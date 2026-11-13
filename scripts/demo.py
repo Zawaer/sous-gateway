@@ -17,6 +17,7 @@ checked by the eval set too. Needs the demo mandates (scripts/seed.py).
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 import uuid
@@ -77,7 +78,11 @@ def say(text: str, pause: float = 0.0) -> None:
 def show_quote(q: dict) -> None:
     for l in q["lines"]:
         mark = _c("32", "✓") if l["orderable"] else _c("31", "✕")
-        say(f"    {mark} {l['quantity']:g} × {l['name']} ({l.get('logistic_model') or '?'}) "
+        cov = l.get("covers") or {}
+        packs = f"{l['quantity']:g} {l.get('sales_unit') or ''}".strip()
+        if cov.get("amount") and cov.get("unit") and cov["unit"] != l.get("sales_unit"):
+            packs += f" (= {cov['amount']:g} {cov['unit']})"
+        say(f"    {mark} {packs} × {l['name']} ({l.get('logistic_model') or '?'}) "
             f"€{l['line_total_ex_vat'] or 0:,.2f}  delivery {l.get('delivery_date') or '–'}")
     for a in q.get("alternatives_considered", [])[:3]:
         say(_c("2", f"    – skipped {a['name']}: {a['why_not'][0]}"))
@@ -156,7 +161,79 @@ def scene_4(gw: Gateway, when: date) -> None:
     show_order(gw.order("espoo-school-agent", "M-SCHOOL-ESPOO", q["id"]), gw.base)
 
 
-SCENES = {"1": scene_1, "2": scene_2, "3": scene_3, "4": scene_4}
+# A fifth buyer, created by this script: an event caterer with a vegan, nut-free menu.
+KAARNA = {
+    "id": "M-KAARNA-CATERING",
+    "buyer": "Kaarna Catering Oy, Espoo",
+    "agent_id": "kaarna-event-agent",
+    "issued_by": "Laura Niemi, kitchen manager",
+    "notify_above_eur": 300,
+    "auto_approve_limit_eur": 600,
+    "hard_limit_eur": 2500,
+    "daily_limit_eur": 3000,
+    "avoid_allergens": ["AM", "AE", "AN", "AP"],  # milk, egg, tree nuts, peanuts
+    "allow_may_contain": False,
+    "unknown_allergens": "ask",
+    "substitutions": "notify",
+    "terminal_products": "ask",
+    "min_delivery_reliability": 0.9,
+    "later_delivery": "ask",
+}
+
+
+def ensure_mandate(gw: Gateway, m: dict) -> None:
+    """Issue the mandate unless the gateway already has it (needs VALTAKIRJA_APPROVER_CODE if the gateway sets one)."""
+    if gw.http.get(f"/mandates/{m['id']}").status_code == 200:
+        return
+    code = os.getenv("VALTAKIRJA_APPROVER_CODE", "")
+    r = gw.http.post("/mandates", json=m, headers={"x-approver-code": code} if code else {})
+    if r.status_code >= 400:
+        raise RuntimeError(f"could not issue {m['id']} ({r.status_code}); set VALTAKIRJA_APPROVER_CODE "
+                           "to the gateway's approver code")
+    say(_c("2", f"  issued mandate {m['id']} for {m['buyer']} (signed by the gateway)"))
+
+
+def scene_5(gw: Gateway, when: date) -> None:
+    """New buyer: a caterer's last-minute vegan, nut-free event, one multi-item order; cashew butter refused."""
+    m = KAARNA
+    agent, mandate = m["agent_id"], m["id"]
+    ensure_mandate(gw, m)
+    say(_c("1", '"Vegan lunch for 150 guests on Monday: oat drink, chickpeas, crushed tomatoes, hummus and rice."')
+        + _c("2", "  (Kaarna Catering's agent; mandate avoids milk, egg, nuts, peanuts)"))
+    avoid = {"avoid_allergens": m["avoid_allergens"], "food_only": "true"}
+    menu = [("kaurajuoma", 60, "L"), ("kikherne", 20, "KG"), ("tomaattimurska", 30, "KG"),
+            ("hummus", 6, "KG"), ("riisi", 15, "KG")]
+    items = []
+    for q, amount, unit in menu:
+        ids = gw.search(agent, q, 6, **avoid)
+        items.append({"product_ids": ids, "amount": amount, "unit": unit, "note": q})
+        say(f"  searched “{q}”: {len(ids)} candidates, none declaring the avoided allergens "
+            f"(missing data is left to the mandate), 0 Valio API calls")
+    q = gw.quote(agent, mandate, items, when)
+    show_quote(q)
+    why = {a["product_id"]: a["why_not"][0] for a in q.get("alternatives_considered", []) if a.get("why_not")}
+    for g in q.get("uncovered", []):
+        def short(r: str) -> str:
+            if "cut-off" in r:
+                return "order cut-off already passed"
+            if "any date" in r:
+                return "not deliverable on any date"
+            return r.rstrip(".")
+        ps = [p for p in g["item"]["product_ids"] if p in why]
+        reasons = [f"{n} × {r}" for r, n in sorted({short(why[p]): sum(short(why[x]) == short(why[p]) for x in ps)
+                                                   for p in ps}.items())]
+        say(_c("33", f"    ! not covered: {g['uncovered']:g} {g.get('unit') or ''} of “{g['item'].get('note')}”. "
+                     f"All {len(ps)} candidates out: {', '.join(reasons) or 'no orderable option'}"))
+    show_order(gw.order(agent, mandate, q["id"]), gw.base)
+    say(_c("2", "    The human sees what's missing and why, and can approve the rest and buy the gap locally."))
+
+    say(_c("1", '"Add 2 jars of the Biona cashew nut butter for the dressing."'))
+    q = gw.quote(agent, mandate, [{"product_ids": ["465267"], "amount": 2, "unit": "SALES_UNIT"}], when)
+    show_quote(q)
+    show_order(gw.order(agent, mandate, q["id"]), gw.base)
+
+
+SCENES = {"1": scene_1, "2": scene_2, "3": scene_3, "4": scene_4, "5": scene_5}
 
 
 def main() -> None:

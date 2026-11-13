@@ -11,6 +11,9 @@ from Valio Aimo's mock API; nothing is staged in the UI.
 3. Phone: open `<base>/ui/#/inbox` once and enter the approver code when asked (it is kept
    in that browser). On the deployed gateway the code is with Rene; never show it on screen.
 4. Dry run: `uv run python scripts/demo.py --base <base> --list`.
+5. Scene 5 creates its own buyer (Kaarna Catering) the first time it runs on a gateway, which
+   needs the approver code: `VALTAKIRJA_APPROVER_CODE=<code> uv run python scripts/demo.py 5 --base <base>`
+   (type it in your own terminal; never show it on screen). Later runs reuse the mandate.
 
 ## Scenes
 | # | Run | What the viewer sees | Outcome |
@@ -19,6 +22,7 @@ from Valio Aimo's mock API; nothing is staged in the UI.
 | 2 | `scripts/demo.py 2 --base <base>` | Hospital agent asks for good/better/best substitutes and picks one with **no allergen data**. Laptop toast "Held for a human"; card appears in Approvals with both reasons. | **Ask human** → open the link on the phone, **Approve** |
 | 3 | `scripts/demo.py 3 --base <base>` | Cheapest milk is a Terminal product whose cut-off already passed: skipped automatically; when the agent insists on it, refused with the rule. | **Auto**, then **Blocked** |
 | 4 | `scripts/demo.py 4 --base <base>` | Over the hospital's €400 limit → asks; rye bread for a gluten-free school → refused. | **Ask human**, **Blocked** |
+| 4b | `scripts/demo.py 5 --base <base>` | **New buyer, Kaarna Catering Oy** (the script issues its mandate: vegan + nut-free, €600 alone). Its agent orders a vegan lunch for 150 in one quote: five searches with the allergens filtered out, 0 API calls; oat drink, chickpeas, tomatoes and hummus covered; **rice can't make Monday** (every candidate past its cut-off or undeliverable). Then it tries cashew nut butter. | **Ask human** (partial cover + 2 products without allergen data), then **Blocked** (nuts). Open the held order: the timeline shows every step and what's missing |
 | 5 | UI: **Audit log** | Chain intact badge; filter by the order id from scene 2 to show every step incl. the phone approval. Click **Verify receipt signature** in the order panel. | Hash chain + Ed25519 checked in the browser |
 | 6 | UI: **Stats** | Share handled without a human, unsafe orders stopped, Valio API calls per quote. Eval-set numbers are in `docs/STATUS.md`. | Numbers slide |
 

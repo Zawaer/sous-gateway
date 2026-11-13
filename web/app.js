@@ -448,15 +448,21 @@ async function openOrder(id) {
   // Link a catalog search only if it was this agent's last step before the quote (no other quote in
   // between) and it returned at least one of the quoted products. Newest first in `recent`.
   const quoted = new Set([...(quote?.lines || []), ...(quote?.alternatives_considered || [])].map((l) => l.product_id));
-  const before = recent.find((e) => e.actor === o.agent_id && (e.event === "catalog.search" ||
-    (e.event === "quote.issued" && e.subject !== o.quote_id)) && new Date(e.ts) <= qTime);
-  const search = before?.event === "catalog.search" && qTime - new Date(before.ts) < 15 * 60000 &&
-    (before.data.results || []).some((id) => quoted.has(id)) ? before : null;
-  $("#flow").innerHTML = flowSteps(o, quote, search, all);
+  // All of this agent's searches since its previous quote (newest first in `recent`).
+  const searches = [];
+  for (const e of recent) {
+    if (e.actor !== o.agent_id || new Date(e.ts) > qTime || e.subject === o.quote_id) continue;
+    if (e.event === "quote.issued") break;
+    if (e.event === "catalog.search" && qTime - new Date(e.ts) < 15 * 60000 &&
+        (e.data.results || []).some((id) => quoted.has(id))) searches.unshift(e);
+  }
+  $("#flow").innerHTML = flowSteps(o, quote, searches, all);
   $("#asof").innerHTML = asOfSection(o, hist);
 }
 
-function flowSteps(o, q, search, events) {
+function flowSteps(o, q, searches, events) {
+  const search = searches[0];
+  const found = new Set(searches.flatMap((s) => s.data.results || []));
   const d = o.decision || {};
   const a = o.approval;
   const calls = q?.valio_api_calls ? (q.valio_api_calls.price_calls || 0) + (q.valio_api_calls.availability_calls || 0) : null;
@@ -472,8 +478,8 @@ function flowSteps(o, q, search, events) {
 
   const request = step(1, "Request", search?.ts || q?.issued_at, ["agent", o.agent_id],
     `Needs delivery by ${dateOnly(q?.requested_delivery_date || o.delivery_date)}
-     ${search ? ` · searched “${esc(search.data.query)}”${search.data.claims?.length ? ` with ${esc(search.data.claims.join(", "))}` : ""}
-       → ${(search.data.results || []).length} products from the static catalog, 0 Valio API calls`
+     ${search ? ` · searched ${searches.map((s) => `“${esc(s.data.query)}”`).join(", ")}${search.data.claims?.length ? ` with ${esc(search.data.claims.join(", "))}` : ""}${search.data.avoid_allergens?.length ? `, avoiding ${esc(search.data.avoid_allergens.map((c) => allergenNames?.[c] || c).join(", "))}` : ""}
+       → ${found.size} products from the static catalog, 0 Valio API calls`
        : !subs.length && q ? ` · named ${(q.lines || []).map((l) => `<span class="mono">${esc(l.product_id)}</span>`).join(", ")} directly, no catalog search` : ""}
      ${subs.length ? ` · asked to replace ${subs.map((l) => `<span class="mono">${esc(l.substitute_for)}</span>`).join(", ")} with a substitute` : ""}`);
 
@@ -482,7 +488,7 @@ function flowSteps(o, q, search, events) {
       signed quote <span class="mono">${esc(q.id)}</span>, ${eur(q.total_ex_vat)} ex VAT, valid until ${when(q.expires_at)}.
       ${(q.lines || []).map((l) => `Chose ${esc(l.quantity)} × ${esc(l.name)}${l.logistic_model ? ` (${esc(l.logistic_model)})` : ""}.`).join(" ")}
       ${skipped.length ? `Passed over ${skipped.length}: ${skipped.slice(0, 2).map((s) => `${esc(s.name)} (${esc(((s.why_not || [])[0] || "").replace(/\.$/, ""))})`).join("; ")}${skipped.length > 2 ? ` and ${skipped.length - 2} more` : ""}.` : ""}
-      ${gaps.length ? `<span style="color:var(--ask)">Could not cover ${gaps.map((g) => `${esc(g.uncovered)} ${esc(g.unit || "")}`).join(", ")}.</span>` : ""}`
+      ${gaps.length ? `<span style="color:var(--ask)">Could not cover ${gaps.map((g) => `${esc(g.uncovered)} ${esc(g.unit || "")}${g.item?.note ? ` of “${esc(g.item.note)}”` : ""}`).join(", ")}: nothing among its candidates can be delivered in time.</span>` : ""}`
       : `<span class="muted">Quote ${esc(o.quote_id)} not found.</span>`);
 
   const fired = (d.findings || []).filter((f) => f.outcome !== "silent" && f.rule !== "mandate.ok");
