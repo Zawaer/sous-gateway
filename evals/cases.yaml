@@ -215,7 +215,7 @@ cases:
 
   - id: H12
     title: Earliest delivery is later than asked -> ask; the human approves
-    request: "200 litres of lactose-free semi-skimmed milk by Saturday."
+    request: "200 litres of lactose-free semi-skimmed milk by Saturday 14 November."
     mandate: M-HOTEL-AURORA
     agent: aurora-purchasing-agent
     candidates: [464201]
@@ -413,7 +413,7 @@ cases:
 
   - id: P09
     title: Later delivery is not allowed for the hospital -> refused
-    request: "50 litres of Oatly semi oat drink by Saturday."
+    request: "50 litres of Oatly semi oat drink by Saturday 14 November."
     mandate: M-HOSPITAL-KITCHEN
     agent: meilahti-kitchen-agent
     candidates: [470863]
