@@ -26,6 +26,20 @@ class AimoError(RuntimeError):
     pass
 
 
+_calls: list[float] = []
+
+
+def _take_budget() -> None:
+    """Global cap on live Valio Aimo calls per minute (their rate limits are undisclosed)."""
+    now = time.time()
+    with _lock:
+        while _calls and now - _calls[0] > 60:
+            _calls.pop(0)
+        if len(_calls) >= config.AIMO_CALLS_PER_MIN:
+            raise AimoError("The gateway's budget of live Valio Aimo calls for this minute is used up; retry shortly.")
+        _calls.append(now)
+
+
 _client = httpx.Client(
     base_url=config.AIMO_API_BASE,
     headers={"X-API-Key": config.AIMO_API_KEY, "User-Agent": "valtakirja-gateway/0.1"},
@@ -49,6 +63,7 @@ def _post(kind: str, requested: date, ids: list[str], ttl: int) -> dict[str, dic
     for i in range(0, len(missing), 1000):
         chunk = missing[i : i + 1000]
         body = {"customer": config.AIMO_CUSTOMER, "requestedDate": day, "products": chunk}
+        _take_budget()
         for attempt in range(3):
             r = _client.post(f"/{kind}", json=body)
             if r.status_code != 429 and r.status_code < 500:

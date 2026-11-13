@@ -25,3 +25,12 @@ AIMO_CUSTOMER = os.getenv("VALIO_AIMO_CUSTOMER", "123")
 
 TZ = ZoneInfo("Europe/Helsinki")
 QUOTE_TTL_SECONDS = int(os.getenv("VALTAKIRJA_QUOTE_TTL", "900"))
+
+# Public deployment
+PUBLIC_BASE_URL = os.getenv("VALTAKIRJA_PUBLIC_BASE_URL", "").rstrip("/")
+# When set, approving/rejecting orders and issuing/revoking mandates need this code
+# in the X-Approver-Code header (stands in for the buyer's real login in this demo).
+APPROVER_CODE = os.getenv("VALTAKIRJA_APPROVER_CODE", "")
+RATE_LIMIT_PER_MIN = int(os.getenv("VALTAKIRJA_RATE_LIMIT_PER_MIN", "60"))  # POST requests per client IP
+AIMO_CALLS_PER_MIN = int(os.getenv("VALTAKIRJA_AIMO_CALLS_PER_MIN", "60"))  # protects our Valio API key
+MAX_CANDIDATES_PER_QUOTE = 200

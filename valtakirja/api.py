@@ -6,7 +6,10 @@ import contextlib
 from datetime import date
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Query, Request
+import time
+from collections import defaultdict, deque
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -54,6 +57,34 @@ def root():
     return RedirectResponse("/ui/" if WEB_DIR.is_dir() else "/docs")
 
 
+_hits: dict[str, deque] = defaultdict(deque)
+
+
+def _client_ip(request: Request) -> str:
+    return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "?")
+
+
+@app.middleware("http")
+async def rate_limit(request: Request, call_next):
+    """Per-IP limit on writes and MCP calls, so one visitor can't burn our Valio API budget."""
+    if request.method == "POST":
+        q = _hits[_client_ip(request)]
+        now = time.time()
+        while q and now - q[0] > 60:
+            q.popleft()
+        if len(q) >= config.RATE_LIMIT_PER_MIN:
+            return JSONResponse(status_code=429, content={"error": "rate_limited",
+                                                          "message": "Too many requests; try again in a minute."})
+        q.append(now)
+    return await call_next(request)
+
+
+def require_approver(x_approver_code: str | None = Header(default=None)):
+    """Human-only actions. In production this is the buyer's own login (e.g. OIDC); here a shared demo code."""
+    if config.APPROVER_CODE and x_approver_code != config.APPROVER_CODE:
+        raise HTTPException(401, "Human approver code required (X-Approver-Code header).")
+
+
 @app.exception_handler(S.GatewayError)
 async def gateway_error(_: Request, e: S.GatewayError):
     return JSONResponse(status_code=e.status, content={"error": e.code, "message": e.message})
@@ -69,7 +100,7 @@ def jwks():
 
 @app.get("/health", tags=["meta"])
 def health():
-    return {"ok": True, "valio_api_calls": aimo.stats}
+    return {"ok": True, "valio_api_calls": aimo.stats, "approver_code_required": bool(config.APPROVER_CODE)}
 
 
 # --- catalog ----------------------------------------------------------------
@@ -150,19 +181,19 @@ class Decision(BaseModel):
     note: str | None = None
 
 
-@app.post("/orders/{order_id}/approve", tags=["approvals"])
+@app.post("/orders/{order_id}/approve", tags=["approvals"], dependencies=[Depends(require_approver)])
 def approve(order_id: str, d: Decision):
     return S.decide(order_id, d.by, True, d.note)
 
 
-@app.post("/orders/{order_id}/reject", tags=["approvals"])
+@app.post("/orders/{order_id}/reject", tags=["approvals"], dependencies=[Depends(require_approver)])
 def reject(order_id: str, d: Decision):
     return S.decide(order_id, d.by, False, d.note)
 
 
 # --- mandates ---------------------------------------------------------------
 
-@app.post("/mandates", tags=["mandates"])
+@app.post("/mandates", tags=["mandates"], dependencies=[Depends(require_approver)])
 def issue_mandate(m: Mandate):
     """A human issues a mandate to their agent; the gateway signs it."""
     return S.issue_mandate(m)
@@ -178,7 +209,7 @@ def get_mandate(mandate_id: str):
     return S.get_mandate(mandate_id)
 
 
-@app.post("/mandates/{mandate_id}/revoke", tags=["mandates"])
+@app.post("/mandates/{mandate_id}/revoke", tags=["mandates"], dependencies=[Depends(require_approver)])
 def revoke_mandate(mandate_id: str, d: Decision):
     return S.revoke_mandate(mandate_id, d.by)
 

@@ -96,7 +96,21 @@ class QuoteRequest(BaseModel):
     items: list[QuoteItem] = Field(min_length=1, max_length=50)
 
 
+def order_url(order_id: str) -> str:
+    return f"{config.PUBLIC_BASE_URL}/ui/#/orders/{order_id}"
+
+
 def request_quote(req: QuoteRequest) -> dict:
+    if sum(len(i.product_ids) for i in req.items) > config.MAX_CANDIDATES_PER_QUOTE:
+        raise GatewayError("too_many_candidates",
+                           f"At most {config.MAX_CANDIDATES_PER_QUOTE} candidate products per quote; narrow the search first.")
+    try:
+        return _request_quote(req)
+    except aimo.AimoError as e:
+        raise GatewayError("valio_unavailable", str(e), 503)
+
+
+def _request_quote(req: QuoteRequest) -> dict:
     mandate = _mandate(req.mandate_id) if req.mandate_id else None
     before = dict(aimo.stats)
     lines: list[dict] = []
@@ -213,6 +227,8 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
         "decision": {"outcome": outcome, "findings": [f.model_dump() for f in findings], "by": "mandate-engine",
                      "at": now.isoformat(timespec="seconds")},
         "approval": None,
+        "order_url": order_url(oid),
+        "approval_url": order_url(oid) if status == "pending_approval" else None,
         "idempotency_key": idempotency_key,
         "created_at": now.isoformat(timespec="seconds"), "updated_at": now.isoformat(timespec="seconds"),
     }

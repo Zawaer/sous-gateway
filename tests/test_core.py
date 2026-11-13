@@ -1,0 +1,180 @@
+"""Offline tests for the deterministic core: no Valio API calls, no data files needed."""
+
+from datetime import date, datetime, timedelta
+
+import pytest
+
+from valtakirja import catalog, config, quote as Q, signing, store
+from valtakirja.mandate import Mandate, evaluate
+
+NOW = datetime(2026, 11, 13, 21, 0, tzinfo=config.TZ)
+
+
+def product(**kw):
+    p = {
+        "id": "1", "name": "Test milk 1 l lactose free", "names": {"fi": "Testimaito 1 l", "en": "", "sv": ""},
+        "brand": "", "vendor": "", "category": "10400", "country_of_origin": "fi",
+        "sales_unit": "ST", "base_unit": "ST", "units": {"ST": 1.0, "KI": 10.0}, "allowed_lot_size": 0.01,
+        "temperature": "chilled", "labels": [], "claims": ["FREE_FROM_LACTOSE"],
+        "allergens": {"declared": True, "contains": ["AM"], "may_contain": [], "free_from": []},
+        "size_from_name": (1.0, "L"), "delivery_reliability": 0.99, "co2_kg_per_kg_group_avg": 1.4,
+        "official_substitutes": [], "deleted": False,
+    }
+    p.update(kw)
+    return p
+
+
+PRICE = {"catalogPrice": {"value": 1.4, "valueWithTax": 1.59, "validTo": "2026-12-31T00:00:00+0200"},
+         "comparisonPrice": {"value": 1.4}, "comparisonUnit": "L", "tax": {"taxRate": 13.5}, "error": False}
+
+
+def avail(model="Stock", amount=500.0, closing="2026-11-15T17:00:00+0200", day="2026-11-16", lines=True):
+    return {"logisticModel": model, "closingTime": closing, "salesBlock": False,
+            "scheduleLines": [{"salesBlock": False, "availableAmount": amount, "availableDate": day,
+                               "salesUnit": "ST"}] if lines else []}
+
+
+# --- units and quantities ------------------------------------------------------
+
+def test_parse_size():
+    assert catalog.parse_size("Valio Eila 3 % maitojuoma 1 l laktoositon") == (1.0, "L")
+    assert catalog.parse_size("Arla portion milk 100x2 cl") == (2.0, "L")
+    assert catalog.parse_size("Valio voi 500 g") == (0.5, "KG")
+    assert catalog.parse_size("Paper napkins") is None
+
+
+def test_content_uses_pack_hierarchy():
+    p = product(sales_unit="KI")
+    price = {**PRICE, "catalogPrice": {**PRICE["catalogPrice"], "value": 14.0}}
+    assert Q.content_per_sales_unit(p, price)[:2] == (10.0, "L")
+
+
+def test_content_falls_back_to_price_ratio_when_name_disagrees():
+    p = product(size_from_name=(5.0, "L"))
+    assert Q.content_per_sales_unit(p, PRICE)[:2] == (1.0, "L")
+
+
+def test_lot_size_rounding():
+    assert Q.round_to_lot(7.2, "ST", 0.01) == 8
+    assert Q.round_to_lot(7, "KI", 3.0) == 9
+    assert Q.round_to_lot(2.345, "KG", 0.01) == 2.35
+
+
+# --- exceptions ----------------------------------------------------------------
+
+def codes(o):
+    return {i["code"] for i in o["issues"]}
+
+
+def test_happy_path_offer():
+    o = Q.build_offer(product(), PRICE, avail(), date(2026, 11, 16), 1000, "L", NOW)
+    assert o["orderable"] and o["quantity"] == 1000 and o["line_total_ex_vat"] == 1400.0
+
+
+def test_cutoff_passed_blocks_even_if_api_still_reports_date():
+    o = Q.build_offer(product(), PRICE, avail("Terminal", 999999, "2026-11-12T15:00:00+0200"),
+                      date(2026, 11, 16), 10, "L", NOW)
+    assert not o["orderable"] and {"CUTOFF_PASSED", "STOCK_UNKNOWN"} <= codes(o)
+
+
+def test_undeliverable_and_out_of_stock():
+    assert "UNDELIVERABLE" in codes(Q.build_offer(product(), PRICE, avail(lines=False), date(2026, 11, 16), 1, "L", NOW))
+    o = Q.build_offer(product(), PRICE, avail(amount=0.0, day=None), date(2026, 11, 16), 1, "L", NOW)
+    assert "OUT_OF_STOCK" in codes(o) and not o["orderable"]
+
+
+def test_later_date_and_partial_stock_are_warnings():
+    o = Q.build_offer(product(), PRICE, avail(amount=100, day="2026-11-18"), date(2026, 11, 16), 500, "L", NOW)
+    assert o["orderable"] and {"LATER_DATE", "PARTIAL_STOCK"} <= codes(o)
+
+
+def test_plan_splits_when_stock_short():
+    cheap = Q.build_offer(product(id="A"), PRICE, avail(amount=300), date(2026, 11, 16), 1000, "L", NOW)
+    dear = Q.build_offer(product(id="B"), {**PRICE, "comparisonPrice": {"value": 1.6},
+                                           "catalogPrice": {**PRICE["catalogPrice"], "value": 1.6}},
+                         avail(amount=5000), date(2026, 11, 16), 1000, "L", NOW)
+    lines, left = Q.plan(1000, "L", [dear, cheap])
+    assert [(l["product_id"], l["quantity"]) for l in lines] == [("A", 300), ("B", 700)] and left == 0
+
+
+# --- allergens and the mandate --------------------------------------------------
+
+def test_allergen_unknown_is_never_safe():
+    p = product(allergens={"declared": False, "contains": [], "may_contain": [], "free_from": []})
+    assert catalog.allergen_status(p, ["AM"])["status"] == "unknown"
+    assert catalog.allergen_status(product(), ["AM"])["status"] == "contains"
+    # family: avoiding tree nuts also catches hazelnut
+    p = product(allergens={"declared": True, "contains": ["SH"], "may_contain": [], "free_from": []})
+    assert catalog.allergen_status(p, ["AN"])["status"] == "contains"
+
+
+def mandate(**kw):
+    return Mandate(**{"id": "M", "buyer": "B", "agent_id": "a", "issued_by": "h", **kw})
+
+
+def line(**kw):
+    o = Q.build_offer(product(), PRICE, avail(), date(2026, 11, 16), 100, "L", NOW)
+    o.update(kw)
+    return o
+
+
+def run(m, lines, agent="a", **kw):
+    return evaluate(m, agent, lines, requested_date=date(2026, 11, 16), now=NOW, **kw)
+
+
+def test_four_tiers():
+    assert run(mandate(), [line()])[0] == "silent"
+    assert run(mandate(notify_above_eur=100), [line()])[0] == "notify"
+    assert run(mandate(auto_approve_limit_eur=100), [line()])[0] == "ask"
+    assert run(mandate(hard_limit_eur=100), [line()])[0] == "block"
+
+
+def test_wrong_agent_and_revoked_mandate_block():
+    assert run(mandate(), [line()], agent="someone-else")[0] == "block"
+    assert run(mandate(revoked=True), [line()])[0] == "block"
+    assert run(mandate(valid_until=NOW - timedelta(days=1)), [line()])[0] == "block"
+
+
+def test_allergen_rules(monkeypatch):
+    unknown = product(allergens={"declared": False, "contains": [], "may_contain": [], "free_from": []})
+    monkeypatch.setattr(catalog, "get", lambda pid: unknown)
+    assert run(mandate(avoid_allergens=["AM"]), [line()])[0] == "ask"
+    assert run(mandate(avoid_allergens=["AM"], unknown_allergens="block"), [line()])[0] == "block"
+    monkeypatch.setattr(catalog, "get", lambda pid: product())
+    out, findings = run(mandate(avoid_allergens=["AM"]), [line()])
+    assert out == "block" and any(f.rule == "allergen.contains" for f in findings)
+
+
+def test_substitution_and_blocking_issue(monkeypatch):
+    monkeypatch.setattr(catalog, "get", lambda pid: product())
+    assert run(mandate(substitutions="ask"), [line()], substitute_for={"1": "2"})[0] == "ask"
+    blocked = line(issues=[{"code": "CUTOFF_PASSED", "severity": "blocking", "message": "late"}])
+    assert run(mandate(), [blocked])[0] == "block"
+
+
+# --- trust: signatures and the audit chain ---------------------------------------
+
+def test_jws_roundtrip_and_tamper():
+    tok = signing.sign({"id": "Q-1", "total": 10}, "test+jws")
+    assert signing.verify(tok) == {"id": "Q-1", "total": 10}
+    h, p, s = tok.split(".")
+    forged = signing._b64(signing.canonical({"id": "Q-1", "total": 1}))
+    assert signing.verify(f"{h}.{forged}.{s}") is None
+
+
+def test_audit_chain_detects_edits(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "STATE_DB", tmp_path / "state.db")
+    monkeypatch.setattr(store, "_conn", None)
+    for i in range(3):
+        store.audit("test.event", "tester", "system", f"S{i}", None, {"i": i})
+    assert store.verify_chain()["ok"]
+    store.db().execute("UPDATE audit_event SET data = '{\"i\": 99}' WHERE seq = 2")
+    assert store.verify_chain() == {"ok": False, "events": 1, "broken_at_seq": 2}
+
+
+@pytest.fixture(autouse=True)
+def _signing_key(tmp_path, monkeypatch):
+    monkeypatch.setattr(signing, "KEY_PATH", tmp_path / "key.pem")
+    signing._key.cache_clear()
+    yield
+    signing._key.cache_clear()
