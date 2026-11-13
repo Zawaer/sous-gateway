@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 data/
+data
 *.zip
 node_modules/
 .venv/
