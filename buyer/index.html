@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Buyer agent | Valtakirja</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="shell topbar">
+      <span class="brand">Valtakirja</span>
+      <a id="api-link" href="/docs" target="_blank" rel="noopener">Gateway API ↗</a>
+    </div>
+  </header>
+  <main class="shell">
+    <div class="intro">
+      <h1>Buyer agent</h1>
+      <p>Find products, verify a live quote, and submit it under your purchasing mandate.</p>
+    </div>
+    <form id="request-form" class="panel">
+      <h2>Purchase request</h2>
+      <label for="intent">Describe what you need <span class="muted">(optional)</span></label>
+      <div class="intent">
+        <input id="intent" placeholder="1,000 litres of lactose-free milk by Monday" maxlength="240">
+        <button id="interpret" class="secondary" type="button">Fill request</button>
+      </div>
+      <p id="intent-message" class="notice" role="status" hidden></p>
+      <div class="fields">
+        <label class="wide">Product search<input id="query" required maxlength="120" placeholder="Milk, oats, or a brand name"></label>
+        <label>Quantity<input id="amount" required type="number" min="0.001" step="any" inputmode="decimal"></label>
+        <label>Unit<select id="unit"><option value="L">Litres</option><option value="KG">Kilograms</option><option value="SALES_UNIT">Sales units / packs</option></select></label>
+        <label>Delivery date<input id="delivery" required type="date"></label>
+        <label>Mandate ID<input id="mandate" required value="M-HOTEL-AURORA" maxlength="100" spellcheck="false"></label>
+      </div>
+      <details>
+        <summary>Product filters and gateway</summary>
+        <div class="fields details-fields">
+          <label>Required claim codes<input id="claims" placeholder="FREE_FROM_LACTOSE, VEGAN"></label>
+          <label>Allergens to avoid<input id="allergens" placeholder="AM, AN, AP" aria-describedby="allergen-help"></label>
+          <label>Product category code<input id="category" placeholder="10400"></label>
+          <label>Temperature<select id="temperature"><option value="">Any</option><option>ambient</option><option>chilled</option><option>frozen</option></select></label>
+          <label>Product ID being replaced<input id="substitute" placeholder="Original SKU" maxlength="100"></label>
+          <label>Gateway URL<input id="gateway" type="url" spellcheck="false"></label>
+        </div>
+        <p class="muted" id="allergen-help">Use gateway allergen codes, for example AM for milk, AN for tree nuts, and AP for peanuts.</p>
+      </details>
+      <button type="submit" id="search">Find products</button>
+      <button type="submit" id="find-substitutes" class="secondary" formnovalidate>Find substitutes</button>
+    </form>
+    <p id="feedback" class="notice" role="status" hidden></p>
+    <section id="candidates" class="panel" aria-labelledby="candidates-title" hidden>
+      <h2 id="candidates-title">Product shortlist</h2>
+      <p id="search-context" class="muted"></p>
+      <form id="shortlist-form">
+        <fieldset>
+          <legend>Select up to six products that fit the request.</legend>
+          <div id="products" class="products"></div>
+        </fieldset>
+        <button type="submit" id="request-quote" disabled>Get signed quote</button>
+      </form>
+    </section>
+    <section id="quote-panel" class="panel" aria-labelledby="quote-title" hidden>
+      <div class="section-title">
+        <h2 id="quote-title">Quote</h2>
+        <span class="verified">Signature verified</span>
+      </div>
+      <div id="quote-content"></div>
+      <button type="button" id="submit-order">Submit order</button>
+      <button type="button" id="quote-substitutes" class="secondary" hidden>Find substitutes</button>
+    </section>
+    <section id="order-panel" class="panel" aria-labelledby="order-title" hidden>
+      <h2 id="order-title">Order</h2>
+      <div id="order-content"></div>
+      <button type="button" id="refresh" class="secondary">Refresh status</button>
+      <a id="approvals" class="text-action" target="_blank" rel="noopener" hidden>Open seller approval inbox ↗</a>
+    </section>
+    <noscript><p class="notice">Enable JavaScript to run the reference buyer agent.</p></noscript>
+  </main>
+</body>
+</html>

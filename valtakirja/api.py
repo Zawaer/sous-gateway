@@ -50,6 +50,9 @@ app.mount("/mcp", mcp_app)
 WEB_DIR = config.ROOT / "web"
 if WEB_DIR.is_dir():
     app.mount("/ui", StaticFiles(directory=WEB_DIR, html=True), name="ui")
+BUYER_DIR = config.ROOT / "buyer"
+if BUYER_DIR.is_dir():
+    app.mount("/buyer", StaticFiles(directory=BUYER_DIR, html=True), name="buyer")
 
 
 @app.get("/", include_in_schema=False)

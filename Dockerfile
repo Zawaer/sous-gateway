@@ -7,6 +7,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY valtakirja ./valtakirja
 COPY scripts ./scripts
 COPY web ./web
+COPY buyer ./buyer
 RUN uv sync --frozen --no-dev
 EXPOSE 8000
 # First start downloads Valio Aimo's data with the API key from the environment,
