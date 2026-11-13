@@ -12,7 +12,7 @@ import csv
 import json
 import re
 import sqlite3
-from functools import lru_cache
+import threading
 from typing import Any
 
 from . import config
@@ -143,11 +143,20 @@ def build(db_path=config.CATALOG_DB) -> int:
     return len(products)
 
 
-@lru_cache(maxsize=1)
+_local = threading.local()
+_build_lock = threading.Lock()
+
+
 def _db() -> sqlite3.Connection:
-    if not config.CATALOG_DB.exists():
-        build()
-    return sqlite3.connect(config.CATALOG_DB, check_same_thread=False)
+    """This thread's read-only connection. FastAPI runs handlers in a thread pool, and one sqlite3
+    connection shared across threads fails under load (InterfaceError), so each thread gets its own."""
+    conn = getattr(_local, "conn", None)
+    if conn is None:
+        with _build_lock:
+            if not config.CATALOG_DB.exists():
+                build()
+        conn = _local.conn = sqlite3.connect(config.CATALOG_DB)
+    return conn
 
 
 def get(product_id: str) -> dict | None:
@@ -155,25 +164,43 @@ def get(product_id: str) -> dict | None:
     return json.loads(row[0]) if row else None
 
 
+# Child code -> its family ("AM" for lactose), so a product declaring only the family still hits.
+ALLERGEN_PARENT: dict[str, str] = {c: g for g, cs in ALLERGEN_GROUPS.items() for c in cs if c != g}
+# A regulated claim that rules the child out even when the product declares the family (lactose-free milk is AM).
+CHILD_FREE_CLAIM: dict[str, str] = {"ML": "FREE_FROM_LACTOSE"}
+
+
 def allergen_status(product: dict, avoid: list[str], allow_may_contain: bool = False) -> dict:
     """Deterministic allergen verdict for one product against codes to avoid.
 
+    Groups expand both ways: avoiding the family (AN) catches every member (SH
+    hazelnut), and avoiding a member (SH) catches a product that only declares the
+    family (AN), unless the product is explicitly free of that member.
     Unknown data is never treated as safe: the result is 'unknown' and the
     mandate engine escalates it to a human.
     """
-    codes: set[str] = set()
-    for a in avoid:
-        codes |= ALLERGEN_GROUPS.get(a, {a})
     a = product["allergens"]
-    hit = sorted(codes & set(a["contains"]))
+    contains, may_contain, free_from = set(a["contains"]), set(a["may_contain"]), set(a["free_from"])
+    claims = set(product.get("claims") or [])
+    codes: set[str] = set()
+    for c in avoid:
+        codes |= ALLERGEN_GROUPS.get(c, {c})
+    # Upward: the family a specific avoided code belongs to, unless the product rules that code out.
+    parents = {ALLERGEN_PARENT[c] for c in codes
+               if c in ALLERGEN_PARENT and c not in free_from and CHILD_FREE_CLAIM.get(c) not in claims}
+    hit = sorted((codes | parents) & contains)
     if hit:
         return {"status": "contains", "codes": hit}
-    may = sorted(codes & set(a["may_contain"]))
+    may = sorted((codes | parents) & may_contain)
     if may and not allow_may_contain:
         return {"status": "may_contain", "codes": may}
     if not codes:
         return {"status": "safe", "codes": []}
-    if not a["declared"]:
+    # Safe only with real data: an allergen list (X99 = "none to declare" counts), or every avoided
+    # code (or its family) explicitly declared absent. A lone unrelated free-from code is not enough.
+    has_list = bool(contains or may_contain) or "X99" in free_from
+    covered = all(c in free_from or ALLERGEN_PARENT.get(c) in free_from for c in avoid)
+    if not (has_list or covered):
         return {"status": "unknown", "codes": sorted(codes)}
     return {"status": "safe", "codes": []}
 
