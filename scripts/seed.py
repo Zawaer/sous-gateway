@@ -1,6 +1,6 @@
 """Issue the demo mandates (idempotent). Run: uv run python -m scripts.seed"""
 
-from valtakirja import service as S
+from valtakirja import service as S, store
 from valtakirja.mandate import Mandate
 
 MANDATES = [
@@ -50,6 +50,8 @@ MANDATES = [
 
 def main():
     for m in MANDATES:
+        if store.get_mandate(m.id):
+            continue  # keep existing mandates (and their audit history) across restarts
         S.issue_mandate(m)
         print("issued", m.id)
 

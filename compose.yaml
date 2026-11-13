@@ -1,0 +1,11 @@
+services:
+  valtakirja:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - valtakirja-data:/data
+    ports:
+      - "8000"
+volumes:
+  valtakirja-data:
