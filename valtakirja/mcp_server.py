@@ -20,6 +20,7 @@ whose mandate (valtakirja) you hold. Flow:
 2. request_quote: pass candidate product ids with the amount needed (L, KG or packs) and the
    delivery date. The gateway prices them live, picks pack sizes, checks cut-offs and stock,
    splits across products if needed, and previews the result against your mandate.
+   If a product can't be ordered (cut-off passed, out of stock...), call suggest_substitutes.
 3. place_order with the quote id. The mandate decides: silent/notify = ordered,
    ask = waits for a human, block = refused. You can't override it; explain the reasons to
    the buyer. Check later with get_order.
@@ -78,6 +79,30 @@ def request_quote(
     """
     return S.request_quote(S.QuoteRequest(agent_id=agent_id, mandate_id=mandate_id,
                                           delivery_date=date.fromisoformat(delivery_date), items=items))
+
+
+@mcp.tool()
+def suggest_substitutes(
+    agent_id: str,
+    product_id: str,
+    delivery_date: str,
+    amount: float,
+    unit: str = "SALES_UNIT",
+    mandate_id: str | None = None,
+    avoid_allergens: list[str] | None = None,
+    limit: int = 3,
+) -> dict:
+    """Good / better / best substitutes for a product that can't be ordered (or for any product).
+
+    Same category, measure and temperature class; keeps the original's dietary claims and the mandate's
+    allergen rules (never relaxed). Each option lists its compromises in plain language and has a live offer.
+    Then request a quote for the chosen one with substitute_for=<original id>.
+    """
+    try:
+        return S.suggest_substitutes(agent_id, product_id, date.fromisoformat(delivery_date), amount, unit,
+                                     mandate_id, avoid_allergens, limit)
+    except S.GatewayError as e:
+        return {"error": e.code, "message": e.message}
 
 
 @mcp.tool()

@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import aimo, catalog, config, quote as Q, signing, store
+from . import aimo, catalog, config, quote as Q, signing, store, substitutes
 from .mandate import Mandate, evaluate
 
 
@@ -274,3 +274,26 @@ def get_order(order_id: str) -> dict:
     if not o:
         raise GatewayError("order_not_found", f"No order {order_id}.", 404)
     return o
+
+
+# --- substitutes ------------------------------------------------------------
+
+def suggest_substitutes(agent_id: str, product_id: str, delivery_date: date, amount: float,
+                        unit: str = "SALES_UNIT", mandate_id: str | None = None,
+                        avoid_allergens: list[str] | None = None, limit: int = 3) -> dict:
+    mandate = _mandate(mandate_id) if mandate_id else None
+    before = dict(aimo.stats)
+    try:
+        r = substitutes.suggest(product_id, delivery_date, amount, None if unit == "SALES_UNIT" else unit,
+                                mandate, avoid_allergens, limit=min(limit, 6))
+    except KeyError:
+        raise GatewayError("product_not_found", f"No product {product_id}.", 404)
+    except aimo.AimoError as e:
+        raise GatewayError("valio_unavailable", str(e), 503)
+    r["valio_api_calls"] = {k: aimo.stats[k] - before[k] for k in aimo.stats}
+    store.audit("substitutes.suggested", agent_id, "agent", product_id, mandate.buyer if mandate else None,
+                {"product_id": product_id, "constraints": r["constraints"],
+                 "options": [{"tier": o["tier"], "product_id": o["product_id"], "compromises": o["compromises"]}
+                             for o in r["options"]],
+                 "no_safe_substitute": r["no_safe_substitute"], "valio_api_calls": r["valio_api_calls"]})
+    return r

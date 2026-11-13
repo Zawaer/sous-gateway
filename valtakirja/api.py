@@ -135,6 +135,22 @@ def allergen_codes():
     return {"codes": catalog.ALLERGENS, "groups": {k: sorted(v) for k, v in catalog.ALLERGEN_GROUPS.items()}}
 
 
+@app.get("/products/{product_id}/substitutes", tags=["catalog"])
+def suggest_substitutes(
+    product_id: str,
+    delivery_date: date,
+    amount: float = 1,
+    unit: Literal["L", "KG", "SALES_UNIT"] = "SALES_UNIT",
+    mandate_id: str | None = None,
+    avoid_allergens: list[str] = Query(default=[]),
+    limit: int = 3,
+    agent_id: str = "anonymous-agent",
+):
+    """Good / better / best substitutes with their compromises and live offers."""
+    return S.suggest_substitutes(agent_id, product_id, delivery_date, amount, unit, mandate_id,
+                                 avoid_allergens or None, limit)
+
+
 # --- quotes and orders ------------------------------------------------------
 
 @app.post("/quotes", tags=["ordering"])
