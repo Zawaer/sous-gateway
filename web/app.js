@@ -28,15 +28,47 @@ async function api(path, opts = {}, retried = false) {
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { message: text }; }
-  if (res.status === 401 && opts.method === "POST" && !retried) {
-    const c = prompt(code ? "That approver code was not accepted. Approver code:" : "This action needs the human approver code:");
-    if (c) { store.set("vk-approver-code", c.trim()); return api(path, opts, true); }
+  if (res.status === 401 && opts.method === "POST") {
+    // Ask in-page (masked, no auto-capitalise/autocorrect: phone keyboards change codes) until it
+    // is accepted or the human cancels.
+    const c = await askCode(code || retried
+      ? "That approver code was not accepted. Check it and try again (it is case-sensitive)."
+      : "This action needs the human approver code.");
+    if (c) { store.set("vk-approver-code", c); return api(path, opts, true); }
+    store.set("vk-approver-code", "");
+    throw new Error("Approver code needed for this action.");
   }
   if (!res.ok) {
     const msg = data?.message || data?.detail?.message || data?.detail || res.statusText;
     throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
   }
   return data;
+}
+
+// A small in-page dialog for the approver code. Resolves to the code, or null when cancelled.
+function askCode(message) {
+  return new Promise((resolve) => {
+    const d = document.createElement("div");
+    d.className = "codebox";
+    d.innerHTML = `<form class="codebox-panel" role="dialog" aria-modal="true" aria-labelledby="codebox-t">
+      <h3 id="codebox-t" style="margin-top:0">Approver code</h3>
+      <p class="small muted">${esc(message)} It stays in this browser only.</p>
+      <input type="password" name="code" autocomplete="off" autocapitalize="none" autocorrect="off"
+        spellcheck="false" enterkeyhint="done" aria-label="Approver code" required>
+      <label class="small muted show"><input type="checkbox"> Show</label>
+      <div class="actions">
+        <button type="button" class="btn no" data-cancel>Cancel</button>
+        <button type="submit" class="btn yes">Continue</button>
+      </div></form>`;
+    document.body.appendChild(d);
+    const input = d.querySelector("input[name=code]");
+    d.querySelector(".show input").addEventListener("change", (e) => { input.type = e.target.checked ? "text" : "password"; });
+    const done = (v) => { d.remove(); resolve(v); };
+    d.querySelector("form").addEventListener("submit", (e) => { e.preventDefault(); done(input.value.trim() || null); });
+    d.querySelector("[data-cancel]").addEventListener("click", () => done(null));
+    d.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); done(null); } });
+    setTimeout(() => input.focus(), 30);
+  });
 }
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
