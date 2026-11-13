@@ -3,25 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#fdfdfd" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#f8f8f3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141412" media="(prefers-color-scheme: dark)">
   <title>Valtakirja gateway</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Fragment+Mono&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="top">
     <div class="top-in">
       <a class="brand" href="#/inbox">
-        <span class="logo" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5l8 14 8-14"/><path d="M8 5h8"/></svg>
-        </span>
-        <span class="name">Valtakirja</span><span class="sub">Valio Aimo gateway</span>
+        <svg class="logo" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 4h4l5 11 5-11h4l-7.5 16h-3z" fill="currentColor"/></svg>
+        <span class="name">Valtakirja</span>
       </a>
       <nav class="tabs" aria-label="Sections">
-        <a href="#/inbox" data-tab="inbox">Approvals <span id="badge" class="badge" hidden>0</span></a>
+        <a href="#/inbox" data-tab="inbox">Approvals<span id="badge" class="badge" hidden>0</span></a>
         <a href="#/orders" data-tab="orders">Orders</a>
         <a href="#/audit" data-tab="audit">Audit log</a>
         <a href="#/mandates" data-tab="mandates">Mandates</a>
@@ -32,6 +30,11 @@
   </header>
 
   <main id="view" aria-live="polite"></main>
+
+  <footer class="foot">
+    <span>Valtakirja · an open gateway for purchasing agents at Valio Aimo</span>
+    <span><a href="/docs">API</a> · <a href="/.well-known/jwks.json">Signing key</a> · <a href="#/audit">Audit log</a></span>
+  </footer>
 
   <div id="sheet" class="sheet" hidden>
     <div class="sheet-bg" data-close></div>

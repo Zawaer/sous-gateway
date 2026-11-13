@@ -73,7 +73,8 @@ const STATUS_LABEL = {
   ordered: "Ordered", pending_approval: "Needs approval", refused: "Refused",
   rejected: "Rejected", expired: "Expired",
 };
-const TIER_LABEL = { silent: "Auto", notify: "Auto + FYI", ask: "Ask human", block: "Blocked" };
+const TIER_LABEL = { silent: "Auto", notify: "Auto + FYI", ask: "Ask human", block: "Blocked",
+  best: "Best", better: "Better", good: "Good" };
 const tier = (t) => `<span class="tier t-${esc(t)}">${esc(TIER_LABEL[t] || STATUS_LABEL[t] || t)}</span>`;
 
 function toast(msg, ms = 3500) {
@@ -325,6 +326,18 @@ async function openOrder(id) {
       ${a.result_reason && a.result_reason !== a.note ? `<p class="muted">${esc(a.result_reason)}</p>` : ""}` : ""}
     <h3>Lines</h3>
     ${linesTable(o.lines)}
+    <h3>Substitutes</h3>
+    <p class="small muted">Alternatives from Valio Aimo's own assortment that keep the mandate's hard rules
+      (allergens, claims, category, unit). Ranked best (no compromises), better (minor) and good (a real trade-off).</p>
+    <div id="subs">${(o.lines || []).map((l) => {
+      const flagged = (d.findings || []).some((f) => f.product_id === l.product_id && (f.outcome === "ask" || f.outcome === "block"));
+      return `<div class="sub-line" data-pid="${esc(l.product_id)}">
+        <div class="row"><div>${esc(l.name)} <span class="muted mono">${esc(l.product_id)}</span>
+          ${flagged ? ` ${tier(d.findings.find((f) => f.product_id === l.product_id && (f.outcome === "ask" || f.outcome === "block")).outcome)}` : ""}</div>
+          <button class="btn plain" data-subs="${esc(l.product_id)}" data-qty="${esc(l.quantity)}"
+            data-date="${esc(l.delivery_date || o.delivery_date)}">Find substitutes</button></div>
+        <div class="sub-out"></div></div>`;
+    }).join("")}</div>
     <h3>Signed receipt</h3>
     <p class="small muted">The gateway signs every order. Anyone can check it against the public key at <a href="${API}/.well-known/jwks.json" target="_blank">/.well-known/jwks.json</a>.</p>
     ${sigButton(o.receipt_jws, "Verify receipt signature")}
@@ -334,11 +347,60 @@ async function openOrder(id) {
   `);
   const box = $("#sheet-body [data-order]");
   if (box) { tickDeadlines(); wireDecision(box, () => openOrder(id)); }
+  $("#sheet-body").querySelectorAll("[data-subs]").forEach((b) => b.addEventListener("click", () => findSubstitutes(b, o)));
   const { events } = await api("/audit?subject=" + encodeURIComponent(o.id) + "&limit=50");
   const q = await api("/audit?subject=" + encodeURIComponent(o.quote_id) + "&limit=50").catch(() => ({ events: [] }));
   const all = [...new Map([...events, ...q.events].map((e) => [e.seq, e])).values()].sort((x, y) => x.seq - y.seq);
   const el = $("#order-audit");
   if (el) el.innerHTML = all.length ? all.map(eventRow).join("") : `<div class="empty">No events.</div>`;
+}
+
+// Good / better / best substitutes for one order line (live price and availability for a shortlist).
+async function findSubstitutes(btn, order) {
+  const out = btn.closest(".sub-line").querySelector(".sub-out");
+  btn.disabled = true;
+  btn.textContent = "Searching…";
+  const date = (btn.dataset.date || "").slice(0, 10) || new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10);
+  const qs = new URLSearchParams({
+    delivery_date: date, amount: btn.dataset.qty || "1", unit: "SALES_UNIT", mandate_id: order.mandate_id,
+    agent_id: "valio-ui:" + (approver() || "anonymous"), limit: "3",
+  });
+  try {
+    allergenNames ||= await api("/allergens").then((x) => x.codes).catch(() => ({}));
+    const r = await api(`/products/${encodeURIComponent(btn.dataset.subs)}/substitutes?${qs}`);
+    const avoid = (r.constraints?.avoid_allergens || []).map((c) => allergenNames?.[c] || c).join(", ");
+    const calls = r.valio_api_calls ? (r.valio_api_calls.price_calls || 0) + (r.valio_api_calls.availability_calls || 0) : null;
+    out.innerHTML = `
+      <p class="small muted" style="margin:10px 0 0">
+        ${(r.original?.why_substitute || []).filter((w) => !w.startsWith("(")).map((w) => esc(w) + " · ").join("")}
+        ${r.considered ? `${r.considered.in_category} in category, ${r.considered.priced_live} priced live` : ""}
+        ${avoid ? ` · must avoid ${esc(avoid)}` : ""}${calls != null ? ` · ${calls} Valio API call(s)` : ""}</p>
+      ${r.options?.length ? `<div class="subs">${r.options.map(subCard).join("")}</div>
+        <p class="small muted">${esc(r.next_step || "")}</p>`
+        : `<p class="small" style="color:var(--block)">${esc(r.no_safe_substitute || "No safe substitute found.")}</p>`}`;
+    btn.textContent = "Search again";
+  } catch (e) {
+    out.innerHTML = `<p class="small" style="color:var(--block)">${esc(e.message)}</p>`;
+    btn.textContent = "Try again";
+  }
+  btn.disabled = false;
+}
+
+function subCard(s) {
+  const o = s.offer || {};
+  const cp = o.comparison_price || {};
+  const pc = s.price_change;
+  const allergen = s.allergen_check?.status;
+  return `<div class="sub">
+    <div class="row" style="align-items:center">${tier(s.tier)}${s.official_substitute ? `<span class="mono muted">official</span>` : ""}</div>
+    <div class="nm">${esc(s.name)}</div>
+    <div class="muted mono">${esc(s.product_id)}${s.brand ? " · " + esc(s.brand) : ""}${o.logistic_model ? " · " + esc(o.logistic_model) : ""}</div>
+    <div class="price">${cp.ex_vat != null ? `${eur(cp.ex_vat)} / ${esc(cp.per)}` : eur(o.unit_price_ex_vat)}
+      ${pc != null ? `<span class="muted">(${pc > 0 ? "+" : ""}${Math.round(pc * 100)} %)</span>` : ""}
+      ${o.delivery_date ? `<span class="muted"> · ${dateOnly(o.delivery_date)}</span>` : ""}</div>
+    ${s.compromises?.length ? `<ul>${s.compromises.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : `<div class="small muted">No compromises</div>`}
+    ${allergen && allergen !== "safe" && allergen !== "unknown" ? `<div class="small" style="color:var(--ask)">Allergen check: ${esc(allergen)}</div>` : ""}
+  </div>`;
 }
 
 // Audit log: the shared, hash-chained record.
@@ -385,6 +447,7 @@ const EVENT_LABEL = {
   "order.rejected": "Order attempt rejected",
   "order.approved": "Approved by a human",
   "order.rejected_by_human": "Rejected by a human",
+  "substitutes.suggested": "Substitutes suggested",
 };
 
 function eventSummary(e) {
@@ -402,6 +465,10 @@ function eventSummary(e) {
       return `→ ${tier(d.resulting_status)}${d.note ? ` “${esc(d.note)}”` : ""}${d.reason && d.reason !== d.note ? " · " + esc(d.reason) : ""}`;
     case "order.rejected":
       return esc(d.reason || "");
+    case "substitutes.suggested":
+      return (d.options || []).length
+        ? (d.options || []).map((x) => `${tier(x.tier)} <span class="mono">${esc(x.product_id)}</span>`).join(" ")
+        : esc(d.no_safe_substitute || "no safe substitute");
     case "mandate.issued": {
       const m = d.mandate || {};
       return `${esc(m.buyer)} → agent ${esc(m.agent_id)} · alone up to ${eur(m.auto_approve_limit_eur)}`;
