@@ -37,7 +37,7 @@ export class Gateway {
 
   async signed(envelope, name) {
     const keys = await this.request('/.well-known/jwks.json');
-    const payload = await verifyJws(envelope.jws, keys, `valtakirja-${name}+jws`);
+    const payload = await verifyJws(envelope.jws, keys, documentTypes(name));
     if (!equalJson(payload, envelope[name])) throw new Error(`The ${name} differs from its signed payload.`);
     return payload;
   }
@@ -149,7 +149,7 @@ export class Gateway {
   }
 
   async receipt(order, quote) {
-    const signed = await verifyJws(order.receipt_jws, await this.request('/.well-known/jwks.json'), 'valtakirja-order+jws');
+    const signed = await verifyJws(order.receipt_jws, await this.request('/.well-known/jwks.json'), documentTypes('order'));
     const hasDecisionSnapshot = Object.hasOwn(signed, 'approval') || Object.hasOwn(signed, 'updated_at');
     const matchesStatus = hasDecisionSnapshot
       ? signed.status === order.status && equalJson(signed.approval, order.approval) && signed.updated_at === order.updated_at
@@ -176,7 +176,11 @@ function equalJson(a, b) {
     Object.keys(a).every((key) => Object.hasOwn(b, key) && equalJson(a[key], b[key]));
 }
 
-export async function verifyJws(token, jwks, type) {
+function documentTypes(name) {
+  return [`sous-${name}+jws`, `valtakirja-${name}+jws`];
+}
+
+export async function verifyJws(token, jwks, types) {
   if (!globalThis.crypto?.subtle) throw new Error('Signature verification requires HTTPS or a localhost browser session.');
   try {
     const parts = token.split('.');
@@ -184,7 +188,8 @@ export async function verifyJws(token, jwks, type) {
     const [header, payload, signature] = parts;
     const decoder = new TextDecoder('utf-8', { fatal: true });
     const { alg, kid, typ, crit, b64 } = JSON.parse(decoder.decode(decode(header)));
-    if (alg !== 'EdDSA' || !kid || typ !== type || crit !== undefined || b64 !== undefined) throw new Error();
+    const allowedTypes = Array.isArray(types) ? types : [types];
+    if (alg !== 'EdDSA' || !kid || !allowedTypes.includes(typ) || crit !== undefined || b64 !== undefined) throw new Error();
     const keys = jwks.keys.filter((key) => key.kid === kid && key.kty === 'OKP' && key.crv === 'Ed25519' &&
       (key.alg === undefined || key.alg === 'EdDSA') && (key.use === undefined || key.use === 'sig'));
     if (keys.length !== 1) throw new Error();

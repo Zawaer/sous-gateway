@@ -9,8 +9,8 @@ import { quoteCoverage } from './coverage.mjs';
 const { privateKey, publicKey } = generateKeyPairSync('ed25519');
 const jwks = { keys: [{ ...publicKey.export({ format: 'jwk' }), kid: 'fixture', use: 'sig' }] };
 const encode = (data) => Buffer.from(JSON.stringify(data)).toString('base64url');
-function token(payload, type) {
-  const input = `${encode({ alg: 'EdDSA', typ: `valtakirja-${type}+jws`, kid: 'fixture' })}.${encode(payload)}`;
+function token(payload, type, prefix = 'valtakirja') {
+  const input = `${encode({ alg: 'EdDSA', typ: `${prefix}-${type}+jws`, kid: 'fixture' })}.${encode(payload)}`;
   return `${input}.${sign(null, Buffer.from(input), privateKey).toString('base64url')}`;
 }
 
@@ -48,6 +48,28 @@ const quote = {
   requested_delivery_date: need.deliveryDate, expires_at: new Date(Date.now() + 60_000).toISOString(),
   mandate_preview: { outcome: 'ask' }, lines: [{ product_id: 'sku', claims: ['VEGAN'] }],
 };
+
+test('accepts both gateway namespaces without accepting a different signed document kind', async () => {
+  for (const prefix of ['sous', 'valtakirja']) {
+    const payload = {
+      id: 'PO-1', quote_id: quote.id, mandate_id: mandate.id, total_ex_vat: quote.total_ex_vat,
+      lines: [], decision: { outcome: 'ask' }, status: 'ordered',
+      approval: { by: 'Demo approver', approved: true }, updated_at: '2026-11-14T00:00:00+02:00',
+    };
+    const order = { ...payload, agent_id: mandate.agent_id, receipt_jws: token(payload, 'order', prefix) };
+    const responses = {
+      '/mandates/M-1': { mandate, jws: token(mandate, 'mandate', prefix) },
+      '/quotes/Q-1': { quote, jws: token(quote, 'quote', prefix) },
+      '/.well-known/jwks.json': jwks,
+    };
+    const client = new Gateway('https://example.test', async (url) => Response.json(responses[new URL(url).pathname]));
+    assert.deepEqual(await client.mandate(mandate.id), mandate);
+    assert.deepEqual(await client.getQuote(quote.id), quote);
+    assert.deepEqual(await client.receipt(order, quote), payload);
+    await assert.rejects(client.receipt({ ...order, receipt_jws: token(payload, 'quote', prefix) }, quote));
+    await assert.rejects(client.receipt({ ...order, receipt_jws: token(payload, 'order', 'other') }, quote));
+  }
+});
 
 test('uses signed request identities, selected SKUs, catalog filters and one idempotency key', async () => {
   const requests = [];
