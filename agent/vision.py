@@ -406,6 +406,11 @@ def drop_non_items(rd: ImageRead) -> list[str]:
 
 
 _SHORTFALL = re.compile(r"\b(puuttuu|puuttui|puuttuvat|vajaa|missing|short|saknas|fattas)\b", re.I)
+# a shortfall WITH an amount ("puuttuu 3 l", "3 l missing"); a printed "Puuttuvat tuotteet toimitetaan
+# erikseen" footer is not one (eval run 3 flagged that page before this)
+_SHORTFALL_AMOUNT = re.compile(
+    r"\b(?:puuttuu|puuttui|vajaa|missing|short|saknas|fattas)\W{0,3}\d+(?:[.,]\d+)?\s*[a-zäöå]{0,4}"
+    r"|\d+(?:[.,]\d+)?\s*[a-zäöå]{0,4}\W{0,3}(?:puuttuu|puuttui|missing|short|saknas|fattas)\b", re.I)
 
 
 def page_check(rd: ImageRead, ignored: list[str]) -> dict[int, str]:
@@ -415,10 +420,14 @@ def page_check(rd: ImageRead, ignored: list[str]) -> dict[int, str]:
     Seen in eval run 2: the same page was read correctly in one run and like this in the next."""
     if rd.kind != "delivery_note":
         return {}
-    loose = [t for t in [rd.notes or "", *rd.unreadable, *ignored] if _SHORTFALL.search(t) and re.search(r"\d", t)]
-    if not loose or any(_SHORTFALL.search(f"{it.text_as_written} {it.note or ''}") for it in rd.items):
+    rows = [it for it in rd.items if it.quantity is not None and it.delivered_quantity is not None]
+    # where a loose note can hide: page notes, unreadable/ignored lines, and "lines" that are not rows
+    texts = [rd.notes or "", *rd.unreadable, *ignored,
+             *(f"{it.text_as_written} {it.note or ''}" for it in rd.items if not any(it is r for r in rows))]
+    loose = [m.group(0).strip() for t in texts for m in _SHORTFALL_AMOUNT.finditer(t)]
+    if not loose or any(_SHORTFALL.search(f"{it.text_as_written} {it.note or ''}") for it in rows):
         return {}
-    why = f"a shortfall is written on the page ({loose[0][:60]!r}) but not applied to any row"
+    why = f"the page says '{loose[0]}' but no row shows it: which row is short?"
     return {i: why for i, it in enumerate(rd.items)
             if it.quantity is not None and it.delivered_quantity is not None and it.delivered_quantity >= it.quantity}
 

@@ -310,6 +310,22 @@ def test_a_loose_shortfall_note_on_a_delivery_note_is_not_lost():
     assert [l.status for l in po.lines] == ["not_found", "needs_confirmation", "needs_confirmation"]  # no mince in the fake catalog
 
 
+def test_shortfall_page_check_edge_cases_from_eval_run_3():
+    rows = [item("Voi 500 g | 5 | 5 | kg", "voi", 5, "kg", delivered_quantity=5),
+            item("Kerma 1 l | 10 | 10 | l", "kerma", 10, "l", delivered_quantity=10)]
+    # a printed footer "Puuttuvat tuotteet toimitetaan erikseen" (no amount) is not a shortfall
+    rd = V.ImageRead(kind="delivery_note", items=rows, notes="LÄHETE 13.11.2026. Puuttuvat tuotteet toimitetaan erikseen.")
+    assert V.page_check(rd, []) == {}
+    # the red-pen note listed as a line of its own (no quantity) is still loose: the full-looking rows are suspect
+    rd = V.ImageRead(kind="delivery_note", items=[*rows, {"text_as_written": "puuttuu 3 l!", "confidence": 0.5}])
+    page = V.page_check(rd, [])
+    assert set(page) == {0, 1} and "puuttuu 3 l" in page[0]
+    # applied to a row: nothing to flag
+    rd = V.ImageRead(kind="delivery_note", items=[rows[0], item("Kerma 1 l | 10 | 10 | l | puuttuu 3 l", "kerma", 10,
+                                                                "l", delivered_quantity=7)], notes="puuttuu 3 l")
+    assert V.page_check(rd, []) == {}
+
+
 def test_headings_and_signatures_are_not_items_but_possible_products_stay():
     first = {**ORDER, "unreadable": [], "items": [
         {"text_as_written": "Tilaus - toimitus ma 16.11.", "quantity": None, "unit": None, "confidence": 0.9},
