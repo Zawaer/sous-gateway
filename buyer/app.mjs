@@ -119,14 +119,20 @@ function renderSearch(need, mandate, products, original) {
     checkbox.type = 'checkbox';
     checkbox.name = 'product';
     checkbox.value = product.id;
-    checkbox.dataset.unverified = String(Boolean(need.avoidAllergens.length && !product.allergens?.declared));
+    const allergenStatus = product.allergen_check?.status;
+    const unknownAllergens = allergenStatus === 'unknown' || !product.allergens?.declared;
+    checkbox.dataset.unverified = String(Boolean(need.avoidAllergens.length && unknownAllergens));
     const content = element('span', product.name);
     const metadata = [`SKU ${product.id}`, product.category && `Category ${product.category}`, product.temperature].filter(Boolean);
-    if (product.allergen_check?.status === 'unknown' || !product.allergens?.declared) {
+    if (unknownAllergens) {
       metadata.push(checkbox.dataset.unverified === 'true' ? 'Requested allergens could not be checked' : 'Allergen information unavailable');
     }
     if (product.claims?.length) metadata.push(product.claims.join(', '));
     if (product.tier) metadata.push(`Gateway ranking ${product.tier}`);
+    if (product.content_per_sales_unit) {
+      const { amount, unit } = product.content_per_sales_unit;
+      metadata.push(`${amount} ${units[unit] || unit} per sales unit`);
+    }
     if (product.compromises?.length) metadata.push(...product.compromises);
     content.append(element('small', metadata.join(' · ')));
     label.append(checkbox, content);
