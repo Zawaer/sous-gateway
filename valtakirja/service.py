@@ -1,7 +1,7 @@
 """Gateway operations, shared by the REST API and the MCP server.
 
 search -> quote (signed, expiring, pre-checked against the mandate) -> order
-(ordered / pending_approval / refused) -> human approve or reject. Every step is
+(tier silent/notify -> ordered, ask -> pending_approval, block -> refused) -> human approve or reject. Every step is
 written to the audit log.
 """
 
@@ -198,7 +198,7 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
 
     _refresh_cutoffs(q, now)
     outcome, findings = _evaluate(mandate, agent_id, q, now)
-    status = {"order": "ordered", "approval": "pending_approval", "refuse": "refused"}[outcome]
+    status = {"silent": "ordered", "notify": "ordered", "ask": "pending_approval", "block": "refused"}[outcome]
     oid = _id("PO")
     if not store.claim_quote(quote_id, oid):
         raise GatewayError("quote_used", f"Quote {quote_id} was already used for an order.", 409)
@@ -222,7 +222,7 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
     store.audit(f"order.{status}", "mandate-engine", "system", oid, mandate.buyer,
                 {"order_id": oid, "quote_id": quote_id, "agent_id": agent_id, "outcome": outcome,
                  "total_ex_vat": q["total_ex_vat"],
-                 "fired": [f.model_dump() for f in findings if f.outcome != "order"] or [findings[-1].model_dump()]})
+                 "fired": [f.model_dump() for f in findings if f.outcome != "silent"] or [findings[-1].model_dump()]})
     return order
 
 
