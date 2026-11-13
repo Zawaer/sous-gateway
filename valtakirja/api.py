@@ -12,7 +12,10 @@ from collections import defaultdict, deque
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, RedirectResponse, Response
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
@@ -103,6 +106,35 @@ def require_approver(x_approver_code: str | None = Header(default=None)):
         raise HTTPException(401, "Human approver code required (X-Approver-Code header).")
 
 
+_HTTP_CODES = {400: "bad_request", 401: "unauthorized", 403: "forbidden", 404: "not_found",
+               405: "method_not_allowed", 409: "conflict", 429: "rate_limited"}
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error(_: Request, e: StarletteHTTPException):
+    """Same shape as gateway errors: {error, message}, so agents parse one format."""
+    return JSONResponse(status_code=e.status_code, headers=getattr(e, "headers", None),
+                        content={"error": _HTTP_CODES.get(e.status_code, f"http_{e.status_code}"),
+                                 "message": str(e.detail)})
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(_: Request, e: RequestValidationError):
+    problems = []
+    for err in e.errors():
+        where = ".".join(str(x) for x in err.get("loc", ()) if x not in ("body", "query", "path"))
+        problems.append(f"{where}: {err.get('msg')}" if where else str(err.get("msg")))
+    return JSONResponse(status_code=422, content={
+        "error": "invalid_request",
+        "message": "; ".join(problems) + ". Dates are YYYY-MM-DD (e.g. delivery_date=2026-11-16).",
+        "details": jsonable_encoder(e.errors())})
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return Response(status_code=204)
+
+
 @app.exception_handler(S.GatewayError)
 async def gateway_error(_: Request, e: S.GatewayError):
     if e.retry_after is None:
@@ -135,7 +167,7 @@ def search_products(
     labels: list[str] = Query(default=[]),
     temperature: Literal["ambient", "chilled", "frozen"] | None = None,
     category: str | None = None,
-    limit: int = 15,
+    limit: int = Query(15, ge=1, le=50),
     agent_id: str = "anonymous-agent",
     food_only: bool | None = None,
 ):
@@ -169,7 +201,7 @@ def suggest_substitutes(
     unit: Literal["L", "KG", "SALES_UNIT"] = "SALES_UNIT",
     mandate_id: str | None = None,
     avoid_allergens: list[str] = Query(default=[]),
-    limit: int = 3,
+    limit: int = Query(3, ge=1, le=6),
     agent_id: str = "anonymous-agent",
 ):
     """Good / better / best substitutes with their compromises and live offers."""
@@ -209,7 +241,8 @@ def place_order(req: OrderRequest):
 
 
 @app.get("/orders", tags=["ordering"])
-def list_orders(status: str | None = None, mandate_id: str | None = None):
+def list_orders(status: Literal["ordered", "pending_approval", "refused", "rejected", "expired"] | None = None,
+                mandate_id: str | None = None):
     return {"orders": store.list_orders(status, mandate_id)}
 
 
@@ -264,7 +297,7 @@ def mandate_history(mandate_id: str):
 
 
 @app.get("/mandates/{mandate_id}/suggestions", tags=["mandates"])
-def mandate_suggestions(mandate_id: str, delivery_date: date, agent_id: str, limit: int = 5,
+def mandate_suggestions(mandate_id: str, delivery_date: date, agent_id: str, limit: int = Query(5, ge=1, le=20),
                         basis: list[str] = Query(default=[])):
     """Valio Aimo's own commercial suggestions (sponsored, not neutral advice): better-value alternatives to what
     the buyer orders, seasonal and new products. Offers only, never orders; pre-checked against the mandate."""
@@ -336,7 +369,7 @@ def simulate_standing_history(standing_id: str, req: SimulateHistory):
 # --- notifications ----------------------------------------------------------
 
 @app.get("/notifications", tags=["notifications"])
-def list_notifications(buyer: str | None = None, order_id: str | None = None, limit: int = 50):
+def list_notifications(buyer: str | None = None, order_id: str | None = None, limit: int = Query(50, ge=1, le=500)):
     """In-app feed of FYIs (notify tier), approval requests (ask tier) and decisions, newest first."""
     from . import notifications_store
     return {"notifications": notifications_store.list_(buyer, limit, order_id)}
@@ -358,7 +391,7 @@ def test_notification(t: NotificationTest):
 # --- audit ------------------------------------------------------------------
 
 @app.get("/audit", tags=["audit"])
-def audit(subject: str | None = None, buyer: str | None = None, limit: int = 200):
+def audit(subject: str | None = None, buyer: str | None = None, limit: int = Query(200, ge=1, le=5000)):
     """The audit log, newest first. Both the buyer and Valio Aimo read the same record."""
     return {"events": store.audit_events(subject, buyer, limit)}
 
