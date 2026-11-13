@@ -3,29 +3,33 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0b3d91">
+  <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#fdfdfd" media="(prefers-color-scheme: light)">
   <title>Valtakirja gateway</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="top">
-    <div class="brand">
-      <span class="logo" aria-hidden="true">V</span>
-      <div>
-        <div class="name">Valtakirja</div>
-        <div class="sub">Valio Aimo agent gateway</div>
-      </div>
+    <div class="top-in">
+      <a class="brand" href="#/inbox">
+        <span class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5l8 14 8-14"/><path d="M8 5h8"/></svg>
+        </span>
+        <span class="name">Valtakirja</span><span class="sub">Valio Aimo gateway</span>
+      </a>
+      <nav class="tabs" aria-label="Sections">
+        <a href="#/inbox" data-tab="inbox">Approvals <span id="badge" class="badge" hidden>0</span></a>
+        <a href="#/orders" data-tab="orders">Orders</a>
+        <a href="#/audit" data-tab="audit">Audit log</a>
+        <a href="#/mandates" data-tab="mandates">Mandates</a>
+        <a href="#/stats" data-tab="stats">Stats</a>
+      </nav>
+      <button id="who" class="who" title="Who is approving">Set your name</button>
     </div>
-    <button id="who" class="who" title="Who is approving">Set your name</button>
   </header>
-
-  <nav class="tabs" aria-label="Sections">
-    <a href="#/inbox" data-tab="inbox">Approvals <span id="badge" class="badge" hidden>0</span></a>
-    <a href="#/orders" data-tab="orders">Orders</a>
-    <a href="#/audit" data-tab="audit">Audit log</a>
-    <a href="#/mandates" data-tab="mandates">Mandates</a>
-    <a href="#/stats" data-tab="stats">Stats</a>
-  </nav>
 
   <main id="view" aria-live="polite"></main>
 

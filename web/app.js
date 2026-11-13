@@ -204,7 +204,7 @@ function inboxCard(o) {
   </article>`;
 }
 
-function wireDecision(card) {
+function wireDecision(card, onDone) {
   const id = card.dataset.order;
   card.querySelector("[data-open]")?.addEventListener("click", (e) => { e.preventDefault(); openOrder(id); });
   for (const b of card.querySelectorAll("[data-act]")) {
@@ -226,7 +226,9 @@ function wireDecision(card) {
           : `${id}: ${STATUS_LABEL[o.status] || o.status}. ${o.approval?.result_reason || ""}`;
         toast(msg, 5000);
         views.inbox.key = "";
+        if (current === "orders") views.orders.key = "";
         refresh();
+        onDone?.(o);
       } catch (e) {
         toast("Failed: " + e.message, 6000);
         card.querySelectorAll("button").forEach((x) => (x.disabled = false));
@@ -297,6 +299,13 @@ async function openOrder(id) {
     <h3>Mandate decision ${tier(d.outcome)}</h3>
     <div class="muted small">By ${esc(d.by)} at ${when(d.at)}. Deterministic rules; no AI in this step.</div>
     ${findingsList(d.findings)}
+    ${o.status === "pending_approval" ? `<div data-order="${esc(o.id)}">
+      ${earliestCutoff(o) ? `<p class="small">Decide within <span class="deadline" data-until="${esc(earliestCutoff(o))}"></span>, before the order cut-off.</p>` : ""}
+      <textarea rows="2" placeholder="Note for the agent and the log (optional)"></textarea>
+      <div class="actions">
+        <button class="btn no" data-act="reject">Reject</button>
+        <button class="btn yes" data-act="approve">Approve order</button>
+      </div></div>` : ""}
     ${a ? `<h3>Human decision</h3>
       <p>${a.approved ? "Approved" : "Rejected"} by <b>${esc(a.by)}</b> at ${when(a.at)}${a.note ? `: “${esc(a.note)}”` : ""}</p>
       ${a.result_reason && a.result_reason !== a.note ? `<p class="muted">${esc(a.result_reason)}</p>` : ""}` : ""}
@@ -309,6 +318,8 @@ async function openOrder(id) {
     <h3>History</h3>
     <div id="order-audit" class="list"><div class="empty">Loading…</div></div>
   `);
+  const box = $("#sheet-body [data-order]");
+  if (box) { tickDeadlines(); wireDecision(box, () => openOrder(id)); }
   const { events } = await api("/audit?subject=" + encodeURIComponent(o.id) + "&limit=50");
   const q = await api("/audit?subject=" + encodeURIComponent(o.quote_id) + "&limit=50").catch(() => ({ events: [] }));
   const all = [...new Map([...events, ...q.events].map((e) => [e.seq, e])).values()].sort((x, y) => x.seq - y.seq);
