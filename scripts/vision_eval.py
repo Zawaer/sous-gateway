@@ -46,7 +46,7 @@ DIR = ROOT / "evals" / "vision"
 TRUTH = DIR / "truth.json"
 OUT_JSON = DIR / "results.json"
 OUT_MD = DIR / "results.md"
-DEFAULT_VARIANTS = ["v1", "v2", "v2+verify"]
+DEFAULT_VARIANTS = ["v1", "v2", "v3", "v3+verify"]
 
 
 def _text(it: dict) -> str:

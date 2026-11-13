@@ -203,8 +203,62 @@ Return ONLY one JSON object, no prose, no markdown, exactly this shape:
 {SCHEMA}"""
 
 
-PROMPTS = {"v1": prompt_v1, "v2": prompt_v2}
-DEFAULT_PROMPT = "v2"
+def prompt_v3(today: date) -> str:
+    """v2 plus fixes for what Nemotron actually got wrong in eval run 1 (docs/NEMOTRON.md): headings and
+    signatures listed as items, table rows transcribed without their numbers, a red-pen correction listed as
+    its own line, menu portions written once in the heading, the "toimitettava" date on a menu."""
+    days = ", ".join(f"{WEEKDAYS[d.weekday()]} {d.isoformat()}" for d in (today + timedelta(days=i) for i in range(1, 8)))
+    return f"""You read photos of paper from professional kitchens in Finland for a food wholesaler's purchasing \
+agent. You only transcribe and structure what is written. You do not choose products, prices or suppliers, and \
+you never add, merge or "fix" lines.
+
+Today is {WEEKDAYS[today.weekday()]} {today.isoformat()}; the coming days: {days}.
+
+1. kind: "order_list" (a list of goods to buy, often handwritten, e.g. "Tilaus", "Tilattavat", "Beställning"),
+   "menu" (dishes, often per weekday, with portions/annosta/hlö/pax), or "delivery_note" (a supplier's
+   lähete / följesedel / packing slip with ordered vs delivered columns, "Tilattu"/"Toimitettu", "Puuttuu").
+2. items: ONLY lines that name a product. Everything else stays out of items:
+   - headings and titles ("Tilaus - toimitus ma 16.11.", "Kylmiö / tilattavat"), dates, signatures ("- Ville"),
+     column headers ("Tuote", "Tilattu") and remarks go to notes;
+   - a crossed-out (struck-through) line was cancelled: leave it out of items and say so in notes;
+   - menus have no items (dishes go to dishes).
+   For each product line, top to bottom:
+   - text_as_written: the line exactly as written, including its number and unit. For a table row (delivery
+     notes, printed orders with columns) write the whole row, cells joined with " | ", e.g.
+     "Maito laktoositon 1 l | 40 | 24 | l". A pack size inside the product name ("1 l", "500 g") is part of
+     the name, NOT the quantity: the quantity is in its own column.
+   - name_fi: the plain Finnish product name in base form (singular nominative), e.g. "maito laktoositon",
+     "kananmuna", "peruna", "kuohukerma"; translate Swedish/English lines (mjölk -> maito, smör -> voi,
+     grädde -> kerma). name_en: the English name ("lactose-free milk"). Keep qualifiers that change the
+     product: laktoositon/laktosfri (lactose-free), gluteeniton (gluten-free), luomu (organic), pakaste (frozen).
+   - quantity and unit: the number and unit ordered on that line. Finnish decimals use a comma: "2,5 kg" = 2.5.
+     Units: kg, g, l (litra, ltr), dl, ml, kpl (pieces, st, stk, x), ltk (laatikko, box), plo (pullo, bottle),
+     pkt (paketti, pack), rs (rasia, tray), prk (purkki, can, tlk), ps (pussi, bag), sk (säkki, sack).
+     Do not convert units. No unit written -> unit null. No number written -> quantity null.
+   - delivery_note only: quantity = ordered ("Tilattu"), delivered_quantity = delivered ("Toimitettu").
+     A handwritten correction next to a row (a struck-through number, "puuttuu 3 l" = 3 l missing) belongs to
+     THAT row: apply it (delivered = ordered - missing), add it to that row's text_as_written after " | ",
+     and do not list it as a line of its own.
+   - confidence (0-1): how sure you are of the WHOLE line (product, number and unit). Clear print or
+     handwriting: 0.9+. A digit that could be another digit (1/7, 4/9, 0/6, 3/8), a smudged or ambiguous
+     unit, a word you are guessing: below 0.6, and say what is unclear in note. Never guess silently: a
+     low-confidence line is checked by a human, a wrong confident line is ordered.
+3. unreadable: product lines you cannot read at all (describe them, e.g. "line 7: smudged, maybe 'juusto'").
+4. dishes (menus only): each dish with its portions (annosta, hlö, henkeä, pax, port.); day as written. A
+   portion count written once for the whole menu (e.g. in the heading "Pikkujoulut la 21.11. - 60 hlö")
+   applies to every dish that has no count of its own.
+5. delivery_date as YYYY-MM-DD (a weekday means the next such date in the list above; "16.11." means this
+   year): order lists and menus: the date the goods must arrive ("toimitus", "toimitettava", "mennessä",
+   "leverans", "for Monday"); a menu with no such date: the event date (e.g. "la 21.11."). Delivery notes:
+   the delivery date printed on the note. Else null.
+6. notes: everything else relevant on the page (headings, signatures, crossed-out lines, remarks), else null.
+
+Return ONLY one JSON object, no prose, no markdown, exactly this shape:
+{SCHEMA}"""
+
+
+PROMPTS = {"v1": prompt_v1, "v2": prompt_v2, "v3": prompt_v3}
+DEFAULT_PROMPT = "v3"
 
 
 def verify_prompt(lines: list[tuple[int, ReadItem, str]]) -> str:
@@ -282,6 +336,7 @@ class VisionRead:
     rechecked: list[dict] = field(default_factory=list)     # lines the second look re-read (before -> after)
     flags: list[dict] = field(default_factory=list)         # cross-check findings left after the second look
     errors: list[str] = field(default_factory=list)
+    ignored: list[str] = field(default_factory=list)        # headings/signatures the model listed as lines
     raw: str = ""
 
     def to_dict(self) -> dict:
@@ -289,7 +344,7 @@ class VisionRead:
                 "prompt_version": self.prompt_version, "model": self.model, "calls": self.calls,
                 "prompt_tokens": self.prompt_tokens, "completion_tokens": self.completion_tokens,
                 "latency_ms": self.latency_ms, "repaired": self.repaired, "rechecked": self.rechecked,
-                "flags": self.flags, "errors": self.errors}
+                "flags": self.flags, "ignored": self.ignored, "errors": self.errors}
 
 
 def extract_json(s: str) -> dict:
@@ -333,6 +388,21 @@ def cross_check(it: ReadItem, kind: str) -> str | None:
     if it.unit in ("kg", "l") and it.quantity > 2000 or it.unit == "kpl" and it.quantity > 20000:
         return "implausibly large quantity"
     return None
+
+
+def drop_non_items(rd: ImageRead) -> list[str]:
+    """Remove lines that are not products (headings, dates, signatures, column headers): no product name, no
+    quantity, no unit, and no "number + unit" in the text. Anything that might be a product ("jogurtti 4 kg"
+    without a name) stays, and goes to a human. Returns the removed texts (shown, never silently lost)."""
+    keep, dropped = [], []
+    for it in rd.items:
+        if (it.name_fi is None and it.quantity is None and it.unit is None
+                and not _written_units(it.text_as_written)):
+            dropped.append(it.text_as_written)
+        else:
+            keep.append(it)
+    rd.items = keep
+    return dropped
 
 
 class _Use:
@@ -389,6 +459,7 @@ def read_order_image(src: str | Path | bytes, kind_hint: str | None = None, llm=
     if kind_hint in ("order_list", "menu", "delivery_note") and rd.kind != kind_hint:
         rd.notes = ((rd.notes + " ") if rd.notes else "") + f"(read as {rd.kind}; the kitchen said {kind_hint})"
 
+    vr.ignored += drop_non_items(rd)
     suspicious = [(i, it, why) for i, it in enumerate(rd.items)
                   if (why := cross_check(it, rd.kind) or ("low confidence" if it.confidence < CONFIRM_BELOW else None))]
     if verify and suspicious:
@@ -774,6 +845,8 @@ def render(po: PhotoOrder, source: str = "photo") -> str:
         out.append(f"   dish: {d.name} x {d.portions or '?'}" + (f" ({d.day})" if d.day else ""))
     for u in rd.unreadable:
         out.append(f"   unreadable: {u}")
+    for t in vr.ignored:
+        out.append(f"   not a product line (ignored): {t!r}")
     for c in vr.rechecked:
         b, a = c["before"], c["after"]
         out.append(f"   second look, line {c['index']} ({c['why']}): {b['quantity']} {b['unit']} -> "

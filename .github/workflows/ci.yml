@@ -284,7 +284,7 @@ jobs:
       VERDA_INFERENCE_API_KEY: ${{ secrets.VERDA_INFERENCE_API_KEY }}
       NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
       # vision eval prompt variants (manual runs only); see scripts/vision_eval.py
-      VISION_EVAL_VARIANTS: ${{ vars.VISION_EVAL_VARIANTS || 'v1 v2 v2+verify' }}
+      VISION_EVAL_VARIANTS: ${{ vars.VISION_EVAL_VARIANTS || 'v1 v2 v3 v3+verify v3+verify+think' }}
       # provider:model pairs; override with the repo variable LLM_EVAL_MODELS
       LLM_EVAL_MODELS: ${{ vars.LLM_EVAL_MODELS || 'gemini:gemini-4-hydrogen verda:kimi-k3-1-pro verda:deepseek-4-1-flash-1017' }}
       # recipe planning eval (manual runs only), next to the table provider

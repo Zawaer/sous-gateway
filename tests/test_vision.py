@@ -287,3 +287,16 @@ def test_doubtful_delivery_lines_go_to_a_human_not_to_delivered_in_full():
     assert [l.reason.split(" ")[0] for l in po.lines] == ["read", "check:", "delivered"]
     assert len(po.to_confirm) == 3 and not gw.quotes() and po.order is None
     assert po.error == "no line can be ordered automatically"
+
+
+def test_headings_and_signatures_are_not_items_but_possible_products_stay():
+    first = {**ORDER, "unreadable": [], "items": [
+        {"text_as_written": "Tilaus - toimitus ma 16.11.", "quantity": None, "unit": None, "confidence": 0.9},
+        item("voi 5 kg", "voi", 5, "kg"),
+        {"text_as_written": "jogurtti 4 kg", "quantity": None, "unit": None, "confidence": 0.0},
+        {"text_as_written": "- Ville", "quantity": None, "unit": None, "confidence": 0.9}]}
+    llm = FakeLLM([first, {"lines": []}])
+    vr = V.read_order_image(png(), None, llm, today=TODAY)
+    assert vr.ignored == ["Tilaus - toimitus ma 16.11.", "- Ville"]
+    assert [i.text_as_written for i in vr.read.items] == ["voi 5 kg", "jogurtti 4 kg"]
+    assert "v3" in V.PROMPTS and V.DEFAULT_PROMPT == "v3" and "Tilaus - toimitus" in V.PROMPTS["v3"](TODAY)
