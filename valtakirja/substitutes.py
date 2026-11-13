@@ -549,7 +549,8 @@ def suggest(
     # A name that names no type ('Valio Oltermanni') in a category that is nearly all the original's
     # kind (cheese) is very likely that kind too; elsewhere it stays unconfirmed.
     families = [t["family"] for _, t in category if t["family"]]
-    dominant = otype["key"] not in _WEAK and bool(otype["family"]) and len(families) >= 5 and families.count(otype["family"]) >= 0.8 * len(families)
+    dominant = (otype["family"] is not None and otype["key"] not in _WEAK and len(families) >= 5
+                and families.count(otype["family"]) >= 0.8 * len(families))
     ow = _words(orig)
     for c, ctype in category:
         if c["id"] == orig["id"] or c["deleted"]:
@@ -574,8 +575,7 @@ def suggest(
             minor = minor + [f"name does not say it is {otype['label']} (most of this category is)"]
         pack_note = _pack_note(opack, cpack)
         entry = {"p": c, "type": ctype, "match": match, "type_minor": minor, "type_major": major,
-                 "pack_note": pack_note,
-                 "pack": cpack and cpack["text"],
+                 "pack_note": pack_note, "pack": cpack and cpack["text"],
                  "score": _static_score(orig, c, ow, match, len(minor), bool(opack and not pack_note))}
         if match == "different":
             excluded["product_type"] += 1
