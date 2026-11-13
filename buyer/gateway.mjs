@@ -20,6 +20,7 @@ export class Gateway {
         Accept: 'application/json', 'Content-Type': 'application/json',
       },
       method: body === undefined ? 'GET' : 'POST',
+      cache: body === undefined ? 'no-store' : 'default',
       body: body === undefined ? undefined : JSON.stringify(body),
       redirect: 'error',
       signal: AbortSignal.timeout(25_000),
@@ -83,20 +84,37 @@ export class Gateway {
   }
 
   async quote(need, mandate, productIds) {
-    if (!productIds.length || productIds.length > 6) throw new Error('Select between one and six products.');
+    return this.quoteBasket(need.deliveryDate, mandate, [{ need, productIds }]);
+  }
+
+  async quoteBasket(deliveryDate, mandate, entries) {
+    if (!entries.length || entries.length > 50) throw new Error('A basket needs between one and 50 items.');
+    const items = entries.map(({ need, productIds }) => {
+      if (!productIds.length || productIds.length > 6) throw new Error('Select between one and six products per item.');
+      return {
+        product_ids: productIds, amount: need.amount, unit: need.unit,
+        substitute_for: need.substituteFor || null, note: need.query,
+      };
+    });
+    const allIds = items.flatMap((item) => item.product_ids);
+    if (new Set(allIds).size !== allIds.length) throw new Error('A product can only appear on one basket item. Combine quantities or choose different products.');
     const quote = await this.signed(await this.request('/quotes', {
-      agent_id: mandate.agent_id, mandate_id: mandate.id, delivery_date: need.deliveryDate,
-      items: [{ product_ids: productIds, amount: need.amount, unit: need.unit, substitute_for: need.substituteFor || null }],
+      agent_id: mandate.agent_id, mandate_id: mandate.id, delivery_date: deliveryDate, items,
     }), 'quote');
     if (!quote.id || !Number.isFinite(Date.parse(quote.expires_at)) || quote.agent_id !== mandate.agent_id || quote.mandate_id !== mandate.id ||
-        quote.requested_delivery_date !== need.deliveryDate || !tiers.has(quote.mandate_preview?.outcome) ||
-        !quote.lines.every((line) => productIds.includes(line.product_id) &&
-          (line.substitute_for || '') === (need.substituteFor || ''))) {
+        quote.requested_delivery_date !== deliveryDate || !tiers.has(quote.mandate_preview?.outcome) ||
+        (quote.items ? !equalJson(quote.items, items) : entries.length > 1)) {
       throw new Error('The signed quote does not match this buyer, delivery date, or product shortlist.');
     }
-    const requiredClaims = [...need.claims, ...mandate.required_claims];
-    if (quote.lines.some((line) => requiredClaims.some((claim) => !line.claims?.includes(claim)))) {
-      throw new Error('A quoted product is missing a required claim.');
+    for (const line of quote.lines) {
+      const entry = entries[quote.items ? line.item_index : 0];
+      if (!entry?.productIds.includes(line.product_id) || (line.substitute_for || '') !== (entry.need.substituteFor || '')) {
+        throw new Error('A quoted product does not match its basket item.');
+      }
+      const requiredClaims = [...entry.need.claims, ...mandate.required_claims];
+      if (requiredClaims.some((claim) => !line.claims?.includes(claim))) {
+        throw new Error('A quoted product is missing a required claim.');
+      }
     }
     return quote;
   }

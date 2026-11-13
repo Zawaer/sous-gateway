@@ -941,9 +941,13 @@ async function refresh() {
 }
 
 function route() {
-  const [, name, openId] = location.hash.match(/^#\/(\w+)(?:\/([\w-]+))?/) || [];
+  const [path, query] = location.hash.split("?", 2);
+  const [, name, openId] = path.match(/^#\/(\w+)(?:\/([\w-]+))?\/?$/) || [];
   const same = current === name && openId;
   current = views[name] ? name : "inbox";
+  if (current === "audit" && query !== undefined) {
+    views.audit.q = new URLSearchParams(query).get("subject") || "";
+  }
   closeSheet();
   // Deep link: #/orders/PO-XXXX opens that order (a buyer agent can send this to its human).
   if (openId) openOrder(openId).catch((e) => toast("Can't open " + openId + ": " + e.message, 5000));

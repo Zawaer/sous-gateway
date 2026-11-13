@@ -16,4 +16,8 @@ The browser verifies mandate and quote JWS payloads against the gateway's JWKS. 
 
 After a submission, the buyer URL keeps the order ID in the `order` query parameter. Reopen that URL to check the status and verify the receipt against the original signed quote. **Refresh status** checks the same order again.
 
+For a multi-item request, select candidates for each product and click **Add to basket**. The basket shares one mandate and delivery date. **Get signed basket quote** shows requested and quoted quantities per item. Use **Find alternatives** on a shortage row to replace that basket item and request a fresh quote. On an existing order, the same action looks up alternatives for the missing quantity.
+
+Pending orders refresh automatically while the tab is visible. **View audit trail** opens the seller audit log filtered to the order ID.
+
 Run the isolated tests with `node --test buyer/buyer.test.mjs` on Node 22 or newer.

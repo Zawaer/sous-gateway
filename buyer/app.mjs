@@ -1,10 +1,13 @@
 import { Gateway } from './gateway.mjs';
 import { helsinkiDate, parseIntent } from './intent.mjs';
+import { quoteCoverage } from './coverage.mjs';
 
 const $ = (id) => document.getElementById(id);
 const requestForm = $('request-form');
 const shortlistForm = $('shortlist-form');
-const state = { search: null, quote: null, order: null, busy: false, retry: false };
+const state = { search: null, quote: null, order: null, basket: null, editing: null, busy: false, retry: false };
+const statusPollMs = 4000;
+let statusTimer;
 const units = { L: 'L', KG: 'kg', SALES_UNIT: 'packs' };
 const tiers = {
   silent: 'Within mandate', notify: 'Within mandate · buyer notification required',
@@ -58,10 +61,15 @@ function updateControls() {
     checkbox.disabled = busy || retry || checkbox.dataset.unverified === 'true' || (checked.length >= 6 && !checkbox.checked);
   }
   $('request-quote').disabled = busy || retry || !checked.length;
+  $('request-quote').hidden = Boolean(state.basket || state.editing !== null);
+  $('add-to-basket').disabled = busy || retry || !checked.length;
+  for (const button of document.querySelectorAll('#basket-panel button, #quote-content button, #order-content button')) {
+    button.disabled = busy || retry;
+  }
   $('submit-order').hidden = !quote || quote.mandate_preview.outcome === 'block';
   $('submit-order').disabled = busy || !quote || (!retry && Date.parse(quote.expires_at) <= Date.now());
-  $('quote-substitutes').disabled = busy || retry;
   $('refresh').disabled = busy;
+  if (state.basket) for (const id of ['gateway', 'mandate', 'delivery']) $(id).disabled = true;
 }
 
 async function run(work) {
@@ -89,7 +97,66 @@ function clearSearch() {
   state.search = null;
   $('candidates').hidden = true;
   notice($('feedback'));
-  clearQuote();
+  if (!state.basket) clearQuote();
+  else updateControls();
+}
+
+function actionButton(label, onClick) {
+  const button = element('button', label, 'secondary');
+  button.type = 'button';
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+function selectedProducts() {
+  return [...shortlistForm.querySelectorAll('input:checked')].map((input) => input.value);
+}
+
+function startItem(entry = null, index = null) {
+  state.editing = index;
+  $('intent').value = '';
+  $('query').value = entry?.need.query ?? '';
+  $('amount').value = entry?.need.amount ?? '';
+  $('unit').value = entry?.need.unit ?? 'L';
+  $('claims').value = entry?.need.claims.join(', ') ?? '';
+  $('allergens').value = entry?.need.avoidAllergens.join(', ') ?? '';
+  $('category').value = entry?.need.category ?? '';
+  $('temperature').value = entry?.need.temperature ?? '';
+  $('substitute').value = entry?.need.substituteFor ?? '';
+  if (state.basket) {
+    $('mandate').value = state.basket.mandate.id;
+    $('delivery').value = state.basket.deliveryDate;
+    $('gateway').value = state.basket.gateway.base;
+  }
+  $('add-to-basket').textContent = index === null ? 'Add to basket' : 'Update basket item';
+  clearSearch();
+  $('query').focus();
+}
+
+function renderBasket() {
+  const basket = state.basket;
+  $('basket-panel').hidden = !basket;
+  if (!basket) return;
+  $('basket-context').textContent = `${basket.mandate.buyer} · Delivery ${basket.deliveryDate}`;
+  $('basket-items').replaceChildren(...basket.entries.map((entry, index) => {
+    const row = element('li', undefined, 'basket-item');
+    const title = `${entry.need.query} · ${entry.need.amount} ${units[entry.need.unit]}`;
+    const edit = actionButton('Edit', () => startItem(entry, index));
+    edit.setAttribute('aria-label', `Edit ${entry.need.query}`);
+    const remove = actionButton('Remove', () => {
+      basket.entries.splice(index, 1);
+      if (!basket.entries.length) state.basket = null;
+      startItem();
+      clearQuote();
+      renderBasket();
+    });
+    remove.setAttribute('aria-label', `Remove ${entry.need.query}`);
+    const actions = element('div', undefined, 'actions');
+    actions.append(edit, remove);
+    row.append(element('span', title), actions);
+    return row;
+  }));
+  updateControls();
 }
 
 function fillRequest() {
@@ -98,10 +165,13 @@ function fillRequest() {
     $('query').value = need.query;
     $('amount').value = need.amount;
     $('unit').value = need.unit;
-    $('delivery').value = need.deliveryDate;
+    if (!state.basket) $('delivery').value = need.deliveryDate;
     $('claims').value = [...new Set([...codes($('claims').value), ...need.claims])].join(', ');
     clearSearch();
-    notice($('intent-message'), 'Review the filled fields and add any product constraints before searching.');
+    const message = state.basket && need.deliveryDate !== state.basket.deliveryDate
+      ? `Review the filled fields. This item will use the basket delivery date, ${state.basket.deliveryDate}.`
+      : 'Review the filled fields and add any product constraints before searching.';
+    notice($('intent-message'), message);
   } catch (error) {
     notice($('intent-message'), error.message, true);
   }
@@ -169,6 +239,71 @@ function renderShortages(content, quote) {
   appendList(content, 'Missing from the quote', shortages);
 }
 
+function renderCoverage(content, quote, draft = [], findAlternatives) {
+  const coverage = quoteCoverage(quote, draft);
+  if (!coverage.length) {
+    renderShortages(content, quote);
+    return;
+  }
+  const list = element('ul', undefined, 'order-lines coverage');
+  for (const [index, row] of coverage.entries()) {
+    const { item, quoted, missing, reasons, referenceSku } = row;
+    const label = item.note || row.lines[0]?.name || referenceSku || 'Requested item';
+    const unit = units[item.unit];
+    const li = element('li');
+    li.append(element('strong', label));
+    const amounts = element('dl');
+    for (const [term, value] of [['Requested', item.amount], ['Quoted', quoted]]) {
+      const pair = element('div');
+      pair.append(element('dt', term), element('dd', `${value} ${unit}`));
+      amounts.append(pair);
+    }
+    li.append(amounts);
+    if (missing) {
+      li.append(element('p', `${missing} ${unit} of ${label} missing by the requested date`, 'shortage'));
+      appendList(li, 'Why it could not be covered', reasons);
+      if (referenceSku) {
+        const button = actionButton('Find alternatives', () => findAlternatives(index, row, li));
+        button.setAttribute('aria-label', `Find alternatives for ${label}`);
+        li.append(button);
+      }
+    }
+    list.append(li);
+  }
+  content.append(element('h3', 'Coverage by item'), list);
+}
+
+function editQuotedItem(index, row) {
+  const { gateway, mandate, entries, deliveryDate } = state.quoteContext;
+  if (!state.basket) {
+    state.basket = { gateway, mandate, entries: [...entries], deliveryDate };
+    renderBasket();
+  }
+  const entry = entries[index];
+  const need = { ...entry.need, substituteFor: row.referenceSku };
+  startItem({ need }, index);
+  requestForm.requestSubmit($('find-substitutes'));
+}
+
+function showOrderAlternatives(gateway, quote, row, container) {
+  run(async () => {
+    const mandate = await gateway.mandate(quote.mandate_id);
+    const need = {
+      amount: row.missing, unit: row.item.unit, deliveryDate: quote.requested_delivery_date,
+      substituteFor: row.referenceSku, claims: [], avoidAllergens: [],
+    };
+    const { options } = await gateway.substitutes(need, mandate);
+    container.querySelector('.alternative-results')?.remove();
+    const results = element('div', undefined, 'alternative-results');
+    if (!options.length) results.append(element('p', 'No alternatives match the mandate for this request.'));
+    appendList(results, 'Alternatives for the missing quantity', options.map(({ name, offer, compromises }) =>
+      [name, offer.delivery_date && `Delivery ${offer.delivery_date}`,
+        offer.line_total_ex_vat != null && `${money(offer.line_total_ex_vat, quote.currency)} ex VAT`,
+        ...compromises].filter(Boolean).join(' · ')));
+    container.append(results);
+  });
+}
+
 function renderQuote(quote) {
   const preview = quote.mandate_preview;
   const content = $('quote-content');
@@ -192,20 +327,22 @@ function renderQuote(quote) {
     list.append(row);
   }
   content.append(list);
-  renderShortages(content, quote);
+  const draft = state.quoteContext.entries.map(({ need, productIds }) => ({
+    amount: need.amount, unit: need.unit, note: need.query, product_ids: productIds, substitute_for: need.substituteFor,
+  }));
+  renderCoverage(content, quote, draft, editQuotedItem);
   appendList(content, 'Mandate findings', preview.findings.map((finding) => finding.message));
   appendList(content, 'Other products considered', quote.alternatives_considered.map((option) => `${option.name} · ${option.why_not.join(' ')}`));
   $('submit-order').textContent = preview.outcome === 'ask' ? 'Send for approval' : 'Submit order';
-  $('quote-substitutes').hidden = Boolean(state.search.need.substituteFor) || quote.lines.length !== 1 ||
-    !quote.lines[0].issues.some(({ code }) => ['OUT_OF_STOCK', 'CUTOFF_PASSED', 'SALES_BLOCK', 'UNDELIVERABLE', 'LATER_DATE'].includes(code));
   $('quote-panel').hidden = false;
 }
 
-async function renderOrder(gateway, order, quote) {
-  const content = $('order-content');
+async function renderOrder(current, order) {
+  const { gateway, quote } = current;
+  const content = document.createDocumentFragment();
   const status = statuses[order.status] || order.status;
-  content.replaceChildren(element('p', `${order.id} · ${status}`, 'total'));
-  renderShortages(content, quote);
+  content.append(element('p', `${order.id} · ${status}`, 'total'));
+  renderCoverage(content, quote, [], (_, row, container) => showOrderAlternatives(gateway, quote, row, container));
   appendList(content, 'Gateway decision', order.decision.findings.map((finding) => finding.message));
   try {
     const signed = await gateway.receipt(order, quote);
@@ -220,6 +357,8 @@ async function renderOrder(gateway, order, quote) {
   } catch (error) {
     content.append(element('p', error.message, 'notice'));
   }
+  if (current !== state.order) return;
+  $('order-content').replaceChildren(content);
   $('order-panel').hidden = false;
   const fallback = `${gateway.base}/ui/#/orders/${encodeURIComponent(order.id)}`;
   let approval = fallback;
@@ -229,11 +368,43 @@ async function renderOrder(gateway, order, quote) {
   }
   $('approvals').href = approval;
   $('approvals').hidden = order.status !== 'pending_approval';
+  $('order-audit-link').href = `${gateway.base}/ui/#/audit?${new URLSearchParams({ subject: order.id })}`;
+  updateControls();
 }
 
-function showOrder(gateway, order, quote) {
-  state.order = { gateway, id: order.id, quote };
-  return renderOrder(gateway, order, quote);
+async function showOrder(gateway, order, quote) {
+  clearTimeout(statusTimer);
+  state.order = { gateway, id: order.id, quote, snapshot: order };
+  await renderOrder(state.order, order);
+  scheduleStatus();
+}
+
+function scheduleStatus() {
+  clearTimeout(statusTimer);
+  if (state.order?.snapshot.status !== 'pending_approval') return;
+  statusTimer = setTimeout(async () => {
+    if (!document.hidden && !state.busy) {
+      try { await refreshOrder(); } catch { /* Retry transient failures on the next poll. */ }
+    }
+    scheduleStatus();
+  }, statusPollMs);
+}
+
+async function refreshOrder(force = false) {
+  const current = state.order;
+  if (!current || current.refreshing) return;
+  current.refreshing = true;
+  try {
+    const { gateway, id } = current;
+    const order = await gateway.getOrder(id);
+    if (current !== state.order) return;
+    if (force || order.status !== current.snapshot.status || order.receipt_jws !== current.snapshot.receipt_jws) {
+      await renderOrder(current, order);
+      current.snapshot = order;
+    }
+  } finally {
+    current.refreshing = false;
+  }
 }
 
 $('interpret').addEventListener('click', fillRequest);
@@ -245,7 +416,10 @@ $('intent').addEventListener('keydown', (event) => {
 requestForm.addEventListener('input', (event) => {
   if (event.target !== $('intent')) clearSearch();
 });
-shortlistForm.addEventListener('change', clearQuote);
+shortlistForm.addEventListener('change', () => {
+  if (state.basket) updateControls();
+  else clearQuote();
+});
 
 requestForm.addEventListener('submit', (event) => {
   event.preventDefault();
@@ -269,29 +443,74 @@ requestForm.addEventListener('submit', (event) => {
     state.search = { gateway, need, mandate };
     $('api-link').href = `${gateway.base}/docs`;
     renderSearch(need, mandate, products, original);
+    const saved = state.basket?.entries[state.editing]?.productIds ?? [];
+    for (const input of shortlistForm.querySelectorAll('input')) {
+      input.checked = saved.includes(input.value) && input.dataset.unverified !== 'true';
+    }
     $('candidates').scrollIntoView({ block: 'start' });
   });
 });
 
-$('quote-substitutes').addEventListener('click', () => {
-  $('substitute').value = state.quote.lines[0].product_id;
-  requestForm.requestSubmit($('find-substitutes'));
+function selectedEntry() {
+  const { gateway, mandate, need } = state.search;
+  const productIds = selectedProducts();
+  if (!productIds.length) throw new Error('Select at least one product.');
+  return { gateway, mandate, entry: { need: { ...need, query: need.query || need.substituteFor }, productIds } };
+}
+
+$('add-to-basket').addEventListener('click', () => {
+  run(() => {
+    const { gateway, mandate, entry } = selectedEntry();
+    state.basket ??= { gateway, mandate, deliveryDate: entry.need.deliveryDate, entries: [] };
+    const basket = state.basket;
+    const index = state.editing ?? basket.entries.length;
+    if (index >= 50) throw new Error('A basket can contain up to 50 items.');
+    const used = new Set(basket.entries.filter((_, position) => position !== index).flatMap((item) => item.productIds));
+    if (entry.productIds.some((id) => used.has(id))) {
+      throw new Error('A product can only appear on one basket item. Combine quantities or choose different products.');
+    }
+    basket.entries[index] = entry;
+    startItem();
+    clearQuote();
+    renderBasket();
+    $('basket-panel').scrollIntoView({ block: 'start' });
+  });
+});
+
+$('add-another').addEventListener('click', () => startItem());
+
+async function requestQuote(gateway, mandate, deliveryDate, entries) {
+  const quote = await gateway.quoteBasket(deliveryDate, mandate, entries);
+  state.quoteContext = { gateway, mandate, deliveryDate, entries: [...entries] };
+  state.quote = quote;
+  renderQuote(quote);
+  $('quote-panel').scrollIntoView({ block: 'start' });
+}
+
+$('quote-basket').addEventListener('click', () => {
+  run(async () => {
+    const { gateway, entries, deliveryDate, mandate: saved } = state.basket;
+    const mandate = await gateway.mandate(saved.id);
+    if (mandate.agent_id !== saved.agent_id) throw new Error('The mandate holder changed. Build a new basket.');
+    await requestQuote(gateway, mandate, deliveryDate, entries);
+  });
 });
 
 shortlistForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  const ids = [...new FormData(shortlistForm).getAll('product')];
+  if (state.basket) {
+    $('add-to-basket').click();
+    return;
+  }
   run(async () => {
-    const { gateway, need, mandate } = state.search;
-    state.quote = await gateway.quote(need, mandate, ids);
-    renderQuote(state.quote);
-    $('quote-panel').scrollIntoView({ block: 'start' });
+    const { gateway, mandate, entry } = selectedEntry();
+    await requestQuote(gateway, mandate, entry.need.deliveryDate, [entry]);
   });
 });
 
 $('submit-order').addEventListener('click', () => {
   run(async () => {
-    const { quote, search: { gateway } } = state;
+    const { quote, quoteContext: { gateway } } = state;
     let order;
     try {
       order = await gateway.order(quote, state.retry);
@@ -316,6 +535,9 @@ $('submit-order').addEventListener('click', () => {
     if (gateway.base === location.origin) url.searchParams.delete('gateway');
     else url.searchParams.set('gateway', gateway.base);
     history.replaceState(null, '', url);
+    state.basket = null;
+    startItem();
+    renderBasket();
     clearQuote();
     await showOrder(gateway, order, quote);
     $('order-panel').scrollIntoView({ block: 'start' });
@@ -323,11 +545,7 @@ $('submit-order').addEventListener('click', () => {
 });
 
 $('refresh').addEventListener('click', () => {
-  run(async () => {
-    const { gateway, id, quote } = state.order;
-    const order = await gateway.getOrder(id);
-    await renderOrder(gateway, order, quote);
-  });
+  run(() => refreshOrder(true));
 });
 
 const linkedOrder = pageParams.get('order');

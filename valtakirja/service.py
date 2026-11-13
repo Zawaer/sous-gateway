@@ -128,11 +128,11 @@ def _request_quote(req: QuoteRequest) -> dict:
     considered: list[dict] = []
     gaps: list[dict] = []
     now = _now()
-    for item in req.items:
+    for item_index, item in enumerate(req.items):
         unit = None if item.unit == "SALES_UNIT" else item.unit
         offers, now = Q.offers(item.product_ids, req.delivery_date, item.amount, unit)
         if not offers:
-            gaps.append({"item": item.model_dump(), "uncovered": item.amount, "unit": item.unit,
+            gaps.append({"item": item.model_dump(), "item_index": item_index, "uncovered": item.amount, "unit": item.unit,
                          "reason": "No such product ids."})
             continue
         chosen, uncovered = Q.plan(item.amount, unit, offers) if len(offers) > 1 else (
@@ -142,17 +142,18 @@ def _request_quote(req: QuoteRequest) -> dict:
             chosen = [offers[0]]
             uncovered = 0.0
         for l in chosen:
+            l["item_index"] = item_index
             if item.substitute_for:
                 l["substitute_for"] = item.substitute_for
             lines.append(l)
         picked = {l["product_id"] for l in chosen}
-        considered += [{"product_id": o["product_id"], "name": o["name"],
+        considered += [{"product_id": o["product_id"], "name": o["name"], "item_index": item_index,
                         "comparison_price": o["comparison_price"], "orderable": o["orderable"],
                         "why_not": [i["message"] for i in o["issues"] if i["severity"] == "blocking"]
                         or ["More expensive per unit than the chosen option."]}
                        for o in sorted(offers, key=Q.rank_key) if o["product_id"] not in picked][:6]
         if uncovered > 0:
-            gaps.append({"item": item.model_dump(), "uncovered": uncovered, "unit": item.unit})
+            gaps.append({"item": item.model_dump(), "item_index": item_index, "uncovered": uncovered, "unit": item.unit})
 
     total_ex = round(sum(l["line_total_ex_vat"] or 0 for l in lines), 2)
     total_inc = round(sum(l["line_total_inc_vat"] or 0 for l in lines), 2)
@@ -165,6 +166,7 @@ def _request_quote(req: QuoteRequest) -> dict:
         "expires_at": Q.quote_expiry(now, [l for l in lines if l["orderable"]]).isoformat(timespec="milliseconds"),
         "requested_delivery_date": req.delivery_date.isoformat(),
         "currency": "EUR",
+        "items": [item.model_dump() for item in req.items],
         "lines": lines,
         "total_ex_vat": total_ex,
         "total_inc_vat": total_inc,

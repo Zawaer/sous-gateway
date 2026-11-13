@@ -58,8 +58,20 @@
           <legend>Select up to six products that fit the request.</legend>
           <div id="products" class="products"></div>
         </fieldset>
-        <button type="submit" id="request-quote" disabled>Get signed quote</button>
+        <div class="actions">
+          <button type="submit" id="request-quote" disabled>Get signed quote</button>
+          <button type="button" id="add-to-basket" class="secondary" disabled>Add to basket</button>
+        </div>
       </form>
+    </section>
+    <section id="basket-panel" class="panel" aria-labelledby="basket-title" hidden>
+      <h2 id="basket-title">Basket</h2>
+      <p id="basket-context" class="muted"></p>
+      <ul id="basket-items" class="order-lines"></ul>
+      <div class="actions">
+        <button type="button" id="quote-basket">Get signed basket quote</button>
+        <button type="button" id="add-another" class="secondary">Add another item</button>
+      </div>
     </section>
     <section id="quote-panel" class="panel" aria-labelledby="quote-title" hidden>
       <div class="section-title">
@@ -68,13 +80,15 @@
       </div>
       <div id="quote-content"></div>
       <button type="button" id="submit-order">Submit order</button>
-      <button type="button" id="quote-substitutes" class="secondary" hidden>Find substitutes</button>
     </section>
     <section id="order-panel" class="panel" aria-labelledby="order-title" hidden>
       <h2 id="order-title">Order</h2>
-      <div id="order-content"></div>
-      <button type="button" id="refresh" class="secondary">Refresh status</button>
-      <a id="approvals" class="text-action" target="_blank" rel="noopener" hidden>Open seller approval inbox ↗</a>
+      <div id="order-content" aria-live="polite"></div>
+      <div class="actions">
+        <button type="button" id="refresh" class="secondary">Refresh status</button>
+        <a id="approvals" class="text-action" target="_blank" rel="noopener" hidden>Open seller approval inbox ↗</a>
+        <a id="order-audit-link" class="text-action" target="_blank" rel="noopener">View audit trail ↗</a>
+      </div>
     </section>
     <noscript><p class="notice">Enable JavaScript to run the reference buyer agent.</p></noscript>
   </main>

@@ -82,7 +82,14 @@ legend { padding: 0; margin-bottom: .65rem; }
 .order-lines { padding: 0; list-style: none; }
 .order-lines > li { border-top: 1px solid var(--line); padding: .65rem 0; }
 .order-lines small { display: block; }
-.text-action { display: inline-block; margin: .75rem 0 .2rem .6rem; }
+.actions { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; }
+.basket-item { display: flex; align-items: center; justify-content: space-between; gap: .65rem; }
+.basket-item button, .coverage button { padding: .4rem .8rem; }
+.coverage { margin: 1rem 0; }
+.coverage dl { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; margin: .35rem 0; }
+.coverage dt { color: var(--muted); font-size: .85rem; }
+.coverage dd { margin: 0; }
+.coverage .shortage { color: var(--error); }
 @media (max-width: 34rem) {
   .intent { flex-wrap: wrap; }
   .section-title { flex-wrap: wrap; gap: .2rem .7rem; margin-bottom: .6rem; }

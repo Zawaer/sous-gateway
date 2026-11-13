@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import { Gateway, gatewayUrl, verifyJws } from './gateway.mjs';
 import { helsinkiDate, parseIntent } from './intent.mjs';
+import { quoteCoverage } from './coverage.mjs';
 
 const { privateKey, publicKey } = generateKeyPairSync('ed25519');
 const jwks = { keys: [{ ...publicKey.export({ format: 'jwk' }), kid: 'fixture', use: 'sig' }] };
@@ -68,7 +69,7 @@ test('uses signed request identities, selected SKUs, catalog filters and one ide
   assert.deepEqual(requests[2].url.searchParams.getAll('avoid_allergens'), ['AM', 'AN']);
   assert.deepEqual(requests[2].url.searchParams.getAll('claims'), ['VEGAN']);
   assert.deepEqual(await client.quote(need, mandate, ['sku']), quote);
-  assert.deepEqual(requests[3].body.items[0], { product_ids: ['sku'], amount: 5, unit: 'KG', substitute_for: null });
+  assert.deepEqual(requests[3].body.items[0], { product_ids: ['sku'], amount: 5, unit: 'KG', substitute_for: null, note: 'oats' });
   assert.equal((await client.order(quote)).status, 'pending_approval');
   const expired = { ...quote, expires_at: '2000-01-01T00:00:00Z' };
   await assert.rejects(client.order(expired), /expired/);
@@ -154,4 +155,48 @@ test('reopens an order using its original signed quote and rejects mismatched ID
   assert.deepEqual(await client.getQuote(reopened.quote_id), quote);
   await assert.rejects(client.getOrder('PO-2'), /different order/);
   await assert.rejects(client.getQuote('Q-2'), /different signed quote/);
+});
+
+test('binds each signed basket line to its request and reports a named shortage with its own reasons', async () => {
+  const rice = { ...need, query: 'rice', amount: 15, claims: [] };
+  const entries = [{ need, productIds: ['sku'] }, { need: rice, productIds: ['rice-sku'] }];
+  const items = [
+    { note: 'oats', amount: 5, unit: 'KG', product_ids: ['sku'], substitute_for: null },
+    { note: 'rice', amount: 15, unit: 'KG', product_ids: ['rice-sku'], substitute_for: null },
+  ];
+  const basketQuote = {
+    ...quote, items,
+    lines: [{ ...quote.lines[0], item_index: 0, orderable: true, quantity: 3,
+      covers: { unit: 'KG', amount: 6 }, delivery_date: need.deliveryDate }],
+    uncovered: [{ item: items[1], item_index: 1, uncovered: 15, unit: 'KG' }],
+    alternatives_considered: [{ item_index: 1, orderable: false, why_not: ['Cut-off passed.'] }],
+  };
+  const client = new Gateway('https://example.test', async (url, init) => {
+    if (url.endsWith('jwks.json')) return Response.json(jwks);
+    assert.deepEqual(JSON.parse(init.body).items, items);
+    return Response.json({ quote: basketQuote, jws: token(basketQuote, 'quote') });
+  });
+  const signed = await client.quoteBasket(need.deliveryDate, mandate, entries);
+  const [oats, riceRow] = quoteCoverage(signed);
+  assert.equal(oats.quoted, 6);
+  assert.equal(oats.missing, 0);
+  assert.equal(riceRow.quoted, 0);
+  assert.equal(riceRow.missing, 15);
+  assert.deepEqual(riceRow.reasons, ['Cut-off passed.']);
+  assert.equal(riceRow.referenceSku, 'rice-sku');
+  basketQuote.lines[0].item_index = 1;
+  await assert.rejects(client.quoteBasket(need.deliveryDate, mandate, entries), /basket item/);
+  await assert.rejects(client.quoteBasket(need.deliveryDate, mandate, [entries[0], entries[0]]), /only appear on one/);
+});
+
+test('shows a shortage when a single offer quotes more stock than it can deliver', () => {
+  const item = { amount: 12, unit: 'SALES_UNIT', product_ids: ['sku'] };
+  const [row] = quoteCoverage({
+    ...quote, items: [item],
+    lines: [{ item_index: 0, orderable: true, quantity: 12, available_amount: 3,
+      delivery_date: need.deliveryDate, issues: [{ code: 'PARTIAL_STOCK', message: 'Only three packs available.' }] }],
+  });
+  assert.equal(row.quoted, 12);
+  assert.equal(row.missing, 9);
+  assert.deepEqual(row.reasons, ['Only three packs available.']);
 });
