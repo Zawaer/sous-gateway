@@ -468,6 +468,127 @@ function mandateCard(m) {
   </article>`;
 }
 
+// Stats: what the gateway did, for Valio Aimo's operators (and the demo's numbers slide).
+// Everything is computed from /orders and the audit log, so it's the same record anyone can check.
+const CATALOG_SIZE = 17546;
+const NAIVE_CALLS = Math.ceil(CATALOG_SIZE / 1000) * 2; // price + availability, 1000 ids per call
+const TIER_ICON = { silent: "✓", notify: "✉", ask: "?", block: "✕" };
+const RULE_GROUP = {
+  allergen: "Allergen safety", spend: "Spend limits", availability: "Stock and cut-offs", supply: "Supply risk",
+  delivery: "Delivery date", price: "Price", product: "Product requirements", substitution: "Substitutes",
+  need: "Partial cover", mandate: "Mandate validity", order: "Empty order",
+};
+
+views.stats = {
+  key: "",
+  async load() {
+    const [{ orders }, { events }, chain] = await Promise.all([
+      api("/orders"), api("/audit?limit=10000"), api("/audit/verify")]);
+    const key = (events[0]?.seq ?? "") + "|" + orders.length;
+    if (key === this.key && view.dataset.view === "stats") return;
+    this.key = key;
+    view.dataset.view = "stats";
+
+    const n = orders.length;
+    const byTier = { silent: 0, notify: 0, ask: 0, block: 0 };
+    for (const o of orders) byTier[o.decision?.outcome] = (byTier[o.decision?.outcome] || 0) + 1;
+    const auto = byTier.silent + byTier.notify;
+
+    // Rules that held or stopped an order (ask/block findings), counted once per order.
+    const rules = {};
+    for (const o of orders) {
+      const seen = new Set();
+      for (const f of o.decision?.findings || []) {
+        if (f.outcome !== "ask" && f.outcome !== "block") continue;
+        if (seen.has(f.rule)) continue;
+        seen.add(f.rule);
+        const r = (rules[f.rule] ||= { rule: f.rule, ask: 0, block: 0, example: f.message });
+        r[f.outcome]++;
+      }
+    }
+    const ruleRows = Object.values(rules).sort((a, b) => (b.ask + b.block) - (a.ask + a.block)).slice(0, 10);
+    const allergenStops = orders.filter((o) => (o.decision?.findings || [])
+      .some((f) => f.rule.startsWith("allergen.") && (f.outcome === "ask" || f.outcome === "block"))).length;
+
+    // Valio Aimo API usage, from the audit log.
+    const quotes = events.filter((e) => e.event === "quote.issued");
+    const searches = events.filter((e) => e.event === "catalog.search").length;
+    let calls = 0, hits = 0;
+    for (const q of quotes) {
+      const c = q.data.valio_api_calls || {};
+      calls += (c.price_calls || 0) + (c.availability_calls || 0);
+      hits += c.cache_hits || 0;
+    }
+    const perQuote = quotes.length ? calls / quotes.length : 0;
+
+    // Human decisions and how long they took.
+    const decided = orders.filter((o) => o.approval);
+    const mins = decided.map((o) => (new Date(o.approval.at) - new Date(o.created_at)) / 60000).sort((a, b) => a - b);
+    const median = mins.length ? mins[Math.floor(mins.length / 2)] : null;
+    const approved = decided.filter((o) => o.approval.approved).length;
+    const pending = orders.filter((o) => o.status === "pending_approval").length;
+
+    // Spend that actually went through, by buyer.
+    const spend = {};
+    for (const o of orders) if (o.status === "ordered") spend[o.buyer] = (spend[o.buyer] || 0) + (o.total_ex_vat || 0);
+    const spendRows = Object.entries(spend).sort((a, b) => b[1] - a[1]);
+    const spendTotal = spendRows.reduce((s, [, v]) => s + v, 0);
+
+    const pct = (a, b) => b ? Math.round((a / b) * 100) + " %" : "–";
+    const tile = (label, value, sub) => `<div class="tile"><div class="muted small">${label}</div>
+      <div class="hero">${value}</div><div class="small muted">${sub}</div></div>`;
+    const bar = (label, value, max, text, title, cls = "") => `
+      <div class="bar-row" title="${esc(title || "")}">
+        <div class="bar-label">${label}</div>
+        <div class="bar-track"><div class="bar ${cls}" style="width:${max ? Math.max(2, (value / max) * 100) : 0}%"></div></div>
+        <div class="bar-val">${text}</div>
+      </div>`;
+    const tierMax = Math.max(...Object.values(byTier), 1);
+    const ruleMax = Math.max(...ruleRows.map((r) => r.ask + r.block), 1);
+    const spendMax = Math.max(...spendRows.map(([, v]) => v), 1);
+
+    view.innerHTML = `<div class="head"><div><h2>Gateway stats</h2>
+        <div class="muted">Computed live from the orders and the audit log (${events.length} events).</div></div></div>
+      <div class="tiles">
+        ${tile("Handled without a human", pct(auto, n), `${auto} of ${n} agent orders went straight through`)}
+        ${tile("Held or refused by the mandate", byTier.ask + byTier.block, `${byTier.block} refused · ${byTier.ask} sent to a human`)}
+        ${tile("Allergen checks that stopped an order", allergenStops, "Unknown allergen data counts as unsafe")}
+        ${tile("Valio API calls per quote", perQuote ? perQuote.toFixed(1) : "–",
+          `${calls} calls for ${quotes.length} quotes · ${searches} searches used none · vs ~${NAIVE_CALLS} to poll the whole catalog`)}
+        ${tile("Human decisions", decided.length, `${approved} approved · ${decided.length - approved} rejected${median != null ? ` · median ${median < 1 ? "<1" : Math.round(median)} min` : ""}${pending ? ` · ${pending} waiting` : ""}`)}
+        ${tile("Ordered through the gateway", eur(spendTotal), "ex VAT, approved and automatic orders")}
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">Mandate outcomes</h3>
+        <div class="muted small">What the rules engine decided for each order. Deterministic code, no AI.</div>
+        ${["silent", "notify", "ask", "block"].map((t) => bar(
+          `<span class="tier t-${t}">${TIER_ICON[t]} ${TIER_LABEL[t]}</span>`, byTier[t], tierMax,
+          `${byTier[t]} <span class="muted">${pct(byTier[t], n)}</span>`, `${byTier[t]} orders: ${TIER_LABEL[t]}`, "b-" + t)).join("")}
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">Rules that held or stopped orders</h3>
+        <div class="muted small">Each rule counted once per order. Hover a row for an example message.</div>
+        ${ruleRows.length ? ruleRows.map((r) => bar(
+          `<div>${esc(RULE_GROUP[r.rule.split(".")[0]] || r.rule)}</div><div class="rule mono">${esc(r.rule)}</div>`,
+          r.ask + r.block, ruleMax,
+          `${r.ask + r.block}${r.block ? ` <span class="muted small">(${r.block} refused)</span>` : ""}`, r.example)).join("")
+          : `<div class="empty">No orders held yet.</div>`}
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">Ordered spend by buyer</h3>
+        <div class="muted small">ex VAT</div>
+        ${spendRows.length ? spendRows.map(([b, v]) => bar(esc(b), v, spendMax, eur(v), `${b}: ${eur(v)}`)).join("")
+          : `<div class="empty">Nothing ordered yet.</div>`}
+      </div>
+
+      <div class="chain ${chain.ok ? "ok" : "bad"}">${chain.ok ? "✔" : "✖"} <div><b>${chain.ok ? "Every number above comes from an intact audit chain" : `Audit chain broken at #${esc(chain.broken_at_seq)}`}</b>
+        <div class="small">${chain.events} events verified. <a href="#/audit">Open the audit log</a></div></div></div>`;
+  },
+};
+
 // --- sheet, routing, refresh ------------------------------------------------------
 
 function openSheet(html) {
@@ -505,9 +626,13 @@ async function refresh() {
 }
 
 function route() {
-  const name = (location.hash.match(/^#\/(\w+)/) || [])[1];
+  const [, name, openId] = location.hash.match(/^#\/(\w+)(?:\/([\w-]+))?/) || [];
+  const same = current === name && openId;
   current = views[name] ? name : "inbox";
   closeSheet();
+  // Deep link: #/orders/PO-XXXX opens that order (a buyer agent can send this to its human).
+  if (openId) openOrder(openId).catch((e) => toast("Can't open " + openId + ": " + e.message, 5000));
+  if (same) return;
   document.querySelectorAll(".tabs a").forEach((a) => a.classList.toggle("on", a.dataset.tab === current));
   view.dataset.view = "";
   views[current].key = "";
