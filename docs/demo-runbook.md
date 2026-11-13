@@ -12,7 +12,7 @@ from Valio Aimo's mock API; nothing is staged in the UI.
    in that browser). On the deployed gateway the code is with Rene; never show it on screen.
 4. Dry run: `uv run python scripts/demo.py --base <base> --list`.
 5. Scene 5 creates its own buyer (Kaarna Catering) the first time it runs on a gateway, which
-   needs the approver code: `VALTAKIRJA_APPROVER_CODE=<code> uv run python scripts/demo.py 5 --base <base>`
+   needs the approver code: `SOUS_APPROVER_CODE=<code> uv run python scripts/demo.py 5 --base <base>`
    (type it in your own terminal; never show it on screen). Later runs reuse the mandate.
 
 ## Scenes

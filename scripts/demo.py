@@ -185,7 +185,7 @@ def ensure_mandate(gw: Gateway, m: dict) -> None:
     """Issue the mandate unless the gateway already has it (needs SOUS_APPROVER_CODE if the gateway sets one)."""
     if gw.http.get(f"/mandates/{m['id']}").status_code == 200:
         return
-    code = os.getenv("SOUS_APPROVER_CODE", "")
+    code = os.getenv("SOUS_APPROVER_CODE") or os.getenv("VALTAKIRJA_APPROVER_CODE", "")  # old name still works
     r = gw.http.post("/mandates", json=m, headers={"x-approver-code": code} if code else {})
     if r.status_code >= 400:
         raise RuntimeError(f"could not issue {m['id']} ({r.status_code}); set SOUS_APPROVER_CODE "
