@@ -29,5 +29,8 @@ Run all scenes in one go with `scripts/demo.py --base <base> --pause 4`.
   the per-IP rate limit (60 POST/min) was hit; wait a minute and rerun that scene.
 - After Sun 15.11 17:00 the mock's Stock cut-off has passed and most products read as
   "cut-off passed" (see the eval note in `docs/STATUS.md`). Record before that.
+- Scene 1 comes back **Ask human** with `spend.daily_limit`: the hotel mandate allows €8,000 per
+  day and earlier rehearsals the same day count towards it. That is the mandate working; record on
+  a fresh day (it resets at midnight Helsinki time) or use a gateway whose orders were reset.
 - Approve says the approver code is wrong: clear it by entering the right one at the prompt
   (the UI asks again on 401).

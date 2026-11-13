@@ -233,6 +233,16 @@ pre {
 .card.fresh { animation: arrive-card 2.4s ease-out; }
 @keyframes arrive-card { 0% { background-color: var(--ask-bg); transform: translateY(-4px); } 100% { background-color: var(--panel); } }
 
+/* order flow: the brief's Request -> Lookup -> Order -> Approval */
+.flow { list-style: none; margin: 8px 0 0; padding: 0; position: relative; }
+.flow-step { display: grid; grid-template-columns: 28px 1fr; gap: 12px; padding: 0 0 16px; position: relative; }
+.flow-step:not(:last-child)::before { content: ""; position: absolute; left: 13px; top: 28px; bottom: 2px; width: 1px; background: var(--rule); }
+.flow-n { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font: .78rem var(--mono);
+  background: var(--solid); color: var(--on-solid); }
+.flow-step b { font: 400 1.05rem var(--serif); }
+.flow-step .small { margin-top: 3px; }
+.versions { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 4px; font-size: .84rem; }
+
 /* approver code dialog */
 .codebox { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px;
   background: rgba(20, 20, 18, .35); animation: fade .2s ease-out; }
@@ -248,6 +258,10 @@ pre {
 .sub ul { margin: 2px 0 0; padding-left: 16px; font-size: .82rem; color: var(--ink-55); }
 .sub .price { font-variant-numeric: tabular-nums; font-size: .88rem; }
 .sub-line { padding: 12px 0; border-bottom: 1px solid var(--rule); }
+.match { font: .7rem var(--mono); padding: 1px 6px; border-radius: 3px; background: var(--pill); color: var(--ink-55); white-space: nowrap; }
+.match.m-same { background: var(--silent-bg); color: var(--silent); }
+.match.m-compatible { background: var(--notify-bg); color: var(--notify); }
+.match.m-different { background: var(--block-bg); color: var(--block); }
 
 /* stats */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 0; margin-bottom: 28px;

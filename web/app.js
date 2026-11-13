@@ -389,6 +389,8 @@ async function openOrder(id) {
       <dt>Delivery</dt><dd>${dateOnly(o.delivery_date)}</dd>
       <dt>Placed</dt><dd>${when(o.created_at)}</dd>
     </dl>
+    <h3>How it happened</h3>
+    <ol class="flow" id="flow"><li class="muted small">Loading…</li></ol>
     <h3>Mandate decision ${tier(d.outcome)}</h3>
     <div class="muted small">By ${esc(d.by)} at ${when(d.at)}. Deterministic rules; no AI in this step.</div>
     ${findingsList(d.findings)}
@@ -402,6 +404,7 @@ async function openOrder(id) {
     ${a ? `<h3>Human decision</h3>
       <p>${a.approved ? "Approved" : "Rejected"} by <b>${esc(a.by)}</b> at ${when(a.at)}${a.note ? `: “${esc(a.note)}”` : ""}</p>
       ${a.result_reason && a.result_reason !== a.note ? `<p class="muted">${esc(a.result_reason)}</p>` : ""}` : ""}
+    <div id="asof"></div>
     <h3>Lines</h3>
     ${linesTable(o.lines)}
     <h3>Substitutes</h3>
@@ -431,6 +434,103 @@ async function openOrder(id) {
   const all = [...new Map([...events, ...q.events].map((e) => [e.seq, e])).values()].sort((x, y) => x.seq - y.seq);
   const el = $("#order-audit");
   if (el) el.innerHTML = all.length ? all.map(eventRow).join("") : `<div class="empty">No events.</div>`;
+
+  // The four steps from Valio Aimo's brief, rebuilt from the signed quote and the audit log.
+  allergenNames ||= await api("/allergens").then((x) => x.codes).catch(() => ({}));
+  const [quote, recent, hist] = await Promise.all([
+    api("/quotes/" + encodeURIComponent(o.quote_id)).then((r) => r.quote).catch(() => null),
+    api("/audit?limit=400").then((r) => r.events).catch(() => []),
+    api(`/orders/${encodeURIComponent(o.id)}/history`).catch(() => null),
+  ]);
+  if (!$("#flow") || $("#sheet-body h2")?.textContent.indexOf(o.id) !== 0) return; // panel closed or replaced
+  const quoteEv = all.find((e) => e.event === "quote.issued");
+  const qTime = new Date(quote?.issued_at || quoteEv?.ts || o.created_at);
+  // Link a catalog search only if it was this agent's last step before the quote (no other quote in
+  // between) and it returned at least one of the quoted products. Newest first in `recent`.
+  const quoted = new Set([...(quote?.lines || []), ...(quote?.alternatives_considered || [])].map((l) => l.product_id));
+  const before = recent.find((e) => e.actor === o.agent_id && (e.event === "catalog.search" ||
+    (e.event === "quote.issued" && e.subject !== o.quote_id)) && new Date(e.ts) <= qTime);
+  const search = before?.event === "catalog.search" && qTime - new Date(before.ts) < 15 * 60000 &&
+    (before.data.results || []).some((id) => quoted.has(id)) ? before : null;
+  $("#flow").innerHTML = flowSteps(o, quote, search, all);
+  $("#asof").innerHTML = asOfSection(o, hist);
+}
+
+function flowSteps(o, q, search, events) {
+  const d = o.decision || {};
+  const a = o.approval;
+  const calls = q?.valio_api_calls ? (q.valio_api_calls.price_calls || 0) + (q.valio_api_calls.availability_calls || 0) : null;
+  const subs = (q?.lines || []).filter((l) => l.substitute_for);
+  const gaps = (q?.uncovered || []).filter((g) => g.uncovered > 0);
+  const skipped = q?.alternatives_considered || [];
+  const notified = events.filter((e) => e.event === "notification.sent");
+  const step = (n, title, when_, who, body) => `<li class="flow-step">
+      <span class="flow-n">${n}</span>
+      <div><div class="row"><b>${title}</b><span class="mono muted">${when_ ? when(when_) : ""}</span></div>
+        ${who ? `<div class="small"><span class="actor ${who[0]}">${who[0]}</span> ${esc(who[1])}</div>` : ""}
+        <div class="small">${body}</div></div></li>`;
+
+  const request = step(1, "Request", search?.ts || q?.issued_at, ["agent", o.agent_id],
+    `Needs delivery by ${dateOnly(q?.requested_delivery_date || o.delivery_date)}
+     ${search ? ` · searched “${esc(search.data.query)}”${search.data.claims?.length ? ` with ${esc(search.data.claims.join(", "))}` : ""}
+       → ${(search.data.results || []).length} products from the static catalog, 0 Valio API calls`
+       : !subs.length && q ? ` · named ${(q.lines || []).map((l) => `<span class="mono">${esc(l.product_id)}</span>`).join(", ")} directly, no catalog search` : ""}
+     ${subs.length ? ` · asked to replace ${subs.map((l) => `<span class="mono">${esc(l.substitute_for)}</span>`).join(", ")} with a substitute` : ""}`);
+
+  const lookup = step(2, "Lookup", q?.issued_at, ["system", "Valtakirja gateway"],
+    q ? `Live price and availability${calls != null ? ` (${calls ? `${calls} Valio API call${calls === 1 ? "" : "s"}` : "from the gateway's short-lived cache, 0 Valio API calls"})` : ""} →
+      signed quote <span class="mono">${esc(q.id)}</span>, ${eur(q.total_ex_vat)} ex VAT, valid until ${when(q.expires_at)}.
+      ${(q.lines || []).map((l) => `Chose ${esc(l.quantity)} × ${esc(l.name)}${l.logistic_model ? ` (${esc(l.logistic_model)})` : ""}.`).join(" ")}
+      ${skipped.length ? `Passed over ${skipped.length}: ${skipped.slice(0, 2).map((s) => `${esc(s.name)} (${esc(((s.why_not || [])[0] || "").replace(/\.$/, ""))})`).join("; ")}${skipped.length > 2 ? ` and ${skipped.length - 2} more` : ""}.` : ""}
+      ${gaps.length ? `<span style="color:var(--ask)">Could not cover ${gaps.map((g) => `${esc(g.uncovered)} ${esc(g.unit || "")}`).join(", ")}.</span>` : ""}`
+      : `<span class="muted">Quote ${esc(o.quote_id)} not found.</span>`);
+
+  const fired = (d.findings || []).filter((f) => f.outcome !== "silent" && f.rule !== "mandate.ok");
+  const order = step(3, "Order", o.created_at, ["agent", o.agent_id],
+    `${d.outcome === "block" ? "Tried to order" : "Committed to"} the quote at its fixed price, ${eur(o.total_ex_vat)} ex VAT. The gateway re-checked the quote's
+     signature and cut-offs, then the mandate engine ruled ${tier(d.outcome)}${fired.length
+       ? `: ${fired.map((f) => esc(f.message)).join(" ")}` : " (all checks passed)."}`);
+
+  let appr;
+  if (d.outcome === "block") {
+    appr = step(4, "Approval", d.at, ["system", "mandate engine"], `Refused outright: this is outside what any human can approve under the mandate. Nothing was ordered.`);
+  } else if (a) {
+    appr = step(4, "Approval", a.at, ["human", a.by],
+      `${a.approved ? "Approved" : "Rejected"}${a.note ? `: “${esc(a.note)}”` : ""} → ${tier(o.status)}${a.result_reason && a.result_reason !== a.note ? ` ${esc(a.result_reason)}` : ""}`);
+  } else if (o.status === "pending_approval") {
+    appr = step(4, "Approval", null, ["human", o.buyer],
+      `<span style="color:var(--ask)">Waiting for a human at ${esc(o.buyer)}.</span>${notified.length ? " Approval request sent." : ""}`);
+  } else {
+    appr = step(4, "Approval", d.at, ["system", "mandate engine"],
+      `Within the mandate, so the agent decided alone; no human sign-off needed.${d.outcome === "notify" ? " The buyer was sent an FYI." : ""}`);
+  }
+  return request + lookup + order + appr;
+}
+
+// MariaDB system-versioned tables: the mandate exactly as it was when the order was decided.
+function asOfSection(o, h) {
+  if (!h) return "";
+  const versions = (h.versions || []).map((v) => `<li>${tier(v.status)} <span class="mono muted">${when(v.valid_from)} → ${v.valid_to ? when(v.valid_to) : "now"}</span></li>`).join("");
+  if (h.backend !== "mariadb" || !h.mandate_at_decision) {
+    return `<h3>Mandate at decision time</h3><p class="small muted">${esc(h.note || "Point-in-time history needs the MariaDB backend.")}</p>`;
+  }
+  const m = h.mandate_at_decision;
+  const changed = h.mandate_changed_since_decision || [];
+  const allergens = (m.avoid_allergens || []).map((c) => allergenNames?.[c] || c).join(", ") || "none";
+  return `<h3>Mandate at decision time</h3>
+    <p class="small muted">Read from MariaDB's system-versioned history, not the current mandate, so a later edit can't
+      rewrite why this order was decided the way it was.</p>
+    <div class="rules small">
+      <div><span class="muted">Agent alone up to</span><span>${eur(m.auto_approve_limit_eur)}</span></div>
+      <div><span class="muted">Refuse above</span><span>${m.hard_limit_eur != null ? eur(m.hard_limit_eur) : "–"}</span></div>
+      <div><span class="muted">Avoid allergens</span><span>${esc(allergens)}</span></div>
+      <div><span class="muted">Substitutes</span><span>${tier(m.substitutions)}</span></div>
+      <div><span class="muted">Revoked</span><span>${m.revoked ? "yes" : "no"}</span></div>
+      <div><span class="muted">Since then</span><span>${changed.length
+        ? `<span style="color:var(--ask)">changed: ${esc(changed.join(", "))}</span>` : "unchanged"}</span></div>
+    </div>
+    ${versions ? `<p class="small" style="margin-bottom:4px">Order versions</p><ul class="versions">${versions}</ul>` : ""}
+    <details><summary>Query</summary><pre>${esc(h.query || "")}</pre></details>`;
 }
 
 // Good / better / best substitutes for one order line (live price and availability for a shortlist).
@@ -464,6 +564,8 @@ async function findSubstitutes(btn, order) {
   btn.disabled = false;
 }
 
+const MATCH_LABEL = { same: "same type", compatible: "compatible type", unknown: "type unknown", different: "different type" };
+
 function subCard(s) {
   const o = s.offer || {};
   const cp = o.comparison_price || {};
@@ -472,6 +574,7 @@ function subCard(s) {
   return `<div class="sub">
     <div class="row" style="align-items:center">${tier(s.tier)}${s.official_substitute ? `<span class="mono muted">official</span>` : ""}</div>
     <div class="nm">${esc(s.name)}</div>
+    ${s.type?.label ? `<div class="small">${esc(s.type.label)} <span class="match m-${esc(s.type.match)}">${esc(MATCH_LABEL[s.type.match] || s.type.match || "")}</span></div>` : ""}
     <div class="muted mono">${esc(s.product_id)}${s.brand ? " · " + esc(s.brand) : ""}${o.logistic_model ? " · " + esc(o.logistic_model) : ""}</div>
     <div class="price">${cp.ex_vat != null ? `${eur(cp.ex_vat)} / ${esc(cp.per)}` : eur(o.unit_price_ex_vat)}
       ${pc != null ? `<span class="muted">(${pc > 0 ? "+" : ""}${Math.round(pc * 100)} %)</span>` : ""}
@@ -537,6 +640,13 @@ const EVENT_LABEL = {
   "substitutes.suggested": "Substitutes suggested",
   "notification.sent": "Notification sent",
   "notification.failed": "Notification failed",
+  "standing.created": "Standing order created",
+  "standing.paused": "Standing order paused",
+  "standing.resumed": "Standing order resumed",
+  "standing.renewal_checked": "Standing order checked for drift",
+  "standing.renewed": "Standing order renewed",
+  "standing.history_simulated": "Standing order history simulated (demo)",
+  "suggestions.offered": "Valio suggestions offered (sponsored)",
 };
 const NOTIFY_WHAT = { "order.notify": "FYI to the buyer", "order.ask": "approval request to the buyer",
   "order.decided": "decision to the agent", test: "test" };
@@ -558,6 +668,19 @@ function eventSummary(e) {
       return esc(d.reason || "");
     case "notification.sent": case "notification.failed":
       return `${esc(NOTIFY_WHAT[d.event] || d.event)} via ${esc(d.channel)}${d.status_code ? ` (HTTP ${esc(d.status_code)})` : ""}${d.error ? " · " + esc(d.error) : ""}`;
+    case "standing.created": {
+      const so = d.standing_order || {};
+      return `${esc(so.name || so.id || "")}${so.items ? ` · ${so.items.length} item(s)` : ""}`;
+    }
+    case "standing.renewal_checked":
+      return `${eur(d.total_ex_vat)} for ${dateOnly(d.delivery_date)} · ${(d.drift || []).length
+        ? `<span style="color:var(--ask)">drift: ${(d.drift || []).map((x) => esc(x.message || x.rule)).join(" · ")}</span>` : "no drift"}`;
+    case "standing.renewed":
+      return `→ <span class="mono">${esc(d.order_id)}</span> ${tier(d.status)}${(d.drift_rules || []).length ? ` · ${esc(d.drift_rules.join(", "))}` : ""}`;
+    case "standing.history_simulated":
+      return `${(d.weeks || []).length} past week(s), marked simulated`;
+    case "suggestions.offered":
+      return `to ${esc(d.agent_id)}: ${(d.suggestions || []).map((s) => `${esc((s.kind || "").replace(/_/g, " "))} <span class="mono">${esc(s.product_id)}</span>`).join(", ") || "none"}`;
     case "substitutes.suggested":
       return (d.options || []).length
         ? (d.options || []).map((x) => `${tier(x.tier)} <span class="mono">${esc(x.product_id)}</span>`).join(" ")
