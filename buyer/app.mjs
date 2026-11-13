@@ -382,13 +382,21 @@ async function showOrder(gateway, order, quote) {
 function scheduleStatus() {
   clearTimeout(statusTimer);
   if (state.order?.snapshot.status !== 'pending_approval') return;
-  statusTimer = setTimeout(async () => {
-    if (!document.hidden && !state.busy) {
-      try { await refreshOrder(); } catch { /* Retry transient failures on the next poll. */ }
-    }
-    scheduleStatus();
-  }, statusPollMs);
+  statusTimer = setTimeout(pollPendingOrder, statusPollMs);
 }
+
+async function pollPendingOrder() {
+  if (state.order?.snapshot.status !== 'pending_approval') return;
+  clearTimeout(statusTimer);
+  if (!document.hidden && !state.busy) {
+    try { await refreshOrder(); } catch { /* Retry transient failures on the next poll. */ }
+  }
+  scheduleStatus();
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) pollPendingOrder();
+});
 
 async function refreshOrder(force = false) {
   const current = state.order;
