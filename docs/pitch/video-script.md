@@ -9,13 +9,13 @@ Before recording (full steps in [demo-runbook.md](../demo-runbook.md)): record b
 
 ## 0:00–0:10 Hook: 13 minutes vs seconds
 
-- **Screen:** split screen. Left **[STILL]**: Puntari's run, timer at 13 minutes, final answer "call wholesalers on Saturday". Right **[REC]**: the Valtakirja receipt appearing within seconds.
+- **Screen:** split screen. Left **[STILL]**: Puntari's run, timer at 13 minutes, final answer "call wholesalers on Saturday". Right **[REC]**: the Sous receipt appearing within seconds.
 - **VO:** "We asked a good shopping agent for a thousand litres of lactose-free milk by Monday. It researched for thirteen minutes, then told us to phone a wholesaler on Saturday."
 
 ## 0:10–0:20 Problem, from Valio Aimo's side
 
-- **Screen [STILL]:** one line on black: "Agents will buy. Who defines how?" Then the Valtakirja name.
-- **VO:** "Agents will buy from wholesalers either way. So we built Valio Aimo's own front door for them. Valtakirja means mandate: every agent carries one from its human, and the gateway enforces it."
+- **Screen [STILL]:** one line on black: "Agents will buy. Who defines how?" Then the Sous name.
+- **VO:** "Agents will buy from wholesalers either way. So we built Valio Aimo's own front door for them. Every agent carries a mandate, a valtakirja, from its human, and the gateway enforces it."
 
 ## 0:20–0:42 Demo 1: hotel, 1,000 L, notify (and the cut-off the API missed)
 
@@ -49,8 +49,8 @@ Before recording (full steps in [demo-runbook.md](../demo-runbook.md)): record b
 
 ## 1:52–2:00 Close
 
-- **Screen [STILL]:** "Valtakirja" + one-liner + public URL + GitHub link.
-- **VO:** "Valtakirja. AI purchasing agents carry a signed mandate from their human, and Valio Aimo's gateway enforces it."
+- **Screen [STILL]:** "Sous" + one-liner + public URL + GitHub link.
+- **VO:** "Sous. AI purchasing agents carry a signed mandate from their human, and Valio Aimo's gateway enforces it."
 
 ---
 

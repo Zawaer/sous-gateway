@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Valtakirja: Valio Aimo agent gateway",
+    title="Sous: Valio Aimo agent gateway",
     version="0.1.0",
     description=(
         "Lets external purchasing agents search Valio Aimo's catalog, get signed quotes with live price and "

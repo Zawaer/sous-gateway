@@ -4,7 +4,7 @@ One idea per slide. Big type, few words. Numbers must match `docs/STATUS.md` and
 
 ---
 
-### 1. Valtakirja
+### 1. Sous
 - AI purchasing agents carry a signed mandate from their human, and Valio Aimo's gateway enforces it.
 - Junction 2026 · Valio Aimo: Trusted Trade Agents · https://135-181-8-209.sslip.io · GitHub
 - **Visual:** name large, one-liner below, small QR code to the live demo.

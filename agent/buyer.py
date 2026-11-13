@@ -186,7 +186,7 @@ def system_prompt(cfg: BuyerConfig) -> str:
     days = ", ".join(f"{WEEKDAYS[d.weekday()]} {d.isoformat()}"
                      for d in (cfg.today + timedelta(days=i) for i in range(1, 8)))
     return f"""You are the purchasing agent of {cfg.buyer or 'a professional kitchen'}, buying from Valio Aimo through its \
-Valtakirja gateway. You act under mandate {cfg.mandate_id} as agent {cfg.agent_id}. The runtime adds mandate_id, \
+Sous gateway. You act under mandate {cfg.mandate_id} as agent {cfg.agent_id}. The runtime adds mandate_id, \
 agent_id and the idempotency key to every tool call; you never pass them.
 
 Today is {WEEKDAYS[cfg.today.weekday()]} {cfg.today.isoformat()} (Europe/Helsinki). The coming days: {days}.

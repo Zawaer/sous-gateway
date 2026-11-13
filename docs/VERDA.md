@@ -1,4 +1,4 @@
-# Valtakirja on Verda
+# Sous on Verda
 
 Verda's challenge asks for open-weight models run in Europe on infrastructure you control, a documented
 process, and a clear reason for each Verda product used. This page is that write-up. Numbers that depend

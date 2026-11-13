@@ -125,7 +125,7 @@ def compose(event: str, order: dict, mandate: Mandate) -> dict:
             msg = f"{who} approved {oid}, but it is {status}: {_sentence(a.get('result_reason') or '')}. " \
                   "Nothing was ordered."
         return {"title": f"{oid} {status}", "message": msg, "url": url}
-    return {"title": "Valtakirja test notification",
+    return {"title": "Sous test notification",
             "message": f"Test notification for {mandate.buyer} (mandate {mandate.id}). Channels work.", "url": url}
 
 

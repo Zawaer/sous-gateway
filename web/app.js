@@ -1,4 +1,4 @@
-// Valtakirja gateway UI: approval inbox, orders, audit log and mandates.
+// Sous gateway UI: approval inbox, orders, audit log and mandates.
 // Plain JS, no build step. Talks to the gateway's REST API on the same origin
 // (override with ?api=http://host:port for development).
 
@@ -343,7 +343,7 @@ function setBadge(n) {
   const b = $("#badge");
   b.hidden = !n;
   b.textContent = n;
-  document.title = (n ? `(${n}) ` : "") + "Valtakirja gateway";
+  document.title = (n ? `(${n}) ` : "") + "Sous gateway";
 }
 
 // All orders, filterable by status.
@@ -483,7 +483,7 @@ function flowSteps(o, q, searches, events) {
        : !subs.length && q ? ` · named ${(q.lines || []).map((l) => `<span class="mono">${esc(l.product_id)}</span>`).join(", ")} directly, no catalog search` : ""}
      ${subs.length ? ` · asked to replace ${subs.map((l) => `<span class="mono">${esc(l.substitute_for)}</span>`).join(", ")} with a substitute` : ""}`);
 
-  const lookup = step(2, "Lookup", q?.issued_at, ["system", "Valtakirja gateway"],
+  const lookup = step(2, "Lookup", q?.issued_at, ["system", "Sous gateway"],
     q ? `Live price and availability${calls != null ? ` (${calls ? `${calls} Valio API call${calls === 1 ? "" : "s"}` : "from the gateway's short-lived cache, 0 Valio API calls"})` : ""} →
       signed quote <span class="mono">${esc(q.id)}</span>, ${eur(q.total_ex_vat)} ex VAT, valid until ${when(q.expires_at)}.
       ${(q.lines || []).map((l) => `Chose ${esc(l.quantity)} × ${esc(l.name)}${l.logistic_model ? ` (${esc(l.logistic_model)})` : ""}.`).join(" ")}

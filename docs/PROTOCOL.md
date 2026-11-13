@@ -1,4 +1,4 @@
-# Valtakirja trust protocol
+# Sous trust protocol
 
 Version 0.2 (Junction 2026). This document describes what the gateway in this repo does today, so an outside agent developer can build a buyer agent against it. Where the code makes a simplification for the demo, it says so.
 
@@ -10,7 +10,7 @@ The short version: a human issues a **mandate** to their purchasing agent. The a
 |---|---|---|
 | Buyer human | e.g. a hotel F&B manager | Issues and revokes the mandate. Approves or rejects held orders. |
 | Buyer agent | Any AI agent (Claude, Gemini, a script) | Searches, asks for quotes, places orders. Identified by `agent_id`; on mandates that require it, authenticated with a bearer credential (section 16). Can never approve its own orders. |
-| Gateway | Valio Aimo's Valtakirja service (this repo) | Holds the catalog, calls Valio Aimo's price and availability APIs, signs mandates, quotes and receipts, enforces the mandate, writes the audit log. |
+| Gateway | Valio Aimo's Sous service (this repo) | Holds the catalog, calls Valio Aimo's price and availability APIs, signs mandates, quotes and receipts, enforces the mandate, writes the audit log. |
 | Approver | The buyer human (or someone they delegate to) | Calls approve or reject on orders in `pending_approval`. |
 
 | Valio Aimo's suggestions | `valtakirja/suggest.py`, actor `valio-aimo-suggestions` | Offers sponsored, mandate-checked suggestions to the buyer agent. Never quotes or orders. |
@@ -341,7 +341,7 @@ A failed notification never blocks or fails an order; each delivery is audited a
 sequenceDiagram
     actor H as Buyer human
     participant A as Buyer agent
-    participant G as Valtakirja gateway
+    participant G as Sous gateway
     participant V as Valio Aimo APIs
     participant L as Audit log
 

@@ -1,8 +1,8 @@
-# Valtakirja
+# Sous
 
 **AI purchasing agents carry a signed mandate from their human, and Valio Aimo's gateway enforces it.**
 
-Valtakirja (Finnish for "power of attorney") is a gateway that lets any buyer's AI agent shop at Valio Aimo, the Finnish food-service wholesaler, over MCP or OpenAPI. The agent searches the catalog, gets a signed quote with live price and availability, and orders. Each agent holds a mandate from its human: spend limits, allergen rules, what may be substituted. A deterministic rules engine checks every order against it and puts it in one of four tiers: **silent** (ordered), **notify** (ordered, human gets an FYI), **ask** (held for a human) or **block** (refused, with the rule that fired). The LLM never decides. Every step goes into a hash-chained audit log that the buyer and Valio Aimo both read.
+Sous is a gateway that lets any buyer's AI agent shop at Valio Aimo, the Finnish food-service wholesaler, over MCP or OpenAPI. The agent searches the catalog, gets a signed quote with live price and availability, and orders. Each agent holds a mandate from its human: spend limits, allergen rules, what may be substituted. A deterministic rules engine checks every order against it and puts it in one of four tiers: **silent** (ordered), **notify** (ordered, human gets an FYI), **ask** (held for a human) or **block** (refused, with the rule that fired). The LLM never decides. Every step goes into a hash-chained audit log that the buyer and Valio Aimo both read.
 
 Built at Junction 2026 for Valio Aimo's challenge "Trusted Trade Agents".
 
@@ -138,7 +138,7 @@ flowchart LR
         A[Buyer agent<br/>Claude Code, agent/ LLM agent, scripts]
         B[Reference buyer<br/>/buyer]
     end
-    subgraph Valtakirja gateway
+    subgraph Sous gateway
         MCP[MCP server<br/>/mcp]
         REST[REST + OpenAPI<br/>/docs]
         SVC[service.py<br/>search, quote, order, approve]

@@ -1,14 +1,14 @@
 # Junction submission
 
 ## Project name (≤30 chars)
-Valtakirja
+Sous
 
 ## Punchline (≤200 chars)
 AI purchasing agents carry a signed mandate from their human, and Valio Aimo's gateway enforces it: open MCP/OpenAPI ordering with deterministic guardrails and a verifiable audit trail.
 
 ## Description (markdown, ≤5000 chars)
 
-**Valtakirja** (Finnish for *mandate*, a power of attorney) is an open front door that lets any AI purchasing agent find products, get a binding quote and place orders with Valio Aimo, inside limits its human set. Live at https://135-181-8-209.sslip.io.
+**Sous** is an open front door that lets any AI purchasing agent find products, get a binding quote and place orders with Valio Aimo, inside limits its human set. Live at https://135-181-8-209.sslip.io.
 
 ### The problem
 We asked a general shopping agent for "1,000 litres of lactose-free milk by Monday". It researched for 13 minutes and concluded it would have to phone wholesalers on Saturday. Agents will buy from wholesalers anyway. If Valio Aimo doesn't define how they do it safely and openly, someone else's platform will.

@@ -44,7 +44,7 @@ the header "Authorization: Bearer <token>" (or, where headers are impossible, pa
 On an error, follow its "hint" field. Never state a price, stock level, delivery date or allergen fact
 that a tool did not return; say "unknown" instead. Allergen data marked 'unknown' is not safe."""
 
-mcp = MCPServer(name="valtakirja", title="Valtakirja: Valio Aimo agent gateway", instructions=INSTRUCTIONS,
+mcp = MCPServer(name="valtakirja", title="Sous: Valio Aimo agent gateway", instructions=INSTRUCTIONS,
                 version="0.2.0")
 
 

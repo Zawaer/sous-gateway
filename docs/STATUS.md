@@ -4,7 +4,7 @@ _Last updated: Fri 13.11 (Helsinki)._
 
 Live: production https://135-181-8-209.sslip.io (Verda CPU instance, Finland), staging https://staging.135-181-63-134.sslip.io. Both run `main` with MariaDB and the seeded demo mandates; human actions need the approver code.
 
-## Vision (one product: Valtakirja)
+## Vision (one product: Sous)
 Valio Aimo's front door for AI purchasing agents. Any buyer's agent (a hotel's, a hospital's) connects over **MCP or OpenAPI**, searches the catalog, gets a **signed quote** with live price and availability, and orders. Each agent carries a **mandate** (*valtakirja*) from its human: spend limits, allergen rules, substitution rules. Valio Aimo's gateway enforces the mandate in plain code and puts every order into one of four tiers:
 
 - **Silent:** routine, ordered and logged.
