@@ -465,7 +465,7 @@ views.audit = {
     view.innerHTML = `<div class="head"><div><h2>Audit log</h2>
         <div class="muted">One record for the buyer and Valio Aimo. Each entry includes the hash of the one before it.</div></div></div>
       ${chain.ok
-        ? `<div class="chain ok">✔ <div><b>Chain intact</b><div class="small">${chain.events} events verified · head <span class="mono">${esc((chain.head || "").slice(0, 16))}…</span></div></div></div>`
+        ? `<div class="chain ok">✔ <div><b>Chain intact</b><div class="small">${chain.events} events verified · head <span class="mono">${esc((chain.head || "").slice(0, 16))}…</span>${versioning(chain)}</div></div></div>`
         : `<div class="chain bad">✖ <div><b>Chain broken at event #${esc(chain.broken_at_seq)}</b><div class="small">An entry was edited or deleted after it was written.</div></div></div>`}
       <input id="audit-q" type="search" placeholder="Filter by order, quote or mandate id (e.g. PO-…, M-HOTEL-AURORA)" value="${esc(this.q)}">
       <div class="list" style="margin-top:12px">${events.length ? events.map(eventRow).join("") : `<div class="empty">No events.</div>`}</div>`;
@@ -481,6 +481,15 @@ views.audit = {
     }));
   },
 };
+
+// MariaDB keeps every past version of the audit rows (system-versioned table); the gateway
+// checks that none was ever changed or deleted. Shown only when the backend reports it.
+function versioning(chain) {
+  const sv = chain.system_versioning;
+  if (!sv) return "";
+  const n = sv.rows_changed_or_deleted || 0;
+  return ` · ${esc(chain.backend || "database")} system versioning: ${n ? `<b style="color:var(--block)">${n} row(s) changed or deleted (#${esc((sv.seqs || []).join(", #"))})</b>` : "no row ever changed or deleted"}`;
+}
 
 const EVENT_LABEL = {
   "mandate.issued": "Mandate issued",
