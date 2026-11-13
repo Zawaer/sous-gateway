@@ -111,6 +111,8 @@ def evaluate(
                 add(f"availability.{issue['code'].lower()}", "block", f"{name}: {issue['message']}", pid)
             elif issue["code"] == "LATER_DATE":
                 add("delivery.later_date", mandate.later_delivery, f"{name}: {issue['message']}", pid)
+            elif issue["code"] == "PARTIAL_STOCK":
+                add("availability.partial_stock", "ask", f"{name}: {issue['message']}", pid)
             elif issue["code"] == "PRICE_EXPIRES":
                 add("price.expires", "ask", f"{name}: {issue['message']}", pid)
 

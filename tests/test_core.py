@@ -186,3 +186,9 @@ def _signing_key(tmp_path, monkeypatch):
 def _offline_catalog(monkeypatch):
     """Tests never touch data/ (CI has no Valio data files); individual tests override this."""
     monkeypatch.setattr(catalog, "get", lambda pid: product(id=pid))
+
+
+def test_partial_stock_on_single_product_asks(monkeypatch):
+    short = Q.build_offer(product(), PRICE, avail(amount=50), date(2026, 11, 16), 100, "L", NOW)
+    out, findings = run(mandate(), [short])
+    assert out == "ask" and any(f.rule == "availability.partial_stock" for f in findings)

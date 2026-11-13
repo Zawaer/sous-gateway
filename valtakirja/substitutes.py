@@ -123,7 +123,7 @@ def suggest(
                 major.append(i["message"])
             elif i["code"] in ("STOCK_UNKNOWN", "PARTIAL_STOCK"):
                 minor.append(i["message"])
-        allergen = catalog.allergen_status(c, avoid) if avoid else {"status": "safe", "codes": []}
+        allergen = catalog.allergen_status(c, avoid, mandate.allow_may_contain if mandate else False) if avoid else {"status": "safe", "codes": []}
         if allergen["status"] == "unknown":
             major.append("no allergen data: a human must confirm it is free of "
                          + ", ".join(catalog.ALLERGENS.get(a, a) for a in avoid))

@@ -45,7 +45,17 @@ app = FastAPI(
     ),
     lifespan=lifespan,
 )
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
+                   expose_headers=["Mcp-Session-Id"])
+
+
+@app.middleware("http")
+async def mcp_without_slash(request: Request, call_next):
+    """Serve /mcp and /mcp/ alike: a 307 redirect can drop https behind a TLS proxy and breaks some MCP clients."""
+    if request.scope["path"] == "/mcp":
+        request.scope["path"] = "/mcp/"
+        request.scope["raw_path"] = b"/mcp/"
+    return await call_next(request)
 app.mount("/mcp", mcp_app)
 WEB_DIR = config.ROOT / "web"
 if WEB_DIR.is_dir():

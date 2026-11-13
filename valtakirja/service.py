@@ -196,6 +196,9 @@ def _refresh_cutoffs(q: dict, now: datetime) -> None:
 
 def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: str | None = None) -> dict:
     if idempotency_key and (prev := store.order_by_idempotency_key(idempotency_key)):
+        if prev["agent_id"] != agent_id or prev["mandate_id"] != mandate_id or prev["quote_id"] != quote_id:
+            raise GatewayError("idempotency_key_reused",
+                               "This idempotency key was already used for a different order; use a fresh key.", 409)
         return prev
     mandate = _mandate(mandate_id)
     q = store.get_quote(quote_id)
@@ -232,8 +235,7 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
         "idempotency_key": idempotency_key,
         "created_at": now.isoformat(timespec="milliseconds"), "updated_at": now.isoformat(timespec="milliseconds"),
     }
-    order["receipt_jws"] = signing.sign({k: order[k] for k in ("id", "quote_id", "mandate_id", "status", "total_ex_vat",
-                                                                "lines", "decision")}, "valtakirja-order+jws")
+    order["receipt_jws"] = _receipt(order)
     store.put_order(order)
     store.audit(f"order.{status}", "mandate-engine", "system", oid, mandate.buyer,
                 {"order_id": oid, "quote_id": quote_id, "agent_id": agent_id, "outcome": outcome,
@@ -242,6 +244,13 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
     if outcome in ("notify", "ask"):
         notify.send(f"order.{outcome}", order, mandate)  # FYI / approval request; never blocks the order
     return order
+
+
+def _receipt(order: dict) -> str:
+    """Signed receipt of the order's current state (re-issued after a human decision)."""
+    return signing.sign({k: order.get(k) for k in ("id", "quote_id", "mandate_id", "status", "total_ex_vat",
+                                                   "lines", "decision", "approval", "updated_at")},
+                        "valtakirja-order+jws")
 
 
 def decide(order_id: str, approver: str, approve: bool, note: str | None = None) -> dict:
@@ -265,6 +274,8 @@ def decide(order_id: str, approver: str, approve: bool, note: str | None = None)
     o["approval"] = {"by": approver, "approved": approve, "note": note, "at": now.isoformat(timespec="milliseconds"),
                      "result_reason": reason}
     o["updated_at"] = now.isoformat(timespec="milliseconds")
+    o["approval_url"] = None
+    o["receipt_jws"] = _receipt(o)
     store.put_order(o)
     store.audit("order.approved" if approve else "order.rejected_by_human", approver, "human", order_id,
                 o["buyer"], {"order_id": order_id, "note": note, "resulting_status": status, "reason": reason})
