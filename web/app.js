@@ -782,6 +782,119 @@ function mandateCard(m) {
   </article>`;
 }
 
+// Standing orders: recurring weekly orders renewed by the buyer's agent, with drift detection.
+const DAY = { mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", fri: "Friday", sat: "Saturday", sun: "Sunday" };
+
+views.standing = {
+  key: "",
+  async load() {
+    const { standing_orders: list } = await api("/standing-orders");
+    const details = await Promise.all(list.map((s) => api("/standing-orders/" + encodeURIComponent(s.id)).catch(() => null)));
+    const key = details.map((d) => d && d.standing_order.id + d.standing_order.active + (d.renewals[0]?.status || "") + d.renewals.length).join();
+    if (key === this.key && view.dataset.view === "standing") return;
+    this.key = key;
+    view.dataset.view = "standing";
+    view.innerHTML = `<div class="head"><div><h2>Standing orders</h2>
+      <div class="muted">Recurring weekly orders. Each week the buyer's agent renews them live; the gateway compares the
+        new quote with the last four renewals and holds the order for a human when quantities, cost or products drift.</div></div></div>
+      ${details.filter(Boolean).length ? `<div class="list">${details.filter(Boolean).map(standingRow).join("")}</div>`
+        : `<div class="empty">No standing orders yet.<p class="small">Try <span class="mono">scripts/demo_standing.py</span>.</p></div>`}`;
+    view.querySelectorAll("[data-so]").forEach((b) => b.addEventListener("click", () => { location.hash = "#/standing/" + b.dataset.so; }));
+  },
+};
+
+function lastLive(d) { return d.renewals.find((r) => !r.simulated) || null; }
+
+function standingRow(d) {
+  const so = d.standing_order;
+  const r = lastLive(d);
+  const totals = [...d.renewals].reverse().map((x) => x.total_ex_vat);
+  return `<button class="item" data-so="${esc(so.id)}">
+    <div><b>${esc(so.name)}</b> <span class="muted mono small">${esc(so.id)}</span>
+      <div class="muted small">${esc(so.buyer)} · every ${DAY[so.cadence?.weekday] || esc(so.cadence?.weekday)} ·
+        ${so.items.map((i) => `${esc(i.amount)} ${esc(i.unit)} ${esc(i.label || "")}`).join(", ")}</div>
+      ${r ? `<div class="small" style="margin-top:4px">${tier(r.status)} ${esc(r.summary || "")}</div>` : `<div class="small muted">Not renewed yet · next ${dateOnly(d.next_delivery_date)}</div>`}</div>
+    <div style="text-align:right">${so.active ? `<span class="tier t-silent">Active</span>` : `<span class="tier t-block">Paused</span>`}
+      ${spark(totals, r && r.drift?.length ? totals.length - 1 : -1, "Weekly total")}</div>
+  </button>`;
+}
+
+// Tiny bar trend: one bar per renewal, oldest first; the flagged bar uses the "ask" colour.
+function spark(values, flagged = -1, label = "") {
+  const vs = values.filter((v) => v != null);
+  if (!vs.length) return "";
+  const max = Math.max(...vs) || 1;
+  return `<span class="spark" role="img" aria-label="${esc(label)}: ${vs.map((v) => esc(v)).join(", ")}">${vs.map((v, i) =>
+    `<i style="height:${Math.max(8, (v / max) * 100)}%" class="${i === flagged ? "hot" : ""}" title="${esc(v)}"></i>`).join("")}</span>`;
+}
+
+async function openStanding(id) {
+  const d = await api("/standing-orders/" + encodeURIComponent(id));
+  const so = d.standing_order;
+  const live = lastLive(d);
+  const chrono = [...d.renewals].reverse();
+  const flaggedLabels = new Set((live?.drift || []).map((f) => (f.message || "").split(":")[0]));
+  openSheet(`
+    <div class="muted small">${esc(so.buyer)} · standing order</div>
+    <h2>${esc(so.name)} ${so.active ? `<span class="tier t-silent">Active</span>` : `<span class="tier t-block">Paused</span>`}</h2>
+    <dl class="kv small">
+      <dt>Delivery</dt><dd>Every ${DAY[so.cadence?.weekday] || esc(so.cadence?.weekday)} · next ${dateOnly(d.next_delivery_date)}</dd>
+      <dt>Agent</dt><dd class="mono">${esc(so.agent_id)}</dd>
+      <dt>Mandate</dt><dd class="mono">${esc(so.mandate_id)}</dd>
+      <dt>Drift rules</dt><dd>amount +${Math.round(d.rules.quantity_creep * 100)} % or up ${d.rules.trend_run} weeks in a row,
+        cost or price per unit +${Math.round(d.rules.cost_drift * 100)} %, a switched product or new supply risk, each vs the
+        median of the last ${d.rules.history_weeks} ordered renewals</dd>
+    </dl>
+    ${live ? `<h3>This week ${tier(live.status)}</h3>
+      <p>${esc(live.summary || "")}</p>
+      ${live.drift?.length ? findingsList(live.drift) : `<p class="small muted">No drift: renewed like the last weeks.</p>`}
+      ${live.order_id ? `<p class="small"><a href="#/orders/${esc(live.order_id)}">Open order ${esc(live.order_id)}</a>${live.status === "pending_approval" ? " to approve or reject" : ""}</p>` : ""}`
+      : `<p class="muted">Not renewed yet.</p>`}
+    <h3>Week by week</h3>
+    <table class="lines"><thead><tr><th>Item</th><th>Trend</th><th class="num">Median</th><th class="num">${live ? "This week" : "Usual"}</th></tr></thead><tbody>
+      ${so.items.map((it, k) => {
+        const amounts = chrono.map((r) => r.items?.[k]?.amount);
+        const base = d.baseline.items?.[k] || {};
+        const now = live?.items?.[k]?.amount ?? it.amount;
+        const hot = flaggedLabels.has(it.label);
+        const pct = base.median_amount ? Math.round((now / base.median_amount - 1) * 100) : null;
+        return `<tr><td>${esc(it.label || it.product_ids[0])}</td>
+          <td>${spark(amounts, hot && live ? amounts.length - 1 : -1, it.label + " per week")}</td>
+          <td class="num">${base.median_amount != null ? `${esc(base.median_amount)} ${esc(it.unit)}` : "–"}</td>
+          <td class="num" ${hot ? `style="color:var(--ask)"` : ""}>${esc(now)} ${esc(it.unit)}${pct ? ` <span class="small">(${pct > 0 ? "+" : ""}${pct} %)</span>` : ""}</td></tr>`;
+      }).join("")}
+      <tr><td>Total</td><td>${spark(chrono.map((r) => r.total_ex_vat), live?.drift?.some((f) => f.rule === "standing.cost_drift") ? chrono.length - 1 : -1, "weekly total")}</td>
+        <td class="num">${eur(d.baseline.median_total_ex_vat)}</td><td class="num">${eur(live?.total_ex_vat)}</td></tr>
+    </tbody></table>
+    <h3>Renewals</h3>
+    <div class="list">${d.renewals.map((r) => `
+      <div class="ev"><div class="seq">${dateOnly(r.delivery_date)}</div><div>
+        <div class="row"><span>${tier(r.status)} ${eur(r.total_ex_vat)}</span>
+          ${r.simulated ? `<span class="mono muted small">simulated history</span>` : r.order_id ? `<a class="mono small" href="#/orders/${esc(r.order_id)}">${esc(r.order_id)}</a>` : ""}</div>
+        <div class="small muted">${(r.items || []).map((i) => `${esc(i.amount)} ${esc(i.unit)} ${esc(i.label)}`).join(", ")}</div>
+        ${r.drift?.length ? `<div class="small" style="color:var(--ask)">${r.drift.map((f) => esc(f.rule.replace("standing.", ""))).join(", ")}</div>` : ""}
+      </div></div>`).join("") || `<div class="empty">No renewals yet.</div>`}</div>
+    <p class="small muted">Simulated weeks are demo history: amounts made up, priced from one real signed quote. Live
+      renewals always quote Valio Aimo's API.</p>
+    <div class="actions">
+      <button class="btn plain" data-toggle="${so.active ? "pause" : "resume"}">${so.active ? "Pause standing order" : "Resume standing order"}</button>
+      <a class="btn plain" href="#/audit?subject=${esc(so.id)}">History in audit log</a>
+    </div>
+  `);
+  $("#sheet-body [data-toggle]")?.addEventListener("click", async (e) => {
+    const act = e.target.dataset.toggle;
+    let by = approver();
+    if (!by) { by = (prompt("Your name, for the audit log:") || "").trim(); if (!by) return; setApprover(by); }
+    try {
+      await api(`/standing-orders/${encodeURIComponent(so.id)}/${act}`, { method: "POST", body: { by } });
+      toast(`${so.name} ${act === "pause" ? "paused" : "resumed"}.`);
+      views.standing.key = "";
+      openStanding(so.id);
+      refresh();
+    } catch (err) { toast("Failed: " + err.message, 6000); }
+  });
+}
+
 // Stats: what the gateway did, for Valio Aimo's operators (and the demo's numbers slide).
 // Everything is computed from /orders and the audit log, so it's the same record anyone can check.
 const CATALOG_SIZE = 17546;
@@ -790,7 +903,7 @@ const TIER_ICON = { silent: "✓", notify: "✉", ask: "?", block: "✕" };
 const RULE_GROUP = {
   allergen: "Allergen safety", spend: "Spend limits", availability: "Stock and cut-offs", supply: "Supply risk",
   delivery: "Delivery date", price: "Price", product: "Product requirements", substitution: "Substitutes",
-  need: "Partial cover", mandate: "Mandate validity", order: "Empty order",
+  need: "Partial cover", mandate: "Mandate validity", order: "Empty order", standing: "Standing-order drift",
 };
 
 views.stats = {
@@ -950,7 +1063,9 @@ function route() {
   }
   closeSheet();
   // Deep link: #/orders/PO-XXXX opens that order (a buyer agent can send this to its human).
-  if (openId) openOrder(openId).catch((e) => toast("Can't open " + openId + ": " + e.message, 5000));
+  // #/standing/SO-XXXX opens that standing order.
+  if (openId) (current === "standing" ? openStanding : openOrder)(openId)
+    .catch((e) => toast("Can't open " + openId + ": " + e.message, 5000));
   if (same) return;
   document.querySelectorAll(".tabs a").forEach((a) => a.classList.toggle("on", a.dataset.tab === current));
   view.dataset.view = "";

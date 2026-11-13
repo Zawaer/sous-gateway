@@ -243,6 +243,11 @@ pre {
 .flow-step .small { margin-top: 3px; }
 .versions { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 4px; font-size: .84rem; }
 
+/* standing orders: tiny weekly trend bars */
+.spark { display: inline-flex; align-items: flex-end; gap: 2px; height: 22px; vertical-align: middle; margin-top: 4px; }
+.spark i { display: block; width: 7px; background: var(--ink-40); border-radius: 1px 1px 0 0; }
+.spark i.hot { background: var(--ask); }
+
 /* approver code dialog */
 .codebox { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px;
   background: rgba(20, 20, 18, .35); animation: fade .2s ease-out; }
@@ -326,6 +331,6 @@ pre {
   .bar-row .bar-track { grid-column: 1 / -1; grid-row: 2; }
   .hero { font-size: 2.1rem; }
   .sheet-panel { padding: 24px 16px 40px; border-left: 0; }
-  .tabs { gap: 16px; }
+  .tabs { gap: 4px 16px; flex-wrap: wrap; overflow: visible; }
   .tabs a { font-size: .84rem; }
 }
