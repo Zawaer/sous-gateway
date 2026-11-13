@@ -11,6 +11,9 @@ either in-process (the MCP server object, used by the eval) or over Streamable H
 
     uv run python -m agent.buyer "We need 1,000 litres of lactose-free milk delivered on Monday." \\
         --mandate M-HOTEL-AURORA --agent aurora-purchasing-agent --gateway https://staging.135-181-63-134.sslip.io
+
+A menu request ("Lasagne for 120 on Monday; we have 10 kg flour") goes to the recipe planner (agent/recipe.py):
+dishes -> ingredients -> one basket quote.
 """
 
 from __future__ import annotations
@@ -449,7 +452,20 @@ def main(argv=None) -> int:
     ap.add_argument("--model")
     ap.add_argument("--max-tool-calls", type=int, default=12)
     ap.add_argument("--transcript", action="store_true", help="print every tool call")
+    ap.add_argument("--recipe", action="store_true",
+                    help="plan a menu ('Lasagne for 120 on Monday') into one basket quote with agent.recipe; "
+                         "automatic when the request names a known dish and a number of portions")
+    ap.add_argument("--no-recipe", action="store_true", help="never route to the recipe planner")
+    ap.add_argument("--order", action="store_true", help="with --recipe: place the planned basket")
     a = ap.parse_args(argv)
+    if not a.no_recipe:
+        from . import recipe
+        if a.recipe or recipe.looks_like_menu(a.request):
+            args = [a.request, "--mandate", a.mandate, "--agent", a.agent, "--gateway", a.gateway]
+            args += ["--provider", a.provider] if a.provider else []
+            args += ["--model", a.model] if a.model else []
+            args += ["--order"] if a.order else []
+            return recipe.main(args)
     cfg = config_from_env(a.provider, a.model)
     if not cfg.api_key and cfg.provider != "local":
         print(f"No API key for {cfg.provider} (set {cfg.provider.upper()} key env var); see agent/llm.py.",

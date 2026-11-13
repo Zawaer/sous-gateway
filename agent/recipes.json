@@ -1,0 +1,160 @@
+{
+  "_about": "Curated recipe table for agent/recipe.py: the offline fallback (--provider table) when no LLM is configured, and the ingredient lexicon both paths use to turn an ingredient into catalog searches. Amounts are per portion in g, ml or pcs (foodservice portions). 'ingredients' maps an ingredient key to Finnish-first search queries, words a matching product name must contain (any; lower case, English or Finnish) and words that rule a product out.",
+  "recipes": {
+    "lasagne": {
+      "name_fi": "Lasagne", "name_en": "Lasagne",
+      "aliases": ["lasagne", "lasagna", "lasanje", "lihalasagne"],
+      "ingredients": [
+        {"key": "lasagnelevy", "amount": 40, "unit": "g"},
+        {"key": "jauheliha", "amount": 90, "unit": "g"},
+        {"key": "tomaattimurska", "amount": 80, "unit": "g"},
+        {"key": "sipuli", "amount": 25, "unit": "g"},
+        {"key": "valkosipuli", "amount": 3, "unit": "g"},
+        {"key": "maito", "amount": 120, "unit": "ml", "notes": "bechamel"},
+        {"key": "voi", "amount": 10, "unit": "g"},
+        {"key": "vehnajauho", "amount": 10, "unit": "g"},
+        {"key": "juustoraaste", "amount": 25, "unit": "g"},
+        {"key": "oregano", "amount": 0.3, "unit": "g"},
+        {"key": "suola", "amount": 2, "unit": "g"},
+        {"key": "mustapippuri", "amount": 0.2, "unit": "g"}
+      ]
+    },
+    "lohikeitto": {
+      "name_fi": "Lohikeitto", "name_en": "Creamy salmon soup",
+      "aliases": ["lohikeitto", "salmon soup", "laxsoppa", "kermainen lohikeitto"],
+      "ingredients": [
+        {"key": "lohifilee", "amount": 90, "unit": "g"},
+        {"key": "peruna", "amount": 150, "unit": "g"},
+        {"key": "porkkana", "amount": 40, "unit": "g"},
+        {"key": "sipuli", "amount": 20, "unit": "g"},
+        {"key": "purjo", "amount": 20, "unit": "g"},
+        {"key": "kuohukerma", "amount": 60, "unit": "ml"},
+        {"key": "kalaliemi", "amount": 300, "unit": "ml", "notes": "prepared stock"},
+        {"key": "tilli", "amount": 3, "unit": "g"},
+        {"key": "voi", "amount": 5, "unit": "g"},
+        {"key": "maustepippuri", "amount": 0.2, "unit": "g"},
+        {"key": "suola", "amount": 2, "unit": "g"}
+      ]
+    },
+    "joulukinkku": {
+      "name_fi": "Joulukinkku", "name_en": "Christmas ham",
+      "aliases": ["joulukinkku", "christmas ham", "julskinka", "kinkku"],
+      "ingredients": [
+        {"key": "joulukinkku", "amount": 150, "unit": "g", "notes": "cooked, served sliced"},
+        {"key": "sinappi", "amount": 15, "unit": "g"}
+      ]
+    },
+    "rosolli": {
+      "name_fi": "Rosolli", "name_en": "Rosolli (beetroot salad)",
+      "aliases": ["rosolli", "beetroot salad", "sillsallad", "rosoll"],
+      "ingredients": [
+        {"key": "punajuuri", "amount": 50, "unit": "g"},
+        {"key": "peruna", "amount": 40, "unit": "g"},
+        {"key": "porkkana", "amount": 30, "unit": "g"},
+        {"key": "suolakurkku", "amount": 20, "unit": "g"},
+        {"key": "omena", "amount": 20, "unit": "g"},
+        {"key": "sipuli", "amount": 10, "unit": "g"},
+        {"key": "kuohukerma", "amount": 20, "unit": "ml", "notes": "dressing"}
+      ]
+    },
+    "karjalanpaisti": {
+      "name_fi": "Karjalanpaisti", "name_en": "Karelian stew",
+      "aliases": ["karjalanpaisti", "karelian stew", "karelsk köttgryta", "karelian hot pot"],
+      "ingredients": [
+        {"key": "naudanliha", "amount": 100, "unit": "g"},
+        {"key": "sianliha", "amount": 100, "unit": "g"},
+        {"key": "sipuli", "amount": 40, "unit": "g"},
+        {"key": "maustepippuri", "amount": 0.5, "unit": "g"},
+        {"key": "laakerinlehti", "amount": 0.1, "unit": "g"},
+        {"key": "suola", "amount": 2, "unit": "g"},
+        {"key": "peruna", "amount": 200, "unit": "g", "notes": "served with boiled potatoes"}
+      ]
+    },
+    "kasvissosekeitto": {
+      "name_fi": "Kasvissosekeitto", "name_en": "Puréed vegetable soup",
+      "aliases": ["kasvissosekeitto", "vegetable soup", "vegetable cream soup", "puréed vegetable soup",
+                  "pureed vegetable soup", "grönsakspuré", "sosekeitto"],
+      "ingredients": [
+        {"key": "porkkana", "amount": 80, "unit": "g"},
+        {"key": "peruna", "amount": 80, "unit": "g"},
+        {"key": "lanttu", "amount": 50, "unit": "g"},
+        {"key": "sipuli", "amount": 20, "unit": "g"},
+        {"key": "kasvisliemi", "amount": 250, "unit": "ml", "notes": "prepared stock"},
+        {"key": "ruokakerma", "amount": 40, "unit": "ml"},
+        {"key": "voi", "amount": 5, "unit": "g"},
+        {"key": "suola", "amount": 2, "unit": "g"}
+      ]
+    }
+  },
+  "ingredients": {
+    "lasagnelevy": {"fi": "lasagnelevy", "en": "lasagne sheets", "aliases": ["lasagne sheet", "lasagne plates", "lasagnelevyt", "pasta sheets"],
+                    "queries": ["lasagnelevy"], "must": ["lasagne plate", "lasagneplate", "lasagne sheet", "lasagnel"], "exclude": ["meal mix", "frozen 2x"]},
+    "jauheliha": {"fi": "naudan-sian jauheliha", "en": "beef-pork mince", "aliases": ["jauheliha", "minced meat", "mince", "ground beef", "minced beef", "beef mince", "köttfärs"],
+                  "queries": ["naudan-sian jauheliha", "jauheliha"], "must": ["mince"], "exclude": ["chicken", "patty", "browned", "turkey", "vegan", "plant"]},
+    "tomaattimurska": {"fi": "tomaattimurska", "en": "crushed tomatoes", "aliases": ["chopped tomatoes", "crushed tomato", "tomato", "tomatoes", "tomaatti", "tomaattisäilyke", "canned tomatoes"],
+                       "queries": ["tomaattimurska"], "must": ["chopped tomato", "crushed tomato", "polpa"], "exclude": ["paste"]},
+    "sipuli": {"fi": "sipuli", "en": "onion", "aliases": ["onions", "kelta sipuli", "keltasipuli", "yellow onion", "lök"],
+               "queries": ["kuorittu sipuli", "sipuli"], "must": ["onion"], "exclude": ["red", "balsamico", "spring", "fried", "bunch", "marin", "sweet", "garlic", "rings"]},
+    "valkosipuli": {"fi": "valkosipuli", "en": "garlic", "aliases": ["garlic cloves", "garlic clove", "valkosipulinkynsi", "vitlök"],
+                    "queries": ["valkosipuli kuorittu", "valkosipulimurska"], "must": ["garlic"], "exclude": ["crisps", "hummus", "crouton", "sauerkraut", "sauce", "sandwich", "bread", "oil", "butter"],
+                    "pcs_g": 5},
+    "maito": {"fi": "maito", "en": "milk", "aliases": ["kevytmaito", "täysmaito", "semi-skimmed milk", "whole milk", "mjölk"],
+              "queries": ["kevytmaito", "maito"], "must": ["milk"], "exclude": ["oat", "soy", "choco", "powder", "sour", "butter", "coconut", "rice", "almond", "drink 5 dl", "2 dl", "2,5 dl", "chocolate"]},
+    "voi": {"fi": "voi", "en": "butter", "aliases": ["smör", "unsalted butter", "salted butter"],
+            "queries": ["voi"], "must": ["butter"], "exclude": ["clarified", "garlic", "peanut", "brown butter", "dish", "10 g", "cookie", "croissant", "sauce"]},
+    "vehnajauho": {"fi": "vehnäjauho", "en": "wheat flour", "aliases": ["vehnäjauhot", "flour", "jauho", "jauhot", "all-purpose flour", "plain flour", "vetemjöl"],
+                   "queries": ["vehnäjauho"], "must": ["wheat flour"], "exclude": ["whole", "graham", "manitoba", "strong", "brown"]},
+    "juustoraaste": {"fi": "juustoraaste", "en": "grated cheese", "aliases": ["juusto", "cheese", "shredded cheese", "riivitty juusto", "emmental", "mozzarella", "parmesan", "parmesaani", "ost"],
+                     "queries": ["juustoraaste"], "must": ["grated", "shredded"], "exclude": ["vegan", "dry grated"]},
+    "oregano": {"fi": "oregano", "en": "oregano", "aliases": ["dried oregano", "kuivattu oregano"],
+                "queries": ["oregano"], "must": ["oregano"], "exclude": ["bunch", "box"]},
+    "suola": {"fi": "suola", "en": "salt", "aliases": ["salt", "sea salt", "merisuola", "ruokasuola"],
+              "queries": ["suola"], "must": ["salt"], "exclude": ["gourmet", "flakes", "smoked", "nitrite", "pepper", "mineral", "rock", "grinder", "mill", "hartshorn", "celery", "garlic", "herb"]},
+    "mustapippuri": {"fi": "mustapippuri", "en": "black pepper", "aliases": ["pippuri", "pepper", "jauhettu mustapippuri", "ground black pepper", "peppar"],
+                     "queries": ["jauhettu mustapippuri", "mustapippuri"], "must": ["black pepper"], "exclude": []},
+    "lohifilee": {"fi": "lohifilee", "en": "salmon fillet", "aliases": ["lohi", "salmon", "lax", "laxfilé", "fresh salmon"],
+                  "queries": ["lohifilee"], "must": ["salmon fillet"], "exclude": ["smoked", "cold", "gravad", "salted", "buffetslices", "patty"]},
+    "peruna": {"fi": "peruna", "en": "potato", "aliases": ["perunat", "potatoes", "kuorittu peruna", "peeled potato", "potatis", "boiled potatoes"],
+               "queries": ["kuorittu peruna", "peruna"], "must": ["potato"], "exclude": ["chips", "mash", "flakes", "starch", "salad", "wedges", "fries", "gratin", "sweet", "dice", "cube", "shaped"]},
+    "porkkana": {"fi": "porkkana", "en": "carrot", "aliases": ["porkkanat", "carrots", "morot"],
+                 "queries": ["porkkana"], "must": ["carrot"], "exclude": ["juice", "cake", "julienne", "brunoise", "baby", "grated", "patty", "puree"]},
+    "purjo": {"fi": "purjo", "en": "leek", "aliases": ["purjosipuli", "leeks", "purjolök"],
+              "queries": ["purjo"], "must": ["leek"], "exclude": []},
+    "kuohukerma": {"fi": "kuohukerma", "en": "whipping cream", "aliases": ["kerma", "cream", "vispikerma", "heavy cream", "double cream", "grädde", "vispgrädde"],
+                   "queries": ["kuohukerma"], "must": ["whipping cream"], "exclude": ["vegetable", "plant", "oat", "spray", "2 dl"]},
+    "kalaliemi": {"fi": "kalaliemi", "en": "fish stock", "aliases": ["fish bouillon", "kalaliemikuutio", "kalafondi", "fish broth", "fiskbuljong"],
+                  "queries": ["kalaliemi"], "must": ["fish bouillon"], "exclude": [" 1 l", "1l"], "concentrate_g_per_l": 15},
+    "tilli": {"fi": "tilli", "en": "dill", "aliases": ["dill", "tuore tilli", "fresh dill", "dill"],
+              "queries": ["tilli pakaste", "tilli"], "must": ["dill"], "exclude": ["cress", "pickle", "crisps", "pastill", "sauce", "potato"]},
+    "joulukinkku": {"fi": "joulukinkku", "en": "Christmas ham", "aliases": ["christmas ham", "kinkku", "ham", "julskinka", "kypsä joulukinkku"],
+                    "queries": ["joulukinkku"], "must": ["christmas ham"], "exclude": []},
+    "sinappi": {"fi": "sinappi", "en": "mustard", "aliases": ["mustard", "senap", "joulusinappi", "christmas mustard"],
+                "queries": ["sinappi"], "must": ["mustard", "sinappi"], "exclude": ["pickled", "seed", "rakuuna", "kjyvä", "dijon"]},
+    "punajuuri": {"fi": "punajuuri", "en": "beetroot", "aliases": ["beetroots", "beet", "rödbeta", "keitetty punajuuri"],
+                  "queries": ["punajuuri", "punajuurikuutio"], "must": ["beetroot"], "exclude": ["hummus", "pasta", "balls", "juice", "falafel", "basket", "burger", "salad", "bunch"]},
+    "suolakurkku": {"fi": "suolakurkku", "en": "pickled cucumber", "aliases": ["pickles", "pickle", "gherkin", "gherkins", "saltgurka", "salty cucumber"],
+                    "queries": ["suolakurkku"], "must": ["pickle", "suolakurkku", "salty cucumber"], "exclude": ["mayonnaise", "relish"]},
+    "omena": {"fi": "omena", "en": "apple", "aliases": ["apples", "omenat", "äpple"],
+              "queries": ["omena"], "must": ["apple"], "exclude": ["juice", "muffin", "pie", "pear", "cider", "marmalade", "jam", "puree", "pink lady"]},
+    "naudanliha": {"fi": "naudan lapa", "en": "beef shoulder", "aliases": ["naudanliha", "beef", "stewing beef", "beef chuck", "nötkött", "naudan paistikuutio"],
+                   "queries": ["naudan lapakuutio", "naudan lapa"], "must": ["beef shoulder", "beef chuck"], "exclude": ["mini", "strips"]},
+    "sianliha": {"fi": "porsaan lapa", "en": "pork shoulder", "aliases": ["sianliha", "pork", "porsaanliha", "sian lapa", "fläsk"],
+                 "queries": ["porsaan lapa"], "must": ["pork shoulder"], "exclude": ["iberico", "stripe", "strip", "boston"]},
+    "maustepippuri": {"fi": "maustepippuri", "en": "allspice", "aliases": ["allspice", "pimento", "kryddpeppar", "kokonainen maustepippuri"],
+                      "queries": ["maustepippuri"], "must": ["allspice", "pimento"], "exclude": ["ground", "minced", "crushed"], "pcs_g": 0.25},
+    "laakerinlehti": {"fi": "laakerinlehti", "en": "bay leaf", "aliases": ["bay leaves", "lagerblad", "laakerinlehdet"],
+                      "queries": ["laakerinlehti"], "must": ["bay leaf", "bay leaves"], "exclude": ["bunch"], "pcs_g": 0.2},
+    "lanttu": {"fi": "lanttu", "en": "swede", "aliases": ["rutabaga", "swedes", "kålrot"],
+               "queries": ["lanttu"], "must": ["swede"], "exclude": ["mash", "grated", "strip", "särä", "dices", "casserole", "laatikko"]},
+    "kasvisliemi": {"fi": "kasvisliemi", "en": "vegetable stock", "aliases": ["vegetable bouillon", "kasvisliemikuutio", "vegetable broth", "grönsaksbuljong"],
+                    "queries": ["kasvisliemi"], "must": ["vegetable bouillon"], "exclude": [" 1 l", "1l"], "concentrate_g_per_l": 15},
+    "ruokakerma": {"fi": "ruokakerma", "en": "cooking cream", "aliases": ["cooking cream", "matlagningsgrädde", "kevytkerma"],
+                   "queries": ["ruokakerma"], "must": ["cooking cream"], "exclude": ["oat", "soy", "plant", "2 dl", "3,3 dl", "thicker"]},
+    "kananmuna": {"fi": "kananmuna", "en": "egg", "aliases": ["eggs", "muna", "munat", "kananmunat", "ägg"],
+                  "queries": ["kananmuna"], "must": ["egg"], "exclude": ["noodle", "pasta", "liquor", "salad", "boiled", "yolk", "white"], "pcs_g": 60},
+    "sokeri": {"fi": "sokeri", "en": "sugar", "aliases": ["sugar", "socker", "hienosokeri"],
+               "queries": ["sokeri"], "must": ["sugar"], "exclude": ["vanilla", "brown", "lumps", "cubes", "5g", "icing", "cane"]},
+    "kerma_laktoositon": {"fi": "laktoositon kuohukerma", "en": "lactose-free whipping cream", "aliases": ["lactose-free cream", "laktoositon kerma"],
+                          "queries": ["kuohukerma laktoositon"], "must": ["whipping cream"], "exclude": ["2 dl"], "claims": ["FREE_FROM_LACTOSE"]}
+  }
+}

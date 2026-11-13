@@ -159,6 +159,13 @@ def _request_quote(req: QuoteRequest) -> dict:
     considered: list[dict] = []
     gaps: list[dict] = []
     now = _now()
+    if len(req.items) > 1:
+        # A basket: fetch every candidate's price and availability in one batched call each, so the
+        # per-item lookups below are served from the cache (2 Valio calls per basket, not 2 per item).
+        ids = list(dict.fromkeys(pid for i in req.items for pid in i.product_ids if catalog.get(pid)))
+        if ids:
+            aimo.prices(ids, req.delivery_date)
+            aimo.availability(ids, req.delivery_date)
     for item_index, item in enumerate(req.items):
         unit = None if item.unit == "SALES_UNIT" else item.unit
         offers, now = Q.offers(item.product_ids, req.delivery_date, item.amount, unit)
