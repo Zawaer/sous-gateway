@@ -8,11 +8,12 @@ from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
 
-from . import aimo, catalog, service as S, signing, store
+from . import aimo, catalog, config, service as S, signing, store
 from .mandate import Mandate
 from .mcp_server import mcp
 
@@ -43,6 +44,14 @@ app = FastAPI(
 )
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.mount("/mcp", mcp_app)
+WEB_DIR = config.ROOT / "web"
+if WEB_DIR.is_dir():
+    app.mount("/ui", StaticFiles(directory=WEB_DIR, html=True), name="ui")
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse("/ui/" if WEB_DIR.is_dir() else "/docs")
 
 
 @app.exception_handler(S.GatewayError)
