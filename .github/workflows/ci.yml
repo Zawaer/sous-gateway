@@ -23,6 +23,14 @@ on:
         description: "Only the vision eval (Nemotron VL reading kitchen paper; no Valio calls)"
         type: boolean
         default: false
+      vision_variants:
+        description: "Vision eval prompt variants, e.g. 'v2 v3 v3+verify' (empty: the default set)"
+        type: string
+        default: ""
+      vision_repeat:
+        description: "Read every page N times (run-to-run variance)"
+        type: string
+        default: "1"
 
 concurrency:
   # manual runs (e.g. the LLM eval) get their own group so a push can't bump them out of the queue
@@ -284,7 +292,8 @@ jobs:
       VERDA_INFERENCE_API_KEY: ${{ secrets.VERDA_INFERENCE_API_KEY }}
       NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
       # vision eval prompt variants (manual runs only); see scripts/vision_eval.py
-      VISION_EVAL_VARIANTS: ${{ vars.VISION_EVAL_VARIANTS || 'v1 v2 v3 v3+verify v3+verify+think' }}
+      VISION_EVAL_VARIANTS: ${{ inputs.vision_variants || vars.VISION_EVAL_VARIANTS || 'v1 v2 v3 v3+verify v3+verify+think' }}
+      VISION_EVAL_REPEAT: ${{ inputs.vision_repeat || '1' }}
       # provider:model pairs; override with the repo variable LLM_EVAL_MODELS
       LLM_EVAL_MODELS: ${{ vars.LLM_EVAL_MODELS || 'gemini:gemini-4-hydrogen verda:kimi-k3-1-pro verda:deepseek-4-1-flash-1017' }}
       # recipe planning eval (manual runs only), next to the table provider
@@ -388,7 +397,7 @@ jobs:
         if: ${{ !cancelled() && steps.pre.outputs.run == 'true' && steps.pre.outputs.vision == 'true' && !inputs.recipe_only }}
         run: |
           uv sync --frozen
-          uv run python scripts/vision_eval.py --provider nvidia --variants $VISION_EVAL_VARIANTS
+          uv run python scripts/vision_eval.py --provider nvidia --variants $VISION_EVAL_VARIANTS --repeat "$VISION_EVAL_REPEAT"
           cat evals/vision/results.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() && steps.pre.outputs.run == 'true' }}

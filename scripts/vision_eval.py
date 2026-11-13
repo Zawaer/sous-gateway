@@ -230,7 +230,7 @@ def make_llm(provider: str, model: str | None, think: bool):
     return ChatClient(cfg)
 
 
-def run_variant(variant: str, provider: str, model: str | None, truth: dict) -> dict | None:
+def run_variant(variant: str, provider: str, model: str | None, truth: dict, repeat: int = 1) -> dict | None:
     parts = variant.split("+")
     version, verify, think = parts[0], "verify" in parts, "think" in parts
     llm = make_llm(provider, model, think)
@@ -239,7 +239,8 @@ def run_variant(variant: str, provider: str, model: str | None, truth: dict) -> 
         return None
     today = date.fromisoformat(truth["today"])
     cases = []
-    for c in truth["cases"]:
+    # repeat > 1: every page read N times (the model is not deterministic: run-to-run variance is a result too)
+    for c in [c for _ in range(repeat) for c in truth["cases"]]:
         t0 = time.perf_counter()
         try:
             vr = V.read_order_image(DIR / c["file"], None, llm, prompt_version=version, today=today, verify=verify)
@@ -263,7 +264,7 @@ def run_variant(variant: str, provider: str, model: str | None, truth: dict) -> 
             "ran_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
 
 
-COLS = [("item_recall", "item recall"), ("item_precision", "precision"), ("qty_unit_exact", "qty+unit exact"),
+COLS = [("pages", "pages read"), ("item_recall", "item recall"), ("item_precision", "precision"), ("qty_unit_exact", "qty+unit exact"),
         ("delivered_exact", "delivered exact"), ("dish_recall", "dishes"), ("portions_exact", "portions"),
         ("kind_acc", "kind"), ("date_acc", "date"), ("auto_correct", "auto-correct"),
         ("silent_errors", "silent errors"), ("traps_ok", "traps"), ("calls", "calls"),
@@ -301,6 +302,7 @@ def main(argv=None) -> int:
     ap.add_argument("--variants", nargs="+", default=DEFAULT_VARIANTS)
     ap.add_argument("--report", action="store_true", help="only rewrite results.md from results.json")
     ap.add_argument("--fresh", action="store_true", help="drop earlier results instead of merging")
+    ap.add_argument("--repeat", type=int, default=1, help="read every page N times (run-to-run variance)")
     a = ap.parse_args(argv)
     global OUT_JSON, OUT_MD
     if a.provider == "oracle":  # never mixed into the real results
@@ -310,7 +312,7 @@ def main(argv=None) -> int:
         truth = json.loads(TRUTH.read_text(encoding="utf-8"))
         ran = 0
         for v in a.variants:
-            r = run_variant(v, a.provider, a.model, truth)
+            r = run_variant(v, a.provider, a.model, truth, a.repeat)
             if r:
                 results[f"{r['model']} {v}"] = r
                 ran += 1

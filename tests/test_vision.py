@@ -289,6 +289,27 @@ def test_doubtful_delivery_lines_go_to_a_human_not_to_delivered_in_full():
     assert po.error == "no line can be ordered automatically"
 
 
+def test_a_loose_shortfall_note_on_a_delivery_note_is_not_lost():
+    # eval run 2, page 08: the red-pen "puuttuu 3 l!" landed in notes, every row looked delivered in full
+    first = {"kind": "delivery_note", "delivery_date": "2026-11-16", "notes": "Handwritten red note: 'puuttuu 3 l!'",
+             "items": [item("Jauheliha naudan 2 kg | 12 | 8 | kg", "jauheliha", 12, "kg", delivered_quantity=8),
+                       item("Tomaattimurska | 6 | 6 | kg", "tomaattimurska", 6, "kg", delivered_quantity=6),
+                       item("Ruokakerma 1 l | 5 | 5 | l", "ruokakerma", 5, "l", delivered_quantity=5)]}
+    # the second look gets the full-looking rows and applies the correction to the right one
+    llm = FakeLLM([first, {"lines": [{"index": 2, "text_as_written": "Ruokakerma 1 l | 5 | 5 | l", "quantity": 5,
+                                      "unit": "l", "delivered_quantity": 2, "confidence": 0.9}]}])
+    vr = V.read_order_image(png(), None, llm, today=TODAY)
+    asked = llm.seen[1][-1]["content"][0]["text"]
+    assert "index 1" in asked and "index 2" in asked and "index 0" not in asked and "puuttuu" in asked
+    assert vr.read.items[2].delivered_quantity == 2 and not vr.flags
+    # no second look (or it changes nothing): the full-looking rows go to a human instead of "delivered in full"
+    llm = FakeLLM([first])
+    vr = V.read_order_image(png(), None, llm, today=TODAY, verify=False)
+    assert {f["index"] for f in vr.flags} == {1, 2}
+    po = V.order_from_read(vr, gateway=FakeGateway(), mandate_id="M", agent_id="a", today=TODAY)
+    assert [l.status for l in po.lines] == ["not_found", "needs_confirmation", "needs_confirmation"]  # no mince in the fake catalog
+
+
 def test_headings_and_signatures_are_not_items_but_possible_products_stay():
     first = {**ORDER, "unreadable": [], "items": [
         {"text_as_written": "Tilaus - toimitus ma 16.11.", "quantity": None, "unit": None, "confidence": 0.9},

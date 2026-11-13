@@ -405,6 +405,24 @@ def drop_non_items(rd: ImageRead) -> list[str]:
     return dropped
 
 
+_SHORTFALL = re.compile(r"\b(puuttuu|puuttui|puuttuvat|vajaa|missing|short|saknas|fattas)\b", re.I)
+
+
+def page_check(rd: ImageRead, ignored: list[str]) -> dict[int, str]:
+    """Page-level check for delivery notes: a shortfall written on the page ("puuttuu 3 l!" in red pen) that
+    the model put in notes instead of applying it to a row. Every row that looks delivered in full is then
+    suspect (code can't tell which row the pen meant), so it gets the second look, and a human if unresolved.
+    Seen in eval run 2: the same page was read correctly in one run and like this in the next."""
+    if rd.kind != "delivery_note":
+        return {}
+    loose = [t for t in [rd.notes or "", *rd.unreadable, *ignored] if _SHORTFALL.search(t) and re.search(r"\d", t)]
+    if not loose or any(_SHORTFALL.search(f"{it.text_as_written} {it.note or ''}") for it in rd.items):
+        return {}
+    why = f"a shortfall is written on the page ({loose[0][:60]!r}) but not applied to any row"
+    return {i: why for i, it in enumerate(rd.items)
+            if it.quantity is not None and it.delivered_quantity is not None and it.delivered_quantity >= it.quantity}
+
+
 class _Use:
     def __init__(self, vr: VisionRead):
         self.vr = vr
@@ -460,8 +478,10 @@ def read_order_image(src: str | Path | bytes, kind_hint: str | None = None, llm=
         rd.notes = ((rd.notes + " ") if rd.notes else "") + f"(read as {rd.kind}; the kitchen said {kind_hint})"
 
     vr.ignored += drop_non_items(rd)
+    page = page_check(rd, vr.ignored)
     suspicious = [(i, it, why) for i, it in enumerate(rd.items)
-                  if (why := cross_check(it, rd.kind) or ("low confidence" if it.confidence < CONFIRM_BELOW else None))]
+                  if (why := cross_check(it, rd.kind) or page.get(i)
+                      or ("low confidence" if it.confidence < CONFIRM_BELOW else None))]
     if verify and suspicious:
         msgs = [{"role": "system", "content": PROMPTS[prompt_version](today)},
                 {"role": "user", "content": [{"type": "text", "text": verify_prompt(suspicious)}, image_part(data, mime)]}]
@@ -485,8 +505,11 @@ def read_order_image(src: str | Path | bytes, kind_hint: str | None = None, llm=
             rd.items[i] = new
             vr.rechecked.append({"index": i, "why": why, "before": before,
                                  "after": new.model_dump(include=set(before))})
+    # the page's loose shortfall counts as applied once the second look moved it onto a row
+    applied = any(c["after"].get("delivered_quantity") != c["before"].get("delivered_quantity") for c in vr.rechecked)
+    page = {} if applied else page_check(rd, vr.ignored)
     for i, it in enumerate(rd.items):
-        why = cross_check(it, rd.kind)
+        why = cross_check(it, rd.kind) or page.get(i)
         if why:
             it.confidence = min(it.confidence, 0.5)
             it.note = "; ".join(x for x in (it.note, f"check: {why}") if x)
