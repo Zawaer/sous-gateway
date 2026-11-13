@@ -25,6 +25,7 @@ Built at Junction 2026 for Valio Aimo's challenge "Trusted Trade Agents".
 - **Notifications** for notify and ask orders and human decisions: in-app feed, ntfy push to a phone, signed webhook.
 - **Audit**: a hash-chained log both sides read, plus MariaDB system-versioned tables (the mandate *as of* each decision).
 - **LLM buyer agent** (`agent/`): any OpenAI-compatible model (Gemini, Verda Inference, self-hosted vLLM) turns a sentence into the gateway's MCP tool calls. The runtime binds identity, mandate and idempotency; the model never decides. Scored per model by `scripts/llm_eval.py`.
+- **Snap a photo of the order**: NVIDIA Nemotron 3.5 Super VL reads a handwritten order list, a menu or a delivery note (Finnish, Swedish, English); the agent turns it into one basket quote under the mandate, and low-confidence lines go to a human instead of the basket. See [docs/NEMOTRON.md](docs/NEMOTRON.md).
 - **Evaluation**: 45 scripted buyer requests pass 45/45; 36/36 unsafe actions are blocked or escalated. See [docs/STATUS.md](docs/STATUS.md#evaluation).
 
 ## Try it yourself
@@ -227,6 +228,7 @@ sous/             the gateway
   aimo.py         Valio Aimo API client: batching, caching, call budget
   config.py       settings
 agent/            LLM buyer agent: buyer.py (MCP tool loop), llm.py (OpenAI-compatible model presets)
+                  recipe.py (menu -> basket), vision.py (photo -> basket, Nemotron VL)
 scripts/          fetch_data.py, seed.py, demo.py, demo_standing.py, eval.py, llm_eval.py
 evals/            cases.yaml (45 cases), results.json, llm_results.*.json
 web/              Valio Aimo UI: approvals, orders, mandates, audit, stats, live activity
