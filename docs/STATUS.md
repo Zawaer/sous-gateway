@@ -42,6 +42,7 @@ Pitch line: *"AI purchasing agents carry a signed mandate from their human, and 
 - Audit log: append-only, hash-chained, `/audit/verify`.
 - MariaDB storage with system-versioned `mandate`, `purchase_order` and `audit_event`: `/orders/{id}/history` shows every version of an order and the mandate AS OF each decision; `/audit/verify` also checks MariaDB's history (any edit or delete of an audit row shows up). SQLite remains the fallback when `SOUS_DB_URL` is unset. (Env vars are `SOUS_*` since the rename from Valtakirja; the old `VALTAKIRJA_*` names still work.)
 - Hardening: approver code for human actions, per-IP rate limit, global cap on Valio API calls.
+- Buyer-signed mandates (opt-in): the buyer's human signs the mandate as a W3C Verifiable Credential (`vc+jwt`, ES256/EdDSA, issuer `did:key`) in the browser (`/ui/sign-mandate.html`, WebCrypto key in IndexedDB) or with `scripts/sign_mandate.py`; the gateway verifies and countersigns (`POST /mandates/credential`), re-verifies both on every use, accepts signed revocations, and `GET /mandates/{id}/verify` shows both checks. Buyer keys pinned on first use or registered by an approver. PROTOCOL.md section 17.
 
 **Interfaces and agents**
 - REST (`/docs`) and MCP (`/mcp`) expose the same operations. MCP has tool annotations, structured errors with a hint and a retryable flag, allergen and mandate resources and a `purchase` prompt.

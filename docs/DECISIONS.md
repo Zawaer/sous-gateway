@@ -50,9 +50,18 @@ Production: periodically anchor the chain head somewhere neither party controls 
 
 ## 9. What we'd change for production
 - **Identity.** Replace the shared `X-Approver-Code` with the buyer's own login (OIDC from their identity provider). Today agents can be required to send a per-mandate bearer token (stored hashed, rotatable; PROTOCOL.md section 16); in production they would prove possession of their own key (mTLS or DPoP), bound to the mandate's `agent_id`.
-- **Mandate signed by the human.** The buyer signs the mandate (Verifiable Credential); the gateway verifies it rather than signing on their behalf.
+- **Mandate signed by the human.** Built opt-in (section 10); production makes it the default, with passkeys and organisation keys from onboarding instead of trust on first use.
 - **Per-customer prices.** Use the real customer number so quotes carry the buyer's contract prices. The mock ignores it.
 - **Valio Aimo's real order API.** `ordered` would submit to the order system, with its confirmation id in the receipt and the audit log.
 - **Notifications.** Built for the demo: in-app feed, ntfy push and an HMAC-signed webhook, with the approval deadline set by the earliest cut-off. Production adds email/Teams and per-buyer channel settings (today the channels come from server env vars).
 - **Rate limits per mandate and agent**, not only per IP and globally.
 - **Key rotation.** Several keys in the JWKS, KMS/HSM-held private keys and `iat`/`exp` in the JWS header. (Receipts are already re-signed after a human decision.)
+
+## 10. Buyer-signed mandates as W3C Verifiable Credentials (did:key, ES256), trust on first use
+The gateway signing a mandate "on the buyer's behalf" asks everyone to trust the gateway about who authorised what. Opt-in, the buyer's human now signs the mandate with a key only they hold, and the gateway verifies and countersigns it (PROTOCOL.md section 17).
+- **Format: VC Data Model 2.0 secured with JOSE (`vc+jwt`)**, not a custom JWS: it is the open standard the EU wallet (EUDI/EBSI) world uses, any JOSE library verifies it, and it reuses our JWS code path. Not JSON-LD Data Integrity proofs: those need RDF canonicalisation, a heavy dependency for no gain here.
+- **ES256 (P-256) first, EdDSA too.** P-256 is what WebCrypto and passkeys support in every browser; Ed25519 is accepted because our own key is Ed25519 and it's free to support.
+- **`did:key`, resolved locally**, not `did:web`/`did:jwk`: the identifier is the key, so verification needs no network and no hosting, and it's the usual issuer id in wallets. About 30 lines of base58 + multicodec; no new dependency.
+- **Countersign, don't replace.** The gateway still signs the mandate (`sous-mandate+jws`), now also covering `issuer` and the VC's SHA-256. Agents and the buyer client keep verifying one gateway signature as before; auditors can additionally verify the buyer's. Every load re-verifies both, so editing the stored VC or mandate is caught.
+- **Trust on first use for buyer keys**, with an approver-managed registry (`POST /buyers/{id}/keys`) as the override, and no automatic pinning for buyers that already have gateway-issued mandates. Chosen because the demo has no onboarding and a judge must be able to sign from a browser alone. Production: keys are bound at onboarding through an organisation credential (EUDI/EBSI legal person, eIDAS seal), and signing uses passkeys.
+- **Revocation as a signed statement** bound to the credential's hash, so it proves the buyer (not the gateway) revoked it. Production: W3C Bitstring Status List so revocation is checkable without asking the gateway.
