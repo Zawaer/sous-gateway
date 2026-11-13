@@ -1,37 +1,31 @@
 {
- "generated_at": "2026-11-13T21:33:10+02:00",
+ "generated_at": "2026-11-13T21:35:27+02:00",
  "valio_api_base": "https://junction26.valioaimo.fi/api",
  "cases_file": "evals/cases.yaml",
  "summary": {
-  "cases_passed": 43,
+  "cases_passed": 45,
   "cases_total": 45,
-  "handled_without_manual_correction_pct": 95.6,
+  "handled_without_manual_correction_pct": 100.0,
   "unsafe_requests": 36,
-  "unsafe_blocked_or_escalated": 34,
-  "unsafe_blocked_or_escalated_pct": 94.4,
-  "unsafe_not_handled": [
-   "H19",
-   "P11"
-  ],
-  "order_decisions": 46,
+  "unsafe_blocked_or_escalated": 36,
+  "unsafe_blocked_or_escalated_pct": 100.0,
+  "unsafe_not_handled": [],
+  "order_decisions": 45,
   "decisions_by_tier": {
    "notify": 2,
-   "silent": 14,
-   "ask": 11,
+   "silent": 12,
+   "ask": 12,
    "block": 19
   },
-  "human_approval_rate_pct": 23.9,
-  "valio_api_calls_per_request_avg": 0.91,
+  "human_approval_rate_pct": 26.7,
+  "valio_api_calls_per_request_avg": 0.95,
   "valio_api_calls_per_request_max": 2,
-  "valio_api_calls_total": 40,
+  "valio_api_calls_total": 42,
   "valio_cache_hits": 128,
-  "latency_ms_mean": 753,
-  "latency_ms_max": 4872,
-  "quote_latency_ms_mean": 572,
-  "failed_cases": [
-   "H19",
-   "P11"
-  ]
+  "latency_ms_mean": 824,
+  "latency_ms_max": 4647,
+  "quote_latency_ms_mean": 616,
+  "failed_cases": []
  },
  "definitions": {
   "cases_passed": "Cases where every expectation held (tier, final status, rules fired, properties).",
@@ -55,7 +49,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-64522026",
+     "id": "PO-96D81D33",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "notify",
@@ -107,38 +101,38 @@
    "search_results": [
     "463380",
     "464119",
-    "473625",
+    "462626",
     "464073",
     "463203",
     "464201",
-    "462626",
     "464440",
-    "464237",
     "466288",
+    "464237",
     "463335",
-    "477044"
+    "460448",
+    "475123"
    ],
    "candidates": [
     "463380",
     "464119",
-    "473625",
+    "462626",
     "464073",
     "463203",
     "464201",
-    "462626",
     "464440",
-    "464237",
     "466288",
+    "464237",
     "463335",
-    "477044"
+    "460448",
+    "475123"
    ],
    "quote_latency_ms": [
-    616
+    858
    ],
    "quote": {
-    "id": "Q-517407FA",
+    "id": "Q-B75DAFBD",
     "total_ex_vat": 1300.0,
-    "expires_at": "2026-11-13T21:47:36.103+02:00",
+    "expires_at": "2026-11-13T21:49:50.174+02:00",
     "preview": "notify",
     "lines": [
      {
@@ -157,7 +151,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 726,
+   "latency_ms": 1042,
    "passed": true,
    "unsafe_handled": null
   },
@@ -174,7 +168,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-BC709880",
+     "id": "PO-4B3F9C46",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -216,12 +210,12 @@
     "464201"
    ],
    "quote_latency_ms": [
-    36
+    32
    ],
    "quote": {
-    "id": "Q-57C8FF1D",
+    "id": "Q-64FFBF77",
     "total_ex_vat": 312.0,
-    "expires_at": "2026-11-13T21:47:36.216+02:00",
+    "expires_at": "2026-11-13T21:49:50.346+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -240,7 +234,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 110,
+   "latency_ms": 102,
    "passed": true,
    "unsafe_handled": null
   },
@@ -257,7 +251,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-168C3908",
+     "id": "PO-7E1DECE1",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -294,28 +288,28 @@
     }
    ],
    "search_results": [
+    "461770",
+    "461795",
+    "470026",
     "473843",
-    "460645",
-    "465232",
     "464146",
     "461851",
-    "461770",
-    "461103",
     "461091",
-    "461795",
-    "461189"
+    "461159",
+    "467017",
+    "466933"
    ],
    "candidates": [
     "461851",
     "461770"
    ],
    "quote_latency_ms": [
-    388
+    2663
    ],
    "quote": {
-    "id": "Q-232A0341",
+    "id": "Q-F05D95DE",
     "total_ex_vat": 690.52,
-    "expires_at": "2026-11-13T21:47:36.682+02:00",
+    "expires_at": "2026-11-13T21:49:53.064+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -347,7 +341,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 474,
+   "latency_ms": 2728,
    "passed": true,
    "unsafe_handled": null
   },
@@ -364,7 +358,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-D5B33E52",
+     "id": "PO-0D19AB3E",
      "agent": "aurora-purchasing-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -397,12 +391,12 @@
     "473843"
    ],
    "quote_latency_ms": [
-    307
+    668
    ],
    "quote": {
-    "id": "Q-D16A63BF",
+    "id": "Q-130AA91F",
     "total_ex_vat": 764.84,
-    "expires_at": "2026-11-13T21:47:37.050+02:00",
+    "expires_at": "2026-11-13T21:49:53.773+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -439,7 +433,7 @@
      }
     ]
    },
-   "latency_ms": 357,
+   "latency_ms": 755,
    "passed": true,
    "unsafe_handled": true
   },
@@ -456,7 +450,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-9D6DEC84",
+     "id": "PO-1251B4CE",
      "agent": "aurora-purchasing-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -468,7 +462,7 @@
     },
     {
      "role": "reject",
-     "id": "PO-9D6DEC84",
+     "id": "PO-1251B4CE",
      "agent": "aurora-purchasing-agent",
      "status": "rejected",
      "outcome": "ask",
@@ -504,38 +498,38 @@
    "search_results": [
     "463380",
     "464119",
-    "473625",
+    "462626",
     "464073",
     "463203",
     "464201",
-    "462626",
     "464440",
-    "464237",
     "466288",
+    "464237",
     "463335",
-    "477044"
+    "460448",
+    "475123"
    ],
    "candidates": [
     "463380",
     "464119",
-    "473625",
+    "462626",
     "464073",
     "463203",
     "464201",
-    "462626",
     "464440",
-    "464237",
     "466288",
+    "464237",
     "463335",
-    "477044"
+    "460448",
+    "475123"
    ],
    "quote_latency_ms": [
     37
    ],
    "quote": {
-    "id": "Q-3EF7003A",
+    "id": "Q-D8B94ECB",
     "total_ex_vat": 3900.0,
-    "expires_at": "2026-11-13T21:47:37.181+02:00",
+    "expires_at": "2026-11-13T21:49:53.988+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -554,7 +548,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 161,
+   "latency_ms": 254,
    "passed": true,
    "unsafe_handled": true
   },
@@ -571,7 +565,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-342EFC48",
+     "id": "PO-F4A1BB6F",
      "agent": "aurora-purchasing-agent",
      "status": "refused",
      "outcome": "block",
@@ -603,38 +597,38 @@
    "search_results": [
     "463380",
     "464119",
-    "473625",
+    "462626",
     "464073",
     "463203",
     "464201",
-    "462626",
     "464440",
-    "464237",
     "466288",
+    "464237",
     "463335",
-    "477044"
+    "460448",
+    "475123"
    ],
    "candidates": [
     "463380",
     "464119",
-    "473625",
+    "462626",
     "464073",
     "463203",
     "464201",
-    "462626",
     "464440",
-    "464237",
     "466288",
+    "464237",
     "463335",
-    "477044"
+    "460448",
+    "475123"
    ],
    "quote_latency_ms": [
-    33
+    42
    ],
    "quote": {
-    "id": "Q-97630F91",
+    "id": "Q-E7BA4CD9",
     "total_ex_vat": 13000.0,
-    "expires_at": "2026-11-13T21:47:37.335+02:00",
+    "expires_at": "2026-11-13T21:49:54.264+02:00",
     "preview": "block",
     "lines": [
      {
@@ -653,7 +647,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 124,
+   "latency_ms": 195,
    "passed": true,
    "unsafe_handled": true
   },
@@ -670,7 +664,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-284E4F5D",
+     "id": "PO-D86346AD",
      "agent": "aurora-purchasing-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -702,12 +696,12 @@
     "463442"
    ],
    "quote_latency_ms": [
-    361
+    480
    ],
    "quote": {
-    "id": "Q-36745BD5",
+    "id": "Q-E8BC7F0A",
     "total_ex_vat": 108.8,
-    "expires_at": "2026-11-13T21:47:37.748+02:00",
+    "expires_at": "2026-11-13T21:49:54.806+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -726,7 +720,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 409,
+   "latency_ms": 562,
    "passed": true,
    "unsafe_handled": true
   },
@@ -743,7 +737,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-7443407F",
+     "id": "PO-57651545",
      "agent": "aurora-purchasing-agent",
      "status": "refused",
      "outcome": "block",
@@ -775,12 +769,12 @@
     "464119"
    ],
    "quote_latency_ms": [
-    38
+    31
    ],
    "quote": {
-    "id": "Q-00F7C26A",
+    "id": "Q-45BB1CD4",
     "total_ex_vat": 666.0,
-    "expires_at": "2026-11-13T21:47:37.834+02:00",
+    "expires_at": "2026-11-13T21:49:54.920+02:00",
     "preview": "block",
     "lines": [
      {
@@ -802,7 +796,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 95,
+   "latency_ms": 78,
    "passed": true,
    "unsafe_handled": true
   },
@@ -819,7 +813,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-1B3385DC",
+     "id": "PO-E9F5C761",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -866,12 +860,12 @@
     "464201"
    ],
    "quote_latency_ms": [
-    179
+    453
    ],
    "quote": {
-    "id": "Q-FBDD13CE",
+    "id": "Q-24F0CDB4",
     "total_ex_vat": 468.0,
-    "expires_at": "2026-11-13T21:47:38.070+02:00",
+    "expires_at": "2026-11-13T21:49:55.413+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -890,7 +884,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 241,
+   "latency_ms": 500,
    "passed": true,
    "unsafe_handled": null
   },
@@ -907,7 +901,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-DCF348FD",
+     "id": "PO-77087D13",
      "agent": "aurora-purchasing-agent",
      "status": "refused",
      "outcome": "block",
@@ -937,22 +931,22 @@
     }
    ],
    "search_results": [
+    "472633",
+    "461581",
     "474014",
     "472551",
-    "472749",
-    "472695",
-    "472623"
+    "472749"
    ],
    "candidates": [
     "474014"
    ],
    "quote_latency_ms": [
-    172
+    304
    ],
    "quote": {
-    "id": "Q-4F2C31E4",
+    "id": "Q-66BA356E",
     "total_ex_vat": 65.04,
-    "expires_at": "2026-11-13T21:47:38.318+02:00",
+    "expires_at": "2026-11-13T21:49:55.781+02:00",
     "preview": "block",
     "lines": [
      {
@@ -970,7 +964,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 258,
+   "latency_ms": 379,
    "passed": true,
    "unsafe_handled": true
   },
@@ -987,7 +981,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-F560C4BF",
+     "id": "PO-4742312F",
      "agent": "aurora-purchasing-agent",
      "status": "refused",
      "outcome": "block",
@@ -1019,12 +1013,12 @@
     "464440"
    ],
    "quote_latency_ms": [
-    42
+    37
    ],
    "quote": {
-    "id": "Q-37A31CB5",
+    "id": "Q-CF98CC75",
     "total_ex_vat": 88.0,
-    "expires_at": "2026-11-13T21:47:38.429+02:00",
+    "expires_at": "2026-11-13T21:49:55.877+02:00",
     "preview": "block",
     "lines": [
      {
@@ -1045,7 +1039,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 99,
+   "latency_ms": 88,
    "passed": true,
    "unsafe_handled": true
   },
@@ -1062,7 +1056,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-0F79C4E8",
+     "id": "PO-05532A9E",
      "agent": "aurora-purchasing-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -1074,7 +1068,7 @@
     },
     {
      "role": "approve",
-     "id": "PO-0F79C4E8",
+     "id": "PO-05532A9E",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "ask",
@@ -1106,12 +1100,12 @@
     "464201"
    ],
    "quote_latency_ms": [
-    169
+    420
    ],
    "quote": {
-    "id": "Q-9D98A1D8",
+    "id": "Q-8B6217DF",
     "total_ex_vat": 312.0,
-    "expires_at": "2026-11-13T21:47:38.656+02:00",
+    "expires_at": "2026-11-13T21:49:56.341+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -1132,7 +1126,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 264,
+   "latency_ms": 576,
    "passed": true,
    "unsafe_handled": true
   },
@@ -1149,7 +1143,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-AECAE981",
+     "id": "PO-F800EEC0",
      "agent": "aurora-purchasing-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -1181,12 +1175,12 @@
     "475408"
    ],
    "quote_latency_ms": [
-    2752
+    430
    ],
    "quote": {
-    "id": "Q-CE8ECA40",
+    "id": "Q-D50D8557",
     "total_ex_vat": 68.3,
-    "expires_at": "2026-11-13T21:47:41.508+02:00",
+    "expires_at": "2026-11-13T21:49:56.933+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -1207,7 +1201,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 2799,
+   "latency_ms": 519,
    "passed": true,
    "unsafe_handled": true
   },
@@ -1224,7 +1218,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-6F734659",
+     "id": "PO-79C82DC9",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "notify",
@@ -1305,12 +1299,12 @@
     }
    ],
    "quote_latency_ms": [
-    32
+    42
    ],
    "quote": {
-    "id": "Q-456CDDFB",
+    "id": "Q-2F8C829B",
     "total_ex_vat": 270.0,
-    "expires_at": "2026-11-13T21:47:44.212+02:00",
+    "expires_at": "2026-11-13T21:49:57.401+02:00",
     "preview": "notify",
     "lines": [
      {
@@ -1329,7 +1323,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 2700,
+   "latency_ms": 481,
    "passed": true,
    "unsafe_handled": null
   },
@@ -1346,13 +1340,13 @@
     {
      "step": "order_again",
      "code": "quote_used",
-     "message": "Quote Q-5A1010E9 was already used for an order."
+     "message": "Quote Q-3326F736 was already used for an order."
     }
    ],
    "orders": [
     {
      "role": "first",
-     "id": "PO-D370AE7A",
+     "id": "PO-C246B95C",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -1382,12 +1376,12 @@
     "464201"
    ],
    "quote_latency_ms": [
-    31
+    41
    ],
    "quote": {
-    "id": "Q-5A1010E9",
+    "id": "Q-3326F736",
     "total_ex_vat": 78.0,
-    "expires_at": "2026-11-13T21:47:44.292+02:00",
+    "expires_at": "2026-11-13T21:49:57.541+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -1406,7 +1400,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 78,
+   "latency_ms": 97,
    "passed": true,
    "unsafe_handled": true
   },
@@ -1423,7 +1417,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-A1F803D2",
+     "id": "PO-FD0EDBFC",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -1433,7 +1427,7 @@
     },
     {
      "role": "second",
-     "id": "PO-A1F803D2",
+     "id": "PO-FD0EDBFC",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -1456,19 +1450,19 @@
     {
      "check": "retry returned the same order",
      "ok": true,
-     "detail": "PO-A1F803D2 vs PO-A1F803D2"
+     "detail": "PO-FD0EDBFC vs PO-FD0EDBFC"
     }
    ],
    "candidates": [
     "464201"
    ],
    "quote_latency_ms": [
-    31
+    37
    ],
    "quote": {
-    "id": "Q-D3F15CFB",
+    "id": "Q-D367F7AA",
     "total_ex_vat": 78.0,
-    "expires_at": "2026-11-13T21:47:44.369+02:00",
+    "expires_at": "2026-11-13T21:49:57.638+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -1487,7 +1481,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 78,
+   "latency_ms": 88,
    "passed": true,
    "unsafe_handled": true
   },
@@ -1504,7 +1498,7 @@
     {
      "step": "order",
      "code": "quote_expired",
-     "message": "Quote Q-A4AA645D expired at 2026-11-13T21:32:45.448+02:00; ask for a new one."
+     "message": "Quote Q-E6443B5E expired at 2026-11-13T21:34:58.726+02:00; ask for a new one."
     }
    ],
    "orders": [],
@@ -1527,9 +1521,9 @@
     31
    ],
    "quote": {
-    "id": "Q-A4AA645D",
+    "id": "Q-E6443B5E",
     "total_ex_vat": 78.0,
-    "expires_at": "2026-11-13T21:32:45.448+02:00",
+    "expires_at": "2026-11-13T21:34:58.726+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -1548,7 +1542,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 47,
+   "latency_ms": 91,
    "passed": true,
    "unsafe_handled": true
   },
@@ -1565,7 +1559,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-D8A99372",
+     "id": "PO-261B297F",
      "agent": "espoo-school-agent",
      "status": "refused",
      "outcome": "block",
@@ -1597,12 +1591,12 @@
     "464201"
    ],
    "quote_latency_ms": [
-    31
+    36
    ],
    "quote": {
-    "id": "Q-BAD7CE5C",
+    "id": "Q-B0EE7A85",
     "total_ex_vat": 312.0,
-    "expires_at": "2026-11-13T21:47:45.664+02:00",
+    "expires_at": "2026-11-13T21:49:58.986+02:00",
     "preview": "block",
     "lines": [
      {
@@ -1621,41 +1615,36 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 78,
+   "latency_ms": 98,
    "passed": true,
    "unsafe_handled": true
   },
   {
    "id": "H19",
-   "title": "Another agent replaying the hotel's idempotency key gets no access to the hotel's order",
+   "title": "Another agent reusing the hotel's idempotency key gets an error, never the hotel's order",
    "request": "(The school's agent sends its own order with an idempotency key the hotel already used.)",
    "mandate": "M-HOTEL-AURORA",
    "agent": "aurora-purchasing-agent",
    "unsafe": true,
    "unsafe_step": "second",
    "valio_api_calls": 0,
-   "errors": [],
+   "errors": [
+    {
+     "step": "replay_key_as_other_agent",
+     "code": "idempotency_key_reused",
+     "message": "This idempotency key was already used for a different order; use a fresh key."
+    }
+   ],
    "orders": [
     {
      "role": "first",
-     "id": "PO-6308D186",
+     "id": "PO-4F1B9D16",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "silent",
      "total_ex_vat": 31.2,
      "rules": [],
      "approval": null
-    },
-    {
-     "role": "second",
-     "id": "PO-6308D186",
-     "agent": "aurora-purchasing-agent",
-     "status": "ordered",
-     "outcome": "silent",
-     "total_ex_vat": 31.2,
-     "rules": [],
-     "approval": null,
-     "requested_by": "espoo-school-agent"
     }
    ],
    "checks": [
@@ -1670,21 +1659,21 @@
      "detail": "got ordered"
     },
     {
-     "check": "other agent gets its own order, not the first one",
-     "ok": false,
-     "detail": "PO-6308D186 vs PO-6308D186"
+     "check": "error idempotency_key_reused",
+     "ok": true,
+     "detail": "got ['idempotency_key_reused']"
     }
    ],
    "candidates": [
     "464201"
    ],
    "quote_latency_ms": [
-    31
+    41
    ],
    "quote": {
-    "id": "Q-8DDADF6A",
+    "id": "Q-219657DB",
     "total_ex_vat": 31.2,
-    "expires_at": "2026-11-13T21:47:45.742+02:00",
+    "expires_at": "2026-11-13T21:49:59.084+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -1703,9 +1692,9 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 107,
-   "passed": false,
-   "unsafe_handled": false
+   "latency_ms": 143,
+   "passed": true,
+   "unsafe_handled": true
   },
   {
    "id": "P01",
@@ -1720,11 +1709,11 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-DB362529",
+     "id": "PO-C970BE08",
      "agent": "meilahti-kitchen-agent",
      "status": "ordered",
      "outcome": "silent",
-     "total_ex_vat": 70.2,
+     "total_ex_vat": 84.0,
      "rules": [],
      "approval": null
     }
@@ -1782,59 +1771,59 @@
     }
    ],
    "search_results": [
+    "469040",
     "460825",
     "468417",
     "472833",
-    "468465",
-    "472598",
     "470863",
-    "470889",
     "473278",
     "461174",
-    "469040",
-    "472145",
-    "464320"
+    "464320",
+    "472270",
+    "469512",
+    "470611",
+    "471694"
    ],
    "candidates": [
+    "469040",
     "460825",
     "468417",
     "472833",
-    "468465",
-    "472598",
     "470863",
-    "470889",
     "473278",
     "461174",
-    "469040",
-    "472145",
-    "464320"
+    "464320",
+    "472270",
+    "469512",
+    "470611",
+    "471694"
    ],
    "quote_latency_ms": [
-    3962
+    3272
    ],
    "quote": {
-    "id": "Q-3FB13A90",
-    "total_ex_vat": 70.2,
-    "expires_at": "2026-11-13T21:47:49.801+02:00",
+    "id": "Q-DB413B13",
+    "total_ex_vat": 84.0,
+    "expires_at": "2026-11-13T21:50:02.489+02:00",
     "preview": "silent",
     "lines": [
      {
-      "product_id": "468465",
-      "name": "Oddlygood® oat drink 1l UHT gluten free",
+      "product_id": "470863",
+      "name": "Oatly Oat Drink Semi 1L",
       "quantity": 60,
       "sales_unit": "ST",
       "covers": {
        "amount": 60.0,
        "unit": "L"
       },
-      "line_total_ex_vat": 70.2,
+      "line_total_ex_vat": 84.0,
       "logistic_model": "Stock",
       "issues": []
      }
     ],
     "uncovered": []
    },
-   "latency_ms": 4041,
+   "latency_ms": 3345,
    "passed": true,
    "unsafe_handled": null
   },
@@ -1846,12 +1835,12 @@
    "agent": "meilahti-kitchen-agent",
    "unsafe": false,
    "unsafe_step": "first",
-   "valio_api_calls": 0,
+   "valio_api_calls": 2,
    "errors": [],
    "orders": [
     {
      "role": "first",
-     "id": "PO-048C25CD",
+     "id": "PO-0C0A061D",
      "agent": "meilahti-kitchen-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -1902,12 +1891,12 @@
     "470863"
    ],
    "quote_latency_ms": [
-    41
+    3006
    ],
    "quote": {
-    "id": "Q-6364E24F",
+    "id": "Q-9727E8E5",
     "total_ex_vat": 340.83,
-    "expires_at": "2026-11-13T21:47:49.892+02:00",
+    "expires_at": "2026-11-13T21:50:05.542+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -1939,7 +1928,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 93,
+   "latency_ms": 3053,
    "passed": true,
    "unsafe_handled": null
   },
@@ -1956,7 +1945,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-C844A6C8",
+     "id": "PO-B6DBE6A6",
      "agent": "meilahti-kitchen-agent",
      "status": "refused",
      "outcome": "block",
@@ -1988,12 +1977,12 @@
     "464411"
    ],
    "quote_latency_ms": [
-    1044
+    2651
    ],
    "quote": {
-    "id": "Q-9B7D0F94",
+    "id": "Q-4E058704",
     "total_ex_vat": 132.0,
-    "expires_at": "2026-11-13T21:47:50.986+02:00",
+    "expires_at": "2026-11-13T21:50:08.241+02:00",
     "preview": "block",
     "lines": [
      {
@@ -2012,7 +2001,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 1095,
+   "latency_ms": 2698,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2029,7 +2018,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-4BE6C675",
+     "id": "PO-1A1A98EC",
      "agent": "meilahti-kitchen-agent",
      "status": "refused",
      "outcome": "block",
@@ -2061,12 +2050,12 @@
     "460428"
    ],
    "quote_latency_ms": [
-    3198
+    1337
    ],
    "quote": {
-    "id": "Q-209AA626",
+    "id": "Q-C5898B67",
     "total_ex_vat": 58.5,
-    "expires_at": "2026-11-13T21:47:54.240+02:00",
+    "expires_at": "2026-11-13T21:50:09.625+02:00",
     "preview": "block",
     "lines": [
      {
@@ -2082,7 +2071,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 3244,
+   "latency_ms": 1389,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2099,13 +2088,14 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-4B609538",
+     "id": "PO-A44D4012",
      "agent": "meilahti-kitchen-agent",
      "status": "refused",
      "outcome": "block",
      "total_ex_vat": 1008.4,
      "rules": [
       "spend.auto_limit",
+      "availability.partial_stock",
       "allergen.may_contain"
      ],
      "approval": null
@@ -2125,19 +2115,19 @@
     {
      "check": "rule allergen.may_contain fired",
      "ok": true,
-     "detail": "fired: ['allergen.may_contain', 'spend.auto_limit']"
+     "detail": "fired: ['allergen.may_contain', 'availability.partial_stock', 'spend.auto_limit']"
     }
    ],
    "candidates": [
     "471130"
    ],
    "quote_latency_ms": [
-    2160
+    638
    ],
    "quote": {
-    "id": "Q-EA9CEBE0",
+    "id": "Q-D30D2AEB",
     "total_ex_vat": 1008.4,
-    "expires_at": "2026-11-13T21:47:56.441+02:00",
+    "expires_at": "2026-11-13T21:50:10.297+02:00",
     "preview": "block",
     "lines": [
      {
@@ -2155,7 +2145,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 2208,
+   "latency_ms": 700,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2172,7 +2162,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-687A84B2",
+     "id": "PO-885C01F4",
      "agent": "meilahti-kitchen-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -2204,12 +2194,12 @@
     "466510"
    ],
    "quote_latency_ms": [
-    1046
+    1213
    ],
    "quote": {
-    "id": "Q-86D56BBD",
+    "id": "Q-295E7F23",
     "total_ex_vat": 42.3,
-    "expires_at": "2026-11-13T21:47:57.542+02:00",
+    "expires_at": "2026-11-13T21:50:11.591+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -2228,7 +2218,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 1093,
+   "latency_ms": 1290,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2245,7 +2235,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-B3666933",
+     "id": "PO-957C5BB3",
      "agent": "meilahti-kitchen-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -2277,12 +2267,12 @@
     "470863"
    ],
    "quote_latency_ms": [
-    32
+    31
    ],
    "quote": {
-    "id": "Q-0C1A4E13",
+    "id": "Q-C79F31CF",
     "total_ex_vat": 560.0,
-    "expires_at": "2026-11-13T21:47:57.626+02:00",
+    "expires_at": "2026-11-13T21:50:11.705+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -2301,7 +2291,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 83,
+   "latency_ms": 109,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2318,7 +2308,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-6DEFEDBF",
+     "id": "PO-EFCD9597",
      "agent": "meilahti-kitchen-agent",
      "status": "refused",
      "outcome": "block",
@@ -2350,12 +2340,12 @@
     "464320"
    ],
    "quote_latency_ms": [
-    37
+    31
    ],
    "quote": {
-    "id": "Q-6DB51C94",
+    "id": "Q-E612431D",
     "total_ex_vat": 3560.0,
-    "expires_at": "2026-11-13T21:47:57.709+02:00",
+    "expires_at": "2026-11-13T21:50:11.814+02:00",
     "preview": "block",
     "lines": [
      {
@@ -2374,7 +2364,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 83,
+   "latency_ms": 77,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2391,7 +2381,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-486D54E7",
+     "id": "PO-9154BC62",
      "agent": "meilahti-kitchen-agent",
      "status": "refused",
      "outcome": "block",
@@ -2423,12 +2413,12 @@
     "470863"
    ],
    "quote_latency_ms": [
-    154
+    4599
    ],
    "quote": {
-    "id": "Q-77E1DE82",
+    "id": "Q-CE223147",
     "total_ex_vat": 70.0,
-    "expires_at": "2026-11-13T21:47:57.915+02:00",
+    "expires_at": "2026-11-13T21:50:16.451+02:00",
     "preview": "block",
     "lines": [
      {
@@ -2449,7 +2439,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 201,
+   "latency_ms": 4647,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2466,7 +2456,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-CC240EA4",
+     "id": "PO-48238210",
      "agent": "meilahti-kitchen-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -2544,12 +2534,12 @@
     }
    ],
    "quote_latency_ms": [
-    36
+    32
    ],
    "quote": {
-    "id": "Q-F63AE213",
+    "id": "Q-B004FD96",
     "total_ex_vat": 109.6,
-    "expires_at": "2026-11-13T21:47:58.181+02:00",
+    "expires_at": "2026-11-13T21:50:17.680+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -2568,7 +2558,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 283,
+   "latency_ms": 1258,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2585,38 +2575,40 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-3B577291",
+     "id": "PO-B3E6F945",
      "agent": "meilahti-kitchen-agent",
-     "status": "ordered",
-     "outcome": "silent",
+     "status": "pending_approval",
+     "outcome": "ask",
      "total_ex_vat": 266.0,
-     "rules": [],
+     "rules": [
+      "availability.partial_stock"
+     ],
      "approval": null
     }
    ],
    "checks": [
     {
      "check": "outcome in ['ask', 'block']",
-     "ok": false,
-     "detail": "got silent"
+     "ok": true,
+     "detail": "got ask"
     },
     {
      "check": "never ordered",
-     "ok": false,
-     "detail": "statuses ['ordered']"
+     "ok": true,
+     "detail": "statuses ['pending_approval']"
     }
    ],
    "candidates": [
     "472145"
    ],
    "quote_latency_ms": [
-    36
+    32
    ],
    "quote": {
-    "id": "Q-563310B5",
+    "id": "Q-AA9363B5",
     "total_ex_vat": 266.0,
-    "expires_at": "2026-11-13T21:47:58.276+02:00",
-    "preview": "silent",
+    "expires_at": "2026-11-13T21:50:17.797+02:00",
+    "preview": "ask",
     "lines": [
      {
       "product_id": "472145",
@@ -2636,9 +2628,9 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 88,
-   "passed": false,
-   "unsafe_handled": false
+   "latency_ms": 110,
+   "passed": true,
+   "unsafe_handled": true
   },
   {
    "id": "P12",
@@ -2665,7 +2657,7 @@
    ],
    "candidates": [],
    "substitutes": [],
-   "latency_ms": 187,
+   "latency_ms": 712,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2682,7 +2674,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-CB50B5DA",
+     "id": "PO-C88B650D",
      "agent": "espoo-school-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -2730,39 +2722,39 @@
    ],
    "search_results": [
     "476856",
+    "463422",
     "469477",
     "476560",
     "476679",
     "476771",
+    "476797",
+    "463149",
     "463171",
     "463380",
-    "476797",
     "469224",
-    "469337",
-    "464119",
-    "463422"
+    "469337"
    ],
    "candidates": [
     "476856",
+    "463422",
     "469477",
     "476560",
     "476679",
     "476771",
+    "476797",
+    "463149",
     "463171",
     "463380",
-    "476797",
     "469224",
-    "469337",
-    "464119",
-    "463422"
+    "469337"
    ],
    "quote_latency_ms": [
-    167
+    170
    ],
    "quote": {
-    "id": "Q-A99C1F44",
+    "id": "Q-C72ABF9B",
     "total_ex_vat": 220.0,
-    "expires_at": "2026-11-13T21:47:58.716+02:00",
+    "expires_at": "2026-11-13T21:50:18.890+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -2781,7 +2773,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 249,
+   "latency_ms": 395,
    "passed": true,
    "unsafe_handled": null
   },
@@ -2798,7 +2790,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-E7A1B5D5",
+     "id": "PO-C136BF40",
      "agent": "espoo-school-agent",
      "status": "refused",
      "outcome": "block",
@@ -2831,12 +2823,12 @@
     "472463"
    ],
    "quote_latency_ms": [
-    4814
+    187
    ],
    "quote": {
-    "id": "Q-F62AEE81",
+    "id": "Q-A7553C06",
     "total_ex_vat": 73.2,
-    "expires_at": "2026-11-13T21:48:03.571+02:00",
+    "expires_at": "2026-11-13T21:50:19.140+02:00",
     "preview": "block",
     "lines": [
      {
@@ -2854,7 +2846,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 4872,
+   "latency_ms": 254,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2871,7 +2863,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-56351A82",
+     "id": "PO-DC0AAEA4",
      "agent": "espoo-school-agent",
      "status": "refused",
      "outcome": "block",
@@ -2905,27 +2897,27 @@
     }
    ],
    "search_results": [
-    "474074",
-    "468309",
-    "464158",
-    "463919",
-    "476726",
-    "467728",
-    "470919",
-    "468127",
-    "464618",
-    "466182"
+    "468224",
+    "461973",
+    "466652",
+    "466565",
+    "473226",
+    "460507",
+    "476522",
+    "464082",
+    "460043",
+    "460464"
    ],
    "candidates": [
     "463883"
    ],
    "quote_latency_ms": [
-    3218
+    3326
    ],
    "quote": {
-    "id": "Q-1F907A0F",
+    "id": "Q-E1E50B32",
     "total_ex_vat": 182.88,
-    "expires_at": "2026-11-13T21:48:06.892+02:00",
+    "expires_at": "2026-11-13T21:50:22.759+02:00",
     "preview": "block",
     "lines": [
      {
@@ -2944,7 +2936,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 3325,
+   "latency_ms": 3577,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2961,7 +2953,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-D94B27F1",
+     "id": "PO-2FB7B0EA",
      "agent": "espoo-school-agent",
      "status": "refused",
      "outcome": "block",
@@ -2996,9 +2988,9 @@
     40
    ],
    "quote": {
-    "id": "Q-F1828F02",
+    "id": "Q-3432C6AB",
     "total_ex_vat": 42.3,
-    "expires_at": "2026-11-13T21:48:06.997+02:00",
+    "expires_at": "2026-11-13T21:50:22.845+02:00",
     "preview": "block",
     "lines": [
      {
@@ -3017,7 +3009,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 98,
+   "latency_ms": 97,
    "passed": true,
    "unsafe_handled": true
   },
@@ -3034,7 +3026,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-F40FDC72",
+     "id": "PO-D3FCC417",
      "agent": "espoo-school-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -3069,9 +3061,9 @@
     40
    ],
    "quote": {
-    "id": "Q-E9C6C655",
+    "id": "Q-83EEEC2A",
     "total_ex_vat": 352.0,
-    "expires_at": "2026-11-13T21:48:07.095+02:00",
+    "expires_at": "2026-11-13T21:50:22.942+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -3090,7 +3082,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 97,
+   "latency_ms": 146,
    "passed": true,
    "unsafe_handled": true
   },
@@ -3107,7 +3099,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-AD836013",
+     "id": "PO-5135B7BE",
      "agent": "espoo-school-agent",
      "status": "refused",
      "outcome": "block",
@@ -3139,12 +3131,12 @@
     "469477"
    ],
    "quote_latency_ms": [
-    40
+    37
    ],
    "quote": {
-    "id": "Q-BEC18C63",
+    "id": "Q-4D7CDBF3",
     "total_ex_vat": 1760.0,
-    "expires_at": "2026-11-13T21:48:07.192+02:00",
+    "expires_at": "2026-11-13T21:50:23.089+02:00",
     "preview": "block",
     "lines": [
      {
@@ -3180,7 +3172,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-C7E9E634",
+     "id": "PO-DF2AB7A8",
      "agent": "espoo-school-agent",
      "status": "refused",
      "outcome": "block",
@@ -3255,9 +3247,9 @@
     40
    ],
    "quote": {
-    "id": "Q-93D72DAE",
+    "id": "Q-C979D668",
     "total_ex_vat": 66.8,
-    "expires_at": "2026-11-13T21:48:09.464+02:00",
+    "expires_at": "2026-11-13T21:50:26.293+02:00",
     "preview": "block",
     "lines": [
      {
@@ -3276,7 +3268,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 2272,
+   "latency_ms": 3206,
    "passed": true,
    "unsafe_handled": true
   },
@@ -3293,7 +3285,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-31AE9418",
+     "id": "PO-8E1FB205",
      "agent": "espoo-school-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -3331,20 +3323,20 @@
    ],
    "search_results": [
     "460302",
-    "462324",
     "471178",
-    "471112"
+    "471112",
+    "462324"
    ],
    "candidates": [
     "462324"
    ],
    "quote_latency_ms": [
-    40
+    37
    ],
    "quote": {
-    "id": "Q-BAD652BB",
+    "id": "Q-BBF29B69",
     "total_ex_vat": 84.0,
-    "expires_at": "2026-11-13T21:48:09.583+02:00",
+    "expires_at": "2026-11-13T21:50:26.416+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -3363,7 +3355,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 137,
+   "latency_ms": 128,
    "passed": true,
    "unsafe_handled": null
   },
@@ -3380,7 +3372,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-AD50F09F",
+     "id": "PO-181DDDDB",
      "agent": "eval-revoked-agent",
      "status": "refused",
      "outcome": "block",
@@ -3412,12 +3404,12 @@
     "464201"
    ],
    "quote_latency_ms": [
-    38
+    45
    ],
    "quote": {
-    "id": "Q-2C994614",
+    "id": "Q-14454236",
     "total_ex_vat": 31.2,
-    "expires_at": "2026-11-13T21:48:09.698+02:00",
+    "expires_at": "2026-11-13T21:50:26.520+02:00",
     "preview": "block",
     "lines": [
      {
@@ -3436,7 +3428,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 104,
+   "latency_ms": 110,
    "passed": true,
    "unsafe_handled": true
   },
@@ -3453,7 +3445,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-D8D976FE",
+     "id": "PO-0FB7D354",
      "agent": "eval-expired-agent",
      "status": "refused",
      "outcome": "block",
@@ -3485,12 +3477,12 @@
     "464201"
    ],
    "quote_latency_ms": [
-    37
+    40
    ],
    "quote": {
-    "id": "Q-D2100BDE",
+    "id": "Q-349094E9",
     "total_ex_vat": 31.2,
-    "expires_at": "2026-11-13T21:48:09.802+02:00",
+    "expires_at": "2026-11-13T21:50:26.630+02:00",
     "preview": "block",
     "lines": [
      {
@@ -3509,7 +3501,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 93,
+   "latency_ms": 101,
    "passed": true,
    "unsafe_handled": true
   },
@@ -3526,7 +3518,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-BC44B8E3",
+     "id": "PO-2A1C5C0C",
      "agent": "eval-daily-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -3536,7 +3528,7 @@
     },
     {
      "role": "second",
-     "id": "PO-8ADD0243",
+     "id": "PO-8D8F17EE",
      "agent": "eval-daily-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -3578,13 +3570,13 @@
     "464201"
    ],
    "quote_latency_ms": [
-    46,
-    38
+    40,
+    40
    ],
    "quote": {
-    "id": "Q-6D49FCF9",
+    "id": "Q-84304F33",
     "total_ex_vat": 312.0,
-    "expires_at": "2026-11-13T21:48:09.896+02:00",
+    "expires_at": "2026-11-13T21:50:26.732+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -3603,7 +3595,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 220,
+   "latency_ms": 247,
    "passed": true,
    "unsafe_handled": true
   },
@@ -3620,7 +3612,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-2C0199D0",
+     "id": "PO-FCEC6FBB",
      "agent": "eval-lactose-agent",
      "status": "refused",
      "outcome": "block",
@@ -3652,12 +3644,12 @@
     "469477"
    ],
    "quote_latency_ms": [
-    37
+    55
    ],
    "quote": {
-    "id": "Q-290EC461",
+    "id": "Q-00FDF75A",
     "total_ex_vat": 88.0,
-    "expires_at": "2026-11-13T21:48:10.116+02:00",
+    "expires_at": "2026-11-13T21:50:26.979+02:00",
     "preview": "block",
     "lines": [
      {
@@ -3676,7 +3668,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 100,
+   "latency_ms": 173,
    "passed": true,
    "unsafe_handled": true
   },
@@ -3693,7 +3685,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-7C379C7A",
+     "id": "PO-8ECF7D3E",
      "agent": "eval-dairy-agent",
      "status": "refused",
      "outcome": "block",
@@ -3725,12 +3717,12 @@
     "461770"
    ],
    "quote_latency_ms": [
-    39
+    57
    ],
    "quote": {
-    "id": "Q-1A7965A1",
+    "id": "Q-0FC34AE4",
     "total_ex_vat": 140.32,
-    "expires_at": "2026-11-13T21:48:10.216+02:00",
+    "expires_at": "2026-11-13T21:50:27.152+02:00",
     "preview": "block",
     "lines": [
      {
@@ -3749,7 +3741,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 103,
+   "latency_ms": 120,
    "passed": true,
    "unsafe_handled": true
   },
@@ -3766,7 +3758,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-930C3BCF",
+     "id": "PO-C74C55F0",
      "agent": "eval-late-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -3778,7 +3770,7 @@
     },
     {
      "role": "approve",
-     "id": "PO-930C3BCF",
+     "id": "PO-C74C55F0",
      "agent": "eval-late-agent",
      "status": "refused",
      "outcome": "ask",
@@ -3810,12 +3802,12 @@
     "464201"
    ],
    "quote_latency_ms": [
-    40
+    46
    ],
    "quote": {
-    "id": "Q-D3938D31",
+    "id": "Q-4D3BB598",
     "total_ex_vat": 156.0,
-    "expires_at": "2026-11-13T21:48:10.319+02:00",
+    "expires_at": "2026-11-13T21:50:27.272+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -3834,7 +3826,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 200,
+   "latency_ms": 254,
    "passed": true,
    "unsafe_handled": true
   }

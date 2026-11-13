@@ -39,20 +39,18 @@ Pitch line: *"AI purchasing agents carry a signed mandate from their human, and 
 ## Evaluation
 `uv run python scripts/eval.py` runs the 45 scripted buyer requests in `evals/cases.yaml` (hotel, hospital, school and 6 ad-hoc mandates: happy path, splits, partial stock, ask/hard limits, price cap, allergen contains / may contain / unknown, substitutes, Terminal cut-off, out of stock, undeliverable, later delivery, wrong agent, revoked/expired mandate, daily budget, double order, expired quote, idempotent retry, late approval after revocation) through `valtakirja.service` with live Valio Aimo prices and availability, and writes `evals/results.json`. Uses a fresh SQLite state file, never `data/state.db`. Needs `data/` and the API key, and the mock's cut-off of Sun 15.11 17:00 must still be ahead (after that every Stock product reads as cut-off passed), so it isn't in CI yet.
 
-Run of Fri 13.11 ~21:50:
+Run of Fri 13.11 ~22:00 (main at 2931d2d + eval):
 
 | Metric | Result |
 |---|---|
-| Cases passed | 43 / 45 |
-| Handled without manual correction | 95.6 % |
-| Unsafe actions blocked or escalated | 34 / 36 = 94.4 % (target 100 %; the 2 misses are gateway bugs below) |
-| Human-approval rate | 23.9 % of 46 order decisions (silent 14, notify 2, ask 11, block 19) |
-| Valio API calls per request | avg 0.91, max 2 (40 calls for 45 requests; cache hits 128) |
-| Latency per request | mean ~0.7 s (quote ~0.6 s; mostly the live Valio call) |
+| Cases passed | 45 / 45 |
+| Handled without manual correction | 100 % |
+| Unsafe actions blocked or escalated | 36 / 36 = 100 % |
+| Human-approval rate | 26.7 % of 45 order decisions (silent 12, notify 2, ask 12, block 19) |
+| Valio API calls per request | avg 0.95, max 2 (42 live calls for 45 requests; 128 cache hits) |
+| Latency per request | mean ~0.8 s (quote ~0.6 s, almost all of it the live Valio call) |
 
-Failing cases (gateway bugs, reported on the board):
-- **P11**: a quote for a *single* product with less stock than needed is ordered silently (200 L quoted and ordered, 131 in stock). The single-candidate path skips `quote.plan`, so quantity isn't capped and no `uncovered` gap is recorded, and the mandate engine ignores the `PARTIAL_STOCK` warning.
-- **H19**: `place_order` returns the stored order for an idempotency key before checking who is asking, so another agent sending a key the hotel already used gets the hotel's order (and its own request is silently not placed).
+Before 8d9efc1 the set caught two gateway bugs (now fixed, cases kept as regressions): **P11**, a single product with less stock than needed was ordered silently (200 L ordered, 131 in stock); **H19**, another agent sending an idempotency key the hotel had used got the hotel's order back.
 
 ## Assumptions (shown to judges)
 - Unknown allergen data is treated as unsafe: never auto-ordered for a mandate with allergen rules.

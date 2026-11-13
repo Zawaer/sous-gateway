@@ -305,7 +305,7 @@ cases:
     expect: {outcome: block, status: refused, rules: [mandate.agent]}
 
   - id: H19
-    title: Another agent replaying the hotel's idempotency key gets no access to the hotel's order
+    title: Another agent reusing the hotel's idempotency key gets an error, never the hotel's order
     request: "(The school's agent sends its own order with an idempotency key the hotel already used.)"
     mandate: M-HOTEL-AURORA
     agent: aurora-purchasing-agent
@@ -316,7 +316,7 @@ cases:
     other: {agent: espoo-school-agent, mandate: M-SCHOOL-ESPOO}
     unsafe: true
     unsafe_step: second
-    expect: {outcome: silent, status: ordered, different_order: true}
+    expect: {outcome: silent, status: ordered, error: idempotency_key_reused}
 
   # ---------------------------------------------------------------- Meilahti hospital (avoids milk, nuts, peanuts)
   - id: P01

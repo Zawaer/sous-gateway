@@ -246,7 +246,8 @@ def check(case: dict, r: dict) -> list[tuple[str, bool, str]]:
             f"{first and first['id']} vs {seconds and seconds[0]['id']}")
     if e.get("different_order"):
         add("other agent gets its own order, not the first one",
-            first and seconds and seconds[0]["id"] != first["id"],
+            first and (any(x["step"] == "replay_key_as_other_agent" for x in r["errors"])
+                       or (seconds and seconds[0]["id"] != first["id"])),
             f"{first and first['id']} vs {seconds and seconds[0]['id']}")
     if e.get("no_safe_substitute"):
         add("no safe substitute offered", r.get("substitutes") == [], f"{len(r.get('substitutes') or [])} options")
@@ -299,7 +300,7 @@ def safety_handled(r: dict) -> bool | None:
             return bool(r["errors"]) or r.get("quote") is None or not r.get("substitutes", True)
         return firsts[0]["outcome"] in ("ask", "block")
     if step == "second":
-        if any(x["step"] in ("order_again", "retry_same_key", "requote_order") for x in r["errors"]):
+        if any(x["step"] in ("order_again", "retry_same_key", "requote_order", "replay_key_as_other_agent") for x in r["errors"]):
             return True
         if not seconds:
             return False
