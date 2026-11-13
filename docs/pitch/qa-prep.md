@@ -8,10 +8,10 @@ Answer in two or three sentences, then stop. If you don't know, say so and say w
 Because an LLM can be talked into anything and can't be audited. A prompt injection in a product description shouldn't be able to raise a spend limit. The model turns language into a structured request and explains results. Limits, allergens, cut-offs and the tier are plain code that gives the same answer every time, with a reason a human can read.
 
 **2. What if the agent lies about who it is?**
-Today the agent sends an `agent_id` and a `mandate_id`; the gateway checks they match, and a human must have issued and signed that mandate, so a stranger can't invent authority. Approvals need a separate approver code. That is still hackathon-grade identity. In production the agent authenticates with OIDC client credentials (or mTLS), and the mandate is bound to the agent's key, so a stolen mandate ID is useless without the key.
+Today the agent sends an `agent_id` and a `mandate_id`; the gateway checks they match the signed mandate, and quotes and standing orders are bound to that agent, so a stranger can't invent authority or reuse someone else's quote. Approvals need a separate approver code. That is still hackathon-grade identity (see question 15). In production the agent proves a key bound to the mandate, so a stolen mandate ID is useless without the key.
 
 **3. How does this scale to 700 suppliers and 25,000 products?**
-Search runs on static catalog data in a local index (17,546 products in about 10 s to build), so it costs no backend calls. Live price and availability are fetched only for a shortlist: 2 batched calls per quote, against roughly 36 to poll the whole catalog. Supplier differences show up as data (Stock vs Terminal, reliability, cut-offs), not as code per supplier.
+Search runs on static catalog data in a local index (17,546 products in about 10 s to build), so it costs no backend calls. Live price and availability are fetched only for a shortlist: at most 2 batched calls per request (0.95 on average with the cache in our eval), against roughly 36 to poll the whole catalog. Supplier differences show up as data (Stock vs Terminal, reliability, cut-offs), not as code per supplier.
 
 **4. What about Valio Aimo's confidential data and the marketplace roadmap?**
 Agents never touch internal systems. They see the catalog and the quotes they ask for, nothing else. The gateway calls the backend on their behalf, with a global cap on API calls and per-IP rate limits. Nothing about ranking, margins or the roadmap is exposed. In production, per-customer prices would only go to an authenticated buyer.
@@ -38,16 +38,37 @@ Two independent layers. The audit log is hash-chained, so editing any event brea
 Valio Aimo runs it; buyers' agents use it. It gives Valio Aimo an open, documented agent channel on its own terms, before a third-party platform defines it and sits between Valio Aimo and 20,000 kitchens. For buyers, routine orders happen in seconds and the unusual ones reach a human with the reason attached.
 
 **12. What's missing before production?**
-A real order API instead of our order store, per-customer prices and contracts, OIDC identity for buyers and agents, mandates as W3C VCs / AP2, push and SMS notifications for notify and ask, and signing-key rotation through JWKS `kid`. The shape doesn't change: those plug into the same quote, mandate and audit flow.
+A real order API instead of our order store, per-customer prices and contracts, OIDC login for buyers and keys bound to agents, mandates as W3C VCs / AP2, and signing-key rotation through JWKS `kid`. Notifications already exist (feed, phone push, signed webhook). The shape doesn't change: the rest plugs into the same quote, mandate and audit flow.
+
+**13. What if Valio's API rate-limits you?**
+We already hit it: the shared key returned HTTP 429 during CI. The client honours `Retry-After`, backs off, and on a 429 pauses all calls briefly so we don't hammer Valio. If a live call still fails, the quote uses the last copy we fetched (price up to 15 min old, availability up to 5 min), marks it `DATA_STALE`, and that order always goes to a human. With no recent copy, the agent gets `valio_unavailable` with a retry time. We never auto-order on stale data.
+
+**14. Why should a seller be allowed to push suggestions to someone else's agent?**
+Because a good sales rep does it today, and the buyer's rules still apply. Every suggestion is checked against the buyer's signed mandate first: nothing it would block is shown, and products with unknown allergens are never pushed to a buyer with allergen rules. It's labelled "sponsored by Valio Aimo", it's only an offer (the buyer's agent must quote and order it like anything else), and every batch is in the audit log both sides read.
+
+**15. How do you authenticate agents?**
+Today: the `agent_id` plus a mandate signed by the gateway and issued to exactly that `agent_id`; quotes, orders and standing orders are bound to it. Opt-in bearer credentials for agents are being added. In production the agent proves possession of a key: mTLS, DPoP-bound tokens, or a key named in the mandate as a Verifiable Credential. A leaked mandate id then buys nothing.
+
+**16. Does it depend on one LLM?**
+No. The gateway decides without any model. Our buyer agent works with any OpenAI-compatible model (Gemini, open-weight models on Verda Inference in the EU, self-hosted vLLM), and Claude Code works over MCP as it is. We score each model on the same 45 cases: [LLM EVAL]. The runtime, not the model, fills in agent id, mandate and idempotency key.
+
+**17. Standing orders: why not just repeat last week's order?**
+Because "same as usual" is where creep hides. Each renewal is quoted live and compared with the median of the last 4 ordered weeks. Quantity up more than 15 % (or 3 rises in a row), cost or price per litre up more than 10 %, a switched product or a new supply risk: the renewal waits for a human. In the demo, milk is +18 % and the bill +€135 (+16 %), so it asks.
 
 ---
 
 ## Backup facts
 - 17,546 products, fi/sv/en. Search: SQLite FTS5 trigram, no API calls.
-- Quote: 2 batched Valio API calls (price + availability). Signed, expiring.
+- Quote: at most 2 batched Valio API calls (price + availability); 0.95 per request on average with the cache. Signed, expiring.
+- Search first-result accuracy 56 % → 100 % on 39 fi/sv/en queries.
+- ~46 % of products have no allergen declaration: unknown → human.
 - Hotel run: Valio Eila 1 L × 1,000 at €1.40/L, €1,400 ex VAT, notify tier, 2 API calls total.
-- Hotel mandate: notify above €1,000, auto-approve to €2,500, hard limit €10,000.
+- Hotel mandate: notify above €1,000, auto-approve to €2,500, hard limit €10,000, daily limit €8,000.
 - Hospital mandate: auto-approve to €400, avoids milk / nuts, unknown allergens → ask, substitutions → ask.
-- Tiers: silent / notify / ask / block. Late approvals expire after the cut-off.
+- Tiers: silent / notify / ask / block. Late approvals expire after the cut-off or delivery date.
 - Signatures: Ed25519 JWS; public keys at `/.well-known/jwks.json`.
-- Evals: `[EVAL: % correct]` correct, `[EVAL: % unsafe blocked]` unsafe blocked, `[EVAL: API calls per request]` calls per request, on `[EVAL: N]` requests.
+- Eval: 45/45 cases pass; 36/36 unsafe actions blocked or escalated; human-approval rate 26.7 % (silent 12, notify 2, ask 12, block 19).
+- LLM eval per model: [LLM EVAL].
+- Standing-order demo: milk +18 % vs 4-week median, cost +€135 (+16 %) → ask before renewing.
+- Live: production https://135-181-8-209.sslip.io (Verda, Finland); staging https://staging.135-181-63-134.sslip.io.
+- CI on CRACI: SBOM + grype gate; smoke under deny-by-default egress.

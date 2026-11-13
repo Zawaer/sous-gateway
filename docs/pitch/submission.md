@@ -8,55 +8,69 @@ AI purchasing agents carry a signed mandate from their human, and Valio Aimo's g
 
 ## Description (markdown, ≤5000 chars)
 
-**Valtakirja** (Finnish for *mandate*, a power of attorney) is an open front door that lets any AI purchasing agent find products, get a binding quote and place orders with Valio Aimo, inside limits its human set.
+**Valtakirja** (Finnish for *mandate*, a power of attorney) is an open front door that lets any AI purchasing agent find products, get a binding quote and place orders with Valio Aimo, inside limits its human set. Live at https://135-181-8-209.sslip.io.
 
 ### The problem
-We asked a general shopping agent for "1,000 litres of lactose-free milk by Monday". It researched for 13 minutes and concluded it would have to phone wholesalers on Saturday. Wholesalers don't publish prices or stock to agents. Agents will buy from wholesalers anyway. If Valio Aimo doesn't define how they do it safely and openly, someone else's platform will.
+We asked a general shopping agent for "1,000 litres of lactose-free milk by Monday". It researched for 13 minutes and concluded it would have to phone wholesalers on Saturday. Agents will buy from wholesalers anyway. If Valio Aimo doesn't define how they do it safely and openly, someone else's platform will.
 
 ### What it does
-- **Search** 17,546 products (fi/sv/en) with filters for claims, allergens, labels and temperature. Search uses static data only, so it costs no API calls.
-- **Quote** a shortlist with live price and availability from Valio Aimo's API (2 batched calls), with pack and lot sizes, VAT, cut-off checked against now, stock vs supplier-shipped, delivery reliability, CO₂ estimate, and splits when stock is short. Quotes are signed and expire.
-- **Check the mandate** in deterministic code. Every order lands in one of four tiers: **silent** (ordered), **notify** (ordered, human gets an FYI), **ask** (held for a human), **block** (refused, with the rule that fired).
-- **Approve** from a phone: the agent gets an approval link, the human sees the reason and a cut-off countdown. Late approvals expire.
-- **Substitute** good / better / best, keeping the category, claims and allergen rules, with each compromise listed.
-- **Audit** everything in a hash-chained log both sides can read, stored in MariaDB system-versioned tables.
+- **Search** 17,546 products (fi/sv/en) with filters for claims, allergens, labels and temperature. No API calls.
+- **Quote** a shortlist with live price and availability: at most 2 Valio API calls (0.95 on average with the cache). Pack and lot sizes, VAT, cut-offs, stock vs supplier-shipped, reliability, CO₂ estimate, splits when stock is short. Signed, expiring.
+- **Check the mandate** in deterministic code. Every order lands in one of four tiers: **silent**, **notify** (ordered, human gets an FYI), **ask** (held for a human), **block** (refused, with the rule).
+- **Approve** from a phone: push notification, approval link, reason and cut-off countdown.
+- **Standing orders with drift detection**: a weekly order renews itself, but rising quantities, cost, a switched product or a new supply risk make it ask first. Demo: milk +18 % vs the 4-week median, cost +€135 (+16 %) → ask before renewing.
+- **Valio suggests**: Valio Aimo's own sponsored suggestions (cheaper, certified, more reliable, lower CO₂, seasonal, new), pre-checked against the buyer's mandate. Offers only, labelled, audited.
+- **Substitutes** good / better / best that understand product type (sour milk is not milk) and keep allergen rules.
 
-In a real run, Claude Code on a laptop connected over MCP and ordered 1,000 × Valio Eila 1 L at €1.40/L (€1,400 ex VAT). That was above the hotel's notify threshold, so it went through and the manager was told. It took 2 Valio API calls in total.
+In a real run, Claude Code on a laptop connected over MCP and ordered 1,000 × Valio Eila 1 L (€1,400 ex VAT). Above the hotel's notify threshold, it went through and the manager was told. 2 Valio API calls in total.
 
 ### Exceptions it handles
-Testing the live API showed that **Terminal (supplier-shipped) products show an order cut-off that has already passed while still promising Monday delivery**. The gateway rejects those and picks a stocked alternative. **About 46% of products have no allergen declaration**. For a mandate with allergen rules, unknown means unsafe, so a human decides. It also handles out-of-stock items, later delivery dates, prices expiring before delivery, lot sizes, short stock, idempotent retries and quote expiry.
+Terminal (supplier-shipped) products show an order cut-off that has already passed while still promising Monday delivery; the gateway rejects them and picks a stocked product. About 46 % of products have no allergen declaration; for a mandate with allergen rules, unknown means a human decides. Also: out of stock, later delivery, prices expiring before delivery, lot sizes, short stock, idempotent retries, quote expiry, and Valio rate limits (last-known data is marked stale and always goes to a human).
 
 ### Why it's trustworthy
-- **The LLM never decides.** It only turns language into a structured request and explains the result. Limits, allergens, cut-offs and tiers are plain code with plain-language reasons.
-- **Signed artifacts.** Mandates, quotes and receipts are Ed25519 JWS, verifiable by anyone against `/.well-known/jwks.json`.
-- **Two independent audit layers.** A hash chain (`/audit/verify`) and MariaDB system versioning. `/orders/{id}/history` answers "what did the mandate say when this order was decided?" with `FOR SYSTEM_TIME AS OF`, and any edit or delete of an audit row shows up.
-- **Controls.** An approver code for human actions, per-IP rate limits and a global cap on Valio API calls.
+- **The LLM never decides.** Limits, allergens, cut-offs, drift and tiers are plain code with plain-language reasons.
+- **Signed artifacts.** Mandates, quotes and receipts are Ed25519 JWS, verifiable against `/.well-known/jwks.json`. Orders use only signed payloads: one order per quote, bound to the agent it was quoted for.
+- **Two audit layers.** A hash chain (`/audit/verify`) and MariaDB system versioning: "what did the mandate say when this order was decided?" is one `AS OF` query.
 
-### Open by design
-The same operations are exposed over **MCP** (for agents like Claude) and **OpenAPI** (for everything else). We include an open reference buyer that runs in the browser and checks signatures itself. Agents never touch Valio Aimo's internal systems: they see the public catalog and the quotes they ask for, and the gateway caps how often it calls the backend. MIT-licensed.
+### Any agent, any model
+MCP and OpenAPI expose the same operations. A browser reference buyer verifies signatures itself. Our LLM buyer agent runs on any OpenAI-compatible model: Gemini, open-weight models on Verda Inference in the EU, or self-hosted vLLM. The runtime binds identity, mandate and idempotency; the model only fills in the request. We score each model on the same cases: [LLM EVAL].
 
 ### Results
-`[EVAL: % correct]` of `[EVAL: N]` scripted requests handled correctly with no manual fixes; `[EVAL: % unsafe blocked]` of unsafe orders stopped; `[EVAL: API calls per request]` Valio API calls per request.
+45/45 scripted buyer requests handled correctly with no manual fixes. 36/36 unsafe actions blocked or escalated. ≤2 Valio API calls per uncached request. Search first-result accuracy 56 % → 100 % on 39 fi/sv/en queries.
+
+### Built like production
+CI on CRACI: tests with MariaDB, Docker build, CycloneDX SBOM, grype gate, and a smoke test under deny-by-default egress (a gateway holding a supplier key must not talk to anything else). Deployed on a Verda CPU instance in Finland.
 
 ### What's next
-OIDC identity for buyers and agents with mandates bound to the agent's key; Valio Aimo's real order API with per-customer prices; mandates as W3C Verifiable Credentials / AP2; push and SMS notifications; signing-key rotation through JWKS.
-
-### Tech
-Python, FastAPI, MCP (streamable HTTP), OpenAPI, SQLite FTS5 search, MariaDB system-versioned tables, Ed25519 / JWS / JWKS, plain JS web UI, Docker Compose, GitHub Actions CI.
+Agent keys bound to the mandate (mTLS, DPoP or VC-bound keys) and buyer login via OIDC; Valio Aimo's real order API with per-customer prices; mandates as W3C Verifiable Credentials / AP2; key rotation through JWKS.
 
 ## Technologies used
 - Python, FastAPI, Pydantic, uv
-- Model Context Protocol (MCP)
-- OpenAPI
+- Model Context Protocol (MCP), OpenAPI
 - MariaDB (system-versioned tables), SQLite FTS5
 - Ed25519, JWS, JWKS
 - JavaScript (web UI and reference buyer)
-- Docker, Docker Compose
-- GitHub Actions (CI on CRACI runners)
+- Docker, Docker Compose, Caddy
+- GitHub Actions on CRACI runners; syft (CycloneDX SBOM), grype
+- Verda (CPU instance in Finland; Verda Inference for open-weight models)
+- OpenAI-compatible LLM APIs: Gemini, Verda Inference, vLLM
+- ntfy (push notifications)
 - Claude Code, OpenAI Codex (development and as buyer agents)
 
 ## Tech challenges to tick
 - **Valio Aimo: Trusted Trade Agents** (main): end-to-end request → lookup → order/approval, with guardrails, signatures and an audit trail.
-- **MariaDB**: mandates, orders and the audit log live in system-versioned tables, so we can show exactly which mandate version an order was decided under (`AS OF`), and tampering with history is detectable.
-- **CRACI**: our pytest suite (offline tests + a MariaDB service) runs on every push on CRACI runners. `[CONFIRM: CI_RUNNER=craci set and a green run exists]`
-- **OpenAI Codex**: the open reference buyer (`buyer/`) was built with Codex and acts as an independent agent against the gateway.
+- **Best Use of Verda**: the gateway (with MariaDB) runs on a Verda CPU instance in Finland; the buyer agent runs open-weight models on Verda Inference in the EU, scored per model. Write-up: [docs/VERDA.md](../VERDA.md).
+- **Best use of CRACI**: CI runs on CRACI runners: tests with MariaDB, Docker build with SBOM and grype gate, compose smoke under deny-by-default egress, eval jobs whose egress is limited to PyPI, Valio and the model APIs. Write-up: [docs/CI.md](../CI.md).
+- **Best Use of Codex**: Rene's reference buyer (`buyer/`) was built with Codex and acts as an independent agent against the gateway.
+- **Best Use of Gemini API** `[CONFIRM: only if a Gemini key arrives and the Gemini run is in docs/LLM_EVAL.md]`: Gemini as one of the buyer agent's models, scored on the eval cases.
+
+(MariaDB has no tech-challenge prize at this event. System versioning still matters for Valio's auditability criterion, so it stays in the description.)
+
+## Before submitting
+- [ ] Fill `[LLM EVAL]` in this description, the deck and `docs/STATUS.md` from `docs/LLM_EVAL.md`; if a model didn't run, delete the placeholder sentence instead.
+- [ ] Resolve `[CONFIRM]` on Gemini: tick it only if the Gemini run exists.
+- [ ] Verda: the process is documented in `docs/VERDA.md`; **post a short summary in Verda's Discord challenge channel** (what runs where, which Verda products and why, link to the repo and the doc).
+- [ ] CRACI: link a green CRACI run, with the SBOM and the network trace, from `docs/CI.md`.
+- [ ] Video ≤ 2:00 uploaded; demo URL and repo link work in a private browser window.
+- [ ] Description ≤ 5,000 characters; no secrets (approver code, API keys) anywhere in the repo, video or deck.
+- [ ] Repo public, README quick start checked once on a clean clone.

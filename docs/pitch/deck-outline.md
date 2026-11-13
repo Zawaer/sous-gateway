@@ -1,12 +1,12 @@
-# Deck outline (PDF, 10 slides)
+# Deck outline (PDF, 13 slides)
 
-One idea per slide. Big type, few words. Numbers must match `docs/STATUS.md` and `evals/results.json`.
+One idea per slide. Big type, few words. Numbers must match `docs/STATUS.md` and `evals/results.json`. `[LLM EVAL]` placeholders wait for the per-model run (`docs/LLM_EVAL.md`).
 
 ---
 
 ### 1. Valtakirja
 - AI purchasing agents carry a signed mandate from their human, and Valio Aimo's gateway enforces it.
-- Junction 2026 · Valio Aimo: Trusted Trade Agents · public URL · GitHub
+- Junction 2026 · Valio Aimo: Trusted Trade Agents · https://135-181-8-209.sslip.io · GitHub
 - **Visual:** name large, one-liner below, small QR code to the live demo.
 
 ### 2. Before: 13 minutes and a phone call
@@ -20,45 +20,63 @@ One idea per slide. Big type, few words. Numbers must match `docs/STATUS.md` and
 - **Visual:** two arrows into Valio Aimo: "someone else's platform" (greyed) vs "Valio Aimo's own front door" (highlighted).
 
 ### 4. How it works
-- Agent → search (17,546 products, no API calls) → signed quote (live price + availability, 2 Valio API calls) → mandate check in code → order, held for a human, or refused.
+- Agent → search (17,546 products, no API calls) → signed quote (live price + availability, ≤2 Valio API calls) → mandate check in code → order, held for a human, or refused.
 - Four tiers: **silent** (just do it) · **notify** (do it, tell me) · **ask** (wait for me) · **block** (never).
+- Notify and ask reach the human: in-app feed, phone push (ntfy), signed webhook.
 - **Visual:** left-to-right flow diagram; the four tiers as coloured chips under "mandate check".
 
 ### 5. Demo in three orders
-- Hotel: 1,000 × Valio Eila 1 L at €1.40/L, €1,400 ex VAT → **notify**. Placed by Claude Code over MCP from a laptop.
+- Hotel: Claude Code on a laptop, over MCP: Valio Eila 1 L × 1000, €1,400 ex VAT → **notify**. 2 Valio API calls.
 - Hospital: substitute with no allergen data → **ask** → approved on a phone.
 - Terminal product past its cut-off → caught, Stock alternative picked.
 - **Visual:** three order cards from the web UI, tier chip on each; phone screenshot of the approval.
 
-### 6. Exceptions we found in the real API
+### 6. Standing orders that notice drift
+- A kitchen's weekly order renews itself, but the gateway compares each renewal with the median of its last 4.
+- Quantity creep (> +15 % or 3 rises in a row), cost or price per L/KG > +10 %, a switched product, a new supply risk: each lifts the renewal to **ask**.
+- Demo: milk +18 % vs the 4-week median, cost +€135 (+16 %) → ask before renewing.
+- **Visual:** small sparkline of the 4 past weeks and this week, with the drift findings in plain words.
+
+### 7. Valio suggests, inside the buyer's rules
+- Valio Aimo's own selling agent offers cheaper, certified, more reliable or lower-CO₂ alternatives, plus seasonal and new products.
+- Every suggestion is pre-checked against the buyer's mandate: nothing it would block is shown, unknown allergens are never pushed.
+- Labelled "sponsored by Valio Aimo", offers only (never orders), written to the audit log.
+- **Visual:** one suggestion card: "Valio Aimo suggests…", reason, mandate check chip, disclosure line.
+
+### 8. Exceptions we found in the real API
 - Terminal products show an order cut-off that has already passed while still promising Monday delivery.
-- ~46% of products have no allergen declaration. We treat unknown as unsafe: a human decides.
-- Also handled: out of stock, later delivery date, short stock (split across products), price expiring before delivery, lot sizes.
+- ~46 % of products have no allergen declaration. We treat unknown as unsafe: a human decides.
+- Also handled: out of stock, later delivery date, short stock (split, or ask), price expiring before delivery, lot sizes, cut-off unknown for the requested date, rate limits (last-known data marked stale → human).
 - **Visual:** annotated API response with the passed `closingTime` and `availableDate` highlighted.
 
-### 7. Why you can trust it
-- The LLM never decides. Limits, allergens, cut-offs and tiers are deterministic code with plain-language reasons.
-- Mandates, quotes and receipts are Ed25519-signed (JWS), verifiable by anyone via `/.well-known/jwks.json`.
+### 9. Why you can trust it
+- The LLM never decides. Limits, allergens, cut-offs, drift and tiers are deterministic code with plain-language reasons.
+- Mandates, quotes and receipts are Ed25519-signed (JWS), verifiable by anyone via `/.well-known/jwks.json`. Orders use only the signed payloads; one order per quote; idempotent retries.
 - Hash-chained audit log + MariaDB system-versioned tables: "what did the mandate say when this order was decided?" (`AS OF`).
 - **Visual:** a decoded receipt JWS next to the audit chain; one `FOR SYSTEM_TIME AS OF` query.
 
-### 8. Numbers
-- `[EVAL: % correct]` of `[EVAL: N]` scripted requests handled correctly with no manual fixes.
-- `[EVAL: % unsafe blocked]` of unsafe orders stopped · `[EVAL: API calls per request]` Valio API calls per request (vs ~36 to poll the whole catalog).
-- `[EVAL: % without human]` handled without a human · 17,546 products searchable.
-- **Visual:** four big numbers, no chart. Source line: "evals/results.json, run on <date>".
+### 10. Any model can be the buyer
+- Our LLM buyer agent (`agent/`) speaks the gateway's MCP tools with any OpenAI-compatible model: Gemini, open-weight models on Verda Inference in the EU, self-hosted vLLM. Claude Code and Codex work as they are.
+- The runtime binds agent id, mandate and idempotency key; the model only picks search terms, products, amount and date.
+- Per-model eval on the same 45 cases: [LLM EVAL] need understood · [LLM EVAL] unsafe blocked or escalated · mandate violations auto-ordered: must be 0.
+- **Visual:** a small table, one row per model: correct, unsafe stopped, tool calls, latency, where it runs.
 
-### 9. Assumptions we made
-- Unknown allergen data = unsafe. A passed `closingTime` = the quoted date can't be met.
-- CO₂ is a product-group average × quantity: an estimate, labelled as such.
-- Pack contents from the product name, checked against price / comparison price; Terminal quantity 999999 = unknown.
-- Valio Aimo has no order API in the mock: orders, approvals and the audit log are ours to design.
-- **Visual:** plain list, two columns. Honest and short.
+### 11. Numbers
+- **45/45** scripted buyer requests handled correctly with no manual fixes.
+- **36/36** unsafe actions blocked or escalated · **≤2** Valio API calls per uncached request (0.95 average with the cache) vs ~36 to poll the whole catalog.
+- **17,546** products searchable · search first-result accuracy 56 % → **100 %** on 39 fi/sv/en queries.
+- **Visual:** four big numbers, no chart. Source line: "evals/results.json, run Fri 13.11".
 
-### 10. Path to production
-- **Identity:** buyer and agent identity via OIDC (client credentials), mandates bound to the agent's key.
+### 12. Built and run like production
+- CI on CRACI: tests with MariaDB, Docker build, CycloneDX SBOM, grype gate on fixable criticals.
+- Smoke test of the real compose stack under deny-by-default egress; eval jobs may reach only PyPI, Valio and the model APIs. A gateway holding a supplier key must not talk to anything else.
+- Live on Verda in Finland: production and staging, MariaDB, Caddy + TLS.
+- **Visual:** the CI job graph with the egress policy per job; the CRACI network trace showing only `junction26.valioaimo.fi`.
+
+### 13. Path to production
+- **Identity:** today `agent_id` + signed mandate (bearer agent credentials being added). Next: buyer login via OIDC; agent keys bound to the mandate (mTLS, DPoP or VC-bound keys).
 - **Orders and prices:** call Valio Aimo's real order API; per-customer prices and contracts instead of list prices.
-- **Mandates as standards:** W3C Verifiable Credentials / AP2 mandates, so any wallet or agent platform can carry them.
-- **Operations:** push/SMS notifications for notify and ask, key rotation via JWKS `kid`, rate limits and per-agent quotas.
+- **Mandates as standards:** W3C Verifiable Credentials / AP2 mandates, signed by the buyer, so any wallet or agent platform can carry them.
+- **Operations:** key rotation via JWKS `kid`, audit chain head anchored outside the gateway, per-agent quotas.
 - **Open:** MCP + OpenAPI + JWS today. MIT-licensed. Any agent works, no lock-in.
-- **Visual:** a three-step roadmap (Pilot with one customer → Real order API + OIDC → VC/AP2 mandates), ending with the one-liner.
+- **Visual:** a three-step roadmap (Pilot with one customer → Real order API + bound agent keys → VC/AP2 mandates), ending with the one-liner.
