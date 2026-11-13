@@ -379,3 +379,32 @@ def test_uncovered_is_summed_per_unit():
     _, f = S._evaluate(m, "a", q, NOW)
     [partial] = [x for x in f if x.rule == "need.partial"]
     assert "6 L" in partial.message and "2 KG" in partial.message
+
+
+def test_approval_rechecks_current_mandate_and_no_unrevoke(monkeypatch, tmp_path):
+    """Codex review: approving a held order must respect the mandate as it is now."""
+    from datetime import date as _d
+    from sous import config, service as S, signing, store, catalog, quote as Q
+    from sous.mandate import Mandate
+    monkeypatch.setattr(config, "STATE_DB", tmp_path / "s.db"); monkeypatch.setattr(config, "DB_URL", "")
+    monkeypatch.setattr(store, "_conn", None)
+    monkeypatch.setattr(signing, "KEY_PATH", tmp_path / "k.pem"); signing._key.cache_clear()
+    from tests.test_core import product, PRICE, avail, NOW
+    monkeypatch.setattr(catalog, "get", lambda pid: product(id=pid))
+    monkeypatch.setattr(Q, "offers", lambda ids, d, n=None, u=None, **k: (
+        [Q.build_offer(product(id=i), PRICE, avail(), d, n, u, NOW) for i in ids], NOW))
+    monkeypatch.setattr(S, "_now", lambda: NOW)
+    S.issue_mandate(Mandate(id="M", buyer="B", agent_id="a", issued_by="h", auto_approve_limit_eur=50, hard_limit_eur=1000))
+    q = S.request_quote(S.QuoteRequest(agent_id="a", mandate_id="M", delivery_date=_d(2026, 11, 16),
+                                       items=[S.QuoteItem(product_ids=["1"], amount=100, unit="L")]))["quote"]
+    o = S.place_order("a", "M", q["id"])
+    assert o["status"] == "pending_approval"
+    S.issue_mandate(Mandate(id="M", buyer="B", agent_id="a", issued_by="h", auto_approve_limit_eur=50, hard_limit_eur=100))
+    assert S.decide(o["id"], "h", True)["status"] == "refused"
+    S.revoke_mandate("M", "h")
+    try:
+        S.issue_mandate(Mandate(id="M", buyer="B", agent_id="a", issued_by="h"))
+        raise AssertionError("un-revoke must be refused")
+    except S.GatewayError as e:
+        assert e.code == "mandate_revoked"
+    signing._key.cache_clear()

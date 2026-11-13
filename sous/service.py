@@ -54,9 +54,13 @@ def issue_mandate(m: Mandate, mint_agent_credential: bool | None = None) -> dict
     """Sign and store the mandate. When the agent must authenticate (or when asked), also mint the agent's
     credential: its token is in the response this once and never again."""
     data = m.model_dump(mode="json")
+    prev = store.get_mandate(m.id)
+    if prev and prev.get("revoked") and not m.revoked:
+        raise GatewayError("mandate_revoked", f"Mandate {m.id} was revoked; issue a new mandate id instead.", 409)
     jws = signing.sign(data, "sous-mandate+jws")
     store.put_mandate(data, jws)
-    store.audit("mandate.issued", m.issued_by, "human", m.id, m.buyer, {"mandate": data})
+    store.audit("mandate.updated" if prev else "mandate.issued", m.issued_by, "human", m.id, m.buyer,
+                {"mandate": data})
     out = {"mandate": data, "jws": jws}
     if mint_agent_credential if mint_agent_credential is not None else agent_auth.required(m):
         out["agent_credential"] = agent_auth.mint(m, m.issued_by)
@@ -358,6 +362,16 @@ def _approval_blocker(o: dict, mandate: Mandate, now: datetime) -> tuple[str, st
     for d in sorted(set(days)):
         if date.fromisoformat(d) < today:
             return "expired", f"Approved too late: the delivery date {d} has already passed."
+    # The human may have tightened the mandate since the order was held (lower caps, blocked products,
+    # allergen rules): re-run the rules on the signed quote against the mandate as it is now.
+    row = store.get_quote(o["quote_id"])
+    q = signing.verify(row["_jws"], "sous-quote+jws") if row else None
+    if not q:
+        return "refused", "The order's signed quote can no longer be verified."
+    outcome, findings = _evaluate(mandate, o["agent_id"], q, now)
+    if outcome == "block":
+        fired = "; ".join(f.message for f in findings if f.outcome == "block")
+        return "refused", f"The mandate as it is now blocks this order: {fired}"
     return None
 
 
