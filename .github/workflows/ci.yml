@@ -28,7 +28,7 @@ env:
 jobs:
   test:
     name: test (pytest + MariaDB)
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 15
     services:
       mariadb:
@@ -59,7 +59,7 @@ jobs:
 
   docker:
     name: docker (build, SBOM, vulnerability scan)
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - uses: cracicorp/setup@5cbae507e2547dca6c402e413c645767fbae3534 # v1
@@ -95,6 +95,7 @@ jobs:
         with:
           sbom: sbom.cdx.json
           fail-build: false
+          severity-cutoff: critical
           output-format: json
           output-file: grype.json
 
@@ -106,7 +107,8 @@ jobs:
           {
             echo "## Image supply chain"
             echo
-            echo "SBOM: $(jq '.components | length' sbom.cdx.json) components (CycloneDX, artifact \`sbom-and-vulns\`)."
+            echo "SBOM (CycloneDX, artifact \`sbom-and-vulns\`): $(jq '[.components[] | select(.type == "library")] | length' sbom.cdx.json) packages:" \
+              "$(jq -r '[.components[] | select(.type == "library") | .purl // "" | capture("^pkg:(?<t>[^/]+)/").t] | group_by(.) | map("\(length) \(.[0])") | join(", ")' sbom.cdx.json)"
             echo
             echo "| Severity | Total | Fix available |"
             echo "|---|---|---|"
@@ -149,7 +151,7 @@ jobs:
   smoke:
     name: smoke (compose, offline fixtures)
     needs: docker
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 10
     steps:
       # Deny-by-default egress: the gateway itself needs no network at all here. Only
@@ -187,7 +189,7 @@ jobs:
     # Only on main or by hand: it spends real Valio Aimo API calls.
     if: ${{ github.event_name != 'pull_request' }}
     needs: test
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 20
     env:
       VALIO_AIMO_API_KEY: ${{ secrets.VALIO_AIMO_API_KEY }}

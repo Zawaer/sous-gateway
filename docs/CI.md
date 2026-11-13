@@ -2,7 +2,7 @@
 
 One workflow, [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), runs on every push to
 `main`, every pull request and on demand (`workflow_dispatch`). It runs on GitHub-hosted runners
-today and on [CRACI](https://docs.craci.com) runners once one repo variable is set.
+today (`ubuntu-24.04`, the same base as CRACI Slim) and on [CRACI](https://docs.craci.com) runners once one repo variable is set.
 
 ```
 test ──────────► eval (main / manual only; needs VALIO_AIMO_API_KEY + scripts/eval.py)
@@ -65,8 +65,10 @@ add e.g. `api.anthropic.com` as a second `tls` connection, and say so in the eva
 2. **Two SBOMs that should agree.** CRACI's own job SBOM (built from the packages it saw each job
    download through its proxy) next to our syft CycloneDX SBOM of the final image
    (`sbom-and-vulns` artifact). The Python packages in both come from `uv.lock`; differences are
-   worth explaining (e.g. Debian packages from the `python:3.12-slim` base appear only in syft's
-   image SBOM; the `uv` binary copied from `ghcr.io/astral-sh/uv` is in neither as a package).
+   worth explaining. syft's image SBOM has ~90 PyPI packages (uv.lock), ~90 Debian packages from the
+   `python:3.12-slim` base, and ~500 Rust crates embedded in the `uv` binary copied from
+   `ghcr.io/astral-sh/uv` (read from its cargo-auditable metadata); CRACI sees the image pulls and
+   the PyPI downloads it proxied.
 3. **Vulnerability management with a sane gate.** The grype report keeps everything; the build fails
    only on critical + fix-available, so CI stays actionable instead of permanently red on unfixable
    base-image CVEs. Compare with CRACI's vulnerability view for the same run.
