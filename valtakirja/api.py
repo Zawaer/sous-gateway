@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
 
-from . import aimo, catalog, config, service as S, signing, store
+from . import aimo, catalog, config, service as S, signing, standing, store
 from .mandate import Mandate
 from .mcp_server import mcp
 
@@ -272,6 +272,62 @@ def mandate_suggestions(mandate_id: str, delivery_date: date, agent_id: str, lim
 @app.post("/mandates/{mandate_id}/revoke", tags=["mandates"], dependencies=[Depends(require_approver)])
 def revoke_mandate(mandate_id: str, d: Decision):
     return S.revoke_mandate(mandate_id, d.by)
+
+
+# --- standing orders --------------------------------------------------------
+
+class RenewRequest(BaseModel):
+    delivery_date: date | None = None
+    agent_id: str | None = None
+    amounts: list[float] | None = None
+
+
+class SimulateHistory(BaseModel):
+    by: str
+    quote_id: str
+    weeks: list[list[float]]
+
+
+@app.post("/standing-orders", tags=["standing orders"])
+def create_standing_order(req: standing.StandingOrderIn):
+    """A kitchen's recurring weekly order, renewed by its agent under the mandate."""
+    return standing.create(req)
+
+
+@app.get("/standing-orders", tags=["standing orders"])
+def list_standing_orders(mandate_id: str | None = None):
+    return {"standing_orders": standing.list_(mandate_id)}
+
+
+@app.get("/standing-orders/{standing_id}", tags=["standing orders"])
+def get_standing_order(standing_id: str):
+    """The standing order with its renewal history and the drift baseline (medians of the last renewals)."""
+    return standing.get(standing_id)
+
+
+@app.post("/standing-orders/{standing_id}/renew", tags=["standing orders"])
+def renew_standing_order(standing_id: str, req: RenewRequest):
+    """Quote this week's order live, check it for drift (quantity creep, cost, product switch, supply), order it.
+
+    Any drift lifts the order to at least ask: it waits for a human with the drift findings."""
+    return standing.renew(standing_id, req.delivery_date, agent_id=req.agent_id, amounts=req.amounts)
+
+
+@app.post("/standing-orders/{standing_id}/pause", tags=["standing orders"], dependencies=[Depends(require_approver)])
+def pause_standing_order(standing_id: str, d: Decision):
+    return standing.set_active(standing_id, False, d.by)
+
+
+@app.post("/standing-orders/{standing_id}/resume", tags=["standing orders"], dependencies=[Depends(require_approver)])
+def resume_standing_order(standing_id: str, d: Decision):
+    return standing.set_active(standing_id, True, d.by)
+
+
+@app.post("/standing-orders/{standing_id}/simulate-history", tags=["standing orders"],
+          dependencies=[Depends(require_approver)])
+def simulate_standing_history(standing_id: str, req: SimulateHistory):
+    """Demo only: store past renewals marked simulated=True, amounts given here, priced at a live signed quote."""
+    return standing.simulate_history(standing_id, req.quote_id, req.weeks, req.by)
 
 
 # --- notifications ----------------------------------------------------------
