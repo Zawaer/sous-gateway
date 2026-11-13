@@ -71,6 +71,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(signing, "KEY_PATH", tmp_path / "key.pem")
     signing._key.cache_clear()
     monkeypatch.setattr(catalog, "get", lambda pid: OAT if pid == "OAT" else None)
+    monkeypatch.setattr(catalog, "search", lambda *a, **k: [OAT])  # CI has no catalog data
     monkeypatch.setattr(Q, "offers", offers_at_now)
     monkeypatch.setattr(S, "_now", lambda: NOW)
     monkeypatch.setattr(notify, "_deliver", lambda *a, **k: None)  # feed only, never a real push
