@@ -9,15 +9,29 @@ const REFRESH_MS = 4000;
 
 // --- helpers -----------------------------------------------------------------
 
-async function api(path, opts = {}) {
+// Human-only actions (approve, reject, revoke) need the approver code when the gateway sets one
+// (X-Approver-Code; a stand-in for the buyer's real login). Kept in this browser only.
+const store = {
+  get: (k) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
+};
+
+async function api(path, opts = {}, retried = false) {
+  const headers = { "content-type": "application/json" };
+  const code = store.get("vk-approver-code");
+  if (opts.method === "POST" && code) headers["x-approver-code"] = code;
   const res = await fetch(API + path, {
-    headers: { "content-type": "application/json" },
     ...opts,
+    headers,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { message: text }; }
+  if (res.status === 401 && opts.method === "POST" && !retried) {
+    const c = prompt(code ? "That approver code was not accepted. Approver code:" : "This action needs the human approver code:");
+    if (c) { store.set("vk-approver-code", c.trim()); return api(path, opts, true); }
+  }
   if (!res.ok) {
     const msg = data?.message || data?.detail?.message || data?.detail || res.statusText;
     throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
