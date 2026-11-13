@@ -19,9 +19,9 @@ from .mandate import Mandate, evaluate
 
 
 class GatewayError(Exception):
-    def __init__(self, code: str, message: str, status: int = 400):
+    def __init__(self, code: str, message: str, status: int = 400, retry_after: int | None = None):
         super().__init__(message)
-        self.code, self.message, self.status = code, message, status
+        self.code, self.message, self.status, self.retry_after = code, message, status, retry_after
 
 
 def _id(prefix: str) -> str:
@@ -118,7 +118,7 @@ def request_quote(req: QuoteRequest) -> dict:
     try:
         return _request_quote(req)
     except aimo.AimoError as e:
-        raise GatewayError("valio_unavailable", str(e), 503)
+        raise GatewayError("valio_unavailable", str(e), 503, e.retry_after)
 
 
 def _request_quote(req: QuoteRequest) -> dict:
@@ -367,7 +367,7 @@ def suggest_substitutes(agent_id: str, product_id: str, delivery_date: date, amo
     except KeyError:
         raise GatewayError("product_not_found", f"No product {product_id}.", 404)
     except aimo.AimoError as e:
-        raise GatewayError("valio_unavailable", str(e), 503)
+        raise GatewayError("valio_unavailable", str(e), 503, e.retry_after)
     r["valio_api_calls"] = {k: aimo.stats[k] - before[k] for k in aimo.stats}
     store.audit("substitutes.suggested", agent_id, "agent", product_id, mandate.buyer if mandate else None,
                 {"product_id": product_id, "constraints": r["constraints"],

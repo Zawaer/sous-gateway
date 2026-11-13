@@ -105,7 +105,10 @@ def require_approver(x_approver_code: str | None = Header(default=None)):
 
 @app.exception_handler(S.GatewayError)
 async def gateway_error(_: Request, e: S.GatewayError):
-    return JSONResponse(status_code=e.status, content={"error": e.code, "message": e.message})
+    if e.retry_after is None:
+        return JSONResponse(status_code=e.status, content={"error": e.code, "message": e.message})
+    return JSONResponse(status_code=e.status, headers={"Retry-After": str(e.retry_after)},
+                        content={"error": e.code, "message": e.message, "retry_after": e.retry_after})
 
 
 # --- discovery --------------------------------------------------------------
@@ -119,7 +122,7 @@ def jwks():
 @app.get("/health", tags=["meta"])
 def health():
     return {"ok": True, "valio_api_calls": aimo.stats, "approver_code_required": bool(config.APPROVER_CODE),
-            "storage": store.backend()}
+            "storage": store.backend(), "valio_aimo": aimo.health()}
 
 
 # --- catalog ----------------------------------------------------------------

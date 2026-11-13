@@ -130,6 +130,8 @@ def evaluate(
                 add("availability.partial_stock", "ask", f"{name}: {issue['message']}", pid)
             elif issue["code"] == "PRICE_EXPIRES":
                 add("price.expires", "ask", f"{name}: {issue['message']}", pid)
+            elif issue["code"] == "DATA_STALE":  # never order on last-known data without a human
+                add("availability.data_stale", "ask", f"{name}: {issue['message']}", pid)
 
         if mandate.allowed_categories is not None and p.get("category") not in mandate.allowed_categories:
             add("product.category", "block",

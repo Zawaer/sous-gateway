@@ -148,6 +148,7 @@ Each issue is `{code, severity, message}`. A line with any `blocking` issue has 
 | `STOCK_UNKNOWN` | warning | Terminal product: supplier stock is unknown. |
 | `PARTIAL_STOCK` | warning | Known stock is below the quantity. (Removed from lines that `plan` sized to stock.) |
 | `LOW_RELIABILITY` | warning | Historical full-delivery rate below 0.9. |
+| `DATA_STALE` | warning | Valio Aimo couldn't be reached live (rate limit, error, or the gateway paused calls after a 429), so the line uses the last copy fetched: price up to 15 min old, availability up to 5 min. The cut-off is still checked against now. Always sends the order to a human (`availability.data_stale`). |
 
 ## 6. Tiers and rules
 
@@ -176,6 +177,7 @@ If the tier is `silent` or `notify`, a final `mandate.ok` finding is added with 
 | `availability.<code>` | block | Any blocking issue on a line, code lowercased: `availability.unit_mismatch`, `availability.content_unknown`, `availability.no_price`, `availability.no_availability`, `availability.sales_block`, `availability.undeliverable`, `availability.out_of_stock`, `availability.cutoff_passed`. |
 | `delivery.later_date` | mandate's `later_delivery` | Line has `LATER_DATE`. |
 | `price.expires` | ask | Line has `PRICE_EXPIRES`. |
+| `availability.data_stale` | ask | Line has `DATA_STALE`: never ordered on last-known data without a human. |
 | `product.category` | block | Category not in `allowed_categories`. |
 | `product.claims` | block | Line lacks a `required_claims` claim. |
 | `allergen.contains` | block | Line contains an avoided allergen. |
@@ -229,7 +231,7 @@ The `receipt_jws` is signed when the order is placed and is not re-signed after 
 
 ### Error codes
 
-`mandate_not_found`, `quote_not_found`, `order_not_found`, `product_not_found` (404); `quote_signature`, `quote_used`, `quote_expired`, `not_pending` (409); `too_many_candidates` (400); `valio_unavailable` (503, Valio Aimo error or the gateway's per-minute budget of live calls is used up); `rate_limited` (429, per client IP on POST).
+`mandate_not_found`, `quote_not_found`, `order_not_found`, `product_not_found` (404); `quote_signature`, `quote_used`, `quote_expired`, `not_pending` (409); `too_many_candidates` (400); `valio_unavailable` (503, Valio Aimo error or the gateway's per-minute budget of live calls is used up, and no recent last-known copy of the data exists; carries `retry_after` seconds in the body and a `Retry-After` header when known); `rate_limited` (429, per client IP on POST).
 
 ## 8. Sequence
 

@@ -160,6 +160,16 @@ def build_offer(
         elif stock_known and qty is not None and available_amount < qty:
             issues.append(Issue("PARTIAL_STOCK", WARNING,
                                 f"Only {available_amount:g} {sl.get('salesUnit', su)} in stock; {qty:g} needed."))
+    # --- last-known data served because Valio Aimo couldn't be reached (see aimo.py)
+    stale = {k: d["_stale_seconds"] for k, d in (("price", price), ("availability", avail))
+             if d and d.get("_stale_seconds") is not None}
+    if stale:
+        why = ("Valio rate limit" if any((d or {}).get("_stale_reason") == "rate_limit" for d in (price, avail))
+               else "Valio Aimo unreachable")
+        mins = max(1, round(max(stale.values()) / 60))
+        issues.append(Issue("DATA_STALE", WARNING,
+                            f"Live {' and '.join(stale)} couldn't be refreshed ({why}); using data from "
+                            f"{mins} min ago. The cut-off is still checked against now."))
     rel = product["delivery_reliability"]
     if rel is not None and rel < LOW_RELIABILITY:
         issues.append(Issue("LOW_RELIABILITY", WARNING,

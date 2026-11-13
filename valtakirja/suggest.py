@@ -332,7 +332,7 @@ def suggestions(mandate_id: str, agent_id: str, delivery_date: date, basis: list
         prices = aimo.prices(ids, delivery_date) if ids else {}
         avail = aimo.availability(ids, delivery_date) if ids else {}
     except aimo.AimoError as e:
-        raise S.GatewayError("valio_unavailable", str(e), 503)
+        raise S.GatewayError("valio_unavailable", str(e), 503, e.retry_after)
     now = S._now()
 
     orig_offer: dict[str, dict] = {}
