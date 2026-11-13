@@ -178,26 +178,71 @@ views.inbox = {
     setBadge(orders.length);
     const key = orders.map((o) => o.id + o.updated_at).join();
     if (key === this.key && view.dataset.view === "inbox") { tickDeadlines(); return; }
+    // Keep notes the human is typing when a new order arrives and the list re-renders.
+    const notes = {};
+    view.querySelectorAll("[data-order]").forEach((c) => { notes[c.dataset.order] = c.querySelector("textarea")?.value; });
+    const firstRender = view.dataset.view !== "inbox";
+    const seen = this.seen || new Set();
     this.key = key;
     view.dataset.view = "inbox";
-    if (!orders.length) {
-      view.innerHTML = `<div class="empty"><div class="big">Nothing waiting</div>
-        <p>Orders that fall outside an agent's mandate show up here for a human to approve or reject.</p>
-        <p><a href="#/orders">See all orders</a></p></div>`;
-      return;
-    }
-    view.innerHTML = `<div class="head"><div><h2>Waiting for a human</h2>
-      <div class="muted">${orders.length} order${orders.length > 1 ? "s" : ""} held by the mandate engine</div></div></div>
-      ${orders.map(inboxCard).join("")}`;
+    const main = orders.length
+      ? `${orders.map((o) => inboxCard(o, !firstRender && !seen.has(o.id))).join("")}`
+      : `<div class="empty"><div class="big">Nothing waiting</div>
+          <p>Orders that fall outside an agent's mandate show up here for a human to approve or reject.</p>
+          <p><a href="#/orders">See all orders</a></p></div>`;
+    view.innerHTML = `<div class="head"><div><h2>${orders.length ? "Waiting for a human" : "Approvals"}</h2>
+      <div class="muted">${orders.length ? `${orders.length} order${orders.length > 1 ? "s" : ""} held by the mandate engine` : "Agents are ordering within their mandates."}</div></div></div>
+      <div class="inbox-grid"><div>${main}</div>
+        <aside class="feed"><div class="feed-head"><span class="live-dot"></span>Live activity</div><div id="feed"></div></aside></div>`;
+    this.seen = new Set(orders.map((o) => o.id));
+    renderFeed();
     tickDeadlines();
-    for (const card of view.querySelectorAll("[data-order]")) wireDecision(card);
+    for (const card of view.querySelectorAll("[data-order]")) {
+      if (notes[card.dataset.order]) card.querySelector("textarea").value = notes[card.dataset.order];
+      wireDecision(card);
+    }
   },
 };
 
-function inboxCard(o) {
+// --- live: poll the audit log, announce what agents just did, keep a feed -----------------
+
+const live = { seq: null, events: [] };
+const ANNOUNCE = {
+  "order.ordered": (d, e) => `Ordered automatically · ${e.buyer} · ${eur(d.total_ex_vat)}`,
+  "order.pending_approval": (d, e) => `Held for a human · ${e.buyer} · ${eur(d.total_ex_vat)}`,
+  "order.refused": (d, e) => `Refused by the mandate · ${e.buyer} · ${eur(d.total_ex_vat)}`,
+  "order.approved": (d, e) => `${e.actor} approved ${e.subject}`,
+  "order.rejected_by_human": (d, e) => `${e.actor} rejected ${e.subject}`,
+};
+
+async function pollLive() {
+  const { events } = await api("/audit?limit=14");
+  const fresh = live.seq == null ? [] : events.filter((e) => e.seq > live.seq).reverse();
+  live.seq = events[0]?.seq ?? live.seq ?? 0;
+  live.events = events;
+  live.fresh = new Set(fresh.map((e) => e.seq));
+  const own = approver();
+  for (const e of fresh) {
+    const f = ANNOUNCE[e.event];
+    if (f && e.actor !== own) toast(f(e.data || {}, e), 4500);
+  }
+  renderFeed();
+}
+
+function renderFeed() {
+  const el = document.getElementById("feed");
+  if (!el) return;
+  el.innerHTML = live.events.length ? live.events.map((e) => `
+    <a class="feed-ev ${live.fresh?.has(e.seq) ? "fresh" : ""}" href="#/orders${/^PO-/.test(e.subject || "") ? "/" + esc(e.subject) : ""}">
+      <div class="row"><span>${esc(EVENT_LABEL[e.event] || e.event)}</span><span class="mono muted">${when(e.ts).split(" ").pop()}</span></div>
+      <div class="small muted"><span class="actor ${esc(e.actor_type)}">${esc(e.actor_type)}</span> ${esc(e.buyer || e.actor)}</div>
+    </a>`).join("") : `<div class="small muted">No activity yet.</div>`;
+}
+
+function inboxCard(o, isNew = false) {
   const cut = earliestCutoff(o);
   const asks = (o.decision?.findings || []).filter((f) => f.outcome === "ask");
-  return `<article class="card ask" data-order="${esc(o.id)}">
+  return `<article class="card ask ${isNew ? "fresh" : ""}" data-order="${esc(o.id)}">
     <div class="row">
       <div><div class="muted small">${esc(o.buyer)}</div><div class="big">${eur(o.total_ex_vat)} <span class="muted small">ex VAT</span></div></div>
       <div style="text-align:right">${tier("ask")}
@@ -266,6 +311,7 @@ function setBadge(n) {
   const b = $("#badge");
   b.hidden = !n;
   b.textContent = n;
+  document.title = (n ? `(${n}) ` : "") + "Valtakirja gateway";
 }
 
 // All orders, filterable by status.
@@ -448,7 +494,11 @@ const EVENT_LABEL = {
   "order.approved": "Approved by a human",
   "order.rejected_by_human": "Rejected by a human",
   "substitutes.suggested": "Substitutes suggested",
+  "notification.sent": "Notification sent",
+  "notification.failed": "Notification failed",
 };
+const NOTIFY_WHAT = { "order.notify": "FYI to the buyer", "order.ask": "approval request to the buyer",
+  "order.decided": "decision to the agent", test: "test" };
 
 function eventSummary(e) {
   const d = e.data || {};
@@ -465,6 +515,8 @@ function eventSummary(e) {
       return `→ ${tier(d.resulting_status)}${d.note ? ` “${esc(d.note)}”` : ""}${d.reason && d.reason !== d.note ? " · " + esc(d.reason) : ""}`;
     case "order.rejected":
       return esc(d.reason || "");
+    case "notification.sent": case "notification.failed":
+      return `${esc(NOTIFY_WHAT[d.event] || d.event)} via ${esc(d.channel)}${d.status_code ? ` (HTTP ${esc(d.status_code)})` : ""}${d.error ? " · " + esc(d.error) : ""}`;
     case "substitutes.suggested":
       return (d.options || []).length
         ? (d.options || []).map((x) => `${tier(x.tier)} <span class="mono">${esc(x.product_id)}</span>`).join(" ")
@@ -705,6 +757,7 @@ $("#sheet-body").addEventListener("click", (e) => {
 
 async function refresh() {
   try {
+    await pollLive().catch(() => {});
     await views[current].load();
     if (current !== "inbox") {
       const { orders } = await api("/orders?status=pending_approval");
