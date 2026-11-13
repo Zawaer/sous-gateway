@@ -91,6 +91,9 @@ def issue_mandate(m: Mandate, mint_agent_credential: bool | None = None) -> dict
     prev = store.get_mandate(m.id)
     if prev and prev.get("revoked") and not m.revoked:
         raise GatewayError("mandate_revoked", f"Mandate {m.id} was revoked; issue a new mandate id instead.", 409)
+    if prev and prev.get("credential_sha256"):  # the gateway doesn't overwrite what the buyer signed
+        raise GatewayError("mandate_buyer_signed", f"Mandate {m.id} is signed by the buyer; they re-sign it "
+                           "(POST /mandates/credential) or an approver revokes it.", 409)
     jws = signing.sign(data, "sous-mandate+jws")
     store.put_mandate(data, jws)
     store.audit("mandate.updated" if prev else "mandate.issued", m.issued_by, "human", m.id, m.buyer,
@@ -180,12 +183,15 @@ def issue_credential_mandate(token: str, mint_agent_credential: bool | None = No
                                f"Buyer {m.buyer!r} already has gateway-issued mandates, so its first key isn't "
                                "pinned automatically; an approver must register it (POST /buyers/{buyer}/keys).", 403)
         prev = credentials.get(m.id)
-        if store.get_mandate(m.id):
+        existing = store.get_mandate(m.id)
+        if existing:
             if prev and prev["vc_sha256"] == c["sha256"]:  # the same credential again: idempotent, mints nothing
                 return {**get_mandate(m.id), "countersigned_by": credentials.gateway_did(), "unchanged": True}
             if not prev or prev["buyer"] != m.buyer:
                 raise GatewayError("mandate_exists",
                                    f"Mandate {m.id} exists and wasn't signed for this buyer; use another id.", 409)
+            if existing.get("revoked"):
+                raise GatewayError("mandate_revoked", f"Mandate {m.id} was revoked; sign a new mandate id instead.", 409)
             if c["valid_from"] <= datetime.fromisoformat(prev["valid_from"]):  # no rolling back to an older one
                 raise GatewayError("credential_stale", f"Mandate {m.id} already has a credential valid from "
                                    f"{prev['valid_from']}; a replacement needs a later validFrom.", 409)
@@ -196,7 +202,7 @@ def issue_credential_mandate(token: str, mint_agent_credential: bool | None = No
         jws = signing.sign(data, "sous-mandate+jws")
         credentials.put(m.id, {**c, "token": token})
         store.put_mandate(data, jws)
-    store.audit("mandate.issued", m.issued_by, "human", m.id, m.buyer,
+    store.audit("mandate.updated" if existing else "mandate.issued", m.issued_by, "human", m.id, m.buyer,
                 {"mandate": data, "issuer": did, "credential_sha256": c["sha256"], "alg": c["header"]["alg"]})
     out = {"mandate": data, "jws": jws, "issuer": data["issuer"], "credential": token, "revocation": None,
            "countersigned_by": credentials.gateway_did()}

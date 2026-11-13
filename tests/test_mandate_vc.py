@@ -215,9 +215,13 @@ def test_buyer_revocation():
     assert S.revoke_by_credential("M-VC", C.sign_revocation(key, "M-VC", token))["already_revoked"]
     ev = [e for e in store.audit_events(limit=50) if e["event"] == "mandate.revoked"]
     assert len(ev) == 1 and ev[0]["actor"] == C.did_key(key.public_key())
-    # replaying the original VC doesn't un-revoke it
+    # replaying the original VC doesn't un-revoke it, nor does a newer one for the same id
     S.issue_credential_mandate(token)
     assert S._mandate("M-VC").revoked
+    assert code(S.issue_credential_mandate, vc(key, valid_from=NOW)) == "mandate_revoked"
+    # and the approver can't overwrite a buyer-signed mandate through the gateway
+    S.issue_credential_mandate(vc(key, "M-VC3"))
+    assert code(S.issue_mandate, Mandate(**mandate("M-VC3"))) == "mandate_buyer_signed"
 
 
 def test_approver_revoke_of_buyer_signed_mandate_keeps_it_verifiable():
