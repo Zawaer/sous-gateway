@@ -332,7 +332,7 @@ function renderQuote(quote) {
       line.quantity != null && `${line.quantity} ${line.sales_unit || 'sales units'}`,
       line.covers?.unit && `${line.covers.amount} ${units[line.covers.unit]}`,
       line.delivery_date && `Delivery ${line.delivery_date}`,
-      money(line.line_total_ex_vat, quote.currency),
+      line.orderable ? money(line.line_total_ex_vat, quote.currency) : 'Unavailable for this order',
     ];
     row.append(element('small', details.filter(Boolean).join(' · ')));
     for (const issue of line.issues) row.append(element('small', issue.message));
