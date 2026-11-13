@@ -237,6 +237,20 @@ def offers(
     return out, now
 
 
+def prefetch(product_ids: list[str], requested: date) -> None:
+    """A basket: fetch every candidate's price and availability in one batched call each, so the per-item
+    offers() calls are served from aimo's cache (2 Valio calls per basket, not 2 per item). Best effort: if
+    it fails, offers() makes its own calls and handles the error as before."""
+    ids = list(dict.fromkeys(pid for pid in product_ids if catalog.get(pid)))
+    if not ids:
+        return
+    try:
+        aimo.prices(ids, requested)
+        aimo.availability(ids, requested)
+    except aimo.AimoError:
+        pass
+
+
 def rank_key(o: dict):
     """Cheapest per L/KG first among orderable offers; reliability breaks ties."""
     cp = (o.get("comparison_price") or {}).get("ex_vat")

@@ -452,16 +452,18 @@ def _unit_ok(card: dict, unit: str) -> bool:
 
 
 # Prepared foods that merely mention an ingredient ("beans in onion sauce"): never a raw ingredient.
-PREPARED = ("sauce", "soup", "pizza", "flammkuchen", "beans in", "sandwich", "pie ", "patty", "casserole",
-            "balls", "chips", "crisps", "snack", "calzone", "lasagne 3kg", "stew", "salad", "hartshorn")
+PREPARED = ("sauce", "soup", "pizza", "flammkuchen", "beans", "sandwich", "pie ", "patty", "casserole",
+            "balls", "chips", "crisps", "snack", "calzone", "lasagne 3kg", "stew", "salad", "hartshorn", "cake",
+            "margarine", "ice cream", " ice ", "muffin", "cookie", "biscuit", "candy")
 
 
 def _name_ok(card: dict, n: Need) -> bool:
     name = (card.get("name") or "").lower()
     if any(x in name for x in n.exclude) or any(x in name and x not in " ".join(n.must) for x in PREPARED):
         return False
-    if n.must:
-        return any(m in name for m in n.must)
+    if n.must:  # whole words: "butter" is not "butterbeans", but "milk free" is still excluded below
+        return any(re.search(rf"(?<!\w){re.escape(m)}(?:s|es)?(?!\w)", name) for m in n.must) and not re.search(
+            r"\b(?:" + "|".join(re.escape(m) for m in n.must) + r")[\s-]*free\b", name)
     # an ingredient outside the lexicon: the product name should mention it (English name words or the
     # Finnish stem); the catalog's own ranking decides otherwise
     words = [w for w in re.findall(r"[a-zäöå]{4,}", f"{n.name_en} {n.name_fi}".lower())]
@@ -590,11 +592,18 @@ def _trim_waste(gateway, p: "Plan", items: list[dict], dd: str, rounds: int = 2)
     return final
 
 
-def _first_substitute(r: dict, mandate: dict) -> dict | None:
+def _first_substitute(r: dict, mandate: dict, need: float | None = None) -> dict | None:
+    """The gateway's best-ranked option that can be delivered, preferring declared-safe allergens and a pack
+    that fits the need (not 3 kg of oregano for 20 g)."""
     safe = [o for o in r.get("options", []) if (o.get("offer") or {}).get("orderable")]
     if mandate.get("avoid_allergens"):
         known = [o for o in safe if (o.get("allergen_check") or {}).get("status") == "safe"]
         safe = known or safe
+    if need:
+        def fits(o):
+            c = ((o.get("offer") or {}).get("content_per_sales_unit") or {}).get("amount")
+            return c is None or c <= max(4 * need, need + 0.3)
+        safe = [o for o in safe if fits(o)] or safe
     return safe[0] if safe else None
 
 
@@ -768,7 +777,7 @@ def plan(request_text: str, *, gateway, mandate_id: str, agent_id: str, llm=None
             err, r = _call(gateway, p.trace, "suggest_substitutes", {
                 "agent_id": agent_id, "mandate_id": mandate_id, "product_id": blocked["id"], "delivery_date": dd,
                 "amount": n.to_buy, "unit": n.unit})
-            o = None if err else _first_substitute(r, mandate)
+            o = None if err else _first_substitute(r, mandate, n.to_buy)
             if o:
                 n.substitute = _sub_view(blocked["id"], blocked["name"], o, n.to_buy, n.unit)
                 p.substitutes.append(n.substitute)
@@ -816,7 +825,7 @@ def plan(request_text: str, *, gateway, mandate_id: str, agent_id: str, llm=None
             err, s = _call(gateway, p.trace, "suggest_substitutes", {
                 "agent_id": agent_id, "mandate_id": mandate_id, "product_id": orig[0], "delivery_date": dd,
                 "amount": missing, "unit": item["unit"]})
-            o = None if err else _first_substitute(s, mandate)
+            o = None if err else _first_substitute(s, mandate, missing)
             if not o:
                 n.notes.append("no safe substitute; the gap stays in the quote for a human")
                 entries.append((n, item))

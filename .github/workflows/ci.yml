@@ -14,6 +14,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      recipe_only:
+        description: "Only the recipe planning eval (skips the scripted eval and the per-model LLM eval)"
+        type: boolean
+        default: false
 
 concurrency:
   # manual runs (e.g. the LLM eval) get their own group so a push can't bump them out of the queue
@@ -194,7 +199,7 @@ jobs:
   eval:
     name: eval (live Valio API)
     # Only on main or by hand: it spends real Valio Aimo API calls.
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name != 'pull_request' && !inputs.recipe_only }}
     needs: test
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 20
@@ -265,6 +270,8 @@ jobs:
       VERDA_INFERENCE_API_KEY: ${{ secrets.VERDA_INFERENCE_API_KEY }}
       # provider:model pairs; override with the repo variable LLM_EVAL_MODELS
       LLM_EVAL_MODELS: ${{ vars.LLM_EVAL_MODELS || 'gemini:gemini-4-hydrogen verda:kimi-k3-1-pro verda:deepseek-4-1-flash-1017' }}
+      # recipe planning eval (manual runs only), next to the table provider
+      RECIPE_EVAL_MODELS: ${{ vars.RECIPE_EVAL_MODELS || 'gemini:gemini-4-hydrogen verda:kimi-k3-1-pro' }}
     steps:
       # Egress: PyPI, Valio Aimo, and the two model APIs (Verda's runs in the EU). Nothing else.
       - uses: cracicorp/setup@5cbae507e2547dca6c402e413c645767fbae3534 # v1
@@ -294,7 +301,7 @@ jobs:
           fi
           if [ "$run" = true ] && [ "$EVENT" = push ]; then
             if git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-              changed=$(git diff --name-only "$BEFORE" HEAD -- agent scripts/llm_eval.py scripts/eval_checks.py evals/cases.yaml sous/mcp_server.py)
+              changed=$(git diff --name-only "$BEFORE" HEAD -- agent/buyer.py agent/llm.py scripts/llm_eval.py scripts/eval_checks.py evals/cases.yaml sous/mcp_server.py)
             else
               changed=unknown
             fi
@@ -313,11 +320,14 @@ jobs:
         with:
           path: data
           key: valio-data-${{ hashFiles('scripts/fetch_data.py', 'sous/catalog.py') }}
-      - name: Fetch Valio data (cached) and run the LLM eval per model
+      - name: Fetch Valio data (cached)
         if: ${{ steps.pre.outputs.run == 'true' }}
         run: |
           uv sync --frozen
           uv run python -m scripts.fetch_data
+      - name: Run the LLM eval per model
+        if: ${{ steps.pre.outputs.run == 'true' && !inputs.recipe_only }}
+        run: |
           status=0
           for pm in $LLM_EVAL_MODELS; do
             provider=${pm%%:*}; model=${pm#*:}
@@ -330,6 +340,18 @@ jobs:
           uv run python scripts/llm_eval.py --report
           cat docs/LLM_EVAL.md >> "$GITHUB_STEP_SUMMARY"
           exit $status
+      - name: Recipe planning eval (manual runs only)
+        # Menu -> ingredients -> one basket quote (agent/recipe.py), per provider; one batched Valio quote per case.
+        if: ${{ !cancelled() && steps.pre.outputs.run == 'true' && github.event_name == 'workflow_dispatch' }}
+        run: |
+          providers=table
+          for pm in $RECIPE_EVAL_MODELS; do
+            provider=${pm%%:*}
+            if [ "$provider" = gemini ]; then key=$GEMINI_API_KEY; else key=$VERDA_INFERENCE_API_KEY; fi
+            if [ -n "$key" ]; then providers="$providers $pm"; fi
+          done
+          uv run python scripts/recipe_eval.py --providers $providers
+          cat evals/recipe_results.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() && steps.pre.outputs.run == 'true' }}
         with:
@@ -337,4 +359,6 @@ jobs:
           path: |
             evals/llm_results.*.json
             docs/LLM_EVAL.md
+            evals/recipe_results.json
+            evals/recipe_results.md
           if-no-files-found: warn

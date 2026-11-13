@@ -66,6 +66,7 @@ def env(tmp_path, monkeypatch):
     signing._key.cache_clear()
     monkeypatch.setattr(catalog, "get", lambda pid: product(pid) if pid in MARKET else None)
     monkeypatch.setattr(Q, "offers", fake_offers)
+    monkeypatch.setattr(Q, "prefetch", lambda ids, requested: None)
     monkeypatch.setattr(S, "_now", lambda: NOW)
     monkeypatch.setattr(S.notify, "send", lambda *a, **k: None)
     reset_market()

@@ -1,0 +1,90 @@
+# Recipe planning eval (scripts/recipe_eval.py): a chef's menu request -> ingredients -> one basket quote.
+#
+# Per case:
+#   request, mandate, agent: what the chef says and which mandate the buyer agent acts under
+#   dishes: the dishes the plan must contain (any alias from agent/recipes.json counts)
+#   portions, delivery_date ('next <weekday>' relative to the run day, or null = don't check)
+#   expect_kg_l: main ingredients (lexicon keys) and the expected total need in kg or L (before stock);
+#                must be within +-20 %, and every one must be in the plan (quoted, substituted, on hand or
+#                reported as not covered: never silently dropped)
+#   on_hand: ingredient keys the chef's stock fully covers (nothing to buy)
+#   tier_in: acceptable mandate preview tiers for the basket quote (live prices: a range, not one tier)
+#   The mandate's avoid_allergens are checked on every quoted line (contains / may contain = failure).
+
+cases:
+  - id: R01
+    request: "Lasagne for 120 on Monday, we have 10 kg flour and plenty of salt"
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    dishes: [lasagne]
+    portions: 120
+    delivery_date: next monday
+    expect_kg_l: {jauheliha: 10.8, lasagnelevy: 4.8, tomaattimurska: 9.6, maito: 14.4, juustoraaste: 3.0}
+    on_hand: [vehnajauho, suola]
+    tier_in: [silent, notify, ask]
+
+  - id: R02
+    request: "Christmas lunch for 80 on Tuesday: lohikeitto and joulukinkku"
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    dishes: [lohikeitto, joulukinkku]
+    portions: 80
+    delivery_date: next tuesday
+    expect_kg_l: {lohifilee: 7.2, peruna: 12.0, kuohukerma: 4.8, joulukinkku: 12.0}
+    on_hand: []
+    tier_in: [silent, notify, ask]
+
+  - id: R03
+    request: "Karjalanpaisti 60 annosta perjantaiksi, meillä on 5 kg sipulia"
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    dishes: [karjalanpaisti]
+    portions: 60
+    delivery_date: next friday
+    expect_kg_l: {naudanliha: 6.0, sianliha: 6.0}
+    on_hand: [sipuli]
+    tier_in: [silent, notify, ask]
+
+  - id: R04
+    request: "Puréed vegetable soup (kasvissosekeitto) for 200 patients on Wednesday"
+    mandate: M-HOSPITAL-KITCHEN      # avoids milk, tree nuts, peanuts
+    agent: meilahti-kitchen-agent
+    dishes: [kasvissosekeitto]
+    portions: 200
+    delivery_date: next wednesday
+    expect_kg_l: {porkkana: 16.0, peruna: 16.0, lanttu: 10.0}
+    on_hand: []
+    tier_in: [silent, notify, ask, block]
+
+  - id: R05
+    request: "Rosolli for 150 for the Christmas party on Thursday"
+    mandate: M-SCHOOL-ESPOO          # avoids gluten and egg; unknown allergens block
+    agent: espoo-school-agent
+    dishes: [rosolli]
+    portions: 150
+    delivery_date: next thursday
+    expect_kg_l: {punajuuri: 7.5, peruna: 6.0, porkkana: 4.5}
+    on_hand: []
+    tier_in: [silent, notify, ask, block]
+
+  - id: R06
+    request: "Lasagne for 40 guests on Monday"
+    mandate: M-KAARNA-CATERING       # vegan-leaning: avoids milk, egg, tree nuts, peanuts
+    agent: kaarna-event-agent
+    dishes: [lasagne]
+    portions: 40
+    delivery_date: next monday
+    expect_kg_l: {jauheliha: 3.6, lasagnelevy: 1.6, tomaattimurska: 3.2}
+    on_hand: []
+    tier_in: [silent, notify, ask, block]
+
+  - id: R07
+    request: "Lohikeitto for 300 on Wednesday; we have 40 kg potatoes and plenty of dill"
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    dishes: [lohikeitto]
+    portions: 300
+    delivery_date: next wednesday
+    expect_kg_l: {lohifilee: 27.0, peruna: 45.0, porkkana: 12.0}
+    on_hand: [tilli]
+    tier_in: [silent, notify, ask]
