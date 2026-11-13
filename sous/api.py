@@ -44,7 +44,7 @@ app = FastAPI(
     version="0.1.0",
     description=(
         "Lets external purchasing agents search Valio Aimo's catalog, get signed quotes with live price and "
-        "availability, and place orders within a mandate (valtakirja) issued by their human. The mandate engine "
+        "availability, and place orders within a mandate (sous) issued by their human. The mandate engine "
         "decides each order's tier: silent or notify (ordered), ask (waits for a human), block (refused). "
         "Every step is in a hash-chained audit log. The same operations are available over MCP at /mcp."
     ),
@@ -81,7 +81,7 @@ _hits: dict[str, deque] = defaultdict(deque)
 def _client_ip(request: Request) -> str:
     # CF-Connecting-IP is client-controlled unless Cloudflare is the only way in: trust it only when told to.
     # Otherwise uvicorn --proxy-headers has already resolved X-Forwarded-For into request.client.
-    if os.getenv("VALTAKIRJA_TRUST_CF_HEADER") == "1" and (ip := request.headers.get("cf-connecting-ip")):
+    if config.env("TRUST_CF_HEADER") == "1" and (ip := request.headers.get("cf-connecting-ip")):
         return ip
     return request.client.host if request.client else "?"
 

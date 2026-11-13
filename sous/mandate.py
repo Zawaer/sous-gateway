@@ -1,4 +1,4 @@
-"""The mandate (valtakirja) and the deterministic rules engine that enforces it.
+"""The mandate (sous) and the deterministic rules engine that enforces it.
 
 A mandate is what a human gives their purchasing agent: spend limits, allergen
 and product requirements, and what the agent may decide alone. The engine checks

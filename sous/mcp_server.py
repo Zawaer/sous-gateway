@@ -1,7 +1,7 @@
 """MCP interface: the same gateway operations as the REST API, as tools any agent can call.
 
 Served over Streamable HTTP at /mcp by the main app (see api.py), or over stdio:
-    uv run python -m valtakirja.mcp_server
+    uv run python -m sous.mcp_server
 
 Every tool returns a JSON object. On failure the result has isError=true and the object is
 {"error": <code>, "message": <what went wrong>, "hint": <what to do next>, "retryable": <bool>}.
@@ -22,12 +22,12 @@ from . import agent_auth, catalog, service as S, standing
 log = logging.getLogger(__name__)
 
 INSTRUCTIONS = """\
-You buy from Valio Aimo (Finnish food-service wholesaler) for a buyer whose mandate (valtakirja) you hold.
+You buy from Valio Aimo (Finnish food-service wholesaler) for a buyer whose mandate (sous) you hold.
 You need the mandate_id and your agent_id; the mandate is issued to exactly that agent_id.
 
 Typical flow, 3-4 calls:
 1. search_products: put dietary needs in filters, not just the query text: claims=["FREE_FROM_LACTOSE"],
-   avoid_allergens=["AM"] (GS1 codes; resource valtakirja://allergens). No price or stock here, and it is free.
+   avoid_allergens=["AM"] (GS1 codes; resource sous://allergens). No price or stock here, and it is free.
 2. request_quote with mandate_id: one item per need, with SEVERAL candidate product_ids and the amount in
    unit "L" or "KG" (e.g. 1000 L of milk), not pack counts. The gateway prices live, picks pack sizes,
    checks cut-off and stock, splits across products, and returns quote.mandate_preview.
@@ -44,7 +44,7 @@ the header "Authorization: Bearer <token>" (or, where headers are impossible, pa
 On an error, follow its "hint" field. Never state a price, stock level, delivery date or allergen fact
 that a tool did not return; say "unknown" instead. Allergen data marked 'unknown' is not safe."""
 
-mcp = MCPServer(name="valtakirja", title="Sous: Valio Aimo agent gateway", instructions=INSTRUCTIONS,
+mcp = MCPServer(name="sous", title="Sous: Valio Aimo agent gateway", instructions=INSTRUCTIONS,
                 version="0.2.0")
 
 
@@ -142,7 +142,7 @@ def search_products(
     claims: required nutritional claims, e.g. FREE_FROM_LACTOSE, FREE_FROM_GLUTEN, VEGAN.
     avoid_allergens: GS1 codes to exclude, e.g. AM (milk), AN (tree nuts), AP (peanuts), AW (gluten), AE (egg).
       Group codes cover the family (AN = all tree nuts). Products that contain them are dropped; products with
-      no allergen data are kept but marked 'unknown'. Full list: resource valtakirja://allergens.
+      no allergen data are kept but marked 'unknown'. Full list: resource sous://allergens.
     labels: e.g. GOODS_FROM_FINLAND_BLUE_SWAN, EU_ORGANIC_FARMING, MARINE_STEWARDSHIP_COUNCIL_LABEL.
     temperature: ambient, chilled or frozen.
     food_only: default ranks food first (equipment first only when the query names it, e.g. "milk jug");
@@ -309,7 +309,7 @@ def get_standing_order(standing_id: str) -> dict:
 
 # --- resources --------------------------------------------------------------
 
-@mcp.resource("valtakirja://allergens", title="GS1 allergen codes", mime_type="application/json")
+@mcp.resource("sous://allergens", title="GS1 allergen codes", mime_type="application/json")
 def allergens() -> dict:
     """GS1 allergen codes for avoid_allergens, and the group codes that cover a whole family."""
     return {"codes": catalog.ALLERGENS,
@@ -317,9 +317,9 @@ def allergens() -> dict:
             "note": "Avoiding a group code (AM, AN, AW) also avoids every code in its group."}
 
 
-@mcp.resource("valtakirja://mandates/{mandate_id}", title="Mandate", mime_type="application/json")
+@mcp.resource("sous://mandates/{mandate_id}", title="Mandate", mime_type="application/json")
 def mandate_resource(mandate_id: str) -> dict:
-    """A mandate (valtakirja): limits and rules the agent acts under, with its JWS signature."""
+    """A mandate (sous): limits and rules the agent acts under, with its JWS signature."""
     return S.get_mandate(mandate_id)
 
 

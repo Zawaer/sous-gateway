@@ -15,7 +15,7 @@ product, one order, an answer).
     uv run python scripts/llm_eval.py --report                                # rebuild docs/LLM_EVAL.md only
 
 Writes evals/llm_results.<model>.json and rebuilds docs/LLM_EVAL.md from every results file.
-Every case gets a fresh SQLite state (VALTAKIRJA_DB_URL forced empty): never data/state.db or MariaDB.
+Every case gets a fresh SQLite state (SOUS_DB_URL forced empty): never data/state.db or MariaDB.
 """
 
 from __future__ import annotations
@@ -80,8 +80,8 @@ def applicability(case: dict) -> str | None:
 
 def fresh_state(path: Path, spec: dict) -> None:
     """Point the gateway at a new, empty SQLite file and issue the eval mandates into it."""
-    from valtakirja import config, service as S, store
-    from valtakirja.mandate import Mandate
+    from sous import config, service as S, store
+    from sous.mandate import Mandate
     from scripts.seed import MANDATES
 
     if store._conn is not None:
@@ -112,7 +112,7 @@ def case_request(case: dict) -> str:
 
 def run_case(case: dict, defaults: dict, make_agent) -> tuple[dict, object]:
     """Run one case through the agent; return (record shaped like scripts/eval.py's, BuyerRun)."""
-    from valtakirja import service as S
+    from sous import service as S
     from scripts.eval_checks import _order_summary
 
     t0 = time.perf_counter()
@@ -212,7 +212,7 @@ def mandate_violations(r: dict) -> list[str]:
     The gateway decides; this only verifies, from the catalog and the signed mandate, that nothing the
     mandate forbids was auto-ordered. Must always be empty.
     """
-    from valtakirja import catalog, service as S, store
+    from sous import catalog, service as S, store
 
     bad = []
     for o in r["orders"]:
@@ -514,12 +514,12 @@ def main(argv=None) -> int:
         print(f"Wrote {a.report_out}")
         return 0
 
-    state_dir = Path(a.state_dir or tempfile.mkdtemp(prefix="valtakirja-llm-eval-")).resolve()
+    state_dir = Path(a.state_dir or tempfile.mkdtemp(prefix="sous-llm-eval-")).resolve()
     state_dir.mkdir(parents=True, exist_ok=True)
     if (ROOT / "data").resolve() in [state_dir, *state_dir.parents]:
         sys.exit("Refusing to put eval state under data/; pass another --state-dir.")
-    os.environ["VALTAKIRJA_STATE_DB"] = str(state_dir / "init.db")
-    os.environ["VALTAKIRJA_DB_URL"] = ""  # always SQLite: never write eval orders into MariaDB
+    os.environ["SOUS_STATE_DB"] = str(state_dir / "init.db")
+    os.environ["SOUS_DB_URL"] = ""  # always SQLite: never write eval orders into MariaDB
     if a.base_url:
         os.environ["LLM_BASE_URL"] = a.base_url
 
@@ -531,8 +531,8 @@ def main(argv=None) -> int:
 
     from agent.buyer import BuyerAgent, BuyerConfig, MCPGateway, helsinki_today
     from agent.llm import ChatClient, LLMConfig, config_from_env, key_present
-    from valtakirja import config
-    from valtakirja.mcp_server import mcp
+    from sous import config
+    from sous.mcp_server import mcp
     from scripts.eval_checks import check
 
     provider = a.provider or os.getenv("LLM_PROVIDER") or "gemini"

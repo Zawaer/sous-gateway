@@ -1,4 +1,4 @@
-# Sous evaluation set: scripted buyer requests run through the gateway (valtakirja.service).
+# Sous evaluation set: scripted buyer requests run through the gateway (sous.service).
 #
 # Each case is what a buyer agent would do after the LLM has turned the human's sentence (`request`)
 # into a structured call: a catalog search, a shortlist of candidate product ids, a quote for an

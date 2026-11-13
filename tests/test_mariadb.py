@@ -1,4 +1,4 @@
-"""MariaDB system-versioning tests; run when VALTAKIRJA_TEST_MARIADB_URL is set (CI has a MariaDB service)."""
+"""MariaDB system-versioning tests; run when SOUS_TEST_MARIADB_URL is set (CI has a MariaDB service)."""
 
 import os
 import time
@@ -6,16 +6,16 @@ from datetime import date
 
 import pytest
 
-from valtakirja import config, service as S, store
-from valtakirja.mandate import Mandate
+from sous import config, service as S, store
+from sous.mandate import Mandate
 
-URL = os.getenv("VALTAKIRJA_TEST_MARIADB_URL")
-pytestmark = pytest.mark.skipif(not URL, reason="needs VALTAKIRJA_TEST_MARIADB_URL")
+URL = os.getenv("SOUS_TEST_MARIADB_URL")
+pytestmark = pytest.mark.skipif(not URL, reason="needs SOUS_TEST_MARIADB_URL")
 
 
 @pytest.fixture()
 def maria(monkeypatch, tmp_path):
-    from valtakirja import signing
+    from sous import signing
     monkeypatch.setattr(signing, "KEY_PATH", tmp_path / "key.pem")
     signing._key.cache_clear()
     monkeypatch.setattr(config, "DB_URL", URL)

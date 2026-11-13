@@ -1,11 +1,11 @@
 """Expectation checks for evals/cases.yaml, shared by scripts/eval.py (scripted) and scripts/llm_eval.py (LLM agent).
 
-Import only after VALTAKIRJA_STATE_DB / VALTAKIRJA_DB_URL are set: valtakirja.config reads them at import.
+Import only after SOUS_STATE_DB / SOUS_DB_URL are set: sous.config reads them at import.
 """
 
 from __future__ import annotations
 
-from valtakirja import catalog
+from sous import catalog
 
 
 def api_calls(d: dict | None) -> int:
@@ -108,7 +108,7 @@ def check(case: dict, r: dict) -> list[tuple[str, bool, str]]:
 
 
 def _first_findings(first: dict) -> list[dict]:
-    from valtakirja import store
+    from sous import store
     o = store.get_order(first["id"])
     return o["decision"]["findings"] if o else []
 

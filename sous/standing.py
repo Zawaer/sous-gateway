@@ -328,7 +328,7 @@ def simulate_history(standing_id: str, quote_id: str, weeks: list[list[float]], 
     """
     so = _get(standing_id)
     row = store.get_quote(quote_id)
-    q = signing.verify(row["_jws"], "valtakirja-quote+jws") if row else None
+    q = signing.verify(row["_jws"], "sous-quote+jws") if row else None
     if not q or q.get("mandate_id") != so["mandate_id"]:
         raise S.GatewayError("quote_not_found", f"No signed quote {quote_id} under mandate {so['mandate_id']}.", 404)
     priced = _snapshot(so["items"], q)["items"]

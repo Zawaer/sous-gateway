@@ -73,7 +73,7 @@ def _take_budget() -> None:
 
 _client = httpx.Client(
     base_url=config.AIMO_API_BASE,
-    headers={"X-API-Key": config.AIMO_API_KEY, "User-Agent": "valtakirja-gateway/0.1"},
+    headers={"X-API-Key": config.AIMO_API_KEY, "User-Agent": "sous-gateway/0.1"},
     timeout=20.0,
 )
 

@@ -1,6 +1,6 @@
 """Persistence for mandates, quotes, orders and the audit log: MariaDB or SQLite.
 
-With VALTAKIRJA_DB_URL=mysql://user:pass@host:port/db the gateway uses MariaDB and
+With SOUS_DB_URL=mysql://user:pass@host:port/db the gateway uses MariaDB and
 makes `mandate`, `purchase_order` and `audit_event` SYSTEM VERSIONED tables: the
 database itself keeps every past version of every row. That gives three things the
 challenge asks for, in plain SQL:

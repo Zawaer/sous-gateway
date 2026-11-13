@@ -4,8 +4,8 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from valtakirja import catalog, config, quote as Q, signing, store
-from valtakirja.mandate import Mandate, evaluate
+from sous import catalog, config, quote as Q, signing, store
+from sous.mandate import Mandate, evaluate
 
 NOW = datetime(2026, 11, 13, 21, 0, tzinfo=config.TZ)
 
@@ -192,3 +192,15 @@ def test_partial_stock_on_single_product_asks(monkeypatch):
     short = Q.build_offer(product(), PRICE, avail(amount=50), date(2026, 11, 16), 100, "L", NOW)
     out, findings = run(mandate(), [short])
     assert out == "ask" and any(f.rule == "availability.partial_stock" for f in findings)
+
+
+def test_rename_compat_env_and_legacy_jws(monkeypatch):
+    """Valtakirja -> Sous rename: old env names and old signature types keep working."""
+    monkeypatch.delenv("SOUS_QUOTE_TTL", raising=False)
+    monkeypatch.setenv("VALTAKIRJA_QUOTE_TTL", "123")
+    assert config.env("QUOTE_TTL") == "123"
+    monkeypatch.setenv("SOUS_QUOTE_TTL", "456")
+    assert config.env("QUOTE_TTL") == "456"
+    legacy = signing.sign({"id": "M-1"}, "valtakirja-mandate+jws")
+    assert signing.verify(legacy, typ="sous-mandate+jws") == {"id": "M-1"}
+    assert signing.verify(signing.sign({"id": "Q"}, "sous-quote+jws"), typ="sous-mandate+jws") is None

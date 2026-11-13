@@ -12,7 +12,7 @@ from datetime import date
 
 import pytest
 
-from valtakirja import catalog, config, quote as Q, substitutes as S
+from sous import catalog, config, quote as Q, substitutes as S
 
 
 def product(pid: str, fi: str, en: str = "", **kw) -> dict:

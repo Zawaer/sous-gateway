@@ -1,6 +1,6 @@
 """Run the evaluation set (evals/cases.yaml) through the gateway and score it.
 
-Every case goes through valtakirja.service directly (no HTTP): search -> quote (live Valio Aimo price
+Every case goes through sous.service directly (no HTTP): search -> quote (live Valio Aimo price
 and availability) -> order under a mandate -> optional human step. Results go to evals/results.json.
 
     uv run python scripts/eval.py                 # all cases
@@ -29,22 +29,22 @@ ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDe
 ap.add_argument("cases", nargs="*", help="case ids to run (default: all)")
 ap.add_argument("--file", default=str(ROOT / "evals" / "cases.yaml"))
 ap.add_argument("--out", default=str(ROOT / "evals" / "results.json"))
-ap.add_argument("--state-db", default=os.getenv("VALTAKIRJA_STATE_DB"),
+ap.add_argument("--state-db", default=os.getenv("SOUS_STATE_DB"),
                 help="SQLite file for eval state (wiped first). Default: a new temp file.")
 args = ap.parse_args()
 
-state_db = Path(args.state_db or Path(tempfile.mkdtemp(prefix="valtakirja-eval-")) / "state.db").resolve()
+state_db = Path(args.state_db or Path(tempfile.mkdtemp(prefix="sous-eval-")) / "state.db").resolve()
 if state_db == (ROOT / "data" / "state.db").resolve():
     sys.exit("Refusing to use the shared data/state.db; pass another --state-db.")
 if state_db.exists():
     state_db.unlink()
-os.environ["VALTAKIRJA_STATE_DB"] = str(state_db)
-os.environ["VALTAKIRJA_DB_URL"] = ""  # always SQLite: never write eval orders into MariaDB
+os.environ["SOUS_STATE_DB"] = str(state_db)
+os.environ["SOUS_DB_URL"] = ""  # always SQLite: never write eval orders into MariaDB
 
 import yaml  # noqa: E402
 
-from valtakirja import aimo, catalog, config, service as S  # noqa: E402
-from valtakirja.mandate import Mandate  # noqa: E402
+from sous import aimo, catalog, config, service as S  # noqa: E402
+from sous.mandate import Mandate  # noqa: E402
 from scripts.seed import MANDATES  # noqa: E402
 from scripts.eval_checks import _order_summary, api_calls, check, safety_handled  # noqa: E402,F401
 
@@ -244,7 +244,7 @@ DEFINITIONS = {
     "human_approval_rate_pct": "Share of order decisions that went to a human (tier ask -> pending_approval).",
     "valio_api_calls_per_request": "Live Valio Aimo price + availability calls per request (quote + substitutes), "
         "from quote.valio_api_calls; the gateway batches a shortlist into at most 2 calls and caches.",
-    "latency_ms": "Wall-clock per request through valtakirja.service, including the live Valio calls "
+    "latency_ms": "Wall-clock per request through sous.service, including the live Valio calls "
         "(deliberate waits excluded).",
 }
 

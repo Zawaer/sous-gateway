@@ -69,7 +69,8 @@ def verify(token: str, typ: str | None = None) -> dict | None:
         header = json.loads(_unb64(h))
         if header.get("alg") != "EdDSA" or header.get("kid") != kid():
             return None
-        if typ is not None and header.get("typ") != typ:
+        # Tokens signed before the Valtakirja -> Sous rename carry valtakirja-* typ values; still valid.
+        if typ is not None and header.get("typ") not in (typ, typ.replace("sous-", "valtakirja-", 1)):
             return None
         _key().public_key().verify(_unb64(s), f"{h}.{p}".encode())
         return json.loads(_unb64(p))

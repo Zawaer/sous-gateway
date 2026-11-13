@@ -35,7 +35,7 @@ jobs:
       mariadb:
         image: mariadb:11.4
         env:
-          MARIADB_DATABASE: valtakirja
+          MARIADB_DATABASE: sous
           MARIADB_USER: vk
           MARIADB_PASSWORD: vkpass
           MARIADB_ROOT_PASSWORD: root
@@ -44,7 +44,7 @@ jobs:
           --health-cmd="healthcheck.sh --connect --innodb_initialized"
           --health-interval=5s --health-timeout=5s --health-retries=20
     env:
-      VALTAKIRJA_TEST_MARIADB_URL: mysql://vk:vkpass@127.0.0.1:3306/valtakirja
+      SOUS_TEST_MARIADB_URL: mysql://vk:vkpass@127.0.0.1:3306/sous
     steps:
       - uses: cracicorp/setup@5cbae507e2547dca6c402e413c645767fbae3534 # v1
         if: ${{ vars.CI_RUNNER == 'craci' }}
@@ -75,9 +75,9 @@ jobs:
         with:
           context: .
           load: true
-          tags: valtakirja:ci
-          cache-from: type=gha,scope=valtakirja-image
-          cache-to: type=gha,scope=valtakirja-image,mode=max
+          tags: sous:ci
+          cache-from: type=gha,scope=sous-image
+          cache-to: type=gha,scope=sous-image,mode=max
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -85,7 +85,7 @@ jobs:
       - name: SBOM (CycloneDX, syft)
         uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
-          image: valtakirja:ci
+          image: sous:ci
           format: cyclonedx-json
           output-file: sbom.cdx.json
           upload-artifact: false
@@ -131,7 +131,7 @@ jobs:
       - name: Save image for the smoke job
         if: ${{ !cancelled() }}
         run: |
-          docker save valtakirja:ci | gzip -1 > valtakirja-image.tar.gz
+          docker save sous:ci | gzip -1 > sous-image.tar.gz
           # smoke runs with no egress at all, so ship the database image with the app image
           docker pull -q mariadb:11.4 && docker save mariadb:11.4 | gzip -1 > mariadb-image.tar.gz
 
@@ -149,7 +149,7 @@ jobs:
         with:
           name: image
           path: |
-            valtakirja-image.tar.gz
+            sous-image.tar.gz
             mariadb-image.tar.gz
           retention-days: 3
           compression-level: 0
@@ -172,7 +172,7 @@ jobs:
         with:
           name: image
       - run: |
-          gunzip -c valtakirja-image.tar.gz | docker load
+          gunzip -c sous-image.tar.gz | docker load
           gunzip -c mariadb-image.tar.gz | docker load
       - name: Start MariaDB + gateway with compose.yaml (fixture catalog, no Valio key)
         run: |
@@ -200,7 +200,7 @@ jobs:
     timeout-minutes: 20
     env:
       VALIO_AIMO_API_KEY: ${{ secrets.VALIO_AIMO_API_KEY }}
-      VALTAKIRJA_AIMO_CALLS_PER_MIN: "30"  # leave headroom on the shared key for the live demos
+      SOUS_AIMO_CALLS_PER_MIN: "30"  # leave headroom on the shared key for the live demos
     steps:
       # The security property on show: this job can reach PyPI (uv + dependencies) and
       # junction26.valioaimo.fi, nothing else. The network trace should list only those.
@@ -233,7 +233,7 @@ jobs:
         if: ${{ steps.pre.outputs.run == 'true' }}
         with:
           path: data
-          key: valio-data-${{ hashFiles('scripts/fetch_data.py', 'valtakirja/catalog.py') }}
+          key: valio-data-${{ hashFiles('scripts/fetch_data.py', 'sous/catalog.py') }}
       - name: Fetch Valio data (cached) and run the eval
         if: ${{ steps.pre.outputs.run == 'true' }}
         run: |
@@ -260,7 +260,7 @@ jobs:
     timeout-minutes: 60
     env:
       VALIO_AIMO_API_KEY: ${{ secrets.VALIO_AIMO_API_KEY }}
-      VALTAKIRJA_AIMO_CALLS_PER_MIN: "30"
+      SOUS_AIMO_CALLS_PER_MIN: "30"
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       VERDA_INFERENCE_API_KEY: ${{ secrets.VERDA_INFERENCE_API_KEY }}
       # provider:model pairs; override with the repo variable LLM_EVAL_MODELS
@@ -294,7 +294,7 @@ jobs:
           fi
           if [ "$run" = true ] && [ "$EVENT" = push ]; then
             if git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-              changed=$(git diff --name-only "$BEFORE" HEAD -- agent scripts/llm_eval.py scripts/eval_checks.py evals/cases.yaml valtakirja/mcp_server.py)
+              changed=$(git diff --name-only "$BEFORE" HEAD -- agent scripts/llm_eval.py scripts/eval_checks.py evals/cases.yaml sous/mcp_server.py)
             else
               changed=unknown
             fi
@@ -312,7 +312,7 @@ jobs:
         if: ${{ steps.pre.outputs.run == 'true' }}
         with:
           path: data
-          key: valio-data-${{ hashFiles('scripts/fetch_data.py', 'valtakirja/catalog.py') }}
+          key: valio-data-${{ hashFiles('scripts/fetch_data.py', 'sous/catalog.py') }}
       - name: Fetch Valio data (cached) and run the LLM eval per model
         if: ${{ steps.pre.outputs.run == 'true' }}
         run: |

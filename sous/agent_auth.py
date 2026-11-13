@@ -1,7 +1,7 @@
 """Agent credentials: proof that a call really comes from the agent a mandate was issued to.
 
 `agent_id` alone is a name anyone can type (GET /mandates lists them). When a mandate requires agent
-authentication (its `require_agent_auth`, or VALTAKIRJA_REQUIRE_AGENT_AUTH=1 for every mandate), the calls
+authentication (its `require_agent_auth`, or SOUS_REQUIRE_AGENT_AUTH=1 for every mandate), the calls
 that spend money (request_quote with a mandate, place_order, renew_standing_order) must carry
 `Authorization: Bearer <token>`: the secret the gateway minted for that mandate's agent.
 
@@ -22,7 +22,7 @@ import secrets
 from . import config, store
 from .mandate import Mandate
 
-PREFIX = "vka_"  # "valtakirja agent": makes leaked tokens easy to grep for and to secret-scan
+PREFIX = "vka_"  # "sous agent": makes leaked tokens easy to grep for and to secret-scan
 
 _SQLITE = """CREATE TABLE IF NOT EXISTS agent_credential (
   mandate_id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, token_sha256 TEXT NOT NULL, last4 TEXT NOT NULL,

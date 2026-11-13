@@ -11,8 +11,8 @@ from datetime import date, datetime
 
 import pytest
 
-from valtakirja import catalog, config, quote as Q, service as S, signing, standing, standing_store, store
-from valtakirja.mandate import Finding, Mandate, evaluate
+from sous import catalog, config, quote as Q, service as S, signing, standing, standing_store, store
+from sous.mandate import Finding, Mandate, evaluate
 
 NOW = datetime(2026, 11, 13, 21, 0, tzinfo=config.TZ)
 MON = date(2026, 11, 16)
@@ -237,7 +237,7 @@ def test_simulate_history_needs_quote_for_the_mandate():
 def test_rest_routes(monkeypatch):
     from fastapi.testclient import TestClient
 
-    from valtakirja import api
+    from sous import api
     monkeypatch.setattr(config, "APPROVER_CODE", "1234")
     c = TestClient(api.app)
     body = {"mandate_id": "M", "agent_id": "a", "name": "Weekly dairy",
@@ -258,7 +258,7 @@ def test_rest_routes(monkeypatch):
 def test_mcp_tools():
     from mcp import Client
 
-    from valtakirja.mcp_server import mcp
+    from sous.mcp_server import mcp
 
     async def go():
         async with Client(mcp) as c:
@@ -283,10 +283,10 @@ def test_mcp_tools():
 
 # --- MariaDB ----------------------------------------------------------------
 
-MARIA = os.getenv("VALTAKIRJA_TEST_MARIADB_URL")
+MARIA = os.getenv("SOUS_TEST_MARIADB_URL")
 
 
-@pytest.mark.skipif(not MARIA, reason="needs VALTAKIRJA_TEST_MARIADB_URL")
+@pytest.mark.skipif(not MARIA, reason="needs SOUS_TEST_MARIADB_URL")
 def test_mariadb_versions_standing_order(monkeypatch):
     monkeypatch.setattr(config, "DB_URL", MARIA)
     monkeypatch.setattr(store, "_conn", None)

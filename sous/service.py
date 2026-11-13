@@ -42,7 +42,7 @@ def _mandate(mandate_id: str) -> Mandate:
     m = store.get_mandate(mandate_id)
     if not m:
         raise GatewayError("mandate_not_found", f"No mandate {mandate_id}.", 404)
-    payload = signing.verify(m.pop("_jws", None) or "", "valtakirja-mandate+jws")
+    payload = signing.verify(m.pop("_jws", None) or "", "sous-mandate+jws")
     if payload is None or payload.get("id") != mandate_id:
         raise GatewayError("mandate_signature", f"Mandate {mandate_id}'s signature does not verify.", 409)
     return Mandate(**payload)  # the signed mandate, not the stored copy
@@ -54,7 +54,7 @@ def issue_mandate(m: Mandate, mint_agent_credential: bool | None = None) -> dict
     """Sign and store the mandate. When the agent must authenticate (or when asked), also mint the agent's
     credential: its token is in the response this once and never again."""
     data = m.model_dump(mode="json")
-    jws = signing.sign(data, "valtakirja-mandate+jws")
+    jws = signing.sign(data, "sous-mandate+jws")
     store.put_mandate(data, jws)
     store.audit("mandate.issued", m.issued_by, "human", m.id, m.buyer, {"mandate": data})
     out = {"mandate": data, "jws": jws}
@@ -100,7 +100,7 @@ def revoke_mandate(mandate_id: str, by: str) -> dict:
         m = _mandate(mandate_id)
         m.revoked = True
         data = m.model_dump(mode="json")
-        store.put_mandate(data, signing.sign(data, "valtakirja-mandate+jws"))
+        store.put_mandate(data, signing.sign(data, "sous-mandate+jws"))
     store.audit("mandate.revoked", by, "human", m.id, m.buyer, {})
     return data
 
@@ -208,7 +208,7 @@ def _request_quote(req: QuoteRequest) -> dict:
     if mandate:
         outcome, findings = _evaluate(mandate, req.agent_id, body, now)
         body["mandate_preview"] = {"outcome": outcome, "findings": [f.model_dump() for f in findings]}
-    jws = signing.sign(body, "valtakirja-quote+jws")
+    jws = signing.sign(body, "sous-quote+jws")
     store.put_quote(body, jws)
     store.audit("quote.issued", req.agent_id, "agent", qid, mandate.buyer if mandate else None,
                 {"quote_id": qid, "total_ex_vat": total_ex, "lines": [
@@ -266,7 +266,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str,
     if not row:
         raise GatewayError("quote_not_found", f"No quote {quote_id}.", 404)
     # Everything below works from the signed payload, never from the stored copy.
-    q = signing.verify(row["_jws"], "valtakirja-quote+jws")
+    q = signing.verify(row["_jws"], "sous-quote+jws")
     if q is None or q.get("id") != quote_id:
         raise GatewayError("quote_signature", "Quote signature does not verify.", 409)
     if q.get("agent_id") != agent_id or (q.get("mandate_id") and q["mandate_id"] != mandate_id):
@@ -326,7 +326,7 @@ def _receipt(order: dict) -> str:
     """Signed receipt of the order's current state (re-issued after a human decision)."""
     return signing.sign({k: order.get(k) for k in ("id", "quote_id", "mandate_id", "status", "total_ex_vat",
                                                    "lines", "decision", "approval", "updated_at")},
-                        "valtakirja-order+jws")
+                        "sous-order+jws")
 
 
 def decide(order_id: str, approver: str, approve: bool, note: str | None = None) -> dict:
@@ -434,7 +434,7 @@ def order_history(order_id: str) -> dict:
                    if (out["mandate_at_decision"] or {}).get(k) != out["mandate_now"][k]]
         out["mandate_changed_since_decision"] = changed
     else:
-        out["note"] = "Point-in-time history needs MariaDB (VALTAKIRJA_DB_URL); SQLite keeps only the current row."
+        out["note"] = "Point-in-time history needs MariaDB (SOUS_DB_URL); SQLite keeps only the current row."
     return out
 
 

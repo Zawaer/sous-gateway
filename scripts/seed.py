@@ -7,8 +7,8 @@ prints a new one (the old one stops working). Tokens are never stored in plain t
 
 import sys
 
-from valtakirja import agent_auth, service as S, signing, store
-from valtakirja.mandate import Mandate
+from sous import agent_auth, service as S, signing, store
+from sous.mandate import Mandate
 
 MANDATES = [
     Mandate(
@@ -99,9 +99,9 @@ def _print_credential(mid: str, cred: dict) -> None:
 def main(rotate: bool = False):
     for m in MANDATES:
         existing = store.get_mandate(m.id)
-        if existing and signing.verify(existing["_jws"], typ="valtakirja-mandate+jws"):
+        if existing and signing.verify(existing["_jws"], typ="sous-mandate+jws"):
             # keep existing mandates (and their audit history) across restarts; mint a credential only if
-            # the mandate needs one and has none (e.g. VALTAKIRJA_REQUIRE_AGENT_AUTH was just turned on)
+            # the mandate needs one and has none (e.g. SOUS_REQUIRE_AGENT_AUTH was just turned on)
             if agent_auth.required(m) and (rotate or agent_auth.status(m)["credential"] is None):
                 _print_credential(m.id, S.agent_credential(m.id, "seed script")["agent_credential"])
             continue

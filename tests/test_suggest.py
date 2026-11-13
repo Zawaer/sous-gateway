@@ -5,8 +5,8 @@ from datetime import date, datetime
 
 import pytest
 
-from valtakirja import aimo, catalog, config, service as S, signing, store, suggest
-from valtakirja.mandate import Mandate
+from sous import aimo, catalog, config, service as S, signing, store, suggest
+from sous.mandate import Mandate
 
 NOW = datetime(2026, 11, 13, 21, 0, tzinfo=config.TZ)
 DAY = date(2026, 11, 16)

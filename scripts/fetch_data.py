@@ -7,7 +7,7 @@ import sys
 
 import httpx
 
-from valtakirja import catalog, config
+from sous import catalog, config
 
 FILES = {
     "products/download": config.PRODUCTS_JSON,
@@ -21,7 +21,7 @@ def main() -> int:
         print("VALIO_AIMO_API_KEY is not set", file=sys.stderr)
         return 1
     config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    headers = {"X-API-Key": config.AIMO_API_KEY, "User-Agent": "valtakirja-gateway/0.1"}
+    headers = {"X-API-Key": config.AIMO_API_KEY, "User-Agent": "sous-gateway/0.1"}
     with httpx.Client(base_url=config.AIMO_API_BASE, headers=headers, follow_redirects=True, timeout=300) as c:
         for path, dest in FILES.items():
             if dest.exists() and dest.stat().st_size > 0:

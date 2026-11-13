@@ -11,8 +11,8 @@ from email.utils import format_datetime
 import httpx
 import pytest
 
-from valtakirja import aimo, catalog, config, quote as Q, service as S
-from valtakirja.mandate import Mandate, evaluate
+from sous import aimo, catalog, config, quote as Q, service as S
+from sous.mandate import Mandate, evaluate
 
 DAY = date(2026, 11, 16)
 NOW = datetime(2026, 11, 13, 21, 0, tzinfo=config.TZ)

@@ -11,7 +11,7 @@ import re
 
 import pytest
 
-from valtakirja import config
+from sous import config
 
 pytestmark = pytest.mark.skipif(not config.PRODUCTS_JSON.exists(), reason="needs data/products.json")
 
@@ -91,7 +91,7 @@ CASES: list[tuple[str, object]] = [
 
 def evaluate(cases=CASES, k: int = 3) -> tuple[float, float, list[tuple[str, float, bool, list[str]]]]:
     """(mean precision@k, top-1 hit rate, per-query rows)."""
-    from valtakirja import catalog
+    from sous import catalog
 
     rows = []
     for q, ok in cases:

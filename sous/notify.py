@@ -3,12 +3,12 @@
 `send(event, order, mandate)` always writes the in-app feed (GET /notifications), then
 delivers to the external channels in a background thread with a short timeout:
 
-- ntfy.sh push to the buyer's phone (free, no account): VALTAKIRJA_NTFY_TOPIC, optional
-  VALTAKIRJA_NTFY_SERVER (default https://ntfy.sh) and VALTAKIRJA_NTFY_TOKEN. Ask-tier
+- ntfy.sh push to the buyer's phone (free, no account): SOUS_NTFY_TOPIC, optional
+  SOUS_NTFY_SERVER (default https://ntfy.sh) and SOUS_NTFY_TOKEN. Ask-tier
   pushes carry the approval link as a click action.
-- Generic webhook (POST JSON): VALTAKIRJA_NOTIFY_WEBHOOK_URL. With
-  VALTAKIRJA_NOTIFY_WEBHOOK_SECRET the body is signed:
-  X-Valtakirja-Signature: sha256=<hex HMAC-SHA256 of the raw body>.
+- Generic webhook (POST JSON): SOUS_NOTIFY_WEBHOOK_URL. With
+  SOUS_NOTIFY_WEBHOOK_SECRET the body is signed:
+  X-Sous-Signature: sha256=<hex HMAC-SHA256 of the raw body>.
 
 A mandate may name its own channels (attributes `notify_webhook_url`, `notify_ntfy_topic`);
 they win over the environment. A failed notification never blocks or fails an order: each
@@ -39,12 +39,17 @@ AUDIENCE = {"order.notify": "buyer", "order.ask": "buyer", "order.decided": "age
 
 
 def _env(name: str, default: str = "") -> str:
+    if name.startswith("SOUS_"):  # pre-rename VALTAKIRJA_* names still work
+        v = os.getenv(name)
+        if v is None:
+            v = os.getenv("VALTAKIRJA_" + name[5:], default)
+        return (v or "").strip()
     return os.getenv(name, default).strip()
 
 
 def _timeout() -> float:
     try:
-        return float(_env("VALTAKIRJA_NOTIFY_TIMEOUT", "5"))
+        return float(_env("SOUS_NOTIFY_TIMEOUT", "5"))
     except ValueError:
         return 5.0
 
@@ -133,10 +138,10 @@ def compose(event: str, order: dict, mandate: Mandate) -> dict:
 
 def channels(mandate: Mandate, audience: str) -> dict[str, str]:
     out = {}
-    hook = getattr(mandate, "notify_webhook_url", None) or _env("VALTAKIRJA_NOTIFY_WEBHOOK_URL")
+    hook = getattr(mandate, "notify_webhook_url", None) or _env("SOUS_NOTIFY_WEBHOOK_URL")
     if hook:
         out["webhook"] = hook
-    topic = getattr(mandate, "notify_ntfy_topic", None) or _env("VALTAKIRJA_NTFY_TOPIC")
+    topic = getattr(mandate, "notify_ntfy_topic", None) or _env("SOUS_NTFY_TOPIC")
     if topic and audience == "buyer":  # the phone belongs to the buyer's human
         out["ntfy"] = topic
     return out
@@ -144,16 +149,16 @@ def channels(mandate: Mandate, audience: str) -> dict[str, str]:
 
 def _webhook(url: str, payload: dict) -> int:
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
-    headers = {"Content-Type": "application/json", "X-Valtakirja-Event": payload["event"]}
-    if secret := _env("VALTAKIRJA_NOTIFY_WEBHOOK_SECRET"):
-        headers["X-Valtakirja-Signature"] = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    headers = {"Content-Type": "application/json", "X-Sous-Event": payload["event"]}
+    if secret := _env("SOUS_NOTIFY_WEBHOOK_SECRET"):
+        headers["X-Sous-Signature"] = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
     r = httpx.post(url, content=body, headers=headers, timeout=_timeout())
     r.raise_for_status()
     return r.status_code
 
 
 def _ntfy(topic: str, n: dict) -> int:
-    server = _env("VALTAKIRJA_NTFY_SERVER", "https://ntfy.sh").rstrip("/")
+    server = _env("SOUS_NTFY_SERVER", "https://ntfy.sh").rstrip("/")
     ask = n["event"] == "order.ask"
     msg = {"topic": topic, "title": n["title"], "message": n["message"], "priority": 4 if ask else 3,
            "tags": ["warning"] if ask else ["shopping_cart"]}
@@ -161,7 +166,7 @@ def _ntfy(topic: str, n: dict) -> int:
         msg["click"] = url
         if ask:
             msg["actions"] = [{"action": "view", "label": "Review and approve", "url": url, "clear": True}]
-    headers = {"Authorization": f"Bearer {tok}"} if (tok := _env("VALTAKIRJA_NTFY_TOKEN")) else {}
+    headers = {"Authorization": f"Bearer {tok}"} if (tok := _env("SOUS_NTFY_TOKEN")) else {}
     # JSON publishing (POST to the server root) keeps € and ä intact, unlike header-based publishing
     r = httpx.post(server, json=msg, headers=headers, timeout=_timeout())
     r.raise_for_status()

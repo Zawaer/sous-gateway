@@ -10,8 +10,8 @@ from datetime import date, datetime, timedelta
 import httpx
 import pytest
 
-from valtakirja import aimo, catalog, config, quote as Q, service as S, signing, store
-from valtakirja.mandate import Mandate, evaluate
+from sous import aimo, catalog, config, quote as Q, service as S, signing, store
+from sous.mandate import Mandate, evaluate
 
 NOW = datetime(2026, 11, 13, 21, 0, tzinfo=config.TZ)
 REAL_CATALOG_GET = catalog.get  # the env fixture stubs catalog.get; the thread-safety test needs the real one
@@ -67,7 +67,7 @@ def quote(qid="Q-1", amount=1000, agent="a", mandate_id="M", day="2026-11-16"):
          "expires_at": "2026-11-13T23:00:00+02:00", "requested_delivery_date": day, "currency": "EUR",
          "lines": [line], "total_ex_vat": line["line_total_ex_vat"], "total_inc_vat": line["line_total_inc_vat"],
          "uncovered": [], "alternatives_considered": []}
-    store.put_quote(q, signing.sign(q, "valtakirja-quote+jws"))
+    store.put_quote(q, signing.sign(q, "sous-quote+jws"))
     return qid
 
 
@@ -228,14 +228,14 @@ def test_order_is_built_from_the_signed_quote_not_the_db_copy():
 def test_quote_signature_must_have_quote_typ():
     mandate()
     q = json.loads(store._exec("SELECT data FROM quote WHERE id = ?", (quote(),))[0][0]["data"])
-    store._exec("UPDATE quote SET jws = ? WHERE id = 'Q-1'", (signing.sign(q, "valtakirja-order+jws"),))
+    store._exec("UPDATE quote SET jws = ? WHERE id = 'Q-1'", (signing.sign(q, "sous-order+jws"),))
     assert gateway_error(S.place_order, "a", "M", "Q-1").code == "quote_signature"
 
 
 def test_verify_checks_typ():
-    tok = signing.sign({"x": 1}, "valtakirja-quote+jws")
-    assert signing.verify(tok, "valtakirja-quote+jws") == {"x": 1}
-    assert signing.verify(tok, "valtakirja-mandate+jws") is None
+    tok = signing.sign({"x": 1}, "sous-quote+jws")
+    assert signing.verify(tok, "sous-quote+jws") == {"x": 1}
+    assert signing.verify(tok, "sous-mandate+jws") is None
     assert signing.verify("garbage") is None
 
 
@@ -246,7 +246,7 @@ def test_tampered_mandate_is_rejected():
     m["auto_approve_limit_eur"] = 1e9  # edited in the DB, not re-signed
     store._exec("UPDATE mandate SET data = ? WHERE id = 'M'", (json.dumps(m),))
     assert S._mandate("M").auto_approve_limit_eur == 500  # the signed payload wins
-    store._exec("UPDATE mandate SET jws = ? WHERE id = 'M'", (signing.sign(m, "valtakirja-quote+jws"),))
+    store._exec("UPDATE mandate SET jws = ? WHERE id = 'M'", (signing.sign(m, "sous-quote+jws"),))
     assert gateway_error(S._mandate, "M").code == "mandate_signature"
 
 
@@ -354,11 +354,11 @@ def test_cutoff_of_earlier_date_does_not_block_later_requested_date():
 def test_rate_limiter_trusts_cf_header_only_when_configured(monkeypatch):
     from starlette.requests import Request
 
-    from valtakirja import api
+    from sous import api
     req = Request({"type": "http", "headers": [(b"cf-connecting-ip", b"6.6.6.6")], "client": ("10.0.0.5", 1234)})
-    monkeypatch.delenv("VALTAKIRJA_TRUST_CF_HEADER", raising=False)
+    monkeypatch.delenv("SOUS_TRUST_CF_HEADER", raising=False)
     assert api._client_ip(req) == "10.0.0.5"
-    monkeypatch.setenv("VALTAKIRJA_TRUST_CF_HEADER", "1")
+    monkeypatch.setenv("SOUS_TRUST_CF_HEADER", "1")
     assert api._client_ip(req) == "6.6.6.6"
 
 

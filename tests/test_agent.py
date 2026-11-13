@@ -11,9 +11,9 @@ import pytest
 
 from agent import buyer as B
 from agent.llm import ChatClient, ChatResponse, LLMConfig, LLMError, config_from_env
-from valtakirja import aimo, catalog, config, service as S, signing, store
-from valtakirja.mandate import Mandate
-from valtakirja.mcp_server import mcp
+from sous import aimo, catalog, config, service as S, signing, store
+from sous.mandate import Mandate
+from sous.mcp_server import mcp
 
 NOW = datetime(2026, 11, 13, 21, 0, tzinfo=config.TZ)
 

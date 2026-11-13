@@ -40,7 +40,7 @@ WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", 
 class MCPGateway:
     """A persistent MCP client session, usable from synchronous code.
 
-    target: the in-process MCPServer (valtakirja.mcp_server.mcp) or a URL like https://host/mcp/.
+    target: the in-process MCPServer (sous.mcp_server.mcp) or a URL like https://host/mcp/.
     The session lives in its own event-loop thread, because the MCP client's task groups must be
     entered and exited by the same task.
     """
@@ -180,7 +180,7 @@ def next_delivery_day(today: date) -> date:
 
 
 def system_prompt(cfg: BuyerConfig) -> str:
-    from valtakirja.mcp_server import INSTRUCTIONS
+    from sous.mcp_server import INSTRUCTIONS
 
     default = cfg.default_delivery or next_delivery_day(cfg.today)
     days = ", ".join(f"{WEEKDAYS[d.weekday()]} {d.isoformat()}"
@@ -456,7 +456,7 @@ def main(argv=None) -> int:
               file=sys.stderr)
         return 2
     if a.gateway == "local":
-        from valtakirja.mcp_server import mcp
+        from sous.mcp_server import mcp
         target = mcp
     else:
         target = a.gateway

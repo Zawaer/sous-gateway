@@ -11,7 +11,7 @@
    up ~18 % and the total over 10 %, so the order is held for a human instead of auto-renewing.
 
 Needs the demo mandates (scripts/seed.py) and, if the gateway has one, the approver code
-(VALTAKIRJA_APPROVER_CODE or --code) for storing the simulated history.
+(SOUS_APPROVER_CODE or --code) for storing the simulated history.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--base", default="http://localhost:8000", help="gateway base URL")
     ap.add_argument("--date", type=date.fromisoformat, default=None, help="delivery date (default: next Monday)")
-    ap.add_argument("--code", default=os.getenv("VALTAKIRJA_APPROVER_CODE", ""), help="approver code, if required")
+    ap.add_argument("--code", default=os.getenv("SOUS_APPROVER_CODE", ""), help="approver code, if required")
     a = ap.parse_args()
     gw = Gateway(a.base)
     if a.code:

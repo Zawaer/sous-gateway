@@ -43,7 +43,7 @@ def next_monday(today: date | None = None) -> date:
 class Gateway:
     def __init__(self, base: str):
         self.base = base.rstrip("/")
-        self.http = httpx.Client(base_url=self.base, timeout=60, headers={"user-agent": "valtakirja-demo/1"})
+        self.http = httpx.Client(base_url=self.base, timeout=60, headers={"user-agent": "sous-demo/1"})
 
     def get(self, path: str, **params):
         r = self.http.get(path, params=params)
@@ -99,7 +99,7 @@ def show_order(o: dict, base: str) -> None:
             say(f"    {_c(TIER[f['outcome']][0], '▮')} {f['message']}  " + _c("2", f["rule"]))
     if o["status"] == "pending_approval":
         url = o.get("approval_url") or f"/ui/#/orders/{o['id']}"
-        if url.startswith("/"):  # gateway without VALTAKIRJA_PUBLIC_BASE_URL
+        if url.startswith("/"):  # gateway without SOUS_PUBLIC_BASE_URL
             url = base + url
         say(_c("1", f"    Waiting for a human. Approve on the phone: {url}"))
 
@@ -182,13 +182,13 @@ KAARNA = {
 
 
 def ensure_mandate(gw: Gateway, m: dict) -> None:
-    """Issue the mandate unless the gateway already has it (needs VALTAKIRJA_APPROVER_CODE if the gateway sets one)."""
+    """Issue the mandate unless the gateway already has it (needs SOUS_APPROVER_CODE if the gateway sets one)."""
     if gw.http.get(f"/mandates/{m['id']}").status_code == 200:
         return
-    code = os.getenv("VALTAKIRJA_APPROVER_CODE", "")
+    code = os.getenv("SOUS_APPROVER_CODE", "")
     r = gw.http.post("/mandates", json=m, headers={"x-approver-code": code} if code else {})
     if r.status_code >= 400:
-        raise RuntimeError(f"could not issue {m['id']} ({r.status_code}); set VALTAKIRJA_APPROVER_CODE "
+        raise RuntimeError(f"could not issue {m['id']} ({r.status_code}); set SOUS_APPROVER_CODE "
                            "to the gateway's approver code")
     say(_c("2", f"  issued mandate {m['id']} for {m['buyer']} (signed by the gateway)"))
 

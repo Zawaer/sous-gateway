@@ -9,8 +9,8 @@ from datetime import date, datetime
 import httpx
 import pytest
 
-from valtakirja import catalog, config, notify, notifications_store, quote as Q, service as S, signing, store
-from valtakirja.mandate import Mandate
+from sous import catalog, config, notify, notifications_store, quote as Q, service as S, signing, store
+from sous.mandate import Mandate
 
 NOW = datetime(2026, 11, 13, 21, 0, tzinfo=config.TZ)
 
@@ -48,14 +48,14 @@ class Calls:
 def env(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "STATE_DB", tmp_path / "state.db")
     monkeypatch.setattr(config, "DB_URL", "")
-    monkeypatch.setattr(config, "PUBLIC_BASE_URL", "https://valtakirja.example")
+    monkeypatch.setattr(config, "PUBLIC_BASE_URL", "https://sous.example")
     monkeypatch.setattr(store, "_conn", None)
     monkeypatch.setattr(signing, "KEY_PATH", tmp_path / "key.pem")
     signing._key.cache_clear()
     monkeypatch.setattr(catalog, "get", lambda pid: product(pid))
     monkeypatch.setattr(S, "_now", lambda: NOW)
-    for k in ("VALTAKIRJA_NTFY_TOPIC", "VALTAKIRJA_NTFY_SERVER", "VALTAKIRJA_NTFY_TOKEN",
-              "VALTAKIRJA_NOTIFY_WEBHOOK_URL", "VALTAKIRJA_NOTIFY_WEBHOOK_SECRET"):
+    for k in ("SOUS_NTFY_TOPIC", "SOUS_NTFY_SERVER", "SOUS_NTFY_TOKEN",
+              "SOUS_NOTIFY_WEBHOOK_URL", "SOUS_NOTIFY_WEBHOOK_SECRET"):
         monkeypatch.delenv(k, raising=False)
     calls = Calls()
     monkeypatch.setattr(httpx, "post", calls)  # nothing leaves the machine
@@ -75,7 +75,7 @@ def quote(qid="Q-1", amount=1000):
          "expires_at": "2026-11-13T23:00:00+02:00", "requested_delivery_date": "2026-11-16", "currency": "EUR",
          "lines": [line], "total_ex_vat": line["line_total_ex_vat"], "total_inc_vat": line["line_total_inc_vat"],
          "uncovered": [], "alternatives_considered": []}
-    store.put_quote(q, signing.sign(q, "valtakirja-quote+jws"))
+    store.put_quote(q, signing.sign(q, "sous-quote+jws"))
     return qid
 
 
@@ -90,7 +90,7 @@ def events(name):
 
 
 def test_notify_tier_message_feed_and_ntfy(env, monkeypatch):
-    monkeypatch.setenv("VALTAKIRJA_NTFY_TOPIC", "hotel-test")
+    monkeypatch.setenv("SOUS_NTFY_TOPIC", "hotel-test")
     mandate(notify_above_eur=1000, auto_approve_limit_eur=2000)
     o = S.place_order("a", "M", quote())
     wait()
@@ -106,7 +106,7 @@ def test_notify_tier_message_feed_and_ntfy(env, monkeypatch):
 
 
 def test_ask_tier_has_deadline_default_and_approve_action(env, monkeypatch):
-    monkeypatch.setenv("VALTAKIRJA_NTFY_TOPIC", "hotel-test")
+    monkeypatch.setenv("SOUS_NTFY_TOPIC", "hotel-test")
     monkeypatch.setattr(catalog, "get", lambda pid: product(pid, declared=False))
     mandate(avoid_allergens=["AM"], auto_approve_limit_eur=5000)
     o = S.place_order("a", "M", quote())
@@ -139,20 +139,20 @@ def test_silent_and_block_send_nothing(env):
 
 
 def test_webhook_is_signed(env, monkeypatch):
-    monkeypatch.setenv("VALTAKIRJA_NOTIFY_WEBHOOK_URL", "https://hooks.example/v")
-    monkeypatch.setenv("VALTAKIRJA_NOTIFY_WEBHOOK_SECRET", "s3cret")
+    monkeypatch.setenv("SOUS_NOTIFY_WEBHOOK_URL", "https://hooks.example/v")
+    monkeypatch.setenv("SOUS_NOTIFY_WEBHOOK_SECRET", "s3cret")
     mandate(notify_above_eur=1000, auto_approve_limit_eur=2000)
     S.place_order("a", "M", quote())
     wait()
     [c] = env.calls
-    body, sig = c["content"], c["headers"]["X-Valtakirja-Signature"]
+    body, sig = c["content"], c["headers"]["X-Sous-Signature"]
     assert sig == "sha256=" + hmac.new(b"s3cret", body, hashlib.sha256).hexdigest()
     p = json.loads(body)
     assert p["event"] == "order.notify" and p["order"]["status"] == "ordered" and p["order"]["buyer"] == "Hotel"
 
 
 def test_failed_channel_never_blocks_the_order(env, monkeypatch):
-    monkeypatch.setenv("VALTAKIRJA_NTFY_TOPIC", "hotel-test")
+    monkeypatch.setenv("SOUS_NTFY_TOPIC", "hotel-test")
     monkeypatch.setattr(httpx, "post", Calls(fail=True))
     mandate(notify_above_eur=1000, auto_approve_limit_eur=2000)
     o = S.place_order("a", "M", quote())
@@ -172,7 +172,7 @@ def test_broken_feed_never_blocks_the_order(env, monkeypatch):
 def test_rest_routes(env, monkeypatch):
     from fastapi.testclient import TestClient
 
-    from valtakirja import api
+    from sous import api
     monkeypatch.setattr(config, "APPROVER_CODE", "1234")
     mandate()
     c = TestClient(api.app)

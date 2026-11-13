@@ -5,7 +5,7 @@
 #   docker compose -f compose.yaml -f tests/fixtures/compose.smoke.yaml up -d --no-build
 services:
   valtakirja:
-    image: valtakirja:ci
+    image: sous:ci
     pull_policy: never
     restart: "no"
     environment:

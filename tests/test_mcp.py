@@ -9,9 +9,9 @@ import json
 import pytest
 from mcp import Client
 
-from valtakirja import catalog, config, service as S, signing, store
-from valtakirja.mandate import Mandate
-from valtakirja.mcp_server import mcp
+from sous import catalog, config, service as S, signing, store
+from sous.mandate import Mandate
+from sous.mcp_server import mcp
 
 MILK = {
     "id": "6409100", "name": "Valio Eila 1 l laktoositon maitojuoma", "names": {"fi": "Valio Eila", "en": "", "sv": ""},
@@ -108,8 +108,8 @@ def test_resources_and_prompt():
     S.issue_mandate(Mandate(id="M-T", buyer="Test", agent_id="a", issued_by="human", avoid_allergens=["AN"]))
 
     async def calls(c):
-        a = await c.read_resource("valtakirja://allergens")
-        m = await c.read_resource("valtakirja://mandates/M-T")
+        a = await c.read_resource("sous://allergens")
+        m = await c.read_resource("sous://mandates/M-T")
         p = await c.get_prompt("purchase", {"request": "1000 L lactose-free milk", "mandate_id": "M-T",
                                             "agent_id": "a"})
         return a, m, p

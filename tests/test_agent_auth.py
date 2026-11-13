@@ -10,8 +10,8 @@ from datetime import date, datetime
 
 import pytest
 
-from valtakirja import agent_auth, catalog, config, quote as Q, service as S, signing, standing, store
-from valtakirja.mandate import Mandate
+from sous import agent_auth, catalog, config, quote as Q, service as S, signing, standing, store
+from sous.mandate import Mandate
 
 NOW = datetime(2026, 11, 13, 21, 0, tzinfo=config.TZ)
 MON = date(2026, 11, 16)
@@ -165,7 +165,7 @@ def test_bearer_parsing():
 def test_rest_bearer_header_and_approver_only_rotation(monkeypatch):
     from fastapi.testclient import TestClient
 
-    from valtakirja import api
+    from sous import api
     monkeypatch.setattr(config, "APPROVER_CODE", "1234")
     c = TestClient(api.app)
     m = {"id": "M", "buyer": "Hotel", "agent_id": "a", "issued_by": "chef", "auto_approve_limit_eur": 5000,
@@ -196,7 +196,7 @@ def test_rest_bearer_header_and_approver_only_rotation(monkeypatch):
 def test_mcp_in_process_with_agent_token_argument():
     from mcp import Client
 
-    from valtakirja.mcp_server import mcp
+    from sous.mcp_server import mcp
     token = issue(require_agent_auth=True)["agent_credential"]["token"]
     args = {"agent_id": "a", "mandate_id": "M", "delivery_date": "2026-11-16",
             "items": [{"product_ids": ["MILK"], "amount": 10, "unit": "L"}]}
@@ -226,7 +226,7 @@ def _rpc(c, session, method, params, rid=1, token=None):
 def test_mcp_streamable_http_reads_the_authorization_header(monkeypatch):
     from fastapi.testclient import TestClient
 
-    from valtakirja import api
+    from sous import api
     monkeypatch.setattr(catalog, "_db", lambda: None)
     token = issue(require_agent_auth=True)["agent_credential"]["token"]
     args = {"agent_id": "a", "mandate_id": "M", "delivery_date": "2026-11-16",
@@ -267,9 +267,9 @@ def test_seed_prints_the_secure_token_once(capsys):
     assert code(S.authorize_agent, "M-HOTEL-AURORA-SECURE", "x", token, "test") == ("agent_auth_invalid", 403)
 
 
-@pytest.mark.skipif(not os.getenv("VALTAKIRJA_TEST_MARIADB_URL"), reason="needs VALTAKIRJA_TEST_MARIADB_URL")
+@pytest.mark.skipif(not os.getenv("SOUS_TEST_MARIADB_URL"), reason="needs SOUS_TEST_MARIADB_URL")
 def test_mariadb_credential_roundtrip(monkeypatch):
-    monkeypatch.setattr(config, "DB_URL", os.environ["VALTAKIRJA_TEST_MARIADB_URL"])
+    monkeypatch.setattr(config, "DB_URL", os.environ["SOUS_TEST_MARIADB_URL"])
     monkeypatch.setattr(store, "_conn", None)
     store._exec("DROP TABLE IF EXISTS agent_credential")
     monkeypatch.setattr(agent_auth, "_ready_for", None)
