@@ -161,7 +161,7 @@ def scene_4(gw: Gateway, when: date) -> None:
     show_order(gw.order("espoo-school-agent", "M-SCHOOL-ESPOO", q["id"]), gw.base)
 
 
-# A fifth buyer, created by this script: an event caterer with a vegan, nut-free menu.
+# An event caterer with a mandate that checks milk, egg, tree nuts and peanuts.
 KAARNA = {
     "id": "M-KAARNA-CATERING",
     "buyer": "Kaarna Catering Oy, Espoo",
@@ -194,21 +194,22 @@ def ensure_mandate(gw: Gateway, m: dict) -> None:
 
 
 def scene_5(gw: Gateway, when: date) -> None:
-    """New buyer: a caterer's last-minute vegan, nut-free event, one multi-item order; cashew butter refused."""
+    """New buyer: Kaarna Catering requests a five-item lunch order with allergen checks."""
     m = KAARNA
     agent, mandate = m["agent_id"], m["id"]
     ensure_mandate(gw, m)
-    say(_c("1", '"Vegan lunch for 150 guests on Monday: oat drink, chickpeas, crushed tomatoes, hummus and rice."')
-        + _c("2", "  (Kaarna Catering's agent; mandate avoids milk, egg, nuts, peanuts)"))
+    say(_c("1", '"Lunch for 150 guests: oat drink, chickpeas, crushed tomatoes, hummus and rice."'))
+    say(_c("2", "  Kaarna's mandate checks for milk, egg, tree nuts and peanuts. Missing allergen data requires human review."))
     avoid = {"avoid_allergens": m["avoid_allergens"], "food_only": "true"}
-    menu = [("kaurajuoma", 60, "L"), ("kikherne", 20, "KG"), ("tomaattimurska", 30, "KG"),
-            ("hummus", 6, "KG"), ("riisi", 15, "KG")]
+    menu = [("kaurajuoma", "oat drink", 60, "L"), ("kikherne", "chickpeas", 20, "KG"),
+            ("tomaattimurska", "crushed tomatoes", 30, "KG"), ("hummus", "hummus", 6, "KG"),
+            ("riisi", "rice", 15, "KG")]
     items = []
-    for q, amount, unit in menu:
+    for q, label, amount, unit in menu:
         ids = gw.search(agent, q, 6, **avoid)
-        items.append({"product_ids": ids, "amount": amount, "unit": unit, "note": q})
-        say(f"  searched “{q}”: {len(ids)} candidates, none declaring the avoided allergens "
-            f"(missing data is left to the mandate), 0 Valio API calls")
+        items.append({"product_ids": ids, "amount": amount, "unit": unit, "note": label})
+        say(f"  searched for {label}: {len(ids)} candidates after excluding declared “contains” and "
+            f"“may contain” matches, 0 Valio API calls")
     q = gw.quote(agent, mandate, items, when)
     show_quote(q)
     why = {a["product_id"]: a["why_not"][0] for a in q.get("alternatives_considered", []) if a.get("why_not")}
@@ -225,7 +226,7 @@ def scene_5(gw: Gateway, when: date) -> None:
         say(_c("33", f"    ! not covered: {g['uncovered']:g} {g.get('unit') or ''} of “{g['item'].get('note')}”. "
                      f"All {len(ps)} candidates out: {', '.join(reasons) or 'no orderable option'}"))
     show_order(gw.order(agent, mandate, q["id"]), gw.base)
-    say(_c("2", "    The human sees what's missing and why, and can approve the rest and buy the gap locally."))
+    say(_c("2", "    The reviewer can verify the flagged ingredients and decide whether to accept the partial order."))
 
     say(_c("1", '"Add 2 jars of the Biona cashew nut butter for the dressing."'))
     q = gw.quote(agent, mandate, [{"product_ids": ["465267"], "amount": 2, "unit": "SALES_UNIT"}], when)

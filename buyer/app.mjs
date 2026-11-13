@@ -161,6 +161,14 @@ function appendList(node, title, items) {
   node.append(element('h3', title), list);
 }
 
+function renderShortages(content, quote) {
+  const shortages = (quote.uncovered ?? []).map(({ item, uncovered, unit, reason }) => {
+    const quantity = `${uncovered} ${units[unit || item?.unit] || 'units'}`;
+    return `${quantity}${item?.note ? ` of ${item.note}` : ''} missing${reason ? ` · ${reason}` : ''}`;
+  });
+  appendList(content, 'Missing from the quote', shortages);
+}
+
 function renderQuote(quote) {
   const preview = quote.mandate_preview;
   const content = $('quote-content');
@@ -184,7 +192,7 @@ function renderQuote(quote) {
     list.append(row);
   }
   content.append(list);
-  appendList(content, 'Unfilled quantity', quote.uncovered.map((gap) => `${gap.uncovered} ${units[gap.unit || gap.item?.unit] || 'units'}${gap.reason ? ` · ${gap.reason}` : ''}`));
+  renderShortages(content, quote);
   appendList(content, 'Mandate findings', preview.findings.map((finding) => finding.message));
   appendList(content, 'Other products considered', quote.alternatives_considered.map((option) => `${option.name} · ${option.why_not.join(' ')}`));
   $('submit-order').textContent = preview.outcome === 'ask' ? 'Send for approval' : 'Submit order';
@@ -197,6 +205,7 @@ async function renderOrder(gateway, order, quote) {
   const content = $('order-content');
   const status = statuses[order.status] || order.status;
   content.replaceChildren(element('p', `${order.id} · ${status}`, 'total'));
+  renderShortages(content, quote);
   appendList(content, 'Gateway decision', order.decision.findings.map((finding) => finding.message));
   try {
     const signed = await gateway.receipt(order, quote);
