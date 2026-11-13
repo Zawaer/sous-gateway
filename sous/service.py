@@ -379,10 +379,11 @@ def _request_quote(req: QuoteRequest) -> dict:
             continue
         chosen, uncovered = Q.plan(item.amount, unit, offers) if len(offers) > 1 else (
             [offers[0]] if offers[0]["orderable"] else [], 0.0 if offers[0]["orderable"] else item.amount)
-        if len(offers) == 1 and not offers[0]["orderable"]:
-            # A single named product that can't be ordered: keep it so the reasons are visible.
-            chosen = [offers[0]]
-            uncovered = 0.0
+        if not chosen and (blocked := [o for o in offers if not o["orderable"]]):
+            # Nothing orderable for this need: keep the products that can't be ordered as (unorderable) lines,
+            # so the mandate engine checks them and the refusal names the real reasons (allergen, undeliverable,
+            # cut-off), not just "nothing orderable". Same as for a single named product: lines, no gap.
+            chosen, uncovered = blocked, 0.0
         for l in chosen:
             l["item_index"] = item_index
             if item.substitute_for:
@@ -397,8 +398,9 @@ def _request_quote(req: QuoteRequest) -> dict:
         if uncovered > 0:
             gaps.append({"item": item.model_dump(), "item_index": item_index, "uncovered": uncovered, "unit": item.unit})
 
-    total_ex = round(sum(l["line_total_ex_vat"] or 0 for l in lines), 2)
-    total_inc = round(sum(l["line_total_inc_vat"] or 0 for l in lines), 2)
+    # Lines that can't be ordered are shown for their reasons but never bought, so they cost nothing.
+    total_ex = round(sum(l["line_total_ex_vat"] or 0 for l in lines if l["orderable"]), 2)
+    total_inc = round(sum(l["line_total_inc_vat"] or 0 for l in lines if l["orderable"]), 2)
     qid = _id("Q")
     body = {
         "id": qid,

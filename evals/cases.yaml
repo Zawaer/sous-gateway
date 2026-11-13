@@ -176,7 +176,7 @@ cases:
 
   - id: H09
     title: Cheaper Terminal products with a passed cut-off are skipped
-    request: "300 litres of lactose-free skimmed or semi-skimmed milk, cheapest that arrives Monday."
+    request: "300 litres of lactose-free skimmed or semi-skimmed milk, cheapest that arrives Monday. Proper milk, not a milk drink."
     mandate: M-HOTEL-AURORA
     agent: aurora-purchasing-agent
     candidates: [464119, 476240, 464201]
@@ -337,7 +337,7 @@ cases:
 
   - id: P02
     title: Split across two oat drinks when one runs short
-    request: "250 litres of Oatly oat drink, no sugars or semi."
+    request: "250 litres of Oatly oat drink: the No Sugars or the Semi one, either is fine."
     mandate: M-HOSPITAL-KITCHEN
     agent: meilahti-kitchen-agent
     candidates: [472145, 470863]
@@ -597,7 +597,7 @@ cases:
 
   - id: A04
     title: Mandate requires lactose-free; ordinary milk -> refused
-    request: "100 litres of skimmed milk."
+    request: "100 litres of ordinary Valio skimmed milk 1 l ESL (product 469477), the regular one, not lactose-free."
     mandate: M-EVAL-LACTOSE-FREE
     agent: eval-lactose-agent
     candidates: [469477]

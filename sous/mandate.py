@@ -93,7 +93,8 @@ def evaluate(
     if not lines:
         add("order.empty", "block", "Nothing orderable was found for this request.")
 
-    total = round(sum(l.get("line_total_ex_vat") or 0 for l in lines), 2)
+    # An unorderable line already blocks the order (availability.*); it never counts towards spend.
+    total = round(sum(l.get("line_total_ex_vat") or 0 for l in lines if l.get("orderable", True)), 2)
     if mandate.hard_limit_eur is not None and total > mandate.hard_limit_eur:
         add("spend.hard_limit", "block",
             f"Order total €{total:,.2f} exceeds the mandate's hard limit of €{mandate.hard_limit_eur:,.2f}.")

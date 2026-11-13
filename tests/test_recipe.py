@@ -301,7 +301,9 @@ def test_uncovered_item_gets_a_substitute_and_a_revised_quote(gw, monkeypatch):
     monkeypatch.setattr(substitutes, "suggest", fake_suggest)
     p = R.plan("Creamy soup for 40", gateway=gw, mandate_id="M-HOTEL", agent_id="hotel-agent",
                llm=FakeLLM([SOUP]), today=TODAY)
-    assert p.first_quote is not None and p.first_quote["uncovered"]
+    # the first quote shows the unavailable creams as unorderable lines (with their reasons), not as a silent gap
+    assert p.first_quote is not None
+    assert {l["product_id"] for l in p.first_quote["lines"] if not l["orderable"]} >= {"121", "122"}
     assert not p.quote["uncovered"]
     sub = next(l for l in p.quote["lines"] if l["product_id"] == "120")
     assert sub["substitute_for"] in ("121", "122")
@@ -334,3 +336,17 @@ def test_an_undeliverable_ingredient_is_left_out_not_blocking_the_basket(gw, mon
     assert "111" not in {l["product_id"] for l in p.quote["lines"]}
     assert p.quote["mandate_preview"]["outcome"] != "block"
     assert "salt (not orderable)" in p.summary()
+
+
+def test_need_with_no_orderable_candidate_keeps_the_reasons():
+    """Several candidates, none orderable: the quote keeps them as unorderable lines, so the refusal names
+    the real rules (sales block, allergen) instead of only order.empty; they don't count towards spend."""
+    UNAVAILABLE.update({"121", "122"})
+    q = S.request_quote(S.QuoteRequest(agent_id="cater-agent", mandate_id="M-NOMILK", delivery_date=date(2026, 11, 16),
+                                       items=[{"product_ids": ["121", "122"], "amount": 200, "unit": "L"}]))["quote"]
+    assert {l["product_id"] for l in q["lines"]} == {"121", "122"} and not any(l["orderable"] for l in q["lines"])
+    assert q["total_ex_vat"] == 0
+    rules = {f["rule"] for f in q["mandate_preview"]["findings"]}
+    assert q["mandate_preview"]["outcome"] == "block"
+    assert {"availability.sales_block", "allergen.contains"} <= rules and "order.empty" not in rules
+    assert not rules & {"spend.auto_limit", "spend.hard_limit"}

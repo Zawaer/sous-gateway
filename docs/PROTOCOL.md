@@ -122,7 +122,7 @@ Issuing (`POST /mandates`) re-signs and stores the mandate and writes `mandate.i
 
 - `unit` is `L`, `KG` or `SALES_UNIT` (packs). With L or KG the gateway converts to packs and rounds up to the allowed lot size.
 - Several `product_ids` for one item means "these are candidates". The gateway prices all of them, ranks orderable ones by comparison price (EUR per L or KG), and fills the need cheapest first, splitting across products when stock is short.
-- One `product_id` that can't be ordered is kept in the quote, so the reasons are visible and the mandate blocks it.
+- When none of an item's candidates can be ordered (one `product_id` or several), they are kept in the quote as unorderable lines (`orderable: false`, with no `uncovered` gap), so the reasons are visible and the mandate blocks them with the real rule (e.g. `availability.undeliverable`, `allergen.contains`). Unorderable lines count €0 towards the total and the spend limits.
 - At most 50 items and 200 candidate ids per quote. Price and availability are fetched in two batched calls per item (price cached 10 min, availability 60 s), so a one-item quote costs at most 2 live calls.
 
 Response: `{"quote": {...}, "jws": "<compact JWS of quote>"}`. Quote fields:
