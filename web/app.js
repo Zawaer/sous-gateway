@@ -991,6 +991,84 @@ async function openStanding(id) {
   });
 }
 
+// Today: one screen for a Valio Aimo operator (or a judge): what needs a human, what agents did today,
+// what was stopped and why, standing-order drift, and whether the record can be trusted.
+const helsinkiDay = (iso) => new Date(iso).toLocaleDateString("sv-SE", { timeZone: "Europe/Helsinki" });
+
+views.today = {
+  key: "",
+  async load() {
+    const [ordersR, mandatesR, standingR, chain] = await Promise.all([
+      api("/orders"), api("/mandates"), api("/standing-orders").catch(() => ({ standing_orders: [] })), api("/audit/verify")]);
+    const orders = noQA(ordersR.orders, isQAOrder);
+    const mandates = noQA(mandatesR.mandates, isQAMandate);
+    const day = helsinkiDay(new Date().toISOString());
+    const today = orders.filter((o) => helsinkiDay(o.created_at) === day);
+    const pending = orders.filter((o) => o.status === "pending_approval");
+    const ordered = today.filter((o) => o.status === "ordered");
+    const stopped = today.filter((o) => o.status === "refused" || o.status === "rejected" || o.status === "expired");
+    const standing = noQA(standingR.standing_orders || [], isQAMandate);
+    const details = await Promise.all(standing.map((s) => api("/standing-orders/" + encodeURIComponent(s.id)).catch(() => null)));
+    const drift = details.filter(Boolean).map((d) => ({ d, r: lastLive(d) })).filter(({ r }) => r && r.drift?.length);
+    const key = [day, orders.length, pending.length, orders[0]?.updated_at, drift.length, chain.events].join("|");
+    if (key === this.key && view.dataset.view === "today") { tickDeadlines(); return; }
+    this.key = key;
+    view.dataset.view = "today";
+
+    const firstReason = (o) => {
+      const f = (o.decision?.findings || []).find((x) => x.outcome === "block") || (o.decision?.findings || []).find((x) => x.outcome === "ask");
+      return o.status === "rejected" ? `Rejected by ${o.approval?.by || "a human"}${o.approval?.note ? `: “${o.approval.note}”` : ""}`
+        : o.status === "expired" ? (o.approval?.result_reason || "Approved after the order cut-off") : (f?.message || "");
+    };
+    const row = (o, extra) => `<a class="item today-row" href="#/orders/${esc(o.id)}">
+        <div><b>${esc(o.buyer)}</b> <span class="muted mono small">${esc(o.id)}</span>
+          <div class="small">${extra}</div></div>
+        <div style="text-align:right">${tier(o.status)}<div class="small">${eur(o.total_ex_vat)}</div></div></a>`;
+    const buyerSigned = mandates.filter((m) => m.issuer?.kind === "buyer").length;
+    const authed = mandates.filter((m) => m.require_agent_auth).length;
+    const tile = (label, value, sub) => `<div class="tile"><div class="muted small">${label}</div><div class="hero">${value}</div><div class="small muted">${sub}</div></div>`;
+
+    view.innerHTML = `<div class="head"><div><h2>Today</h2>
+        <div class="muted">${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Helsinki" })}
+          · purchasing agents ordering from Valio Aimo through Sous, each under a signed mandate</div></div></div>
+      <div class="tiles">
+        ${tile("Waiting for a human", pending.length, pending.length ? "held by a mandate rule; decide before the cut-off" : "nothing held")}
+        ${tile("Ordered today", ordered.length, `${eur(ordered.reduce((s, o) => s + (o.total_ex_vat || 0), 0))} ex VAT, within mandates or approved`)}
+        ${tile("Stopped today", stopped.length, "refused by a mandate, rejected or too late")}
+        ${tile("Standing orders held for drift", drift.filter(({ r }) => r.status === "pending_approval").length, `${standing.length} standing order(s) in total`)}
+      </div>
+      <div class="today-grid">
+        <section><h3>Waiting for you</h3>
+          ${pending.length ? `<div class="list">${pending.slice(0, 6).map((o) => {
+            const cut = earliestCutoff(o);
+            return row(o, `${esc(firstReason(o))}${cut ? ` · decide within <span class="deadline" data-until="${esc(cut)}"></span>` : ""}`);
+          }).join("")}</div>${pending.length > 6 ? `<p class="small"><a href="#/inbox">All ${pending.length} in Approvals</a></p>` : ""}`
+            : `<p class="muted small">Nothing is waiting. Orders outside an agent's mandate appear here.</p>`}
+          <h3>Stopped today, and why</h3>
+          ${stopped.length ? `<div class="list">${stopped.slice(0, 6).map((o) => row(o, esc(firstReason(o)))).join("")}</div>`
+            : `<p class="muted small">Nothing refused today.</p>`}
+          ${drift.length ? `<h3>Standing-order drift</h3><div class="list">${drift.map(({ d, r }) => `
+            <a class="item today-row" href="#/standing/${esc(d.standing_order.id)}"><div><b>${esc(d.standing_order.name)}</b>
+              <div class="small">${esc(r.summary || "")}</div></div><div>${tier(r.status)}</div></a>`).join("")}</div>` : ""}
+        </section>
+        <aside>
+          <h3>Can this record be trusted?</h3>
+          <div class="chain ${chain.ok ? "ok" : "bad"}">${chain.ok ? "✔" : "✖"} <div><b>${chain.ok ? "Audit chain intact" : `Chain broken at #${esc(chain.broken_at_seq)}`}</b>
+            <div class="small">${esc(chain.events)} events${versioning(chain)}</div></div></div>
+          <div class="rules small" style="grid-template-columns:1fr">
+            <div><span class="muted">Mandates in force</span><span>${mandates.filter((m) => !m.revoked).length}</span></div>
+            <div><span class="muted">Signed by the buyer's own key</span><span>${buyerSigned}</span></div>
+            <div><span class="muted">Agents must authenticate</span><span>${authed}</span></div>
+            <div><span class="muted">Quotes, orders, receipts</span><span>Ed25519 signed · <a href="/.well-known/jwks.json">key</a></span></div>
+          </div>
+          <p class="small muted" style="margin-top:12px">Decisions are deterministic rules on signed quotes; no AI decides.
+            <a href="#/audit">Audit log</a> · <a href="#/stats">Stats</a></p>
+        </aside>
+      </div>`;
+    tickDeadlines();
+  },
+};
+
 // Stats: what the gateway did, for Valio Aimo's operators (and the demo's numbers slide).
 // Everything is computed from /orders and the audit log, so it's the same record anyone can check.
 const CATALOG_SIZE = 17546;

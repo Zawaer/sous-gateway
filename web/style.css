@@ -251,6 +251,12 @@ pre {
 .spark i { display: block; width: 7px; background: var(--ink-40); border-radius: 1px 1px 0 0; }
 .spark i.hot { background: var(--ask); }
 
+/* Today view */
+.today-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 32px; align-items: start; }
+.today-grid h3:first-child { margin-top: 0; }
+.today-row { text-decoration: none; color: var(--ink); }
+@media (max-width: 860px) { .today-grid { grid-template-columns: 1fr; gap: 8px; } }
+
 /* judge sandbox banner */
 .sbx { max-width: 1080px; margin: 12px auto 0; padding: 10px 16px; border-radius: 6px; background: var(--notify-bg);
   color: var(--ink-80); display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: .86rem; }
