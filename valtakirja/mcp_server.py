@@ -17,7 +17,7 @@ from datetime import date
 from mcp.server.mcpserver import MCPServer
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
 
-from . import catalog, service as S
+from . import catalog, service as S, standing
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +62,9 @@ HINTS: dict[str, tuple[str, bool]] = {
     "too_many_candidates": ("Pass fewer candidate product_ids (the best 3-6 per need from search_products).", False),
     "valio_unavailable": ("Valio's live price/stock API failed. Wait a few seconds and retry once; if it fails "
                           "again, tell the buyer and don't order.", True),
+    "standing_not_found": ("Use a standing order id (SO-...) from create_standing_order.", False),
+    "standing_paused": ("The buyer paused this standing order; ask them before ordering it another way.", False),
+    "already_renewed": ("This week is already renewed: call get_order with the order id in the message.", False),
     "invalid_argument": ("Fix the argument named in the message and call the tool again.", False),
     "internal_error": ("Unexpected gateway error. Retry once; if it persists, tell the buyer and stop.", True),
 }
@@ -219,6 +222,45 @@ def get_order(order_id: str) -> dict:
 def get_mandate(mandate_id: str) -> dict:
     """The mandate you act under (spend limits, allergen and claim rules, what needs a human), with its signature."""
     return S.get_mandate(mandate_id)
+
+
+@mcp.tool(title="Create a weekly standing order",
+          annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False,
+                                      open_world_hint=False))
+@_tool
+def create_standing_order(mandate_id: str, agent_id: str, name: str, items: list[standing.StandingItem],
+                          weekday: str = "mon") -> dict:
+    """Save the buyer's recurring weekly order (e.g. milk + butter + cream every Monday). Places no order.
+
+    items: [{product_ids: [...candidates], amount, unit: 'L' | 'KG' | 'SALES_UNIT', label: 'milk'}].
+    weekday: mon..sun, the usual delivery day. Renew it each week with renew_standing_order.
+    """
+    return standing.create(standing.StandingOrderIn(mandate_id=mandate_id, agent_id=agent_id, name=name,
+                                                    items=items, weekday=weekday))
+
+
+@mcp.tool(title="Renew a standing order (with drift check)",
+          annotations=ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False,
+                                      open_world_hint=True))
+@_tool
+def renew_standing_order(standing_id: str, agent_id: str, delivery_date: str | None = None,
+                         amounts: list[float] | None = None) -> dict:
+    """Renew this week's standing order: live quote, drift check against past renewals, then the order.
+
+    amounts: this week's amount per item, in item order, if it differs from the usual (omit for the usual).
+    The gateway compares with the median of recent renewals: quantity creep, cost or price drift, a different
+    product, new Terminal or reliability issues. Any drift puts the order on hold for a human (pending_approval);
+    tell the buyer drift.summary and share order.approval_url. delivery_date defaults to the next delivery day.
+    """
+    return standing.renew(standing_id, _date(delivery_date) if delivery_date else None, agent_id=agent_id,
+                          amounts=amounts)
+
+
+@mcp.tool(title="Standing order, history and drift baseline", annotations=READ_LOCAL)
+@_tool
+def get_standing_order(standing_id: str) -> dict:
+    """A standing order with its renewals (newest first, simulated ones marked) and the drift baseline."""
+    return standing.get(standing_id)
 
 
 # --- resources --------------------------------------------------------------
