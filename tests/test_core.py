@@ -180,3 +180,9 @@ def _signing_key(tmp_path, monkeypatch):
     signing._key.cache_clear()
     yield
     signing._key.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _offline_catalog(monkeypatch):
+    """Tests never touch data/ (CI has no Valio data files); individual tests override this."""
+    monkeypatch.setattr(catalog, "get", lambda pid: product(id=pid))
