@@ -72,8 +72,8 @@ Valkey is an optimisation for a shared limit, never a dependency of a quote:
    its Service URI.
 2. Set `SOUS_VALKEY_URL` and `SOUS_DEPLOYMENT_ROLE` in each server's `.env`, and the GitHub secret
    `VALKEY_URL` (`gh secret set VALKEY_URL -R Zawaer/sous`); CI's `eval` and `llm-eval` jobs map it to
-   `SOUS_VALKEY_URL` with role `ci`. On CRACI those jobs' deny-all egress policy allows TCP to
-   `*.aivencloud.com` (Aiven ports differ per service) in addition to Valio and the model APIs.
+   `SOUS_VALKEY_URL` with role `ci`. On CRACI those jobs' deny-all egress policy allows TLS to
+   `*.aivencloud.com` on the service's port (23770 for ours; Aiven ports differ per service) in addition to Valio and the model APIs.
 3. Check: `curl -s https://<gateway>/health | jq .valio_aimo.shared_budget`, or
    `uv run python -m scripts.valio_budget`:
 

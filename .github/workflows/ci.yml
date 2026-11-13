@@ -235,9 +235,10 @@ jobs:
               - tls:
                   serverNamePatterns: [junction26.valioaimo.fi]
                   ports: [443]
-              # Aiven for Valkey (shared Valio budget). Service ports are per service, so any port on Aiven hosts.
-              - tcp:
-                  hostPatterns: ["*.aivencloud.com"]
+              # Aiven for Valkey (shared Valio budget, rediss://). The port is our service's, from its Service URI.
+              - tls:
+                  serverNamePatterns: ["*.aivencloud.com"]
+                  ports: [23770]
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check prerequisites
         id: pre
@@ -313,9 +314,10 @@ jobs:
                   serverNamePatterns: [junction26.valioaimo.fi, generativelanguage.googleapis.com, inference.verda.com,
                                        integrate.api.nvidia.com]
                   ports: [443]
-              # Aiven for Valkey (shared Valio budget). Service ports are per service, so any port on Aiven hosts.
-              - tcp:
-                  hostPatterns: ["*.aivencloud.com"]
+              # Aiven for Valkey (shared Valio budget, rediss://). The port is our service's, from its Service URI.
+              - tls:
+                  serverNamePatterns: ["*.aivencloud.com"]
+                  ports: [23770]
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0   # to see what a push changed
