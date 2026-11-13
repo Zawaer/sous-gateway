@@ -8,6 +8,7 @@ written to the audit log.
 from __future__ import annotations
 
 import secrets
+import threading
 from datetime import date, datetime
 from typing import Literal
 
@@ -31,12 +32,20 @@ def _now() -> datetime:
     return datetime.now(config.TZ)
 
 
+# The gateway runs as one process: this lock makes "check idempotency key, claim quote, sum today's spend,
+# evaluate, store the order" and "check pending, decide, store" atomic, so concurrent requests can't double
+# order, overrun the daily limit or both approve and reject the same order.
+_order_lock = threading.RLock()
+
+
 def _mandate(mandate_id: str) -> Mandate:
     m = store.get_mandate(mandate_id)
     if not m:
         raise GatewayError("mandate_not_found", f"No mandate {mandate_id}.", 404)
-    m.pop("_jws", None)
-    return Mandate(**m)
+    payload = signing.verify(m.pop("_jws", None) or "", "valtakirja-mandate+jws")
+    if payload is None or payload.get("id") != mandate_id:
+        raise GatewayError("mandate_signature", f"Mandate {mandate_id}'s signature does not verify.", 409)
+    return Mandate(**payload)  # the signed mandate, not the stored copy
 
 
 # --- mandates ---------------------------------------------------------------
@@ -58,10 +67,11 @@ def get_mandate(mandate_id: str) -> dict:
 
 
 def revoke_mandate(mandate_id: str, by: str) -> dict:
-    m = _mandate(mandate_id)
-    m.revoked = True
-    data = m.model_dump(mode="json")
-    store.put_mandate(data, signing.sign(data, "valtakirja-mandate+jws"))
+    with _order_lock:  # an order being placed or approved right now sees the mandate before or after, not both
+        m = _mandate(mandate_id)
+        m.revoked = True
+        data = m.model_dump(mode="json")
+        store.put_mandate(data, signing.sign(data, "valtakirja-mandate+jws"))
     store.audit("mandate.revoked", by, "human", m.id, m.buyer, {})
     return data
 
@@ -122,7 +132,8 @@ def _request_quote(req: QuoteRequest) -> dict:
         unit = None if item.unit == "SALES_UNIT" else item.unit
         offers, now = Q.offers(item.product_ids, req.delivery_date, item.amount, unit)
         if not offers:
-            gaps.append({"item": item.model_dump(), "uncovered": item.amount, "reason": "No such product ids."})
+            gaps.append({"item": item.model_dump(), "uncovered": item.amount, "unit": item.unit,
+                         "reason": "No such product ids."})
             continue
         chosen, uncovered = Q.plan(item.amount, unit, offers) if len(offers) > 1 else (
             [offers[0]] if offers[0]["orderable"] else [], 0.0 if offers[0]["orderable"] else item.amount)
@@ -175,11 +186,13 @@ def _request_quote(req: QuoteRequest) -> dict:
 
 
 def _evaluate(mandate: Mandate, agent_id: str, q: dict, now: datetime):
-    uncovered = sum(g["uncovered"] for g in q["uncovered"])
-    unit = q["uncovered"][0].get("unit") if q["uncovered"] else None
+    uncovered: dict[str, float] = {}  # per unit: litres and kilos don't add up
+    for g in q["uncovered"]:
+        u = g.get("unit") or (g.get("item") or {}).get("unit") or "SALES_UNIT"
+        uncovered[u] = uncovered.get(u, 0.0) + g["uncovered"]
     subs = {l["product_id"]: l["substitute_for"] for l in q["lines"] if l.get("substitute_for")}
     return evaluate(mandate, agent_id, q["lines"], requested_date=date.fromisoformat(q["requested_delivery_date"]),
-                    substitute_for=subs, uncovered=uncovered, need_unit=unit,
+                    substitute_for=subs, uncovered=uncovered,
                     spent_today_eur=store.spent_today(mandate.id, now.date().isoformat()), now=now)
 
 
@@ -196,18 +209,34 @@ def _refresh_cutoffs(q: dict, now: datetime) -> None:
 # --- orders -----------------------------------------------------------------
 
 def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: str | None = None) -> dict:
+    with _order_lock:
+        order, mandate = _place_order(agent_id, mandate_id, quote_id, idempotency_key)
+    if mandate is not None and order["decision"]["outcome"] in ("notify", "ask"):
+        notify.send(f"order.{order['decision']['outcome']}", order, mandate)  # FYI / approval request; never blocks
+    return order
+
+
+def _place_order(agent_id: str, mandate_id: str, quote_id: str,
+                 idempotency_key: str | None) -> tuple[dict, Mandate | None]:
     if idempotency_key and (prev := store.order_by_idempotency_key(idempotency_key)):
         if prev["agent_id"] != agent_id or prev["mandate_id"] != mandate_id or prev["quote_id"] != quote_id:
             raise GatewayError("idempotency_key_reused",
                                "This idempotency key was already used for a different order; use a fresh key.", 409)
-        return prev
+        return prev, None
     mandate = _mandate(mandate_id)
-    q = store.get_quote(quote_id)
-    if not q:
+    row = store.get_quote(quote_id)
+    if not row:
         raise GatewayError("quote_not_found", f"No quote {quote_id}.", 404)
-    if not signing.verify(q.pop("_jws")):
+    # Everything below works from the signed payload, never from the stored copy.
+    q = signing.verify(row["_jws"], "valtakirja-quote+jws")
+    if q is None or q.get("id") != quote_id:
         raise GatewayError("quote_signature", "Quote signature does not verify.", 409)
-    if q.pop("_order_id"):
+    if q.get("agent_id") != agent_id or (q.get("mandate_id") and q["mandate_id"] != mandate_id):
+        raise GatewayError("quote_mismatch",
+                           f"Quote {quote_id} was issued to agent '{q.get('agent_id')}'"
+                           + (f" for mandate {q['mandate_id']}" if q.get("mandate_id") else "")
+                           + "; ask for a quote of your own.", 409)
+    if row["_order_id"]:
         raise GatewayError("quote_used", f"Quote {quote_id} was already used for an order.", 409)
     now = _now()
     if now > datetime.fromisoformat(q["expires_at"]):
@@ -218,15 +247,14 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
     outcome, findings = _evaluate(mandate, agent_id, q, now)
     status = {"silent": "ordered", "notify": "ordered", "ask": "pending_approval", "block": "refused"}[outcome]
     oid = _id("PO")
-    if not store.claim_quote(quote_id, oid):
-        raise GatewayError("quote_used", f"Quote {quote_id} was already used for an order.", 409)
     order = {
         "id": oid, "quote_id": quote_id, "mandate_id": mandate.id, "agent_id": agent_id, "buyer": mandate.buyer,
         "status": status, "total_ex_vat": q["total_ex_vat"], "total_inc_vat": q["total_inc_vat"],
         "delivery_date": max((l["delivery_date"] for l in q["lines"] if l.get("delivery_date")),
                              default=q["requested_delivery_date"]),
-        "lines": [{k: l[k] for k in ("product_id", "name", "quantity", "sales_unit", "unit_price_ex_vat",
-                                     "line_total_ex_vat", "delivery_date", "logistic_model", "order_cutoff")}
+        "requested_delivery_date": q["requested_delivery_date"],
+        "lines": [{k: l.get(k) for k in ("product_id", "name", "quantity", "sales_unit", "unit_price_ex_vat",
+                                         "line_total_ex_vat", "delivery_date", "logistic_model", "order_cutoff")}
                   for l in q["lines"]],
         "decision": {"outcome": outcome, "findings": [f.model_dump() for f in findings], "by": "mandate-engine",
                      "at": now.isoformat(timespec="milliseconds")},
@@ -237,14 +265,23 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
         "created_at": now.isoformat(timespec="milliseconds"), "updated_at": now.isoformat(timespec="milliseconds"),
     }
     order["receipt_jws"] = _receipt(order)
-    store.put_order(order)
+    # Claim the quote and store the order together: if storing fails, the quote is released again.
+    if not store.claim_quote(quote_id, oid):
+        raise GatewayError("quote_used", f"Quote {quote_id} was already used for an order.", 409)
+    try:
+        store.insert_order(order)
+    except store.Conflict:
+        store.release_quote(quote_id, oid)
+        raise GatewayError("idempotency_key_reused",
+                           "This idempotency key is already taken by another order; use a fresh key.", 409)
+    except Exception:
+        store.release_quote(quote_id, oid)
+        raise
     store.audit(f"order.{status}", "mandate-engine", "system", oid, mandate.buyer,
                 {"order_id": oid, "quote_id": quote_id, "agent_id": agent_id, "outcome": outcome,
                  "total_ex_vat": q["total_ex_vat"],
                  "fired": [f.model_dump() for f in findings if f.outcome != "silent"] or [findings[-1].model_dump()]})
-    if outcome in ("notify", "ask"):
-        notify.send(f"order.{outcome}", order, mandate)  # FYI / approval request; never blocks the order
-    return order
+    return order, mandate
 
 
 def _receipt(order: dict) -> str:
@@ -255,6 +292,31 @@ def _receipt(order: dict) -> str:
 
 
 def decide(order_id: str, approver: str, approve: bool, note: str | None = None) -> dict:
+    with _order_lock:
+        o, mandate = _decide(order_id, approver, approve, note)
+    notify.send("order.decided", o, mandate)  # FYI to the agent side
+    return o
+
+
+def _approval_blocker(o: dict, mandate: Mandate, now: datetime) -> tuple[str, str] | None:
+    """Why an approval can no longer become an order: (status, reason), or None if it still can."""
+    if mandate.revoked:
+        return "refused", "Mandate was revoked before approval."
+    if mandate.valid_until and now > mandate.valid_until:
+        return "refused", f"Mandate {mandate.id} expired on {mandate.valid_until:%d.%m.%Y}, before approval."
+    for l in o["lines"]:
+        if l.get("order_cutoff") and datetime.fromisoformat(l["order_cutoff"]) <= now:
+            return "expired", f"Approved too late: the order cut-off for {l['name']} ({l['order_cutoff']}) has passed."
+    today = now.astimezone(config.TZ).date()
+    days = [l["delivery_date"] for l in o["lines"] if l.get("delivery_date")]
+    days += [d for d in (o.get("requested_delivery_date"), o.get("delivery_date")) if d]
+    for d in sorted(set(days)):
+        if date.fromisoformat(d) < today:
+            return "expired", f"Approved too late: the delivery date {d} has already passed."
+    return None
+
+
+def _decide(order_id: str, approver: str, approve: bool, note: str | None) -> tuple[dict, Mandate]:
     o = store.get_order(order_id)
     if not o:
         raise GatewayError("order_not_found", f"No order {order_id}.", 404)
@@ -264,24 +326,22 @@ def decide(order_id: str, approver: str, approve: bool, note: str | None = None)
     mandate = _mandate(o["mandate_id"])
     status = "ordered" if approve else "rejected"
     reason = note
-    if approve:
-        if mandate.revoked:
-            status, reason = "refused", "Mandate was revoked before approval."
-        for l in o["lines"]:
-            if l.get("order_cutoff") and datetime.fromisoformat(l["order_cutoff"]) <= now:
-                status = "expired"
-                reason = f"Approved too late: the order cut-off for {l['name']} ({l['order_cutoff']}) has passed."
+    if approve and (blocked := _approval_blocker(o, mandate, now)):
+        status, reason = blocked
     o["status"] = status
     o["approval"] = {"by": approver, "approved": approve, "note": note, "at": now.isoformat(timespec="milliseconds"),
                      "result_reason": reason}
     o["updated_at"] = now.isoformat(timespec="milliseconds")
     o["approval_url"] = None
     o["receipt_jws"] = _receipt(o)
-    store.put_order(o)
+    # Conditional on the order still being pending, so a concurrent decision is never overwritten.
+    if not store.update_order(o, expected_status="pending_approval"):
+        current = store.get_order(order_id) or {}
+        raise GatewayError("not_pending",
+                           f"Order {order_id} is {current.get('status')}, not waiting for approval.", 409)
     store.audit("order.approved" if approve else "order.rejected_by_human", approver, "human", order_id,
                 o["buyer"], {"order_id": order_id, "note": note, "resulting_status": status, "reason": reason})
-    notify.send("order.decided", o, mandate)  # FYI to the agent side
-    return o
+    return o, mandate
 
 
 def get_order(order_id: str) -> dict:

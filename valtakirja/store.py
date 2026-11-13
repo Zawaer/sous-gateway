@@ -30,6 +30,10 @@ from .signing import canonical
 _lock = threading.RLock()
 _conn = None
 
+
+class Conflict(Exception):
+    """A unique key (order id, idempotency key) is already taken."""
+
 SQLITE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS mandate (
   id TEXT PRIMARY KEY, data TEXT NOT NULL, jws TEXT NOT NULL, created_at TEXT NOT NULL);
@@ -83,9 +87,10 @@ def db():
             _conn = pymysql.connect(
                 host=u.hostname, port=u.port or 3306, user=unquote(u.username or ""),
                 password=unquote(u.password or ""), database=u.path.lstrip("/"), charset="utf8mb4",
-                autocommit=True, cursorclass=pymysql.cursors.DictCursor)
+                autocommit=True, cursorclass=pymysql.cursors.DictCursor,
+                # re-applied by pymysql on every (re)connect, so ping(reconnect=True) keeps UTC
+                init_command="SET time_zone = '+00:00'")
             with _conn.cursor() as c:
-                c.execute("SET time_zone = '+00:00'")
                 for stmt in MARIADB_SCHEMA:
                     c.execute(stmt)
         else:
@@ -241,16 +246,47 @@ def claim_quote(qid: str, order_id: str) -> bool:
     return n == 1
 
 
+def release_quote(qid: str, order_id: str) -> None:
+    """Undo claim_quote when the order could not be stored."""
+    _exec("UPDATE quote SET order_id = NULL WHERE id = ? AND order_id = ?", (qid, order_id))
+
+
 # --- orders -----------------------------------------------------------------
 
 ORDER_COLS = ["id", "quote_id", "mandate_id", "agent_id", "status", "total_ex_vat", "data",
               "idempotency_key", "created_at", "updated_at"]
 
 
+def _order_row(o: dict) -> tuple:
+    return (o["id"], o["quote_id"], o["mandate_id"], o["agent_id"], o["status"], o["total_ex_vat"],
+            json.dumps(o, ensure_ascii=False), o.get("idempotency_key"), o["created_at"], o["updated_at"])
+
+
+def insert_order(o: dict) -> None:
+    """Store a NEW order. A clash on the id or idempotency key raises Conflict instead of overwriting."""
+    try:
+        _exec(f"INSERT INTO purchase_order ({','.join(ORDER_COLS)}) VALUES ({','.join('?' * len(ORDER_COLS))})",
+              _order_row(o))
+    except Exception as e:  # sqlite3.IntegrityError / pymysql.err.IntegrityError
+        if type(e).__name__ == "IntegrityError":
+            raise Conflict(str(e)) from e
+        raise
+
+
+def update_order(o: dict, expected_status: str | None = None) -> bool:
+    """Write an order's new state; with `expected_status`, only if it still has that status (False otherwise)."""
+    sql = "UPDATE purchase_order SET status = ?, total_ex_vat = ?, data = ?, updated_at = ? WHERE id = ?"
+    args = [o["status"], o["total_ex_vat"], json.dumps(o, ensure_ascii=False), o["updated_at"], o["id"]]
+    if expected_status is not None:
+        sql += " AND status = ?"
+        args.append(expected_status)
+    _, n, _ = _exec(sql, args)
+    return n == 1
+
+
 def put_order(o: dict) -> None:
-    _upsert("purchase_order", ORDER_COLS,
-            (o["id"], o["quote_id"], o["mandate_id"], o["agent_id"], o["status"], o["total_ex_vat"],
-             json.dumps(o, ensure_ascii=False), o.get("idempotency_key"), o["created_at"], o["updated_at"]))
+    """Insert or update an order by id (UPDATE in place on MariaDB, so versioning keeps history)."""
+    _upsert("purchase_order", ORDER_COLS, _order_row(o))
 
 
 def get_order(oid: str) -> dict | None:

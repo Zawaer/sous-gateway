@@ -11,9 +11,9 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from . import catalog
+from . import catalog, config
 
 # Four tiers, from least to most human involvement:
 #   silent: routine, the order goes through and is logged
@@ -45,6 +45,12 @@ class Mandate(BaseModel):
     later_delivery: Literal["notify", "ask", "block"] = "ask"
     max_comparison_price_eur: dict[str, float] = Field(default_factory=dict, description="e.g. {'L': 2.5}")
 
+    @field_validator("valid_until")
+    @classmethod
+    def _aware(cls, v: datetime | None) -> datetime | None:
+        """A valid_until without an offset is Helsinki local time (comparing naive and aware datetimes fails)."""
+        return v.replace(tzinfo=config.TZ) if v is not None and v.tzinfo is None else v
+
 
 class Finding(BaseModel):
     rule: str
@@ -63,7 +69,7 @@ def evaluate(
     *,
     requested_date: date,
     substitute_for: dict[str, str] | None = None,
-    uncovered: float = 0.0,
+    uncovered: float | dict[str, float] = 0.0,
     need_unit: str | None = None,
     spent_today_eur: float = 0.0,
     now: datetime,
@@ -97,9 +103,16 @@ def evaluate(
         add("spend.daily_limit", "ask",
             f"With this order, today's spend would be €{spent_today_eur + total:,.2f}, "
             f"above the daily limit of €{mandate.daily_limit_eur:,.2f}.")
-    if uncovered > 0:
+    # `uncovered` is either one amount in `need_unit`, or {unit: amount} when items use different units.
+    missing: dict[str, float] = {}
+    for u, a in (uncovered if isinstance(uncovered, dict) else {need_unit: uncovered}).items():
+        if a and a > 0:
+            u = "units" if u in (None, "SALES_UNIT") else u
+            missing[u] = round(missing.get(u, 0.0) + a, 3)
+    if missing:
         add("need.partial", "ask",
-            f"Only part of the need can be covered: {uncovered:g} {need_unit or 'units'} is still missing.")
+            "Only part of the need can be covered: "
+            f"{' and '.join(f'{a:g} {u}' for u, a in missing.items())} still missing.")
 
     subs = substitute_for or {}
     for l in lines:

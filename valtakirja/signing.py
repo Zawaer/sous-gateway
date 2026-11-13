@@ -62,14 +62,16 @@ def sign(payload: dict, typ: str) -> str:
     return f"{signing_input}.{_b64(_key().sign(signing_input.encode()))}"
 
 
-def verify(token: str) -> dict | None:
-    """Payload if the signature is ours and valid, else None."""
+def verify(token: str, typ: str | None = None) -> dict | None:
+    """Payload if the signature is ours and valid (and the header typ is `typ`, when given), else None."""
     try:
         h, p, s = token.split(".")
         header = json.loads(_unb64(h))
         if header.get("alg") != "EdDSA" or header.get("kid") != kid():
             return None
+        if typ is not None and header.get("typ") != typ:
+            return None
         _key().public_key().verify(_unb64(s), f"{h}.{p}".encode())
         return json.loads(_unb64(p))
-    except (ValueError, InvalidSignature):
+    except (ValueError, TypeError, AttributeError, InvalidSignature):
         return None

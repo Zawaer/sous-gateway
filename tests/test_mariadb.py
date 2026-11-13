@@ -51,3 +51,20 @@ def test_audit_tamper_seen_by_versioning(maria):
     store._exec("UPDATE audit_event SET actor = 'x' WHERE seq = 2")
     r = store.verify_chain()
     assert not r["ok"] and r["system_versioning"]["seqs"] == [2]
+
+
+def test_reconnect_keeps_utc_session_time_zone(maria):
+    store._exec("SELECT 1")
+    store._conn.close()  # e.g. wait_timeout dropped the connection; ping(reconnect=True) opens a new one
+    assert store._exec("SELECT @@session.time_zone AS tz")[0][0]["tz"] == "+00:00"
+
+
+def test_new_order_insert_never_overwrites(maria):
+    o = {"id": "PO-1", "quote_id": "Q-1", "mandate_id": "M1", "agent_id": "a", "status": "pending_approval",
+         "total_ex_vat": 10.0, "idempotency_key": "k1", "created_at": store.now_iso(), "updated_at": store.now_iso()}
+    store.insert_order(o)
+    with pytest.raises(store.Conflict):
+        store.insert_order({**o, "id": "PO-2", "status": "ordered"})
+    assert store.get_order("PO-1")["status"] == "pending_approval" and store.get_order("PO-2") is None
+    assert store.update_order({**o, "status": "ordered"}, expected_status="pending_approval")
+    assert not store.update_order({**o, "status": "rejected"}, expected_status="pending_approval")
