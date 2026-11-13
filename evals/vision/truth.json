@@ -1,0 +1,440 @@
+{
+ "today": "2026-11-13",
+ "cases": [
+  {
+   "file": "images/01_order_handwritten_fi.jpg",
+   "dishes": [],
+   "must_skip": [],
+   "must_flag": [],
+   "kind": "order_list",
+   "delivery_date": "2026-11-16",
+   "items": [
+    {
+     "name_fi": "maito laktoositon",
+     "terms": [
+      "maito",
+      "milk"
+     ],
+     "quantity": 40,
+     "unit": "l"
+    },
+    {
+     "name_fi": "voi",
+     "terms": [
+      "voi",
+      "butter"
+     ],
+     "quantity": 5,
+     "unit": "kg"
+    },
+    {
+     "name_fi": "kerma",
+     "terms": [
+      "kerma",
+      "cream"
+     ],
+     "quantity": 10,
+     "unit": "l"
+    },
+    {
+     "name_fi": "kananmuna",
+     "terms": [
+      "kananmun",
+      "muna",
+      "egg"
+     ],
+     "quantity": 360,
+     "unit": "kpl"
+    },
+    {
+     "name_fi": "peruna",
+     "terms": [
+      "peruna",
+      "potato"
+     ],
+     "quantity": 25,
+     "unit": "kg"
+    },
+    {
+     "name_fi": "jauheliha",
+     "terms": [
+      "jauheliha",
+      "mince",
+      "minced",
+      "ground"
+     ],
+     "quantity": 12,
+     "unit": "kg"
+    },
+    {
+     "name_fi": "tomaattimurska",
+     "terms": [
+      "tomaatti",
+      "tomato"
+     ],
+     "quantity": 6,
+     "unit": "kg"
+    }
+   ]
+  },
+  {
+   "file": "images/02_order_abbrev_fi.jpg",
+   "dishes": [],
+   "must_skip": [
+    [
+     "jogurt",
+     "yogh",
+     "yogurt"
+    ]
+   ],
+   "must_flag": [
+    [
+     "juust",
+     "chees"
+    ]
+   ],
+   "kind": "order_list",
+   "delivery_date": null,
+   "items": [
+    {
+     "name_fi": "kevytmaito",
+     "terms": [
+      "maito",
+      "milk"
+     ],
+     "quantity": 6,
+     "unit": "ltk"
+    },
+    {
+     "name_fi": "appelsiinimehu",
+     "terms": [
+      "appelsiin",
+      "orange"
+     ],
+     "quantity": 12,
+     "unit": "plo"
+    },
+    {
+     "name_fi": "kahvi",
+     "terms": [
+      "kahvi",
+      "coffee"
+     ],
+     "quantity": 8,
+     "unit": "pkt"
+    },
+    {
+     "name_fi": "ruokakerma",
+     "terms": [
+      "kerma",
+      "cream"
+     ],
+     "quantity": 2.5,
+     "unit": "l"
+    },
+    {
+     "name_fi": "ruisleipä",
+     "terms": [
+      "ruisleip",
+      "rye"
+     ],
+     "quantity": 20,
+     "unit": "kpl"
+    },
+    {
+     "name_fi": "sipuli",
+     "terms": [
+      "sipuli",
+      "onion"
+     ],
+     "quantity": 10,
+     "unit": "kg"
+    }
+   ]
+  },
+  {
+   "file": "images/03_order_printed_sv.jpg",
+   "dishes": [],
+   "must_skip": [],
+   "must_flag": [],
+   "kind": "order_list",
+   "delivery_date": "2026-11-17",
+   "items": [
+    {
+     "name_fi": "maito laktoositon",
+     "terms": [
+      "maito",
+      "mjölk",
+      "milk"
+     ],
+     "quantity": 30,
+     "unit": "l"
+    },
+    {
+     "name_fi": "voi",
+     "terms": [
+      "voi",
+      "smör",
+      "butter"
+     ],
+     "quantity": 4,
+     "unit": "kg"
+    },
+    {
+     "name_fi": "kuohukerma",
+     "terms": [
+      "kerma",
+      "grädde",
+      "cream"
+     ],
+     "quantity": 5,
+     "unit": "l"
+    },
+    {
+     "name_fi": "kananmuna",
+     "terms": [
+      "muna",
+      "ägg",
+      "egg"
+     ],
+     "quantity": 180,
+     "unit": "kpl"
+    },
+    {
+     "name_fi": "peruna",
+     "terms": [
+      "peruna",
+      "potatis",
+      "potato"
+     ],
+     "quantity": 20,
+     "unit": "kg"
+    }
+   ]
+  },
+  {
+   "file": "images/04_order_handwritten_en.jpg",
+   "dishes": [],
+   "must_skip": [],
+   "must_flag": [],
+   "kind": "order_list",
+   "delivery_date": "2026-11-16",
+   "items": [
+    {
+     "name_fi": "maito laktoositon",
+     "terms": [
+      "maito",
+      "milk"
+     ],
+     "quantity": 1000,
+     "unit": "l"
+    },
+    {
+     "name_fi": "voi",
+     "terms": [
+      "voi",
+      "butter"
+     ],
+     "quantity": 2.5,
+     "unit": "kg"
+    },
+    {
+     "name_fi": "kananmuna",
+     "terms": [
+      "muna",
+      "egg"
+     ],
+     "quantity": 90,
+     "unit": "kpl"
+    },
+    {
+     "name_fi": "kuohukerma",
+     "terms": [
+      "kerma",
+      "cream"
+     ],
+     "quantity": 6,
+     "unit": "l"
+    }
+   ]
+  },
+  {
+   "file": "images/05_menu_printed_fi.jpg",
+   "dishes": [
+    {
+     "name": "Lohikeitto",
+     "terms": [
+      "lohikeit",
+      "salmon"
+     ],
+     "portions": 80
+    },
+    {
+     "name": "Lasagne",
+     "terms": [
+      "lasagn"
+     ],
+     "portions": 120
+    },
+    {
+     "name": "Karjalanpaisti",
+     "terms": [
+      "karjalan",
+      "karelian"
+     ],
+     "portions": 100
+    }
+   ],
+   "must_skip": [],
+   "must_flag": [],
+   "kind": "menu",
+   "delivery_date": "2026-11-16",
+   "items": []
+  },
+  {
+   "file": "images/06_menu_handwritten_fi.jpg",
+   "dishes": [
+    {
+     "name": "Kasvissosekeitto",
+     "terms": [
+      "kasvissose",
+      "vegetable"
+     ],
+     "portions": 60
+    },
+    {
+     "name": "Joulukinkku",
+     "terms": [
+      "kinkku",
+      "ham"
+     ],
+     "portions": 60
+    },
+    {
+     "name": "Rosolli",
+     "terms": [
+      "rosol",
+      "beet"
+     ],
+     "portions": 60
+    }
+   ],
+   "must_skip": [],
+   "must_flag": [],
+   "kind": "menu",
+   "delivery_date": "2026-11-21",
+   "items": []
+  },
+  {
+   "file": "images/07_delivery_note_printed_fi.jpg",
+   "dishes": [],
+   "must_skip": [],
+   "must_flag": [],
+   "kind": "delivery_note",
+   "delivery_date": "2026-11-13",
+   "items": [
+    {
+     "name_fi": "maito laktoositon",
+     "terms": [
+      "maito",
+      "milk"
+     ],
+     "quantity": 40,
+     "unit": "l",
+     "delivered_quantity": 24
+    },
+    {
+     "name_fi": "voi",
+     "terms": [
+      "voi",
+      "butter"
+     ],
+     "quantity": 5,
+     "unit": "kg",
+     "delivered_quantity": 5
+    },
+    {
+     "name_fi": "kuohukerma",
+     "terms": [
+      "kerma",
+      "cream"
+     ],
+     "quantity": 10,
+     "unit": "l",
+     "delivered_quantity": 6
+    },
+    {
+     "name_fi": "kananmuna",
+     "terms": [
+      "muna",
+      "egg"
+     ],
+     "quantity": 360,
+     "unit": "kpl",
+     "delivered_quantity": 360
+    },
+    {
+     "name_fi": "peruna",
+     "terms": [
+      "peruna",
+      "potato"
+     ],
+     "quantity": 25,
+     "unit": "kg",
+     "delivered_quantity": 0
+    }
+   ]
+  },
+  {
+   "file": "images/08_delivery_note_photo.jpg",
+   "dishes": [],
+   "must_skip": [],
+   "must_flag": [],
+   "kind": "delivery_note",
+   "delivery_date": "2026-11-16",
+   "items": [
+    {
+     "name_fi": "jauheliha",
+     "terms": [
+      "jauheliha",
+      "mince",
+      "minced"
+     ],
+     "quantity": 12,
+     "unit": "kg",
+     "delivered_quantity": 8
+    },
+    {
+     "name_fi": "tomaattimurska",
+     "terms": [
+      "tomaatti",
+      "tomato"
+     ],
+     "quantity": 6,
+     "unit": "kg",
+     "delivered_quantity": 6
+    },
+    {
+     "name_fi": "sipuli",
+     "terms": [
+      "sipuli",
+      "onion"
+     ],
+     "quantity": 10,
+     "unit": "kg",
+     "delivered_quantity": 10
+    },
+    {
+     "name_fi": "ruokakerma",
+     "terms": [
+      "kerma",
+      "cream"
+     ],
+     "quantity": 5,
+     "unit": "l",
+     "delivered_quantity": 2
+    }
+   ]
+  }
+ ]
+}
