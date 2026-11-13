@@ -15,8 +15,8 @@ docker ────────► smoke
 | `test` | `uv sync --frozen` + `pytest` against a MariaDB 11.4 service (system-versioned tables). uv cache keyed on `uv.lock`. | 4 | default (observe: all presets, unmatched allowed) |
 | `docker` | Builds the [Dockerfile](../Dockerfile) with buildx (layer cache in the Actions cache), writes a CycloneDX SBOM with syft, scans it with grype, fails only on **critical vulnerabilities that have a fix**. Uploads `sbom-and-vulns` (SBOM, grype JSON, TSV) and the image. Severity table in the job summary. | 8 | default (observe) |
 | `smoke` | Loads that image and starts the real [compose.yaml](../compose.yaml) (MariaDB + gateway) with the override [tests/fixtures/compose.smoke.yaml](../tests/fixtures/compose.smoke.yaml): a 20-product fixture catalog instead of Valio's data, no API key. [tests/fixtures/smoke.sh](../tests/fixtures/smoke.sh) checks `/health` (storage = mariadb), `/docs`, `/openapi.json`, `/.well-known/jwks.json` (Ed25519 key), a catalog search, and MCP `initialize` + `tools/list` at `/mcp/`. | 2 (default) | **deny**, only `dockerhub` |
-| `eval` | Runs `scripts/eval.py` (the scripted buyer requests in `evals/cases.yaml`) against the live Valio Aimo API and uploads `evals/results.json` as `eval-results`. Skips itself (with a notice) when the `VALIO_AIMO_API_KEY` secret or `scripts/eval.py` is missing. Never runs on pull requests. Valio data files are cached between runs. | 2 (default) | **deny**, only `pypi` + `junction26.valioaimo.fi:443` |
-| `llm-eval` | Runs the same cases' natural-language requests through the LLM buyer agent (`agent/`, `scripts/llm_eval.py`), once per model in `LLM_EVAL_MODELS` (default `gemini:gemini-4-hydrogen verda:kimi-k3-1-pro verda:deepseek-4-1-flash-1017`; repo variable overrides). Uploads `evals/llm_results.*.json` + `docs/LLM_EVAL.md` as `llm-eval-results` and puts the comparison table in the job summary. Skips with a notice when the Valio key or both model keys are missing, and on pushes that don't touch the agent, its tools or the cases. Fails only if an auto-approved order violates its mandate. See [LLM_EVAL.md](LLM_EVAL.md). | 2 (default) | **deny**, only `pypi` + `junction26.valioaimo.fi`, `generativelanguage.googleapis.com`, `inference.verda.com` (443) |
+| `eval` | Runs `scripts/eval.py` (the scripted buyer requests in `evals/cases.yaml`) against the live Valio Aimo API and uploads `evals/results.json` as `eval-results`. Skips itself (with a notice) when the `VALIO_AIMO_API_KEY` secret or `scripts/eval.py` is missing. Never runs on pull requests. Valio data files are cached between runs. | 2 (default) | **deny**, only `pypi` + `junction26.valioaimo.fi:443` + Aiven Valkey (`*.aivencloud.com`, TCP) |
+| `llm-eval` | Runs the same cases' natural-language requests through the LLM buyer agent (`agent/`, `scripts/llm_eval.py`), once per model in `LLM_EVAL_MODELS` (default `gemini:gemini-4-hydrogen verda:kimi-k3-1-pro verda:deepseek-4-1-flash-1017`; repo variable overrides). Uploads `evals/llm_results.*.json` + `docs/LLM_EVAL.md` as `llm-eval-results` and puts the comparison table in the job summary. Skips with a notice when the Valio key or both model keys are missing, and on pushes that don't touch the agent, its tools or the cases. Fails only if an auto-approved order violates its mandate. See [LLM_EVAL.md](LLM_EVAL.md). | 2 (default) | **deny**, only `pypi` + `junction26.valioaimo.fi`, `generativelanguage.googleapis.com`, `inference.verda.com` (443) + Aiven Valkey (`*.aivencloud.com`, TCP) |
 
 All actions are pinned to full commit SHAs (version in a comment).
 
@@ -36,6 +36,14 @@ cp -r tests/fixtures/catalog /tmp/vk-smoke && echo "MARIADB_PASSWORD=dev" > .env
 SMOKE_DATA_DIR=/tmp/vk-smoke docker compose -f compose.yaml -f tests/fixtures/compose.smoke.yaml up -d --no-build
 EXPECT_STORAGE=mariadb tests/fixtures/smoke.sh
 ```
+
+### Shared Valio budget (Aiven for Valkey)
+
+`eval` and `llm-eval` get `SOUS_VALKEY_URL` from the `VALKEY_URL` secret and run as
+`SOUS_DEPLOYMENT_ROLE=ci`, so their Valio calls count against the same budget as prod and staging and
+stop at half of it ([AIVEN.md](AIVEN.md)). `scripts/valio_budget.py` prints the shared budget
+(backend, usage by role; never the URL) before/after the eval and into the job summary. Without the
+secret the jobs use per-process limits as before.
 
 ## Switching to CRACI
 

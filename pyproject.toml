@@ -15,10 +15,14 @@ dependencies = [
     "cryptography>=42",
     "pymysql>=1.2.4",
     "pillow>=13.0.0",
+    "redis>=8.1.0",
 ]
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = [
+    "fakeredis>=2.40.0",
+    "pytest>=8",
+]
 
 [build-system]
 requires = ["hatchling"]

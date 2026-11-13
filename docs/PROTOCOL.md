@@ -47,7 +47,7 @@ The same operations are exposed twice, over one service layer (`sous/service.py`
 | Judge sandbox | `POST /sandbox` (no login, per-IP limited), `GET /sandbox/{id}`, `DELETE /sandbox/{id}` (approver); `?sandbox=<id>` on `GET /orders`, `/mandates`, `/audit`, `/notifications`, `/standing-orders` (section 18) | |
 | Public key | `GET /.well-known/jwks.json` | |
 | Allergen codes | `GET /allergens` | resource `sous://allergens` |
-| Health | `GET /health` (Valio call counters, storage backend, whether the approver code is required) | |
+| Health | `GET /health` (Valio call counters, shared Valio budget (section 19), storage backend, whether the approver code is required) | |
 
 REST errors, including schema and HTTP errors, are `{"error": "<code>", "message": "<text>"}` with an HTTP status (plus `retry_after` on `valio_unavailable` when known). MCP tools return `{"error", "message", "hint", "retryable"}` as a tool result with `isError: true` instead of raising; `hint` tells the model what to do next (codes in section 7).
 
@@ -589,3 +589,22 @@ Limits: `SOUS_SANDBOX_PER_IP_HOUR` new sandboxes per client IP per hour (default
 
 **Status and cleanup.** `GET /sandbox/{id}`: `{status: active | expired | deleted, expires_at, quotes_used, quotes_limit, quotes_left, mandates, orders: {total, by_status, recent}}`, no tokens. Expired sandboxes are swept lazily: their mandates are revoked (`mandate.revoked`, `sandbox.expired` in the audit log) and their data hidden; quotes then return `410 sandbox_expired`. `DELETE /sandbox/{id}?by=<name>` (real approver code) ends one early (`sandbox.deleted`). Nothing is removed from the audit log.
 
+## 19. Shared Valio Aimo budget (`/health`)
+
+Every deployment (prod, staging, CI, demos) uses one Valio Aimo API key with undisclosed rate limits. With `SOUS_VALKEY_URL` set they share one call budget, circuit breaker and offer cache in Aiven for Valkey ([AIVEN.md](AIVEN.md)). Nothing changes for agents: an exhausted budget or an open circuit is the same `valio_unavailable` error (503, `retryable: true`, `Retry-After`), and a quote may be served from a copy another deployment fetched.
+
+`GET /health` → `valio_aimo.shared_budget`:
+
+| Field | Meaning |
+|---|---|
+| `backend` | `valkey` when the shared budget is in use, `local` when unset or Valkey is unreachable (per-process budget) |
+| `ok` | `false` only when Valkey is configured but unreachable (the gateway keeps working on local limits) |
+| `configured` | whether `SOUS_VALKEY_URL` is set |
+| `role` | this deployment's `SOUS_DEPLOYMENT_ROLE` |
+| `used_this_minute` | calls in the sliding one-minute window: all deployments (`valkey`) or this process (`local`) |
+| `limit` | `SOUS_VALIO_GLOBAL_CALLS_PER_MIN` (`valkey`) or `SOUS_AIMO_CALLS_PER_MIN` (`local`) |
+| `role_limit`, `by_role` | (`valkey`) the most this role may use of the window; calls per role this minute |
+| `denied`, `shared_cache_hits` | (`valkey`) calls this process refused on the shared budget; offers served from another deployment's fetch |
+| `error` | (`local` while configured) the exception type, never the URL or password |
+
+`valio_aimo.circuit` is `open` when any deployment got a 429 and the pause (Retry-After) has not passed yet.

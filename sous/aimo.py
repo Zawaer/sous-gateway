@@ -15,6 +15,12 @@ deployment, so the client degrades gracefully instead of failing a quote:
   PRICE_STALE_MAX / AVAILABILITY_STALE_MAX old) is returned with
   item["_stale_seconds"] set. quote.build_offer turns that into a DATA_STALE
   warning, which the mandate engine always sends to a human ("ask").
+
+With SOUS_VALKEY_URL set (Aiven for Valkey, sous/shared.py) the budget, the circuit
+breaker and the cache are also shared by every deployment using the key: a global
+per-minute budget with a prod-first cap per role, a 429 anywhere pauses everyone, and
+offers fetched by one deployment serve the others. If Valkey is unreachable the client
+falls back to the per-process behaviour above.
 """
 
 from __future__ import annotations
@@ -28,7 +34,7 @@ from email.utils import parsedate_to_datetime
 
 import httpx
 
-from . import config
+from . import config, shared
 
 PRICE_TTL = 600  # prices change rarely within a session
 AVAILABILITY_TTL = 60  # availability and cut-offs are time-sensitive
@@ -81,7 +87,8 @@ def _prune(calls: list[float], now: float) -> None:
 
 def _take_budget() -> None:
     """Global cap on live Valio Aimo calls per minute (their rate limits are undisclosed); sandbox calls also
-    count against a smaller shared sub-budget (config.SANDBOX_CALLS_PER_MIN)."""
+    count against a smaller shared sub-budget (config.SANDBOX_CALLS_PER_MIN). With SOUS_VALKEY_URL, also the
+    budget shared by every deployment (sous/shared.py)."""
     now = time.time()
     m = meter.get()
     with _lock:
@@ -102,7 +109,22 @@ def _take_budget() -> None:
         _calls.append(now)
         if m is not None:
             _sandbox_calls.append(now)
-            m.live = True
+            was_live, m.live = m.live, True
+    # Then the budget every deployment shares in Valkey (no-op when unset or unreachable). Outside the lock:
+    # it is a network round trip. If it refuses, hand back the local slot this call took.
+    try:
+        shared.take()
+    except shared.OverBudget as e:
+        with _lock:
+            if now in _calls:
+                _calls.remove(now)
+            if m is not None:
+                if now in _sandbox_calls:
+                    _sandbox_calls.remove(now)
+                m.live = was_live
+        raise AimoError(f"The shared budget of live Valio Aimo calls for this minute is used up "
+                        f"({shared.ROLE} may use {e.limit} of {shared.GLOBAL_CALLS_PER_MIN}); retry shortly.",
+                        retry_after=e.retry_after, rate_limited=True) from None
 
 
 _client = httpx.Client(
@@ -130,13 +152,19 @@ def _retry_after(r: httpx.Response) -> float | None:
     return min(max(s, 0.0), MAX_PAUSE)
 
 
-def _open_circuit(seconds: float) -> None:
+def _open_circuit(seconds: float, share: bool = True) -> None:
     global _circuit_until
     with _lock:
         _circuit_until = max(_circuit_until, time.time() + seconds)
+    if share:
+        shared.open_circuit(seconds)  # every other deployment pauses too
 
 
 def _circuit_wait() -> float:
+    """Seconds until calls may go out: this process's pause or one another deployment set in Valkey."""
+    until = shared.circuit_until()
+    if until > _circuit_until:
+        _open_circuit(min(until - time.time(), MAX_PAUSE), share=False)
     return max(0.0, _circuit_until - time.time())
 
 
@@ -227,6 +255,8 @@ def _fetch_shared(kind: str, day: str, chunk: list[str]) -> list[dict]:
         with _lock:
             for item in call.items:
                 _cache[(kind, day, item["productId"])] = (fetched, item)
+        shared.put_offers(kind, day, fetched, call.items,
+                          keep=PRICE_STALE_MAX if kind == "price" else AVAILABILITY_STALE_MAX)
         return call.items
     except Exception as e:
         call.error = e if isinstance(e, AimoError) else AimoError(f"Valio Aimo call failed: {type(e).__name__}")
@@ -251,6 +281,27 @@ def _stale(kind: str, day: str, chunk: list[str], max_age: int, err: AimoError) 
     return out
 
 
+def _from_shared(kind: str, day: str, missing: list[str], ttl: int, out: dict[str, dict]) -> list[str]:
+    """L2: copies another deployment (or this one) put in Valkey. Fresh ones go to `out`; every copy newer
+    than ours goes to L1, so it can also serve as the last-known copy if the live call fails."""
+    found = shared.get_offers(kind, day, missing)
+    if not found:
+        return missing
+    now = time.time()
+    hits = 0
+    with _lock:
+        for pid, (t, item) in found.items():
+            mine = _cache.get((kind, day, pid))
+            if mine is None or mine[0] < t:
+                _cache[(kind, day, pid)] = (t, item)
+            if now - t < ttl:
+                out[pid] = item
+                hits += 1
+        stats["cache_hits"] += hits
+    shared.count_hits(hits)
+    return [pid for pid in missing if pid not in out]
+
+
 def _post(kind: str, requested: date, ids: list[str], ttl: int, stale_max: int) -> dict[str, dict]:
     day = requested.isoformat()
     out: dict[str, dict] = {}
@@ -264,6 +315,8 @@ def _post(kind: str, requested: date, ids: list[str], ttl: int, stale_max: int) 
                 stats["cache_hits"] += 1
             else:
                 missing.append(pid)
+    if missing:
+        missing = _from_shared(kind, day, missing, ttl, out)
     for i in range(0, len(missing), 1000):
         chunk = missing[i : i + 1000]
         try:
@@ -290,12 +343,15 @@ def availability(ids: list[str], requested: date) -> dict[str, dict]:
 
 def health() -> dict:
     """For GET /health: how hard we're using the shared key and whether Valio Aimo is pushing back."""
+    wait = _circuit_wait()  # may ask Valkey: outside the lock
     now = time.time()
     with _lock:
+        local_used = sum(1 for t in _calls if now - t <= 60)
+    budget = shared.health(local_used, config.AIMO_CALLS_PER_MIN)
+    with _lock:
         last = _health["last_429_at"]
-        wait = _circuit_wait()
         return {
-            "calls_last_minute": sum(1 for t in _calls if now - t <= 60),
+            "calls_last_minute": local_used,
             "budget_per_minute": config.AIMO_CALLS_PER_MIN,
             "sandbox_calls_last_minute": sum(1 for t in _sandbox_calls if now - t <= 60),
             "sandbox_budget_per_minute": config.SANDBOX_CALLS_PER_MIN,
@@ -306,6 +362,7 @@ def health() -> dict:
             "server_errors": _health["server_errors"],
             "stale_items_served": _health["stale_served"],
             "coalesced_requests": _health["coalesced"],
+            "shared_budget": budget,
         }
 
 
