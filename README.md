@@ -9,3 +9,5 @@ Status: building (13–15 Nov 2026).
 ## Setup
 1. `cp .env.example .env` and fill in the keys (the Valio Aimo API key is on the Junction platform).
 2. Product data, delivery reliability and carbon CSVs: download via the API (`/api/products/download` etc.) into `data/` (gitignored).
+
+Start here: [HANDOFF.md](HANDOFF.md) (brief for the agent building this).
