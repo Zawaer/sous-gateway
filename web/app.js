@@ -653,6 +653,10 @@ const EVENT_LABEL = {
   "standing.renewed": "Standing order renewed",
   "standing.history_simulated": "Standing order history simulated (demo)",
   "suggestions.offered": "Valio suggestions offered (sponsored)",
+  "agent.credential_issued": "Agent credential issued",
+  "agent.credential_rotated": "Agent credential rotated",
+  "agent.credential_revoked": "Agent credential revoked",
+  "agent.auth_failed": "Agent failed to authenticate",
 };
 const NOTIFY_WHAT = { "order.notify": "FYI to the buyer", "order.ask": "approval request to the buyer",
   "order.decided": "decision to the agent", test: "test" };
@@ -739,6 +743,7 @@ views.mandates = {
         this.key = ""; this.load();
       } catch (e) { toast("Failed: " + e.message, 6000); }
     }));
+    view.querySelectorAll("[data-suggest]").forEach((b) => b.addEventListener("click", () => showSuggestions(b)));
     view.querySelectorAll("[data-sig]").forEach((b) => b.addEventListener("click", async () => {
       const { jws } = await api("/mandates/" + encodeURIComponent(b.dataset.sig));
       const r = await verifyJws(jws);
@@ -746,6 +751,57 @@ views.mandates = {
     }));
   },
 };
+
+// "Valio suggests": Valio Aimo's own commercial offers to this buyer's agent (sponsored, labelled as such),
+// each pre-checked against the mandate. A preview of what the agent receives; nothing is ordered.
+const KIND_LABEL = {
+  cheaper_alternative: "Cheaper alternative", certified_alternative: "Certified alternative",
+  more_reliable_alternative: "More reliable", lower_co2_alternative: "Lower CO₂", seasonal: "Seasonal", new: "New",
+};
+
+function nextMondayISO() {
+  const d = new Date();
+  d.setDate(d.getDate() + (((8 - d.getDay()) % 7) || 7));
+  return d.toISOString().slice(0, 10);
+}
+
+async function showSuggestions(btn) {
+  const out = btn.closest(".card").querySelector(".sugs-out");
+  btn.disabled = true;
+  btn.textContent = "Asking Valio…";
+  try {
+    const r = await api(`/mandates/${encodeURIComponent(btn.dataset.suggest)}/suggestions?` + new URLSearchParams({
+      delivery_date: nextMondayISO(), agent_id: btn.dataset.agent, limit: "4" }));
+    const calls = r.valio_api_calls ? (r.valio_api_calls.price_calls || 0) + (r.valio_api_calls.availability_calls || 0) : null;
+    const excluded = Object.entries(r.considered?.excluded || {}).filter(([, n]) => n);
+    out.innerHTML = `<h3>Valio suggests <span class="match m-compatible">sponsored by ${esc(r.sponsored_by || "Valio Aimo")}</span></h3>
+      <p class="small muted">${esc(r.disclosure || "")} Preview of what ${esc(btn.dataset.agent)} would see for delivery
+        ${dateOnly(nextMondayISO())}.${calls != null ? ` ${calls} Valio API call(s).` : ""}</p>
+      ${(r.suggestions || []).length ? `<div class="subs">${r.suggestions.map(sugCard).join("")}</div>`
+        : `<p class="small muted">Nothing to suggest that this mandate would allow.</p>`}
+      ${excluded.length ? `<p class="small muted">Left out before showing: ${excluded.map(([k, n]) => `${esc(n)} ${esc(k.replace(/_/g, " "))}`).join(", ")}.</p>` : ""}`;
+    btn.textContent = "Refresh suggestions";
+  } catch (e) {
+    out.innerHTML = `<p class="small" style="color:var(--block)">${esc(e.message)}</p>`;
+    btn.textContent = "Valio suggests…";
+  }
+  btn.disabled = false;
+}
+
+function sugCard(s) {
+  const p = s.product || {};
+  const o = s.offer || {};
+  const cp = o.comparison_price || {};
+  return `<div class="sub">
+    <div class="row" style="align-items:center"><span class="mono small">${esc(KIND_LABEL[s.kind] || s.kind)}</span>
+      ${s.mandate_check?.outcome ? tier(s.mandate_check.outcome) : ""}</div>
+    <div class="nm">${esc(p.name || p.id)}</div>
+    <div class="muted mono">${esc(p.id)}${o.logistic_model ? " · " + esc(o.logistic_model) : ""}</div>
+    ${s.instead_of ? `<div class="small">instead of ${esc(s.instead_of.name)}</div>` : ""}
+    ${cp.ex_vat != null ? `<div class="price">${eur(cp.ex_vat)} / ${esc(cp.per)}${o.delivery_date ? `<span class="muted"> · ${dateOnly(o.delivery_date)}</span>` : ""}</div>` : ""}
+    <div class="small muted">${esc(s.reason || "")}</div>
+  </div>`;
+}
 
 function mandateCard(m) {
   const a = m.auto_approve_limit_eur, n = m.notify_above_eur, h = m.hard_limit_eur;
@@ -773,12 +829,15 @@ function mandateCard(m) {
       ${(m.required_claims || []).length ? rule("Required claims", esc(m.required_claims.join(", "))) : ""}
       ${Object.entries(m.max_comparison_price_eur || {}).map(([u, v]) => rule("Price cap", `${eur(v)} / ${esc(u)}`)).join("")}
       ${m.allowed_categories ? rule("Categories", esc(m.allowed_categories.join(", "))) : ""}
+      ${rule("Agent must authenticate", m.require_agent_auth ? `<span class="tier t-silent">Bearer token</span>` : `<span class="muted">no (agent id only)</span>`)}
     </div>
     <div class="actions">
       <button class="btn plain" data-sig="${esc(m.id)}">🔏 Verify signature</button>
       <a class="btn plain" href="#/audit" onclick="views.audit.q='${esc(m.id)}';views.audit.key=''">History</a>
+      ${m.revoked ? "" : `<button class="btn plain" data-suggest="${esc(m.id)}" data-agent="${esc(m.agent_id)}">Valio suggests…</button>`}
       ${m.revoked ? "" : `<button class="btn plain" data-revoke="${esc(m.id)}" style="color:var(--block)">Revoke</button>`}
     </div>
+    <div class="sugs-out"></div>
   </article>`;
 }
 
