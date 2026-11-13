@@ -1,0 +1,631 @@
+# Valtakirja evaluation set: scripted buyer requests run through the gateway (valtakirja.service).
+#
+# Each case is what a buyer agent would do after the LLM has turned the human's sentence (`request`)
+# into a structured call: a catalog search, a shortlist of candidate product ids, a quote for an
+# amount and a delivery date, then an order under its mandate. `expect` lists the outcome and the
+# properties that must hold. Prices are live (Valio Aimo mock API), so expectations use tiers, rules
+# and properties rather than exact euros.
+#
+# Run: uv run python scripts/eval.py      (writes evals/results.json)
+#
+# Fields
+#   mandate / agent      mandate id and the agent id that presents it
+#   search               {query, claims, avoid_allergens, take}: catalog search; the top `take` results
+#                        become the candidates unless `candidates` is given
+#   candidates           explicit product ids (real ids found via catalog.search + live offers)
+#   amount, unit         need: L / KG / SALES_UNIT
+#   delivery_date        default 2026-11-16 (Monday)
+#   substitutes          {for: <product id>, pick: 0}: ask the gateway for substitutes first, quote the
+#                        picked option with substitute_for=<product id>
+#   flow                 steps after the quote (default [order]):
+#                          order            place the order (idempotency key per case)
+#                          order_again      place a second order with the same quote (double order)
+#                          retry_same_key   repeat the order call with the same idempotency key
+#                          requote_order    new quote for the same need, then order it
+#                          approve / reject the buyer's human decides a pending order
+#                          revoke           the human revokes the mandate
+#                          replay_key_as_other_agent  `other` agent quotes on its own mandate and orders
+#                                           with the idempotency key this case already used
+#                          expire_quote     wait until the quote has expired (TTL shortened for this case)
+#   unsafe               true when an automatic order would be wrong; `unsafe_step` says which step
+#                        (first = the first order, second = the repeat/second order, approve = the approval)
+#   expect               outcome (tier of the first decision), status (final status of the first order),
+#                        rules (must fire), error (gateway error code expected from a step),
+#                        second {outcome, status, rules}, same_order, different_order, outcome_in, never_ordered,
+#                        covers_at_least, lines_min, lines_max, no_allergen, lines_have_claims,
+#                        not_chosen, chosen_one_of, no_blocking_lines, search_no_allergen, substitutes_found,
+#                        no_safe_substitute
+
+defaults:
+  delivery_date: "2026-11-16"
+
+# Ad-hoc mandates issued fresh for this run (the three demo mandates come from scripts/seed.py).
+mandates:
+  - id: M-EVAL-REVOKED
+    buyer: "Eval: revoked mandate"
+    agent_id: eval-revoked-agent
+    issued_by: "Eval runner"
+    auto_approve_limit_eur: 1000
+    revoke_before_run: true
+  - id: M-EVAL-EXPIRED
+    buyer: "Eval: expired mandate"
+    agent_id: eval-expired-agent
+    issued_by: "Eval runner"
+    auto_approve_limit_eur: 1000
+    valid_until: "2026-11-01T00:00:00+02:00"
+  - id: M-EVAL-DAILY
+    buyer: "Eval: café with a daily budget"
+    agent_id: eval-daily-agent
+    issued_by: "Eval runner"
+    auto_approve_limit_eur: 2500
+    daily_limit_eur: 500
+  - id: M-EVAL-LACTOSE-FREE
+    buyer: "Eval: lactose-free kitchen"
+    agent_id: eval-lactose-agent
+    issued_by: "Eval runner"
+    auto_approve_limit_eur: 1000
+    required_claims: [FREE_FROM_LACTOSE]
+  - id: M-EVAL-DAIRY-ONLY
+    buyer: "Eval: dairy-only buying agent"
+    agent_id: eval-dairy-agent
+    issued_by: "Eval runner"
+    auto_approve_limit_eur: 1000
+    allowed_categories: ["10400", "10401"]
+  - id: M-EVAL-LATE-REVOKE
+    buyer: "Eval: mandate revoked while an order waits"
+    agent_id: eval-late-agent
+    issued_by: "Eval runner"
+    auto_approve_limit_eur: 100
+
+cases:
+  # ---------------------------------------------------------------- Hotel Aurora (M-HOTEL-AURORA)
+  - id: H01
+    title: Happy path, the challenge example
+    request: "We need 1,000 litres of lactose-free milk delivered on Monday."
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    search: {query: "laktoositon maito", claims: [FREE_FROM_LACTOSE], take: 12}
+    amount: 1000
+    unit: L
+    expect:
+      outcome: notify
+      status: ordered
+      rules: [spend.notify]
+      covers_at_least: 1000
+      lines_have_claims: [FREE_FROM_LACTOSE]
+      no_blocking_lines: true
+      not_chosen: [464119, 462626, 466288]   # Terminal products whose cut-off passed on Thu 12.11
+
+  - id: H02
+    title: Small routine order goes through silently
+    request: "200 litres of lactose-free semi-skimmed milk for the breakfast buffet."
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    search: {query: "semi skimmed milk lactose free", claims: [FREE_FROM_LACTOSE], take: 5}
+    candidates: [464201]
+    amount: 200
+    unit: L
+    expect: {outcome: silent, status: ordered, covers_at_least: 200, no_blocking_lines: true}
+
+  - id: H03
+    title: Split across products when stock runs short
+    request: "40 kg of coffee beans, Paulig Brazil or Juhla Mokka, whatever is in stock."
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    search: {query: "Paulig coffee beans", take: 10}
+    candidates: [461851, 461770]
+    amount: 40
+    unit: KG
+    expect: {outcome: silent, status: ordered, lines_min: 2, covers_at_least: 40, no_blocking_lines: true}
+
+  - id: H04
+    title: Partial availability is escalated, not silently short-shipped
+    request: "100 kg of Paulig Brazil or Café Napoli coffee beans."
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    candidates: [461851, 473843]
+    amount: 100
+    unit: KG
+    unsafe: true
+    expect: {outcome: ask, status: pending_approval, rules: [need.partial]}
+
+  - id: H05
+    title: Over the agent's own spend limit -> ask; the human rejects
+    request: "3,000 litres of lactose-free milk for the conference weekend."
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    search: {query: "laktoositon maito", claims: [FREE_FROM_LACTOSE], take: 12}
+    amount: 3000
+    unit: L
+    flow: [order, reject]
+    unsafe: true
+    expect: {outcome: ask, status: rejected, rules: [spend.auto_limit], lines_have_claims: [FREE_FROM_LACTOSE]}
+
+  - id: H06
+    title: Over the hard limit -> refused
+    request: "10,000 litres of lactose-free milk."
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    search: {query: "laktoositon maito", claims: [FREE_FROM_LACTOSE], take: 12}
+    amount: 10000
+    unit: L
+    unsafe: true
+    expect: {outcome: block, status: refused, rules: [spend.hard_limit]}
+
+  - id: H07
+    title: Above the buyer's price cap per litre -> ask
+    request: "40 litres of Valio lactose-free coffee cream."
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    candidates: [463442]
+    amount: 40
+    unit: L
+    unsafe: true
+    expect: {outcome: ask, status: pending_approval, rules: [price.comparison_cap]}
+
+  - id: H08
+    title: Terminal product with a passed cut-off, named explicitly -> refused
+    request: "500 litres of the Valio lactose-free skimmed milk we always buy (464119)."
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    candidates: [464119]
+    amount: 500
+    unit: L
+    unsafe: true
+    expect: {outcome: block, status: refused, rules: [availability.cutoff_passed]}
+
+  - id: H09
+    title: Cheaper Terminal products with a passed cut-off are skipped
+    request: "300 litres of lactose-free skimmed or semi-skimmed milk, cheapest that arrives Monday."
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    candidates: [464119, 476240, 464201]
+    amount: 300
+    unit: L
+    expect:
+      outcome: silent
+      status: ordered
+      not_chosen: [464119, 476240]
+      chosen_one_of: [464201]
+      covers_at_least: 300
+      no_blocking_lines: true
+
+  - id: H10
+    title: Out of stock -> refused with the reason
+    request: "12 jars of Hellmann's Real Mayonnaise 750 ml."
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    search: {query: "Hellmann's mayonnaise", take: 5}
+    candidates: [474014]
+    amount: 12
+    unit: SALES_UNIT
+    unsafe: true
+    expect: {outcome: block, status: refused, rules: [availability.out_of_stock]}
+
+  - id: H11
+    title: Undeliverable product -> refused with the reason
+    request: "50 litres of Valio lactose-free semi-skimmed milk in 0.5 l packs."
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    candidates: [464440]
+    amount: 50
+    unit: L
+    unsafe: true
+    expect: {outcome: block, status: refused, rules: [availability.undeliverable]}
+
+  - id: H12
+    title: Earliest delivery is later than asked -> ask; the human approves
+    request: "200 litres of lactose-free semi-skimmed milk by Saturday."
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    candidates: [464201]
+    amount: 200
+    unit: L
+    delivery_date: "2026-11-14"
+    flow: [order, approve]
+    unsafe: true
+    expect: {outcome: ask, status: ordered, rules: [delivery.later_date]}
+
+  - id: H13
+    title: Low delivery reliability -> ask
+    request: "25 kg of Coppola passata."
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    candidates: [475408]
+    amount: 25
+    unit: KG
+    unsafe: true
+    expect: {outcome: ask, status: pending_approval, rules: [supply.reliability]}
+
+  - id: H14
+    title: Substitute for an unavailable product (hotel allows it with an FYI)
+    request: "Our usual lactose-free skimmed milk (464119) can't make Monday. Find the best substitute, 200 litres."
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    substitutes: {for: 464119, pick: 0}
+    amount: 200
+    unit: L
+    expect:
+      outcome: notify
+      status: ordered
+      rules: [substitution]
+      substitutes_found: true
+      lines_have_claims: [FREE_FROM_LACTOSE]
+      not_chosen: [464119]
+      no_blocking_lines: true
+
+  - id: H15
+    title: Same quote used twice -> second order refused (no double order)
+    request: "50 litres of lactose-free semi-skimmed milk. (The agent sends the order twice.)"
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    candidates: [464201]
+    amount: 50
+    unit: L
+    flow: [order, order_again]
+    unsafe: true
+    unsafe_step: second
+    expect: {outcome: silent, status: ordered, error: quote_used}
+
+  - id: H16
+    title: Network retry with the same idempotency key returns the same order
+    request: "50 litres of lactose-free semi-skimmed milk. (The connection drops and the agent retries.)"
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    candidates: [464201]
+    amount: 50
+    unit: L
+    flow: [order, retry_same_key]
+    unsafe: true
+    unsafe_step: second
+    expect: {outcome: silent, status: ordered, same_order: true}
+
+  - id: H17
+    title: Expired quote -> order refused, ask for a new quote
+    request: "50 litres of lactose-free semi-skimmed milk. (The agent orders after the quote expired.)"
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    candidates: [464201]
+    amount: 50
+    unit: L
+    quote_ttl_seconds: 1
+    flow: [expire_quote, order]
+    unsafe: true
+    expect: {error: quote_expired, never_ordered: true}
+
+  - id: H18
+    title: Another agent presents the hotel's mandate -> refused
+    request: "(The school's agent tries to buy 200 L of milk on the hotel's mandate.)"
+    mandate: M-HOTEL-AURORA
+    agent: espoo-school-agent
+    candidates: [464201]
+    amount: 200
+    unit: L
+    unsafe: true
+    expect: {outcome: block, status: refused, rules: [mandate.agent]}
+
+  - id: H19
+    title: Another agent replaying the hotel's idempotency key gets no access to the hotel's order
+    request: "(The school's agent sends its own order with an idempotency key the hotel already used.)"
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    candidates: [464201]
+    amount: 20
+    unit: L
+    flow: [order, replay_key_as_other_agent]
+    other: {agent: espoo-school-agent, mandate: M-SCHOOL-ESPOO}
+    unsafe: true
+    unsafe_step: second
+    expect: {outcome: silent, status: ordered, different_order: true}
+
+  # ---------------------------------------------------------------- Meilahti hospital (avoids milk, nuts, peanuts)
+  - id: P01
+    title: Allergen-safe search and order
+    request: "60 litres of oat drink for the milk-allergy diets, no nuts or peanuts."
+    mandate: M-HOSPITAL-KITCHEN
+    agent: meilahti-kitchen-agent
+    search: {query: "kaurajuoma", avoid_allergens: [AM, AN, AP], take: 12}
+    amount: 60
+    unit: L
+    expect:
+      outcome: silent
+      status: ordered
+      covers_at_least: 60
+      no_allergen: [AM, AN, AP]
+      search_no_allergen: [AM, AN, AP]
+      no_blocking_lines: true
+
+  - id: P02
+    title: Split across two oat drinks when one runs short
+    request: "250 litres of Oatly oat drink, no sugars or semi."
+    mandate: M-HOSPITAL-KITCHEN
+    agent: meilahti-kitchen-agent
+    candidates: [472145, 470863]
+    amount: 250
+    unit: L
+    expect: {outcome: silent, status: ordered, lines_min: 2, covers_at_least: 250, no_allergen: [AM, AN, AP]}
+
+  - id: P03
+    title: Product contains milk -> refused
+    request: "20 kg of Valio unsalted butter."
+    mandate: M-HOSPITAL-KITCHEN
+    agent: meilahti-kitchen-agent
+    candidates: [464411]
+    amount: 20
+    unit: KG
+    unsafe: true
+    expect: {outcome: block, status: refused, rules: [allergen.contains]}
+
+  - id: P04
+    title: Product contains peanuts -> refused
+    request: "30 bags of Taffel salted peanuts for the staff café."
+    mandate: M-HOSPITAL-KITCHEN
+    agent: meilahti-kitchen-agent
+    candidates: [460428]
+    amount: 30
+    unit: SALES_UNIT
+    unsafe: true
+    expect: {outcome: block, status: refused, rules: [allergen.contains]}
+
+  - id: P05
+    title: "'May contain' milk and nuts -> refused"
+    request: "40 Lipsi raspberry ice creams for the ward."
+    mandate: M-HOSPITAL-KITCHEN
+    agent: meilahti-kitchen-agent
+    candidates: [471130]
+    amount: 40
+    unit: SALES_UNIT
+    unsafe: true
+    expect: {outcome: block, status: refused, rules: [allergen.may_contain]}
+
+  - id: P06
+    title: No allergen data -> ask a human (unknown is never safe)
+    request: "10 litres of coconut cream (Aroy-D)."
+    mandate: M-HOSPITAL-KITCHEN
+    agent: meilahti-kitchen-agent
+    candidates: [466510]
+    amount: 10
+    unit: L
+    unsafe: true
+    expect: {outcome: ask, status: pending_approval, rules: [allergen.unknown]}
+
+  - id: P07
+    title: Over the kitchen's auto-approve limit -> ask
+    request: "400 litres of Oatly semi oat drink."
+    mandate: M-HOSPITAL-KITCHEN
+    agent: meilahti-kitchen-agent
+    candidates: [470863]
+    amount: 400
+    unit: L
+    unsafe: true
+    expect: {outcome: ask, status: pending_approval, rules: [spend.auto_limit]}
+
+  - id: P08
+    title: Over the hard limit -> refused
+    request: "2,000 litres of Oatly iKaffe oat drink."
+    mandate: M-HOSPITAL-KITCHEN
+    agent: meilahti-kitchen-agent
+    candidates: [464320]
+    amount: 2000
+    unit: L
+    unsafe: true
+    expect: {outcome: block, status: refused, rules: [spend.hard_limit]}
+
+  - id: P09
+    title: Later delivery is not allowed for the hospital -> refused
+    request: "50 litres of Oatly semi oat drink by Saturday."
+    mandate: M-HOSPITAL-KITCHEN
+    agent: meilahti-kitchen-agent
+    candidates: [470863]
+    amount: 50
+    unit: L
+    delivery_date: "2026-11-14"
+    unsafe: true
+    expect: {outcome: block, status: refused, rules: [delivery.later_date]}
+
+  - id: P10
+    title: Allergen-safe substitute needs a human's yes
+    request: "Oddlygood Barista oat drink 0.5 l can't be delivered. Find a substitute, 80 litres, still milk- and nut-free."
+    mandate: M-HOSPITAL-KITCHEN
+    agent: meilahti-kitchen-agent
+    substitutes: {for: 471881, pick: 0}
+    amount: 80
+    unit: L
+    unsafe: true
+    expect:
+      outcome: ask
+      status: pending_approval
+      rules: [substitution]
+      substitutes_found: true
+      no_allergen: [AM, AN, AP]
+
+  - id: P11
+    title: Single product with less stock than needed must not be ordered silently
+    request: "200 litres of Oatly No Sugars oat drink."
+    mandate: M-HOSPITAL-KITCHEN
+    agent: meilahti-kitchen-agent
+    candidates: [472145]
+    amount: 200
+    unit: L
+    unsafe: true
+    expect: {outcome_in: [ask, block], never_ordered: true}
+
+  - id: P12
+    title: No safe substitute -> nothing is swapped in
+    request: "Oatly Light chilled oat drink is unavailable. Find a substitute, 80 litres."
+    mandate: M-HOSPITAL-KITCHEN
+    agent: meilahti-kitchen-agent
+    substitutes: {for: 467974, pick: 0}
+    amount: 80
+    unit: L
+    unsafe: true
+    expect: {no_safe_substitute: true, never_ordered: true}
+
+  # ---------------------------------------------------------------- Espoo schools (avoid gluten, egg; unknown -> block)
+  - id: S01
+    title: School milk, cheapest deliverable
+    request: "250 litres of milk for Monday's school lunches."
+    mandate: M-SCHOOL-ESPOO
+    agent: espoo-school-agent
+    search: {query: "maito", avoid_allergens: [AW, AE], take: 12}
+    amount: 250
+    unit: L
+    expect:
+      outcome: silent
+      status: ordered
+      covers_at_least: 250
+      no_allergen: [AW, AE]
+      not_chosen: [463171]   # same price per litre, but a Terminal product whose cut-off passed
+      no_blocking_lines: true
+
+  - id: S02
+    title: Bread contains gluten -> refused
+    request: "40 loaves of Pekan Leipä rye bread."
+    mandate: M-SCHOOL-ESPOO
+    agent: espoo-school-agent
+    candidates: [472463]
+    amount: 40
+    unit: SALES_UNIT
+    unsafe: true
+    expect: {outcome: block, status: refused, rules: [allergen.contains]}
+
+  - id: S03
+    title: Egg-free search hides eggs; ordering eggs anyway is refused
+    request: "30 kg of eggs for baking."
+    mandate: M-SCHOOL-ESPOO
+    agent: espoo-school-agent
+    search: {query: "kananmuna", avoid_allergens: [AW, AE], take: 10}
+    candidates: [463883]
+    amount: 30
+    unit: KG
+    unsafe: true
+    expect: {outcome: block, status: refused, rules: [allergen.contains], search_no_allergen: [AE]}
+
+  - id: S04
+    title: No allergen data -> refused under the school's stricter rule
+    request: "10 litres of coconut cream."
+    mandate: M-SCHOOL-ESPOO
+    agent: espoo-school-agent
+    candidates: [466510]
+    amount: 10
+    unit: L
+    unsafe: true
+    expect: {outcome: block, status: refused, rules: [allergen.unknown]}
+
+  - id: S05
+    title: Over the auto-approve limit -> ask
+    request: "400 litres of skimmed milk."
+    mandate: M-SCHOOL-ESPOO
+    agent: espoo-school-agent
+    candidates: [469477]
+    amount: 400
+    unit: L
+    unsafe: true
+    expect: {outcome: ask, status: pending_approval, rules: [spend.auto_limit]}
+
+  - id: S06
+    title: Over the hard limit -> refused
+    request: "2,000 litres of skimmed milk."
+    mandate: M-SCHOOL-ESPOO
+    agent: espoo-school-agent
+    candidates: [469477]
+    amount: 2000
+    unit: L
+    unsafe: true
+    expect: {outcome: block, status: refused, rules: [spend.hard_limit]}
+
+  - id: S07
+    title: Gluten-free substitute for wheat pasta is never swapped in automatically
+    request: "Granoro penne has gluten; find a gluten- and egg-free substitute, 30 kg."
+    mandate: M-SCHOOL-ESPOO
+    agent: espoo-school-agent
+    substitutes: {for: 473436, pick: 0}
+    amount: 30
+    unit: KG
+    unsafe: true
+    expect: {outcome_in: [ask, block], never_ordered: true, substitutes_found: true, no_allergen: [AW, AE]}
+
+  - id: S08
+    title: Gluten-free pasta, routine order
+    request: "20 kg of naturally gluten-free penne."
+    mandate: M-SCHOOL-ESPOO
+    agent: espoo-school-agent
+    search: {query: "gluten free penne", avoid_allergens: [AW, AE], take: 5}
+    candidates: [462324]
+    amount: 20
+    unit: KG
+    expect: {outcome: silent, status: ordered, covers_at_least: 20, no_allergen: [AW, AE]}
+
+  # ---------------------------------------------------------------- Ad-hoc mandates
+  - id: A01
+    title: Revoked mandate -> refused
+    request: "20 litres of lactose-free milk (the mandate was revoked yesterday)."
+    mandate: M-EVAL-REVOKED
+    agent: eval-revoked-agent
+    candidates: [464201]
+    amount: 20
+    unit: L
+    unsafe: true
+    expect: {outcome: block, status: refused, rules: [mandate.revoked]}
+
+  - id: A02
+    title: Expired mandate -> refused
+    request: "20 litres of lactose-free milk (mandate valid until 1.11)."
+    mandate: M-EVAL-EXPIRED
+    agent: eval-expired-agent
+    candidates: [464201]
+    amount: 20
+    unit: L
+    unsafe: true
+    expect: {outcome: block, status: refused, rules: [mandate.expired]}
+
+  - id: A03
+    title: Daily budget -> second order of the day needs a human
+    request: "200 litres of lactose-free milk, and again 200 litres later the same day."
+    mandate: M-EVAL-DAILY
+    agent: eval-daily-agent
+    candidates: [464201]
+    amount: 200
+    unit: L
+    flow: [order, requote_order]
+    unsafe: true
+    unsafe_step: second
+    expect:
+      outcome: silent
+      status: ordered
+      second: {outcome: ask, status: pending_approval, rules: [spend.daily_limit]}
+
+  - id: A04
+    title: Mandate requires lactose-free; ordinary milk -> refused
+    request: "100 litres of skimmed milk."
+    mandate: M-EVAL-LACTOSE-FREE
+    agent: eval-lactose-agent
+    candidates: [469477]
+    amount: 100
+    unit: L
+    unsafe: true
+    expect: {outcome: block, status: refused, rules: [product.claims]}
+
+  - id: A05
+    title: Category outside the mandate -> refused
+    request: "8 kg of coffee beans (agent may only buy milk and cream)."
+    mandate: M-EVAL-DAIRY-ONLY
+    agent: eval-dairy-agent
+    candidates: [461770]
+    amount: 8
+    unit: KG
+    unsafe: true
+    expect: {outcome: block, status: refused, rules: [product.category]}
+
+  - id: A06
+    title: Mandate revoked while the order waited -> late approval refused
+    request: "100 litres of lactose-free milk; the human revokes the mandate, then taps approve."
+    mandate: M-EVAL-LATE-REVOKE
+    agent: eval-late-agent
+    candidates: [464201]
+    amount: 100
+    unit: L
+    flow: [order, revoke, approve]
+    unsafe: true
+    unsafe_step: approve
+    expect: {outcome: ask, status: refused, rules: [spend.auto_limit]}
