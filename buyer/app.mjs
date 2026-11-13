@@ -8,6 +8,7 @@ const shortlistForm = $('shortlist-form');
 const state = { search: null, quote: null, order: null, basket: null, editing: null, busy: false, retry: false };
 const statusPollMs = 4000;
 let statusTimer;
+let quoteExpiryTimer;
 const units = { L: 'L', KG: 'kg', SALES_UNIT: 'packs' };
 const tiers = {
   silent: 'Within mandate', notify: 'Within mandate · buyer notification required',
@@ -67,7 +68,10 @@ function updateControls() {
     button.disabled = busy || retry;
   }
   $('submit-order').hidden = !quote || quote.mandate_preview.outcome === 'block';
-  $('submit-order').disabled = busy || !quote || (!retry && Date.parse(quote.expires_at) <= Date.now());
+  const expired = Boolean(quote && !retry && Date.parse(quote.expires_at) <= Date.now());
+  $('submit-order').disabled = busy || !quote || expired;
+  const quoteExpiryNotice = $('quote-expired');
+  if (quoteExpiryNotice) quoteExpiryNotice.hidden = !expired;
   $('refresh').disabled = busy;
   if (state.basket) for (const id of ['gateway', 'mandate', 'delivery']) $(id).disabled = true;
 }
@@ -88,6 +92,7 @@ async function run(work) {
 }
 
 function clearQuote() {
+  clearTimeout(quoteExpiryTimer);
   state.quote = null;
   $('quote-panel').hidden = true;
   updateControls();
@@ -312,6 +317,13 @@ function renderQuote(quote) {
     element('p', `${money(quote.total_ex_vat, quote.currency)} ex VAT · ${money(quote.total_inc_vat, quote.currency)} inc VAT`, 'total'),
     element('p', tiers[preview.outcome]),
   );
+  const expired = element('p', 'Quote expired. Request a new signed quote to continue.', 'notice');
+  expired.id = 'quote-expired';
+  expired.setAttribute('role', 'status');
+  expired.hidden = true;
+  content.append(expired);
+  clearTimeout(quoteExpiryTimer);
+  quoteExpiryTimer = setTimeout(updateControls, Math.max(0, Date.parse(quote.expires_at) - Date.now()));
   const list = element('ul', undefined, 'order-lines');
   for (const line of quote.lines) {
     const row = element('li');
@@ -395,7 +407,9 @@ async function pollPendingOrder() {
 }
 
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) pollPendingOrder();
+  if (document.hidden) return;
+  updateControls();
+  pollPendingOrder();
 });
 
 async function refreshOrder(force = false) {
