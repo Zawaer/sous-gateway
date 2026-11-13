@@ -122,3 +122,18 @@ test('reports an original signed approval hold separately from the refreshed sta
   await assert.rejects(client.receipt({ ...order, status: 'ordered' }, quote));
   await assert.rejects(client.receipt({ ...order, total_ex_vat: 5 }, quote));
 });
+
+test('requires the current status, approval details and update time to match a new receipt', async () => {
+  const payload = {
+    id: 'PO-2', quote_id: quote.id, mandate_id: mandate.id, total_ex_vat: quote.total_ex_vat,
+    lines: [], decision: { outcome: 'ask' }, status: 'ordered',
+    approval: { by: 'Demo approver', approved: true }, updated_at: '2026-11-13T21:45:00+02:00',
+  };
+  const client = new Gateway('https://example.test', async () => Response.json(jwks));
+  const order = { ...payload, agent_id: mandate.agent_id, receipt_jws: token(payload, 'order') };
+  assert.deepEqual(await client.receipt(order, quote), payload);
+  await assert.rejects(client.receipt({ ...order, approval: { ...payload.approval, by: 'Someone else' } }, quote));
+  await assert.rejects(client.receipt({ ...order, updated_at: null }, quote));
+  const pendingToken = token({ ...payload, status: 'pending_approval', approval: null }, 'order');
+  await assert.rejects(client.receipt({ ...order, receipt_jws: pendingToken }, quote));
+});

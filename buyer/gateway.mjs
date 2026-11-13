@@ -119,10 +119,14 @@ export class Gateway {
 
   async receipt(order, quote) {
     const signed = await verifyJws(order.receipt_jws, await this.request('/.well-known/jwks.json'), 'valtakirja-order+jws');
+    const hasDecisionSnapshot = Object.hasOwn(signed, 'approval') || Object.hasOwn(signed, 'updated_at');
+    const matchesStatus = hasDecisionSnapshot
+      ? signed.status === order.status && equalJson(signed.approval, order.approval) && signed.updated_at === order.updated_at
+      : signed.status === order.status || (signed.status === 'pending_approval' && Boolean(order.approval));
     if (signed.quote_id !== quote.id || signed.mandate_id !== quote.mandate_id ||
         order.agent_id !== quote.agent_id || signed.total_ex_vat !== quote.total_ex_vat ||
         !['id', 'quote_id', 'mandate_id', 'total_ex_vat', 'lines', 'decision'].every((key) => equalJson(signed[key], order[key])) ||
-        (signed.status !== order.status && (signed.status !== 'pending_approval' || !order.approval))) {
+        !matchesStatus) {
       throw new Error('The signed receipt does not match this order and quote.');
     }
     return signed;

@@ -190,10 +190,14 @@ async function renderOrder(gateway, order, quote) {
   const content = $('order-content');
   const status = statuses[order.status] || order.status;
   content.replaceChildren(element('p', `${order.id} · ${status}`, 'total'));
-  if (order.approval?.result_reason) content.append(element('p', order.approval.result_reason));
   appendList(content, 'Gateway decision', order.decision.findings.map((finding) => finding.message));
   try {
     const signed = await gateway.receipt(order, quote);
+    if (signed.approval) {
+      const action = signed.approval.approved ? 'Approved by' : 'Rejected by';
+      content.append(element('p', `${action} ${signed.approval.by}`));
+      if (signed.approval.result_reason) content.append(element('p', signed.approval.result_reason));
+    }
     const message = signed.status === order.status ? 'Receipt signature verified' :
       `Original receipt verified (${statuses[signed.status] || signed.status}). Current status reported by the gateway.`;
     content.append(element('p', message, 'verified'));
