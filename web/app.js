@@ -667,8 +667,11 @@ function eventSummary(e) {
     case "catalog.search":
       return `“${esc(d.query)}” → ${(d.results || []).length} products${d.avoid_allergens?.length ? ", avoiding " + esc(d.avoid_allergens.join(", ")) : ""} · 0 Valio API calls`;
     case "quote.issued": {
-      const calls = d.valio_api_calls ? Object.values(d.valio_api_calls).reduce((a, b) => a + (Number(b) || 0), 0) : null;
-      return `${(d.lines || []).length} line(s), ${eur(d.total_ex_vat)} ex VAT${d.preview ? " · mandate preview " + tier(d.preview) : ""}${calls != null ? ` · ${calls} Valio API call(s)` : ""}`;
+      // Only price + availability calls reach Valio Aimo; cache hits are served by the gateway.
+      const v = d.valio_api_calls;
+      const calls = v ? (Number(v.price_calls) || 0) + (Number(v.availability_calls) || 0) : null;
+      const hits = v ? Number(v.cache_hits) || 0 : 0;
+      return `${(d.lines || []).length} line(s), ${eur(d.total_ex_vat)} ex VAT${d.preview ? " · mandate preview " + tier(d.preview) : ""}${calls != null ? ` · ${calls} Valio API call(s)${hits ? `, ${hits} from cache` : ""}` : ""}`;
     }
     case "order.ordered": case "order.pending_approval": case "order.refused":
       return `${eur(d.total_ex_vat)} ${tier(d.outcome)} ${(d.fired || []).map((f) => esc(f.message)).join(" · ")}`;
