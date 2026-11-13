@@ -64,17 +64,29 @@ def _post(kind: str, requested: date, ids: list[str], ttl: int) -> dict[str, dic
         chunk = missing[i : i + 1000]
         body = {"customer": config.AIMO_CUSTOMER, "requestedDate": day, "products": chunk}
         _take_budget()
-        for attempt in range(3):
-            r = _client.post(f"/{kind}", json=body)
-            if r.status_code != 429 and r.status_code < 500:
-                break
-            time.sleep(0.5 * 2**attempt)
-        stats[f"{kind}_calls"] += 1
+        try:
+            for attempt in range(3):
+                r = _client.post(f"/{kind}", json=body)
+                if r.status_code != 429 and r.status_code < 500:
+                    break
+                time.sleep(0.5 * 2**attempt)
+        except httpx.HTTPError as e:  # timeouts, connection errors, protocol errors
+            raise AimoError(f"Valio Aimo {kind} API is unreachable: {type(e).__name__}") from e
+        finally:
+            stats[f"{kind}_calls"] += 1
         if r.status_code != 200:
             raise AimoError(f"Valio Aimo {kind} API returned HTTP {r.status_code}: {r.text[:200]}")
-        payload = r.json()
+        try:
+            payload = r.json()
+            items = payload.get("products", [])
+            if not isinstance(items, list):
+                raise ValueError("'products' is not a list")
+        except (ValueError, AttributeError) as e:  # json.JSONDecodeError is a ValueError
+            raise AimoError(f"Valio Aimo {kind} API returned a malformed response: {e}") from e
         with _lock:
-            for item in payload.get("products", []):
+            for item in items:
+                if not isinstance(item, dict) or not item.get("productId"):
+                    continue
                 item = {**item, "_timeNow": payload.get("timeNow")}
                 _cache[(kind, day, item["productId"])] = (now, item)
                 out[item["productId"]] = item

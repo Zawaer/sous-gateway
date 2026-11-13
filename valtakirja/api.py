@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 from datetime import date
 from typing import Literal
 
@@ -74,7 +75,11 @@ _hits: dict[str, deque] = defaultdict(deque)
 
 
 def _client_ip(request: Request) -> str:
-    return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "?")
+    # CF-Connecting-IP is client-controlled unless Cloudflare is the only way in: trust it only when told to.
+    # Otherwise uvicorn --proxy-headers has already resolved X-Forwarded-For into request.client.
+    if os.getenv("VALTAKIRJA_TRUST_CF_HEADER") == "1" and (ip := request.headers.get("cf-connecting-ip")):
+        return ip
+    return request.client.host if request.client else "?"
 
 
 @app.middleware("http")

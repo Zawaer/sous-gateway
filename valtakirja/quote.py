@@ -29,7 +29,11 @@ class Issue:
 
 
 def _dt(s: str | None) -> datetime | None:
-    return datetime.fromisoformat(s.replace("+0200", "+02:00").replace("+0300", "+03:00")) if s else None
+    """Parse Valio Aimo's timestamps; one without an offset is Helsinki local time."""
+    if not s:
+        return None
+    d = datetime.fromisoformat(s.replace("+0200", "+02:00").replace("+0300", "+03:00"))
+    return d if d.tzinfo else d.replace(tzinfo=config.TZ)
 
 
 def content_per_sales_unit(product: dict, price: dict | None) -> tuple[float, str, str] | None:
@@ -126,6 +130,9 @@ def build_offer(
     available_amount = sl.get("availableAmount")
     available_date = date.fromisoformat(sl["availableDate"]) if sl.get("availableDate") else None
     stock_known = model == "Stock" and available_amount is not None and available_amount < STOCK_PLENTY
+    if closing and available_date and available_date < requested:
+        # closingTime is the cut-off for the earliest date (availableDate), not for the later date asked for.
+        closing = None
     if not avail:
         issues.append(Issue("NO_AVAILABILITY", BLOCKING, "Valio Aimo returned no availability for this product."))
     elif a.get("salesBlock") or sl.get("salesBlock"):
@@ -135,6 +142,10 @@ def build_offer(
     elif not available_date or available_amount == 0:
         issues.append(Issue("OUT_OF_STOCK", BLOCKING, "Out of stock: no delivery date available."))
     else:
+        if available_date < requested:
+            issues.append(Issue("CUTOFF_UNKNOWN", WARNING,
+                                f"Valio Aimo reported the order cut-off for {available_date} only; the cut-off for "
+                                f"delivery on {requested} isn't known."))
         if closing and closing <= now:
             issues.append(Issue("CUTOFF_PASSED", BLOCKING,
                                 f"The order cut-off for delivery on {available_date} was "
@@ -166,6 +177,7 @@ def build_offer(
         "name": product["name"],
         "brand": product["brand"],
         "sales_unit": su,
+        "allowed_lot_size": product["allowed_lot_size"],
         "content_per_sales_unit": {"amount": content[0], "unit": content[1], "source": content[2]} if content else None,
         "quantity": qty,
         "covers": {"amount": round(covered, 2), "unit": need_unit} if covered is not None else None,
@@ -235,9 +247,10 @@ def plan(need: float, need_unit: str | None, candidates: list[dict]) -> tuple[li
         content = (o["content_per_sales_unit"] or {}).get("amount") if need_unit else 1.0
         if not content:
             continue
-        want = round_to_lot(remaining / content, o["sales_unit"], None)
+        lot = o.get("allowed_lot_size")
+        want = round_to_lot(remaining / content, o["sales_unit"], lot)
         if o["available_amount"] is not None:
-            want = min(want, math.floor(o["available_amount"]))
+            want = min(want, _floor_to_lot(o["available_amount"], o["sales_unit"], lot))
         if want <= 0:
             continue
         line = dict(o)
@@ -249,6 +262,16 @@ def plan(need: float, need_unit: str | None, candidates: list[dict]) -> tuple[li
         lines.append(line)
         remaining -= want * content
     return lines, max(0.0, round(remaining, 3))
+
+
+def _floor_to_lot(stock: float, sales_unit: str, lot: float | None) -> float:
+    """The most that can be ordered from `stock` in whole lots (rounding down, unlike round_to_lot)."""
+    if lot and lot >= 1:
+        return math.floor(stock / lot + 1e-9) * lot
+    if sales_unit == "KG":
+        step = lot or 0.01
+        return round(math.floor(stock / step + 1e-9) * step, 2)
+    return math.floor(stock)
 
 
 def quote_expiry(now: datetime, lines: list[dict]) -> datetime:
