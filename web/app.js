@@ -71,6 +71,16 @@ function askCode(message) {
   });
 }
 
+// QA test data (agents qa-*, mandates M-QA-*, buyers "QA …") is hidden from the demo views unless the
+// footer toggle shows it. Hiding is display-only: the audit chain check still covers every event.
+const QA_AGENT = /^qa[-_:]/i, QA_MANDATE = /^M-QA-/i, QA_BUYER = /^QA\b/;
+let showQA = (() => { try { return localStorage.getItem("vk-show-qa") === "1"; } catch { return false; } })();
+const isQAOrder = (o) => QA_AGENT.test(o.agent_id || "") || QA_MANDATE.test(o.mandate_id || "") || QA_BUYER.test(o.buyer || "");
+const isQAMandate = (m) => QA_MANDATE.test(m.id || m.mandate_id || "") || QA_AGENT.test(m.agent_id || "") || QA_BUYER.test(m.buyer || "");
+const isQAEvent = (e) => QA_AGENT.test(e.actor || "") || QA_MANDATE.test(e.subject || "") || QA_BUYER.test(e.buyer || "") ||
+  QA_AGENT.test(e.data?.agent_id || "") || QA_MANDATE.test(e.data?.mandate_id || "");
+const noQA = (list, isQA) => (showQA ? list : list.filter((x) => !isQA(x)));
+
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -206,7 +216,7 @@ let timer = null;
 views.inbox = {
   key: "",
   async load() {
-    const { orders } = await api("/orders?status=pending_approval");
+    const orders = noQA((await api("/orders?status=pending_approval")).orders, isQAOrder);
     setBadge(orders.length);
     const key = orders.map((o) => o.id + o.updated_at).join();
     if (key === this.key && view.dataset.view === "inbox") { tickDeadlines(); return; }
@@ -248,7 +258,7 @@ const ANNOUNCE = {
 };
 
 async function pollLive() {
-  const { events } = await api("/audit?limit=14");
+  const events = noQA((await api("/audit?limit=40")).events, isQAEvent).slice(0, 14);
   const fresh = live.seq == null ? [] : events.filter((e) => e.seq > live.seq).reverse();
   live.seq = events[0]?.seq ?? live.seq ?? 0;
   live.events = events;
@@ -351,7 +361,7 @@ views.orders = {
   filter: "",
   key: "",
   async load() {
-    const { orders } = await api("/orders" + (this.filter ? "?status=" + this.filter : ""));
+    const orders = noQA((await api("/orders" + (this.filter ? "?status=" + this.filter : ""))).orders, isQAOrder);
     const key = this.filter + orders.map((o) => o.id + o.status).join();
     if (key === this.key && view.dataset.view === "orders") return;
     this.key = key;
@@ -597,14 +607,17 @@ views.audit = {
   async load() {
     const params = new URLSearchParams({ limit: "200" });
     if (this.q) params.set("subject", this.q);
-    const [{ events }, chain] = await Promise.all([api("/audit?" + params), api("/audit/verify")]);
+    const [{ events: raw }, chain] = await Promise.all([api("/audit?" + params), api("/audit/verify")]);
+    // A search for a specific id always shows it, QA or not.
+    const events = this.q ? raw : noQA(raw, isQAEvent);
+    const hiddenQA = raw.length - events.length;
     const key = this.q + (events[0]?.seq ?? "") + chain.ok;
     if (key === this.key && view.dataset.view === "audit") return;
     this.key = key;
     const focused = document.activeElement?.id === "audit-q";
     view.dataset.view = "audit";
     view.innerHTML = `<div class="head"><div><h2>Audit log</h2>
-        <div class="muted">One record for the buyer and Valio Aimo. Each entry includes the hash of the one before it.</div></div></div>
+        <div class="muted">One record for the buyer and Valio Aimo. Each entry includes the hash of the one before it.${hiddenQA ? ` ${hiddenQA} QA test event(s) hidden from this list (still in the chain).` : ""}</div></div></div>
       ${chain.ok
         ? `<div class="chain ok">✔ <div><b>Chain intact</b><div class="small">${chain.events} events verified · head <span class="mono">${esc((chain.head || "").slice(0, 16))}…</span>${versioning(chain)}</div></div></div>`
         : `<div class="chain bad">✖ <div><b>Chain broken at event #${esc(chain.broken_at_seq)}</b><div class="small">An entry was edited or deleted after it was written.</div></div></div>`}
@@ -726,7 +739,7 @@ let allergenNames = null;
 views.mandates = {
   key: "",
   async load() {
-    const { mandates } = await api("/mandates");
+    const mandates = noQA((await api("/mandates")).mandates, isQAMandate);
     allergenNames ||= await api("/allergens").then((r) => r.codes).catch(() => ({}));
     const key = mandates.map((m) => m.id + m.revoked).join();
     if (key === this.key && view.dataset.view === "mandates") return;
@@ -850,7 +863,7 @@ const DAY = { mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", 
 views.standing = {
   key: "",
   async load() {
-    const { standing_orders: list } = await api("/standing-orders");
+    const list = noQA((await api("/standing-orders")).standing_orders, isQAMandate);
     const details = await Promise.all(list.map((s) => api("/standing-orders/" + encodeURIComponent(s.id)).catch(() => null)));
     const key = details.map((d) => d && d.standing_order.id + d.standing_order.active + (d.renewals[0]?.status || "") + d.renewals.length).join();
     if (key === this.key && view.dataset.view === "standing") return;
@@ -971,8 +984,10 @@ const RULE_GROUP = {
 views.stats = {
   key: "",
   async load() {
-    const [{ orders }, { events }, chain] = await Promise.all([
+    const [{ orders: allOrders }, { events: allEvents }, chain] = await Promise.all([
       api("/orders"), api("/audit?limit=10000"), api("/audit/verify")]);
+    const orders = noQA(allOrders, isQAOrder);
+    const events = noQA(allEvents, isQAEvent);
     const key = (events[0]?.seq ?? "") + "|" + orders.length;
     if (key === this.key && view.dataset.view === "stats") return;
     this.key = key;
@@ -1105,8 +1120,7 @@ async function refresh() {
     await pollLive().catch(() => {});
     await views[current].load();
     if (current !== "inbox") {
-      const { orders } = await api("/orders?status=pending_approval");
-      setBadge(orders.length);
+      setBadge(noQA((await api("/orders?status=pending_approval")).orders, isQAOrder).length);
     }
   } catch (e) {
     view.dataset.view = "";
@@ -1137,6 +1151,19 @@ function route() {
   clearInterval(timer);
   timer = setInterval(() => { if (!document.hidden) refresh(); tickDeadlines(); }, REFRESH_MS);
 }
+
+function renderQAToggle() {
+  const b = $("#qa-toggle");
+  if (b) b.textContent = showQA ? "Hide QA test data" : "Show QA test data";
+}
+$("#qa-toggle")?.addEventListener("click", () => {
+  showQA = !showQA;
+  try { localStorage.setItem("vk-show-qa", showQA ? "1" : "0"); } catch { /* private mode */ }
+  renderQAToggle();
+  for (const v of Object.values(views)) v.key = "";
+  route();
+});
+renderQAToggle();
 
 window.addEventListener("hashchange", route);
 renderWho();
