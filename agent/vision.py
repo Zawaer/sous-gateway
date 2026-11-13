@@ -555,27 +555,37 @@ def gateway_amount(it: ReadItem, qty: float) -> tuple[float, str, str | None]:
 
 
 def classify(rd: ImageRead) -> list[Line]:
-    """Which lines may be ordered automatically, which need a human, which need nothing (delivered in full)."""
+    """Which lines may be ordered automatically, which need a human, which need nothing (delivered in full).
+
+    Doubt comes first: a line that is low-confidence, incomplete or fails the code cross-check goes to a human
+    whatever it says, also an apparent full delivery (a misread "5 / 5" could hide a shortfall). The
+    cross-check runs here too, so callers that build a reading themselves get the same guard."""
     out = []
     for i, it in enumerate(rd.items):
         ln = Line(index=i, item=it, status="to_order")
-        qty = it.quantity
-        if rd.kind == "delivery_note":
-            if it.quantity is not None and it.delivered_quantity is not None:
-                qty = round(it.quantity - it.delivered_quantity, 6)
-                if qty <= 0:
-                    ln.status, ln.reason = "no_shortfall", "delivered in full"
-                    out.append(ln)
-                    continue
+        why = cross_check(it, rd.kind)
         if it.confidence < CONFIRM_BELOW:
             ln.status = "needs_confirmation"
             ln.reason = f"read with confidence {it.confidence:.2f}" + (f" ({it.note})" if it.note else "")
-        elif qty is None or it.unit is None:
+        elif it.quantity is None or it.unit is None:
             ln.status, ln.reason = "needs_confirmation", "no quantity or unit read"
-        if ln.status == "to_order":
-            ln.amount, ln.unit, note = gateway_amount(it, qty)
-            if note:
-                ln.reason = note
+        elif rd.kind == "delivery_note" and it.delivered_quantity is None:
+            ln.status, ln.reason = "needs_confirmation", "delivered quantity not read"
+        elif why:
+            ln.status, ln.reason = "needs_confirmation", f"check: {why}"
+        if ln.status != "to_order":
+            out.append(ln)
+            continue
+        qty = it.quantity
+        if rd.kind == "delivery_note":
+            qty = round(it.quantity - it.delivered_quantity, 6)
+            if qty <= 0:
+                ln.status, ln.reason = "no_shortfall", "delivered in full"
+                out.append(ln)
+                continue
+        ln.amount, ln.unit, note = gateway_amount(it, qty)
+        if note:
+            ln.reason = note
         out.append(ln)
     return out
 

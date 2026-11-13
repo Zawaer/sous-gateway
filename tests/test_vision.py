@@ -272,3 +272,18 @@ def test_eval_scorer_counts_silent_errors():
 def test_unit_in_its_own_column_is_not_a_mismatch():
     it = V.ReadItem(**item("Voi 500 g | 5 | 5 | kg", "voi", 5, "kg", delivered_quantity=5))
     assert V.cross_check(it, "delivery_note") is None
+
+
+def test_doubtful_delivery_lines_go_to_a_human_not_to_delivered_in_full():
+    # QA repro: an uncertain "5 / 5" must not be declared fulfilled; a missing delivered column must not be
+    # treated as an all-missing shortfall and ordered; a line that fails the cross-check is not ordered
+    note = {"kind": "delivery_note", "items": [
+        item("Voi 5 5 kg", "voi", 5, "kg", 0.40, delivered_quantity=5),
+        item("Kerma 10 4 kg", "kerma", 10, "l", 0.95, delivered_quantity=4),
+        item("Maito laktoositon 40 l", "maito laktoositon", 40, "l", 0.95)]}
+    gw = FakeGateway()
+    po = V.order_from_read(read(note), gateway=gw, mandate_id="M", agent_id="a", today=TODAY, place=True)
+    assert [l.status for l in po.lines] == ["needs_confirmation"] * 3
+    assert [l.reason.split(" ")[0] for l in po.lines] == ["read", "check:", "delivered"]
+    assert len(po.to_confirm) == 3 and not gw.quotes() and po.order is None
+    assert po.error == "no line can be ordered automatically"
