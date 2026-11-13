@@ -1,0 +1,30 @@
+# Sous spend ledger: every paid model/API run and every running service, per provider.
+# Regenerate docs/COSTS.md with: uv run python scripts/costs.py
+# Add a line for each new run (eval scripts print tokens; CI artifacts have them).
+# usd: null = price not known yet (fill from the provider's console).
+
+prices_usd_per_1m:            # [input, output] per 1M tokens, as charged
+  gemini-4-hydrogen: [1.5, 7.5]
+  kimi-k3-1-pro: [null, null]          # Verda Inference: see the Verda console
+  nemotron-3.5-super-vl-120b-a12b: [0, 0]   # NVIDIA Build free tier
+  codex: [null, null]                  # OpenAI credits (Codex), see the OpenAI usage page
+
+runs:
+  - {when: "2026-11-13 21:40", provider: verda, model: kimi-k3-1-pro, purpose: "buyer LLM eval, 40 cases (CI on CRACI, run 43505798752)", tokens_in: 0, tokens_out: 0, note: "key rejected (401), no tokens used"}
+  - {when: "2026-11-13 23:40", provider: verda, model: kimi-k3-1-pro, purpose: "buyer LLM eval, 40 cases (CI on CRACI, run 43511463514)", tokens_in: 849421, tokens_out: 20386}
+  - {when: "2026-11-13 23:44", provider: gemini, model: gemini-4-hydrogen, purpose: "buyer LLM eval, 40 cases (Rene, local run)", tokens_in: 935045, tokens_out: 12292, usd: 1.4948}
+  - {when: "2026-11-14 01:19", provider: gemini, model: gemini-4-hydrogen, purpose: "buyer LLM eval, 40 cases (CI on CRACI, run 43524836008)", tokens_in: 926590, tokens_out: 12178, usd: 1.4812}
+  - {when: "2026-11-14 01:26", provider: verda, model: kimi-k3-1-pro, purpose: "buyer LLM eval, 40 cases (CI on CRACI, run 43524836008)", tokens_in: 848184, tokens_out: 20939}
+  - {when: "2026-11-14 01:30", provider: gemini, model: gemini-4-hydrogen, purpose: "recipe eval, 7 menus (CI run 43524836008)", tokens_in: 10172, tokens_out: 3934}
+  - {when: "2026-11-14 01:30", provider: verda, model: kimi-k3-1-pro, purpose: "recipe eval, 7 menus (CI run 43524836008)", tokens_in: 7784, tokens_out: 5460}
+  - {when: "2026-11-14 00:10", provider: openai, model: codex, purpose: "read-only security review of the trust core (Codex run 01a1d6fd)", tokens_in: 356000, tokens_out: 2400, note: "approximate, from the Codex run summary"}
+
+services:                      # running infrastructure, prorated
+  - {provider: aiven, item: "Valkey, Developer plan (shared Valio budget)", usd_per_month: 15, since: "2026-11-13 22:30", note: "paid from Aiven's $50 trial credits"}
+  - {provider: verda, item: "CPU instance, prod (FIN-01)", usd_per_hour: null, since: "2026-11-13 20:00", note: "price: Verda console (Rene)"}
+  - {provider: verda, item: "CPU instance, staging", usd_per_hour: null, since: "2026-11-13 20:00", note: "price: Verda console (Rene)"}
+  - {provider: craci, item: "CI runners (test, docker, smoke, eval, llm-eval)", usd_per_hour: null, since: "2026-11-13 21:40", note: "paid from CRACI's per-team compute credits; see the CRACI dashboard"}
+
+notes:
+  - "Gemini and Verda keys are shared with Rene's other work until the Sous-only keys land; usage before the switch is attributed from these run logs, not from the provider dashboards."
+  - "Valio Aimo's API is free for the challenge (rate-limited, not billed)."
