@@ -80,7 +80,9 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(aimo, "_client", httpx.Client(base_url="https://aimo.test/api",
                                                       transport=httpx.MockTransport(valio)))
     aimo.reset()
+    api._hits.clear()  # the per-IP POST limit is process-wide; don't eat other tests' budget
     yield valio
+    api._hits.clear()
     aimo.reset()
     signing._key.cache_clear()
 
