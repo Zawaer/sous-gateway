@@ -6,6 +6,7 @@ today (`ubuntu-24.04`, the same base as CRACI Slim) and on [CRACI](https://docs.
 
 ```
 test ──────────► eval (main / manual only; needs VALIO_AIMO_API_KEY + scripts/eval.py)
+     └─────────► llm-eval (manual, or main pushes that change agent/; needs VALIO_AIMO_API_KEY + GEMINI_API_KEY and/or VERDA_INFERENCE_API_KEY)
 docker ────────► smoke
 ```
 
@@ -15,6 +16,7 @@ docker ────────► smoke
 | `docker` | Builds the [Dockerfile](../Dockerfile) with buildx (layer cache in the Actions cache), writes a CycloneDX SBOM with syft, scans it with grype, fails only on **critical vulnerabilities that have a fix**. Uploads `sbom-and-vulns` (SBOM, grype JSON, TSV) and the image. Severity table in the job summary. | 8 | default (observe) |
 | `smoke` | Loads that image and starts the real [compose.yaml](../compose.yaml) (MariaDB + gateway) with the override [tests/fixtures/compose.smoke.yaml](../tests/fixtures/compose.smoke.yaml): a 20-product fixture catalog instead of Valio's data, no API key. [tests/fixtures/smoke.sh](../tests/fixtures/smoke.sh) checks `/health` (storage = mariadb), `/docs`, `/openapi.json`, `/.well-known/jwks.json` (Ed25519 key), a catalog search, and MCP `initialize` + `tools/list` at `/mcp/`. | 2 (default) | **deny**, only `dockerhub` |
 | `eval` | Runs `scripts/eval.py` (the scripted buyer requests in `evals/cases.yaml`) against the live Valio Aimo API and uploads `evals/results.json` as `eval-results`. Skips itself (with a notice) when the `VALIO_AIMO_API_KEY` secret or `scripts/eval.py` is missing. Never runs on pull requests. Valio data files are cached between runs. | 2 (default) | **deny**, only `pypi` + `junction26.valioaimo.fi:443` |
+| `llm-eval` | Runs the same cases' natural-language requests through the LLM buyer agent (`agent/`, `scripts/llm_eval.py`), once per model in `LLM_EVAL_MODELS` (default `gemini:gemini-4-hydrogen verda:kimi-k3-1-pro verda:deepseek-4-1-flash-1017`; repo variable overrides). Uploads `evals/llm_results.*.json` + `docs/LLM_EVAL.md` as `llm-eval-results` and puts the comparison table in the job summary. Skips with a notice when the Valio key or both model keys are missing, and on pushes that don't touch the agent, its tools or the cases. Fails only if an auto-approved order violates its mandate. See [LLM_EVAL.md](LLM_EVAL.md). | 2 (default) | **deny**, only `pypi` + `junction26.valioaimo.fi`, `generativelanguage.googleapis.com`, `inference.verda.com` (443) |
 
 All actions are pinned to full commit SHAs (version in a comment).
 
