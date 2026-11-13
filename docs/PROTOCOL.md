@@ -47,7 +47,7 @@ The same operations are exposed twice, over one service layer (`valtakirja/servi
 | Allergen codes | `GET /allergens` | resource `valtakirja://allergens` |
 | Health | `GET /health` (Valio call counters, storage backend, whether the approver code is required) | |
 
-REST errors are `{"error": "<code>", "message": "<text>"}` with an HTTP status. MCP tools return `{"error", "message", "hint", "retryable"}` as a tool result with `isError: true` instead of raising; `hint` tells the model what to do next (codes in section 7).
+REST errors, including schema and HTTP errors, are `{"error": "<code>", "message": "<text>"}` with an HTTP status (plus `retry_after` on `valio_unavailable` when known). MCP tools return `{"error", "message", "hint", "retryable"}` as a tool result with `isError: true` instead of raising; `hint` tells the model what to do next (codes in section 7).
 
 ## 3. Signatures
 
@@ -255,7 +255,9 @@ The `receipt_jws` is signed when the order is placed and **re-signed after the h
 
 | Code | HTTP | When | Retry as-is? |
 |---|---|---|---|
-| `invalid_argument` | 400 | A field is malformed (standing `amounts` not one positive number per item; over MCP also bad dates). REST schema errors are FastAPI's 422 with a `detail` list. | no |
+| `invalid_argument` | 400 | A field is malformed (standing `amounts` not one positive number per item; over MCP also bad dates). | no |
+| `invalid_request` | 422 | REST request doesn't match the schema; `message` names each field, `details` has the raw list. | no |
+| `unauthorized` | 401 | Human action without the right `X-Approver-Code`. | no |
 | `too_many_candidates` | 400 | More than 200 candidate ids in a quote. | no |
 | `mandate_not_found`, `quote_not_found`, `order_not_found`, `product_not_found`, `standing_not_found` | 404 | Unknown id. | no |
 | `agent_mismatch` | 403 | Suggestions asked for by an agent that doesn't hold the mandate. | no |
