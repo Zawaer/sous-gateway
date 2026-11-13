@@ -46,7 +46,11 @@ app = FastAPI(
         "Lets external purchasing agents search Valio Aimo's catalog, get signed quotes with live price and "
         "availability, and place orders within a mandate (sous) issued by their human. The mandate engine "
         "decides each order's tier: silent or notify (ordered), ask (waits for a human), block (refused). "
-        "Every step is in a hash-chained audit log. The same operations are available over MCP at /mcp."
+        "Every step is in a hash-chained audit log. The same operations are available over MCP at /mcp.\n\n"
+        "Discovery and open standards: A2A agent card at /.well-known/agent-card.json, MCP server card at "
+        "/.well-known/mcp/server-card.json, signing keys at /.well-known/jwks.json, JSON Schemas at /schemas/{mandate,"
+        "quote,order,receipt}.json, and AP2 / schema.org views of mandates, quotes and orders (tag `standards`). "
+        "Mapping and gaps: https://github.com/Zawaer/sous/blob/main/docs/STANDARDS.md"
     ),
     lifespan=lifespan,
 )
@@ -60,6 +64,9 @@ async def mcp_without_slash(request: Request, call_next):
     if request.scope["path"] == "/mcp":
         request.scope["path"] = "/mcp/"
         request.scope["raw_path"] = b"/mcp/"
+    elif request.scope["path"] in ("/mcp/server-card", "/mcp/server-card/"):  # SEP-2127's recommended location
+        request.scope["path"] = "/.well-known/mcp/server-card.json"
+        request.scope["raw_path"] = request.scope["path"].encode()
     return await call_next(request)
 app.mount("/mcp", mcp_app)
 WEB_DIR = config.ROOT / "web"
@@ -171,6 +178,70 @@ async def gateway_error(_: Request, e: S.GatewayError):
 def jwks():
     """Public key for verifying quotes, mandates and order receipts (Ed25519, JWS)."""
     return signing.jwks()
+
+
+from . import standards as STD  # noqa: E402  open-standard views and discovery; docs/STANDARDS.md
+
+
+@app.get("/.well-known/agent-card.json", tags=["standards"])
+def a2a_agent_card(request: Request):
+    """A2A v1.0 Agent Card: interfaces (MCP, OpenAPI), auth schemes, JWKS, schemas and skills (= MCP tools)."""
+    return STD.agent_card(STD.base_url(str(request.base_url)), app.version)
+
+
+@app.get("/.well-known/agent.json", include_in_schema=False)
+def a2a_agent_card_legacy(request: Request):
+    return a2a_agent_card(request)  # A2A < 0.3 path
+
+
+@app.get("/.well-known/mcp/server-card.json", tags=["standards"])
+def mcp_server_card(request: Request):
+    """MCP Server Card (SEP-2127, schema v1); also at /mcp/server-card."""
+    return STD.mcp_server_card(STD.base_url(str(request.base_url)), app.version)
+
+
+@app.get("/.well-known/ai-catalog.json", tags=["standards"])
+def ai_catalog(request: Request):
+    return JSONResponse(STD.ai_catalog(STD.base_url(str(request.base_url))), media_type="application/ai-catalog+json")
+
+
+@app.get("/schemas/{name}.json", tags=["standards"])
+def json_schema(name: Literal["mandate", "quote", "order", "receipt"], request: Request):
+    """JSON Schema (2020-12) of a native object: mandate, quote (sous-quote+jws payload), order, receipt."""
+    return JSONResponse(STD.json_schema(name, STD.base_url(str(request.base_url))),
+                        media_type="application/schema+json")
+
+
+@app.get("/mandates/{mandate_id}/ap2", tags=["standards"])
+def mandate_ap2(mandate_id: str):
+    """The mandate as AP2 v0.2 open checkout/payment mandate claims, a v0.1 IntentMandate and a W3C VC."""
+    return STD.ap2_mandate(mandate_id)
+
+
+@app.get("/quotes/{quote_id}/ap2", tags=["standards"])
+def quote_ap2(quote_id: str, request: Request):
+    """The quote as a gateway(merchant)-signed UCP checkout for an AP2 v0.2 checkout mandate, and a v0.1 CartMandate."""
+    return STD.ap2_quote(quote_id, STD.base_url(str(request.base_url)))
+
+
+@app.get("/quotes/{quote_id}/schema-org", tags=["standards"])
+def quote_schema_org(quote_id: str, request: Request):
+    """The quote as schema.org Offer JSON-LD."""
+    return JSONResponse(STD.schema_org_quote(quote_id, STD.base_url(str(request.base_url))),
+                        media_type="application/ld+json")
+
+
+@app.get("/orders/{order_id}/ap2", tags=["standards"])
+def order_ap2(order_id: str, request: Request):
+    """The order as a signed AP2 v0.2 CheckoutReceipt (final states only)."""
+    return STD.ap2_receipt(order_id, STD.base_url(str(request.base_url)))
+
+
+@app.get("/orders/{order_id}/schema-org", tags=["standards"])
+def order_schema_org(order_id: str, request: Request):
+    """The order as schema.org Order JSON-LD with OrderItems."""
+    return JSONResponse(STD.schema_org_order(order_id, STD.base_url(str(request.base_url))),
+                        media_type="application/ld+json")
 
 
 @app.get("/health", tags=["meta"])

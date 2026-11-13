@@ -67,6 +67,8 @@ Everything the gateway signs is a **compact JWS** (RFC 7515) with **Ed25519** (`
 | `sous-quote+jws` | The quote object (section 5) |
 | `sous-order+jws` | The order receipt: `id, quote_id, mandate_id, status, total_ex_vat, lines, decision, approval, updated_at`. Re-signed after a human decision. |
 
+JSON Schemas (2020-12) of these payloads are served at `GET /schemas/mandate.json`, `/schemas/quote.json`, `/schemas/order.json` and `/schemas/receipt.json` (generated from the models in `sous/standards.py` and `sous/mandate.py`; they allow extra fields, so new fields don't break readers). AP2, schema.org and discovery views of the same objects are described in [STANDARDS.md](STANDARDS.md).
+
 Tokens signed before the rename from Valtakirja carry `valtakirja-mandate+jws`, `valtakirja-quote+jws` and `valtakirja-order+jws`; the gateway still verifies them as the matching `sous-*` type.
 
 The gateway trusts only signed payloads: an order is built from the quote's verified JWS payload and the mandate's verified JWS payload, never from the stored copies. A mandate whose signature no longer verifies gives `mandate_signature`; a quote, `quote_signature`.

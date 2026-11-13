@@ -12,7 +12,7 @@ Approve and reject are REST-only on purpose: an agent should not have a tool tha
 Quotes, mandates and receipts are RFC 7515 compact JWS, `alg: EdDSA` (RFC 8037), with the key published as a JWKS at `/.well-known/jwks.json`.
 Any language has a JOSE library, so a buyer can verify offline without our code. Ed25519 keys are small, signing is fast and deterministic.
 Each object has its own `typ` so a quote can't be passed off as a receipt.
-Production path: express the mandate as a W3C Verifiable Credential signed by the buyer, and align quote and order with the agent payment protocols now emerging (Google's AP2 mandates, OpenAI/Stripe's ACP). The JWS payloads map onto both without changing the rules engine.
+Production path: express the mandate as a W3C Verifiable Credential signed by the buyer, and align quote and order with the agent payment protocols now emerging (Google's AP2 mandates, OpenAI/Stripe's ACP). The JWS payloads map onto both without changing the rules engine. Done as views: AP2 v0.2 / schema.org exports, A2A and MCP server cards and JSON Schemas; mapping and gaps in [STANDARDS.md](STANDARDS.md).
 
 ## 3. Deterministic rules engine; the LLM never decides
 `mandate.evaluate` is plain Python: every finding has a stable rule id, a tier and a human-readable sentence. The same input always gives the same tier.

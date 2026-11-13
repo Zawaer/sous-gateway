@@ -58,9 +58,10 @@ Each sandbox has 15 live Valio Aimo lookups (cached offers are free); `GET /sand
 | Standing orders | `POST /standing-orders`, `GET /standing-orders[/{id}]`, `POST /standing-orders/{id}/renew`, `.../pause`, `.../resume` (human) | `create_standing_order`, `renew_standing_order`, `get_standing_order` |
 | Notifications | `GET /notifications`, `POST /notifications/test` (human) | |
 | Audit and trust | `GET /audit`, `GET /audit/verify`, `GET /.well-known/jwks.json`, `GET /health` | |
+| Discovery and standards | `GET /.well-known/agent-card.json` (A2A), `GET /.well-known/mcp/server-card.json` (MCP), `GET /schemas/{mandate,quote,order,receipt}.json`, `GET /mandates/{id}/ap2`, `GET /quotes/{id}/ap2`, `GET /quotes/{id}/schema-org`, `GET /orders/{id}/ap2`, `GET /orders/{id}/schema-org` | |
 | Judge sandbox | `POST /sandbox`, `GET /sandbox/{id}`, `DELETE /sandbox/{id}` (human); `?sandbox=<id>` on the list endpoints | |
 
-MCP also offers the resources `sous://allergens` and `sous://mandates/{id}`, and a `purchase` prompt. Full details, error codes and rule ids: [docs/PROTOCOL.md](docs/PROTOCOL.md).
+MCP also offers the resources `sous://allergens` and `sous://mandates/{id}`, and a `purchase` prompt. Full details, error codes and rule ids: [docs/PROTOCOL.md](docs/PROTOCOL.md). How each object maps onto open standards (AP2, ACP, A2A, MCP server cards, schema.org, W3C VC 2.0, JOSE), what is exported and what is still missing: [docs/STANDARDS.md](docs/STANDARDS.md).
 
 ## Quick start
 
