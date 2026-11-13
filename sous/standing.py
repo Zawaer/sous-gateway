@@ -261,7 +261,8 @@ def _items(so: dict, amounts: list[float] | None) -> list[dict]:
 
 
 def renew(standing_id: str, delivery_date: date | None = None, *, agent_id: str | None = None,
-          amounts: list[float] | None = None, agent_token: str | None = None) -> dict:
+          amounts: list[float] | None = None, agent_token: str | None = None,
+          rationale: str | None = None) -> dict:
     """Quote this week's order live, check it for drift against past renewals, and place it.
 
     `amounts` (one per item) are this week's amounts if they differ from the standing order's usual ones.
@@ -287,7 +288,8 @@ def renew(standing_id: str, delivery_date: date | None = None, *, agent_id: str 
 
     q = S.request_quote(S.QuoteRequest(
         agent_id=so["agent_id"], mandate_id=so["mandate_id"], delivery_date=when,
-        items=[S.QuoteItem(product_ids=it["product_ids"], amount=it["amount"], unit=it["unit"]) for it in items]
+        items=[S.QuoteItem(product_ids=it["product_ids"], amount=it["amount"], unit=it["unit"]) for it in items],
+        rationale=rationale or f"Weekly renewal of standing order {so['name']}",
     ), agent_token=agent_token)["quote"]
     snap = _snapshot(items, q)
     findings, base = drift(so, snap, hist)
@@ -303,7 +305,7 @@ def renew(standing_id: str, delivery_date: date | None = None, *, agent_id: str 
     tries = sum(1 for r in rens if not r.get("simulated") and r["delivery_date"] == when.isoformat())
     order = S.place_order(so["agent_id"], so["mandate_id"], q["id"],
                           idempotency_key=f"standing:{standing_id}:{when}:{tries + 1}", extra_findings=findings,
-                          agent_token=agent_token)
+                          agent_token=agent_token, rationale=rationale)
     ren = {"id": S._id("SR"), "standing_id": standing_id, "delivery_date": when.isoformat(), "simulated": False,
            "quote_id": q["id"], "order_id": order["id"], "status": order["status"],
            "outcome": order["decision"]["outcome"], **snap,

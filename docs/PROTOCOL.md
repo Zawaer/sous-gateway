@@ -216,7 +216,7 @@ Warnings `LOT_SIZE`, `CUTOFF_UNKNOWN`, `STOCK_UNKNOWN` and `LOW_RELIABILITY` hav
 
 ## 7. Orders
 
-`POST /orders` with `{agent_id, mandate_id, quote_id, idempotency_key?}`. The gateway, in order:
+`POST /orders` with `{agent_id, mandate_id, quote_id, idempotency_key?, rationale?}`. The gateway, in order:
 
 All steps run under one lock, so concurrent requests can't double order, overrun the daily limit, or both approve and reject the same order.
 
@@ -229,7 +229,9 @@ All steps run under one lock, so concurrent requests can't double order, overrun
 7. Re-checks every line's cut-off against the clock (no API call) and adds `CUTOFF_PASSED` where needed.
 8. Re-runs the mandate engine with today's spend, maps the tier to a status, signs a receipt, stores the order, and sends a notification for notify and ask (section 10).
 
-Order fields: `id (PO-XXXXXXXX), quote_id, mandate_id, agent_id, buyer, status, total_ex_vat, total_inc_vat, delivery_date, lines[], decision {outcome, findings[], by: "mandate-engine", at}, approval, order_url, approval_url, idempotency_key, created_at, updated_at, receipt_jws`.
+Order fields: `id (PO-XXXXXXXX), quote_id, mandate_id, agent_id, buyer, status, total_ex_vat, total_inc_vat, delivery_date, lines[], decision {outcome, findings[], by: "mandate-engine", at}, approval, order_url, approval_url, idempotency_key, agent_rationale, created_at, updated_at, receipt_jws`.
+
+**Rationale.** `POST /quotes`, `POST /orders` and `POST /standing-orders/{id}/renew` (and the MCP tools `request_quote`, `place_order`, `renew_standing_order`) take an optional `rationale`: the agent's business reason in one sentence, at most 500 characters, whitespace collapsed. It is stated, not verified, and **no rule reads it**: the tier comes only from the signed quote and mandate. It is signed into the quote (`quote.rationale`), kept on the order as `agent_rationale` (the order's own, else the quote's), and written to the audit events `quote.issued`, `order.<status>` and `order.rejected`, so an approver sees why the agent asked next to which rule fired. The reference LLM agent (`agent/buyer.py`) does not let the model write it: the runtime sends the buyer's own request text. A renewal without one records `Weekly renewal of standing order <name>`.
 
 ### Statuses
 

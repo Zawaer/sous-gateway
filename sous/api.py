@@ -19,7 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import aimo, catalog, config, sandbox, service as S, signing, standing, store
 from .mandate import Mandate
@@ -258,6 +258,7 @@ class OrderRequest(BaseModel):
     mandate_id: str
     quote_id: str
     idempotency_key: str | None = None
+    rationale: str | None = Field(None, max_length=500, description=S.RATIONALE_DOC)
 
 
 @app.post("/orders", tags=["ordering"])
@@ -266,7 +267,8 @@ def place_order(req: OrderRequest, token: str | None = Depends(agent_token)):
 
     If the mandate requires agent authentication, send `Authorization: Bearer <agent token>`
     (401 agent_auth_required without it, 403 agent_auth_invalid with a wrong one)."""
-    return S.place_order(req.agent_id, req.mandate_id, req.quote_id, req.idempotency_key, agent_token=token)
+    return S.place_order(req.agent_id, req.mandate_id, req.quote_id, req.idempotency_key, agent_token=token,
+                         rationale=req.rationale)
 
 
 @app.get("/orders", tags=["ordering"])
@@ -442,6 +444,7 @@ class RenewRequest(BaseModel):
     delivery_date: date | None = None
     agent_id: str | None = None
     amounts: list[float] | None = None
+    rationale: str | None = Field(None, max_length=500, description=S.RATIONALE_DOC)
 
 
 class SimulateHistory(BaseModel):
@@ -478,7 +481,7 @@ def renew_standing_order(standing_id: str, req: RenewRequest, token: str | None 
 
     Any drift lifts the order to at least ask: it waits for a human with the drift findings."""
     return standing.renew(standing_id, req.delivery_date, agent_id=req.agent_id, amounts=req.amounts,
-                          agent_token=token)
+                          agent_token=token, rationale=req.rationale)
 
 
 @app.post("/standing-orders/{standing_id}/pause", tags=["standing orders"], dependencies=[Depends(require_approver)])

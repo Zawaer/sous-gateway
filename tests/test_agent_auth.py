@@ -279,3 +279,36 @@ def test_mariadb_credential_roundtrip(monkeypatch):
     assert code(S.authorize_agent, "M-AUTH-MARIA", "a", token, "test")[0] == "agent_auth_invalid"
     S.authorize_agent("M-AUTH-MARIA", "a", new, "test")
     store._conn = None
+
+
+# --- rationale ----------------------------------------------------------------
+
+def test_rationale_is_signed_into_the_quote_kept_on_the_order_and_audited():
+    issue()
+    r = req()
+    r.rationale = "  Breakfast milk for\n400 guests  "
+    out = S.request_quote(r)
+    assert out["quote"]["rationale"] == "Breakfast milk for 400 guests"
+    assert signing.verify(out["jws"], "sous-quote+jws")["rationale"] == "Breakfast milk for 400 guests"
+    assert events("quote.issued")[-1]["data"]["rationale"] == "Breakfast milk for 400 guests"
+    o = S.place_order("a", "M", out["quote"]["id"], rationale="Monday delivery, as asked")
+    assert o["agent_rationale"] == "Monday delivery, as asked"
+    assert events("order.ordered")[-1]["data"]["agent_rationale"] == "Monday delivery, as asked"
+    # without one at order time, the quote's stated reason carries over; none at all stays None
+    q2 = S.request_quote(r)["quote"]
+    assert S.place_order("a", "M", q2["id"])["agent_rationale"] == "Breakfast milk for 400 guests"
+    q3 = S.request_quote(req())["quote"]
+    assert "rationale" not in q3 and S.place_order("a", "M", q3["id"])["agent_rationale"] is None
+
+
+def test_rationale_over_rest_and_its_length_limit():
+    from fastapi.testclient import TestClient
+    from sous.api import app
+    issue()
+    c = TestClient(app)
+    body = {"agent_id": "a", "mandate_id": "M", "delivery_date": "2026-11-16",
+            "items": [{"product_ids": ["MILK"], "amount": 10, "unit": "L"}]}
+    assert c.post("/quotes", json={**body, "rationale": "x" * 501}).status_code == 422
+    q = c.post("/quotes", json={**body, "rationale": "Weekly milk"}).json()["quote"]
+    o = c.post("/orders", json={"agent_id": "a", "mandate_id": "M", "quote_id": q["id"], "rationale": "As quoted"})
+    assert o.status_code == 200 and o.json()["agent_rationale"] == "As quoted"

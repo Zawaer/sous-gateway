@@ -182,6 +182,7 @@ def request_quote(
     delivery_date: str,
     items: list[S.QuoteItem],
     mandate_id: str | None = None,
+    rationale: str | None = None,
     agent_token: str | None = None,
     ctx: Context | None = None,
 ) -> dict:
@@ -194,10 +195,13 @@ def request_quote(
     Always pass mandate_id: the quote then includes mandate_preview (silent | notify | ask | block, and why).
     Check quote.lines[].orderable, quote.uncovered and mandate_preview, then place_order with quote.id
     before quote.expires_at.
+    rationale: one sentence on the buyer's business need (e.g. "breakfast milk for 400 guests"); it is signed into
+      the quote and shown to the humans who audit or approve. State the need, not your reasoning steps.
     agent_token: only if you can't send the Authorization: Bearer header and the mandate requires agent auth.
     """
     return S.request_quote(S.QuoteRequest(agent_id=agent_id, mandate_id=mandate_id,
-                                          delivery_date=_date(delivery_date), items=items),
+                                          delivery_date=_date(delivery_date), items=items,
+                                          rationale=rationale),
                            agent_token=_agent_token(ctx, agent_token))
 
 
@@ -230,16 +234,18 @@ def suggest_substitutes(
                                       open_world_hint=True))
 @_tool
 def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: str | None = None,
-                agent_token: str | None = None, ctx: Context | None = None) -> dict:
+                rationale: str | None = None, agent_token: str | None = None,
+                ctx: Context | None = None) -> dict:
     """Order a quote under a mandate. This is the only call that commits the buyer to a purchase.
 
     The mandate engine decides, not you: status ordered (silent/notify), pending_approval (a human must approve
     at approval_url; poll get_order) or refused (decision.findings say which rule fired).
     Always send an idempotency_key and reuse it on retries: the same key never orders twice.
+    rationale: one sentence on why the buyer needs this order; the approver sees it next to the mandate's findings.
     agent_token: only if you can't send the Authorization: Bearer header and the mandate requires agent auth.
     """
     return S.place_order(agent_id, mandate_id, quote_id, idempotency_key,
-                         agent_token=_agent_token(ctx, agent_token))
+                         agent_token=_agent_token(ctx, agent_token), rationale=rationale)
 
 
 @mcp.tool(title="Order status", annotations=READ_LOCAL)
@@ -296,8 +302,8 @@ def create_standing_order(mandate_id: str, agent_id: str, name: str, items: list
                                       open_world_hint=True))
 @_tool
 def renew_standing_order(standing_id: str, agent_id: str, delivery_date: str | None = None,
-                         amounts: list[float] | None = None, agent_token: str | None = None,
-                         ctx: Context | None = None) -> dict:
+                         amounts: list[float] | None = None, rationale: str | None = None,
+                         agent_token: str | None = None, ctx: Context | None = None) -> dict:
     """Renew this week's standing order: live quote, drift check against past renewals, then the order.
 
     amounts: this week's amount per item, in item order, if it differs from the usual (omit for the usual).
@@ -307,7 +313,8 @@ def renew_standing_order(standing_id: str, agent_id: str, delivery_date: str | N
     agent_token: only if you can't send the Authorization: Bearer header and the mandate requires agent auth.
     """
     return standing.renew(standing_id, _date(delivery_date) if delivery_date else None, agent_id=agent_id,
-                          amounts=amounts, agent_token=_agent_token(ctx, agent_token))
+                          amounts=amounts, agent_token=_agent_token(ctx, agent_token),
+                          rationale=rationale)
 
 
 @mcp.tool(title="Standing order, history and drift baseline", annotations=READ_LOCAL)

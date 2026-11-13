@@ -17,6 +17,7 @@ checked by the eval set too. Needs the demo mandates (scripts/seed.py).
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -40,18 +41,63 @@ def next_monday(today: date | None = None) -> date:
     return today + timedelta(days=(7 - today.weekday()) % 7 or 7)
 
 
+def approver_code() -> str:
+    return os.getenv("SOUS_APPROVER_CODE") or os.getenv("VALTAKIRJA_APPROVER_CODE", "")  # old name still works
+
+
 class Gateway:
-    def __init__(self, base: str):
+    """The gateway's REST API, as a buyer's agent sees it.
+
+    Agent credentials: when a mandate requires agent authentication (its require_agent_auth, or the gateway's
+    SOUS_REQUIRE_AGENT_AUTH=1), quotes and orders carry `Authorization: Bearer <token>`. Tokens come from
+    SOUS_AGENT_TOKENS (JSON {mandate_id: token}) or the token file (--tokens, default .sous-agent-tokens.json,
+    gitignored). If a needed token is missing and SOUS_APPROVER_CODE is set, the script rotates the mandate's
+    credential (a human action, audited) and saves the new token to the file, chmod 600.
+    """
+
+    def __init__(self, base: str, token_file: str = ".sous-agent-tokens.json"):
         self.base = base.rstrip("/")
         self.http = httpx.Client(base_url=self.base, timeout=60, headers={"user-agent": "sous-demo/1"})
+        self.why: str | None = None  # the buyer's request, sent as the agent's rationale
+        self.token_file = token_file
+        self.tokens: dict[str, dict[str, str]] = {}
+        try:
+            with open(token_file) as f:
+                self.tokens = json.load(f)
+        except FileNotFoundError:
+            pass
+        if env := os.getenv("SOUS_AGENT_TOKENS"):
+            self.tokens.setdefault(self.base, {}).update(json.loads(env))
 
-    def get(self, path: str, **params):
-        r = self.http.get(path, params=params)
+    def _headers(self, mandate: str) -> dict:
+        """Authorization for this mandate's agent, minting a credential if one is needed and missing."""
+        mine = self.tokens.setdefault(self.base, {})
+        if mandate not in mine:
+            st = self.http.get(f"/mandates/{mandate}/agent-credential")
+            if st.status_code != 200 or not st.json().get("required"):
+                return {}
+            code = approver_code()
+            if not code:
+                raise RuntimeError(f"{mandate} requires an agent token: put it in SOUS_AGENT_TOKENS or "
+                                   f"{self.token_file}, or set SOUS_APPROVER_CODE to mint one")
+            r = self.http.post(f"/mandates/{mandate}/agent-credential", json={"by": "demo script", "action": "rotate"},
+                               headers={"x-approver-code": code})
+            if r.status_code >= 400:
+                raise RuntimeError(f"could not mint an agent token for {mandate}: {r.status_code} {r.text[:200]}")
+            mine[mandate] = r.json()["agent_credential"]["token"]
+            fd = os.open(self.token_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                json.dump(self.tokens, f, indent=1)
+            say(_c("2", f"  minted an agent token for {mandate}, saved to {self.token_file}"))
+        return {"authorization": f"Bearer {mine[mandate]}"}
+
+    def get(self, path: str, headers: dict | None = None, **params):
+        r = self.http.get(path, params=params, headers=headers or {})
         r.raise_for_status()
         return r.json()
 
-    def post(self, path: str, body: dict):
-        r = self.http.post(path, json=body)
+    def post(self, path: str, body: dict, headers: dict | None = None):
+        r = self.http.post(path, json=body, headers=headers or {})
         if r.status_code >= 400:
             raise RuntimeError(f"{r.status_code} {r.text[:300]}")
         return r.json()
@@ -61,12 +107,14 @@ class Gateway:
         return [p["id"] for p in res["products"]]
 
     def quote(self, agent: str, mandate: str, items: list[dict], when: date) -> dict:
-        return self.post("/quotes", {"agent_id": agent, "mandate_id": mandate,
-                                     "delivery_date": when.isoformat(), "items": items})["quote"]
+        return self.post("/quotes", {"agent_id": agent, "mandate_id": mandate, "rationale": self.why,
+                                     "delivery_date": when.isoformat(), "items": items},
+                         self._headers(mandate))["quote"]
 
     def order(self, agent: str, mandate: str, quote_id: str) -> dict:
         return self.post("/orders", {"agent_id": agent, "mandate_id": mandate, "quote_id": quote_id,
-                                     "idempotency_key": f"demo-{uuid.uuid4().hex[:12]}"})
+                                     "rationale": self.why, "idempotency_key": f"demo-{uuid.uuid4().hex[:12]}"},
+                         self._headers(mandate))
 
 
 def say(text: str, pause: float = 0.0) -> None:
@@ -109,6 +157,7 @@ def show_order(o: dict, base: str) -> None:
 def scene_1(gw: Gateway, when: date) -> None:
     """Hotel: 1,000 L lactose-free milk by Monday, split across packs, within the mandate [H01]."""
     agent, mandate = "aurora-purchasing-agent", "M-HOTEL-AURORA"
+    gw.why = 'We need 1,000 litres of lactose-free milk delivered on Monday.'
     say(_c("1", '"We need 1,000 litres of lactose-free milk delivered on Monday."') + _c("2", "  (Hotel Aurora's agent)"))
     ids = gw.search(agent, "laktoositon maito", 12, claims=["FREE_FROM_LACTOSE"])
     say(f"  searched the static catalog: {len(ids)} lactose-free candidates, 0 Valio API calls")
@@ -121,9 +170,11 @@ def scene_2(gw: Gateway, when: date) -> None:
     """Hospital: a substitute with no allergen data is held for a human (milk- and nut-free kitchen) [P06]."""
     agent, mandate = "meilahti-kitchen-agent", "M-HOSPITAL-KITCHEN"
     original = "468376"  # Bravo Chef chopped tomatoes 400 g
+    gw.why = 'Swap our usual 400 g chopped tomatoes for a bulk pack.'
     say(_c("1", '"Swap our usual 400 g chopped tomatoes for a bulk pack."') + _c("2", "  (Meilahti hospital kitchen's agent)"))
     subs = gw.get(f"/products/{original}/substitutes", delivery_date=when.isoformat(), amount=40,
-                  unit="SALES_UNIT", mandate_id=mandate, agent_id=agent, limit=4)
+                  unit="SALES_UNIT", mandate_id=mandate, agent_id=agent, limit=4,
+                  headers=gw._headers(mandate))
     for o in subs["options"]:
         say(f"    {o['tier']:<6} {o['name']}" + _c("2", f"  {'; '.join(o['compromises']) or 'no compromises'}"))
     pick = next((o for o in subs["options"] if o["allergen_check"]["status"] == "unknown"), None) or subs["options"][0]
@@ -137,10 +188,12 @@ def scene_2(gw: Gateway, when: date) -> None:
 def scene_3(gw: Gateway, when: date) -> None:
     """Cheapest options are Terminal products whose cut-off has passed: skipped, or refused when named [H09, H08]."""
     agent, mandate = "aurora-purchasing-agent", "M-HOTEL-AURORA"
+    gw.why = '300 litres of lactose-free skimmed or semi-skimmed milk, cheapest that arrives Monday.'
     say(_c("1", '"300 litres of lactose-free skimmed or semi-skimmed milk, cheapest that arrives Monday."'))
     q = gw.quote(agent, mandate, [{"product_ids": ["464119", "476240", "464201"], "amount": 300, "unit": "L"}], when)
     show_quote(q)
     show_order(gw.order(agent, mandate, q["id"]), gw.base)
+    gw.why = 'No, 500 litres of exactly 464119, the one we always buy.'
     say(_c("1", '"No, 500 litres of exactly 464119, the one we always buy."'))
     q = gw.quote(agent, mandate, [{"product_ids": ["464119"], "amount": 500, "unit": "L"}], when)
     show_quote(q)
@@ -149,11 +202,13 @@ def scene_3(gw: Gateway, when: date) -> None:
 
 def scene_4(gw: Gateway, when: date) -> None:
     """Guardrails: over the spend limit -> ask; gluten for the school -> refused [P07, S02]."""
+    gw.why = '400 litres of Oatly semi oat drink.'
     say(_c("1", '"400 litres of Oatly semi oat drink."') + _c("2", "  (hospital, auto-approve limit €400)"))
     q = gw.quote("meilahti-kitchen-agent", "M-HOSPITAL-KITCHEN",
                  [{"product_ids": ["470863"], "amount": 400, "unit": "L"}], when)
     show_quote(q)
     show_order(gw.order("meilahti-kitchen-agent", "M-HOSPITAL-KITCHEN", q["id"]), gw.base)
+    gw.why = '40 loaves of Pekan Leipä rye bread.'
     say(_c("1", '"40 loaves of Pekan Leipä rye bread."') + _c("2", "  (Espoo schools, gluten-free mandate)"))
     q = gw.quote("espoo-school-agent", "M-SCHOOL-ESPOO",
                  [{"product_ids": ["472463"], "amount": 40, "unit": "SALES_UNIT"}], when)
@@ -185,7 +240,7 @@ def ensure_mandate(gw: Gateway, m: dict) -> None:
     """Issue the mandate unless the gateway already has it (needs SOUS_APPROVER_CODE if the gateway sets one)."""
     if gw.http.get(f"/mandates/{m['id']}").status_code == 200:
         return
-    code = os.getenv("SOUS_APPROVER_CODE") or os.getenv("VALTAKIRJA_APPROVER_CODE", "")  # old name still works
+    code = approver_code()
     r = gw.http.post("/mandates", json=m, headers={"x-approver-code": code} if code else {})
     if r.status_code >= 400:
         raise RuntimeError(f"could not issue {m['id']} ({r.status_code}); set SOUS_APPROVER_CODE "
@@ -198,6 +253,7 @@ def scene_5(gw: Gateway, when: date) -> None:
     m = KAARNA
     agent, mandate = m["agent_id"], m["id"]
     ensure_mandate(gw, m)
+    gw.why = 'Lunch for 150 guests: oat drink, chickpeas, crushed tomatoes, hummus and rice.'
     say(_c("1", '"Lunch for 150 guests: oat drink, chickpeas, crushed tomatoes, hummus and rice."'))
     say(_c("2", "  Kaarna's mandate checks for milk, egg, tree nuts and peanuts. Missing allergen data requires human review."))
     avoid = {"avoid_allergens": m["avoid_allergens"], "food_only": "true"}
@@ -228,6 +284,7 @@ def scene_5(gw: Gateway, when: date) -> None:
     show_order(gw.order(agent, mandate, q["id"]), gw.base)
     say(_c("2", "    The reviewer can verify the flagged ingredients and decide whether to accept the partial order."))
 
+    gw.why = 'Add 2 jars of the Biona cashew nut butter for the dressing.'
     say(_c("1", '"Add 2 jars of the Biona cashew nut butter for the dressing."'))
     q = gw.quote(agent, mandate, [{"product_ids": ["465267"], "amount": 2, "unit": "SALES_UNIT"}], when)
     show_quote(q)
@@ -244,12 +301,14 @@ def main() -> None:
     ap.add_argument("--date", type=date.fromisoformat, default=None, help="delivery date (default: next Monday)")
     ap.add_argument("--pause", type=float, default=1.5, help="seconds between scenes")
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--tokens", default=".sous-agent-tokens.json",
+                    help="agent token file {base: {mandate_id: token}} (gitignored)")
     a = ap.parse_args()
     if a.list:
         for k, f in SCENES.items():
             print(k, f.__doc__)
         return
-    gw = Gateway(a.base)
+    gw = Gateway(a.base, a.tokens)
     health = gw.get("/health")
     when = a.date or next_monday()
     storage = f" · storage {health['storage']}" if health.get("storage") else ""

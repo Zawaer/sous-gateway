@@ -22,6 +22,7 @@ import argparse
 import asyncio
 import inspect
 import json
+import os
 import sys
 import threading
 import time
@@ -33,7 +34,12 @@ from .llm import ChatClient, LLMError, config_from_env
 
 BUYER_TOOLS = ("search_products", "get_product", "get_mandate", "suggest_substitutes", "request_quote",
                "place_order", "get_order")
-BOUND = ("agent_id", "mandate_id", "idempotency_key")  # filled in by the runtime, hidden from the model
+BOUND = ("agent_id", "mandate_id", "idempotency_key", "agent_token", "rationale")  # set by the runtime, hidden from the model
+# Tools that take the agent's bearer credential (sous/mcp_server.py); MCPGateway adds it, so it never reaches the model
+# or a transcript.
+TOKEN_TOOLS = frozenset({"request_quote", "place_order", "renew_standing_order", "suggest_substitutes",
+                         "get_suggestions"})
+RATIONALE_TOOLS = frozenset({"request_quote", "place_order", "renew_standing_order"})
 MAX_RESULT_CHARS = 24000
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
@@ -44,12 +50,16 @@ class MCPGateway:
     """A persistent MCP client session, usable from synchronous code.
 
     target: the in-process MCPServer (sous.mcp_server.mcp) or a URL like https://host/mcp/.
+    agent_token: the agent's bearer credential (default $SOUS_AGENT_TOKEN), for mandates that require agent
+      authentication. It is added to the TOKEN_TOOLS calls' arguments here, below the model and the transcripts.
     The session lives in its own event-loop thread, because the MCP client's task groups must be
     entered and exited by the same task.
     """
 
-    def __init__(self, target, timeout_s: float = 120.0):
+    def __init__(self, target, timeout_s: float = 120.0, agent_token: str | None = None):
         from mcp import Client
+
+        self._agent_token = agent_token or os.getenv("SOUS_AGENT_TOKEN") or None
 
         if isinstance(target, str) and not target.rstrip("/").endswith("/mcp"):
             target = target.rstrip("/") + "/mcp/"
@@ -86,6 +96,8 @@ class MCPGateway:
         return self._run(self._client.list_tools()).tools
 
     def call(self, name: str, args: dict) -> tuple[bool, dict]:
+        if self._agent_token and name in TOKEN_TOOLS:
+            args = {**args, "agent_token": self._agent_token}
         r = self._run(self._client.call_tool(name, args))
         body = r.structured_content
         if body is None:
@@ -343,6 +355,7 @@ class BuyerAgent:
 
     def run(self, request: str) -> BuyerRun:
         run = BuyerRun(request=request, model=getattr(self.llm.cfg, "label", "?"))
+        self._rationale = " ".join(request.split())[:500]  # the buyer's own words, recorded by the gateway
         messages = [{"role": "system", "content": system_prompt(self.cfg)}, {"role": "user", "content": request}]
         run.messages = messages
         capped_at = None  # LLM call count when the tool-call budget ran out
@@ -408,6 +421,8 @@ class BuyerAgent:
             full["agent_id"] = self.cfg.agent_id
         if "mandate_id" in props:
             full["mandate_id"] = self.cfg.mandate_id
+        if name in RATIONALE_TOOLS and "rationale" in props:
+            full["rationale"] = getattr(self, "_rationale", None)
         if name == "place_order":
             full["idempotency_key"] = f"{self.cfg.agent_id}:{shown.get('quote_id')}"
         t0 = time.perf_counter()
@@ -450,6 +465,9 @@ def main(argv=None) -> int:
                     help="gateway base URL (MCP at /mcp/), or 'local' for the in-process gateway")
     ap.add_argument("--provider", help="gemini | verda | local (default: $LLM_PROVIDER or gemini)")
     ap.add_argument("--model")
+    ap.add_argument("--agent-token", default=None,
+                    help="the agent's bearer credential (default $SOUS_AGENT_TOKEN); needed when the mandate "
+                         "requires agent authentication. Prefer the env var: arguments show up in ps.")
     ap.add_argument("--max-tool-calls", type=int, default=12)
     ap.add_argument("--transcript", action="store_true", help="print every tool call")
     ap.add_argument("--recipe", action="store_true",
@@ -476,7 +494,7 @@ def main(argv=None) -> int:
         target = mcp
     else:
         target = a.gateway
-    with MCPGateway(target) as gw:
+    with MCPGateway(target, agent_token=a.agent_token) as gw:
         agent = BuyerAgent(ChatClient(cfg), gw, BuyerConfig(a.mandate, a.agent, helsinki_today(),
                                                              max_tool_calls=a.max_tool_calls))
         run = agent.run(a.request)

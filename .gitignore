@@ -9,3 +9,4 @@ __pycache__/
 *.pyc
 .next/
 dist/
+.sous-agent-tokens.json

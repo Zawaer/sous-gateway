@@ -119,7 +119,7 @@ def test_tool_schemas_hide_runtime_bound_arguments(gw):
     assert set(tools) == set(B.BUYER_TOOLS)
     for f in tools.values():
         props = f["parameters"]["properties"]
-        assert not set(props) & {"agent_id", "mandate_id", "idempotency_key"}, f["name"]
+        assert not set(props) & {"agent_id", "mandate_id", "idempotency_key", "agent_token", "rationale"}, f["name"]
         assert "$ref" not in json.dumps(f) and "anyOf" not in json.dumps(f)
     item = tools["request_quote"]["parameters"]["properties"]["items"]["items"]
     assert item["properties"]["unit"]["enum"] == ["L", "KG", "SALES_UNIT"]
@@ -272,3 +272,28 @@ def test_llm_eval_applicability_and_need_checks():
              "_quote_args": {"items": [{"product_ids": ["464201"], "amount": 500, "unit": "SALES_UNIT"}]}}
     failed = {n.split(" ")[0] for n, ok, _ in E.llm_checks(case, wrong, {"delivery_date": "2026-11-16"}) if not ok}
     assert failed == {"asked", "delivery", "quoted"}
+
+
+def test_runtime_records_the_buyers_words_as_rationale(gw):
+    """The model can't write the rationale: the runtime sends the buyer's request, signed into the quote."""
+    turns = happy_turns()
+    turns[2] = lambda res: [("place_order", {"quote_id": res[-1]["quote"]["id"], "rationale": "model made this up"})]
+    run = B.BuyerAgent(ScriptedLLM(turns), gw, cfg()).run("200 litres of  lactose-free milk\nfor Monday")
+    o = run.orders[0]
+    assert o["agent_rationale"] == "200 litres of lactose-free milk for Monday"
+    assert S.get_order(o["id"])["agent_rationale"] == o["agent_rationale"]
+    assert all("rationale" not in t["args"] for t in run.transcript())
+
+
+def test_mcp_gateway_adds_the_agent_token_below_the_model(monkeypatch):
+    """With an agent token, MCPGateway sends it on the money-spending tools; the transcript never shows it."""
+    from sous import config
+    monkeypatch.setattr(config, "REQUIRE_AGENT_AUTH", True)
+    token = S.agent_credential("M-HOTEL", "test")["agent_credential"]["token"]
+    with B.MCPGateway(mcp) as bare:
+        run = B.BuyerAgent(ScriptedLLM(happy_turns()[:2] + ["no token"]), bare, cfg()).run("milk")
+        assert run.results("request_quote", ok_only=False)[0][1]["error"] == "agent_auth_required"
+    with B.MCPGateway(mcp, agent_token=token) as authed:
+        run = B.BuyerAgent(ScriptedLLM(happy_turns()), authed, cfg()).run("milk")
+        assert run.orders[0]["status"] == "ordered"
+        assert token not in json.dumps(run.transcript()) and token not in json.dumps(run.summary())

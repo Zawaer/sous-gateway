@@ -327,11 +327,22 @@ class QuoteItem(BaseModel):
     note: str | None = None
 
 
+RATIONALE_DOC = ("The agent's business reason for this call, in a sentence (e.g. 'weekly breakfast milk for 400 "
+                 "guests'). Recorded as stated in the signed quote, the order and the audit log; never used by the rules.")
+
+
+def clean_rationale(text: str | None) -> str | None:
+    """One line, at most 500 characters, or None."""
+    text = " ".join((text or "").split())[:500]
+    return text or None
+
+
 class QuoteRequest(BaseModel):
     agent_id: str
     mandate_id: str | None = None
     delivery_date: date
     items: list[QuoteItem] = Field(min_length=1, max_length=50)
+    rationale: str | None = Field(None, max_length=500, description=RATIONALE_DOC)
 
 
 def order_url(order_id: str) -> str:
@@ -405,6 +416,8 @@ def _request_quote(req: QuoteRequest) -> dict:
         "alternatives_considered": considered,
         "valio_api_calls": {k: aimo.stats[k] - before[k] for k in aimo.stats},
     }
+    if rationale := clean_rationale(req.rationale):
+        body["rationale"] = rationale
     if mandate:
         outcome, findings = _evaluate(mandate, req.agent_id, body, now)
         body["mandate_preview"] = {"outcome": outcome, "findings": [f.model_dump() for f in findings]}
@@ -414,7 +427,7 @@ def _request_quote(req: QuoteRequest) -> dict:
                 {"quote_id": qid, "total_ex_vat": total_ex, "lines": [
                     {"product_id": l["product_id"], "quantity": l["quantity"], "issues": [i["code"] for i in l["issues"]]}
                     for l in lines], "uncovered": gaps, "preview": body.get("mandate_preview", {}).get("outcome"),
-                 "valio_api_calls": body["valio_api_calls"]})
+                 "valio_api_calls": body["valio_api_calls"], "rationale": body.get("rationale")})
     return {"quote": body, "jws": jws}
 
 
@@ -443,19 +456,21 @@ def _refresh_cutoffs(q: dict, now: datetime) -> None:
 # --- orders -----------------------------------------------------------------
 
 def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: str | None = None,
-                extra_findings=None, agent_token: str | None = None) -> dict:
+                extra_findings=None, agent_token: str | None = None, rationale: str | None = None) -> dict:
     """`extra_findings` (list of mandate.Finding) join the mandate's own; standing.py passes drift findings.
-    `agent_token` is the agent's bearer credential, needed when the mandate requires agent authentication."""
+    `agent_token` is the agent's bearer credential, needed when the mandate requires agent authentication.
+    `rationale` is the agent's stated reason, kept with the order and in the audit log (see RATIONALE_DOC)."""
     authorize_agent(mandate_id, agent_id, agent_token, "place_order")
     with _order_lock:
-        order, mandate = _place_order(agent_id, mandate_id, quote_id, idempotency_key, extra_findings)
+        order, mandate = _place_order(agent_id, mandate_id, quote_id, idempotency_key, extra_findings,
+                                      clean_rationale(rationale))
     if mandate is not None and order["decision"]["outcome"] in ("notify", "ask"):
         notify.send(f"order.{order['decision']['outcome']}", order, mandate)  # FYI / approval request; never blocks
     return order
 
 
-def _place_order(agent_id: str, mandate_id: str, quote_id: str,
-                 idempotency_key: str | None, extra_findings=None) -> tuple[dict, Mandate | None]:
+def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: str | None,
+                 extra_findings=None, rationale: str | None = None) -> tuple[dict, Mandate | None]:
     if idempotency_key and (prev := store.order_by_idempotency_key(idempotency_key)):
         if prev["agent_id"] != agent_id or prev["mandate_id"] != mandate_id or prev["quote_id"] != quote_id:
             raise GatewayError("idempotency_key_reused",
@@ -478,7 +493,8 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str,
         raise GatewayError("quote_used", f"Quote {quote_id} was already used for an order.", 409)
     now = _now()
     if now > datetime.fromisoformat(q["expires_at"]):
-        store.audit("order.rejected", agent_id, "agent", quote_id, mandate.buyer, {"reason": "quote expired"})
+        store.audit("order.rejected", agent_id, "agent", quote_id, mandate.buyer,
+                    {"reason": "quote expired", "agent_rationale": rationale})
         raise GatewayError("quote_expired", f"Quote {quote_id} expired at {q['expires_at']}; ask for a new one.", 409)
 
     _refresh_cutoffs(q, now)
@@ -500,6 +516,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str,
         "order_url": order_url(oid),
         "approval_url": order_url(oid) if status == "pending_approval" else None,
         "idempotency_key": idempotency_key,
+        "agent_rationale": rationale or q.get("rationale"),
         "created_at": now.isoformat(timespec="milliseconds"), "updated_at": now.isoformat(timespec="milliseconds"),
     }
     order["receipt_jws"] = _receipt(order)
@@ -517,7 +534,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str,
         raise
     store.audit(f"order.{status}", "mandate-engine", "system", oid, mandate.buyer,
                 {"order_id": oid, "quote_id": quote_id, "agent_id": agent_id, "outcome": outcome,
-                 "total_ex_vat": q["total_ex_vat"],
+                 "total_ex_vat": q["total_ex_vat"], "agent_rationale": order["agent_rationale"],
                  "fired": [f.model_dump() for f in findings if f.outcome != "silent"] or [findings[-1].model_dump()]})
     return order, mandate
 
