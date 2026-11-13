@@ -41,6 +41,9 @@ def next_monday(today: date | None = None) -> date:
     return today + timedelta(days=(7 - today.weekday()) % 7 or 7)
 
 
+SANDBOX_ID: list[str | None] = [None]  # set by --sandbox, used when printing approval links
+
+
 def approver_code() -> str:
     return os.getenv("SOUS_APPROVER_CODE") or os.getenv("VALTAKIRJA_APPROVER_CODE", "")  # old name still works
 
@@ -68,9 +71,47 @@ class Gateway:
             pass
         if env := os.getenv("SOUS_AGENT_TOKENS"):
             self.tokens.setdefault(self.base, {}).update(json.loads(env))
+        self.sbx: str | None = None  # judge sandbox id: scenes run on its private copies of the demo mandates
+        self.sbx_token: str | None = None
+
+    # --- judge sandbox (POST /sandbox): private copies of the hotel, hospital and school mandates -------------
+    SANDBOX_MANDATES = {"M-HOTEL-AURORA", "M-HOSPITAL-KITCHEN", "M-SCHOOL-ESPOO"}
+
+    def use_sandbox(self, which: str) -> None:
+        """'new' creates a sandbox (tokens saved to the token file); an SBX id reuses one from that file."""
+        mine = self.tokens.setdefault(self.base, {})
+        if which == "new":
+            r = self.http.post("/sandbox")
+            if r.status_code >= 400:
+                raise RuntimeError(f"could not create a sandbox: {r.status_code} {r.text[:200]}")
+            d = r.json()
+            self.sbx, self.sbx_token = d["sandbox"]["id"], d["agent_token"]
+            mine[f"sandbox:{self.sbx}"] = {"agent_token": d["agent_token"], "approver_token": d["approver_token"]}
+            fd = os.open(self.token_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                json.dump(self.tokens, f, indent=1)
+            say(_c("2", f"  created sandbox {self.sbx} (expires {d['sandbox']['expires_at'][:16]}); tokens saved to {self.token_file}"))
+        else:
+            self.sbx = which.upper()
+            saved = mine.get(f"sandbox:{self.sbx}") or {}
+            self.sbx_token = os.getenv("SOUS_SANDBOX_AGENT_TOKEN") or saved.get("agent_token")
+            if not self.sbx_token:
+                raise RuntimeError(f"no agent token for {self.sbx}: set SOUS_SANDBOX_AGENT_TOKEN or use --sandbox new")
+
+    def _m(self, mandate: str) -> str:
+        if not self.sbx:
+            return mandate
+        if mandate not in self.SANDBOX_MANDATES:
+            raise RuntimeError(f"{mandate} has no sandbox copy (sandboxes cover the hotel, hospital and school)")
+        return f"{mandate}-{self.sbx}"
+
+    def _a(self, agent: str) -> str:
+        return f"{agent}-{self.sbx.lower()}" if self.sbx else agent
 
     def _headers(self, mandate: str) -> dict:
         """Authorization for this mandate's agent, minting a credential if one is needed and missing."""
+        if self.sbx:
+            return {"authorization": f"Bearer {self.sbx_token}"}
         mine = self.tokens.setdefault(self.base, {})
         if mandate not in mine:
             st = self.http.get(f"/mandates/{mandate}/agent-credential")
@@ -92,6 +133,10 @@ class Gateway:
         return {"authorization": f"Bearer {mine[mandate]}"}
 
     def get(self, path: str, headers: dict | None = None, **params):
+        if "mandate_id" in params:
+            params["mandate_id"] = self._m(params["mandate_id"])
+        if "agent_id" in params:
+            params["agent_id"] = self._a(params["agent_id"])
         r = self.http.get(path, params=params, headers=headers or {})
         r.raise_for_status()
         return r.json()
@@ -103,16 +148,16 @@ class Gateway:
         return r.json()
 
     def search(self, agent: str, q: str, take: int, **kw) -> list[str]:
-        res = self.get("/products", q=q, agent_id=agent, limit=take, **kw)
+        res = self.get("/products", q=q, agent_id=agent, limit=take, **kw)  # agent_id mapped in get()
         return [p["id"] for p in res["products"]]
 
     def quote(self, agent: str, mandate: str, items: list[dict], when: date) -> dict:
-        return self.post("/quotes", {"agent_id": agent, "mandate_id": mandate, "rationale": self.why,
+        return self.post("/quotes", {"agent_id": self._a(agent), "mandate_id": self._m(mandate), "rationale": self.why,
                                      "delivery_date": when.isoformat(), "items": items},
                          self._headers(mandate))["quote"]
 
     def order(self, agent: str, mandate: str, quote_id: str) -> dict:
-        return self.post("/orders", {"agent_id": agent, "mandate_id": mandate, "quote_id": quote_id,
+        return self.post("/orders", {"agent_id": self._a(agent), "mandate_id": self._m(mandate), "quote_id": quote_id,
                                      "rationale": self.why, "idempotency_key": f"demo-{uuid.uuid4().hex[:12]}"},
                          self._headers(mandate))
 
@@ -147,6 +192,8 @@ def show_order(o: dict, base: str) -> None:
             say(f"    {_c(TIER[f['outcome']][0], '▮')} {f['message']}  " + _c("2", f["rule"]))
     if o["status"] == "pending_approval":
         url = o.get("approval_url") or f"/ui/#/orders/{o['id']}"
+        if SANDBOX_ID[0] and "sandbox=" not in url:  # keep the judge inside their sandbox
+            url = url.replace("/ui/#", f"/ui/?sandbox={SANDBOX_ID[0]}#")
         if url.startswith("/"):  # gateway without SOUS_PUBLIC_BASE_URL
             url = base + url
         say(_c("1", f"    Waiting for a human. Approve on the phone: {url}"))
@@ -301,6 +348,8 @@ def main() -> None:
     ap.add_argument("--date", type=date.fromisoformat, default=None, help="delivery date (default: next Monday)")
     ap.add_argument("--pause", type=float, default=1.5, help="seconds between scenes")
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--sandbox", default=None, metavar="new|SBX-XXXX",
+                    help="run scenes 1-4 on a judge sandbox's private mandate copies (new = create one)")
     ap.add_argument("--tokens", default=".sous-agent-tokens.json",
                     help="agent token file {base: {mandate_id: token}} (gitignored)")
     a = ap.parse_args()
@@ -310,10 +359,14 @@ def main() -> None:
         return
     gw = Gateway(a.base, a.tokens)
     health = gw.get("/health")
+    if a.sandbox:
+        gw.use_sandbox(a.sandbox)
+        SANDBOX_ID[0] = gw.sbx
     when = a.date or next_monday()
     storage = f" · storage {health['storage']}" if health.get("storage") else ""
     say(_c("2", f"gateway {a.base} ok{storage} · delivery {when:%a %d.%m.%Y}"))
-    say(_c("2", f"watch: {a.base}/ui/#/inbox   audit: {a.base}/ui/#/audit"))
+    ui = f"{a.base}/ui/" + (f"?sandbox={gw.sbx}" if gw.sbx else "")
+    say(_c("2", f"watch: {ui}#/inbox   audit: {ui}#/audit"))
     for k in a.scenes or SCENES:
         f = SCENES[k]
         say("\n" + _c("1;4", f"Scene {k}") + "  " + f.__doc__)

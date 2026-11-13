@@ -29,6 +29,20 @@ from Valio Aimo's mock API; nothing is staged in the UI.
 
 Run all scenes in one go with `scripts/demo.py --base <base> --pause 4`.
 
+### Agent tokens and the sandbox route
+When the gateway requires agent authentication (`SOUS_REQUIRE_AGENT_AUTH=1`, on staging since the
+night of 13-14.11), quotes and orders need the mandate's bearer token. Two ways:
+- **Your own tokens:** put them in `.sous-agent-tokens.json` (gitignored) or `SOUS_AGENT_TOKENS`.
+  With `SOUS_APPROVER_CODE` set, the script mints missing ones, but minting *rotates* the mandate's
+  credential and cuts off anyone else using it.
+- **A sandbox (no shared tokens touched):** `scripts/demo.py 1 2 3 4 --sandbox new --base <base>`
+  creates a judge sandbox (private copies of the hotel, hospital and school mandates, 24 h, 15 live
+  lookups) and saves its tokens to the token file. Approval links open `/ui/?sandbox=SBX-…`; the UI
+  asks for the sandbox's approver token (`sbxa_…`, in the token file). Reuse it with
+  `--sandbox SBX-XXXX`. Scene 5 (Kaarna) and `demo_standing.py` have no sandbox copy yet.
+  Dry run on staging, 14.11 ~01:05: scenes 1-4 all as expected in 63 s with `--pause 15`,
+  ~10 Valio calls; the phone approval with the `sbxa_` token worked.
+
 ## If something goes wrong
 - A scene prints `scene failed`: the others still run. Usually the Valio mock is slow (503) or
   the per-IP rate limit (60 POST/min) was hit; wait a minute and rerun that scene.
