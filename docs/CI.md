@@ -40,14 +40,14 @@ EXPECT_STORAGE=mariadb tests/fixtures/smoke.sh
 ## Switching to CRACI
 
 1. **Connect GitHub (one time, org/repo owner in a browser):** CRACI web app →
-   Settings → Builds → Install GitHub App, covering `Zawaer/valtakirja`
+   Settings → Builds → Install GitHub App, covering `Zawaer/sous`
    ([guide](https://docs.craci.com/guides/github-connection/)). Without it, CRACI jobs queue forever.
 2. **Set the repo variable** `CI_RUNNER` = `craci`
    (GitHub → Settings → Secrets and variables → Actions → Variables), or
-   `gh variable set CI_RUNNER -R Zawaer/valtakirja --body craci`.
+   `gh variable set CI_RUNNER -R Zawaer/sous --body craci`.
    The label is exactly `craci`: CRACI puts no size or arch suffix in `runs-on`.
-3. Re-run CI (`gh workflow run CI -R Zawaer/valtakirja`). To go back, delete the variable.
-4. For the eval job: `gh secret set VALIO_AIMO_API_KEY -R Zawaer/valtakirja` (paste the key at the prompt).
+3. Re-run CI (`gh workflow run CI -R Zawaer/sous`). To go back, delete the variable.
+4. For the eval job: `gh secret set VALIO_AIMO_API_KEY -R Zawaer/sous` (paste the key at the prompt).
 
 Each job starts with a `cracicorp/setup@v1` step that sets `size` and, for `smoke`/`eval`, a network
 policy. CRACI reads those inputs when it schedules the job and ignores the step's `if:`; the `if:`
