@@ -1,0 +1,30 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # CRACI runners once the team invite is active: set the repo variable CI_RUNNER=craci
+    # (Settings -> Secrets and variables -> Actions -> Variables). Until then, GitHub-hosted.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_DATABASE: valtakirja
+          MARIADB_USER: vk
+          MARIADB_PASSWORD: vkpass
+          MARIADB_ROOT_PASSWORD: root
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      VALTAKIRJA_TEST_MARIADB_URL: mysql://vk:vkpass@127.0.0.1:3306/valtakirja
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - run: uv run pytest -q
