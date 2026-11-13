@@ -129,15 +129,16 @@ Response: `{"quote": {...}, "jws": "<compact JWS of quote>"}`. Quote fields:
 | `issued_at` | Gateway time (Europe/Helsinki, ISO 8601, ms). |
 | `expires_at` | `min(issued_at + VALTAKIRJA_QUOTE_TTL, earliest order_cutoff of any orderable line)`. Default TTL 900 s. |
 | `requested_delivery_date` | As requested. |
+| `items[]` | The requested items, signed with the quote, so a buyer can match each line to its need. |
 | `currency` | `EUR` |
 | `lines[]` | One per chosen product (below). |
 | `total_ex_vat`, `total_inc_vat` | Sums of line totals. |
-| `uncovered[]` | Needs that couldn't be filled: `{item, uncovered, unit}` or `{item, uncovered, reason}`. |
-| `alternatives_considered[]` | Up to 6 per item: `{product_id, name, comparison_price, orderable, why_not[]}`. |
+| `uncovered[]` | Needs that couldn't be filled: `{item, item_index, uncovered, unit}` or `{item, item_index, uncovered, reason}`. |
+| `alternatives_considered[]` | Up to 6 per item: `{product_id, name, item_index, comparison_price, orderable, why_not[]}`. |
 | `valio_api_calls` | Live calls this quote cost: `{price_calls, availability_calls, cache_hits}`. |
 | `mandate_preview` | Only with `mandate_id`: `{outcome, findings[]}`, what will happen if this quote is ordered now. |
 
-Each line has: `product_id, name, brand, sales_unit, content_per_sales_unit {amount, unit, source}, quantity, covers {amount, unit}, unit_price_ex_vat, unit_price_inc_vat, vat_rate, comparison_price {ex_vat, per}, list_price_ex_vat, line_total_ex_vat, line_total_inc_vat, logistic_model (Stock|Terminal), available_amount, stock (known|plenty|unknown), available_date, delivery_date, order_cutoff, delivery_reliability, co2_estimate_kg, co2_note, labels, claims, allergens, temperature, orderable, issues[]`, and `substitute_for` when set.
+Each line has: `product_id, name, brand, sales_unit, content_per_sales_unit {amount, unit, source}, quantity, covers {amount, unit}, unit_price_ex_vat, unit_price_inc_vat, vat_rate, comparison_price {ex_vat, per}, list_price_ex_vat, line_total_ex_vat, line_total_inc_vat, logistic_model (Stock|Terminal), available_amount, stock (known|plenty|unknown), available_date, delivery_date, order_cutoff, delivery_reliability, co2_estimate_kg, co2_note, labels, claims, allergens, temperature, orderable, issues[], item_index` (which entry of `items[]` it covers), and `substitute_for` when set.
 
 `delivery_date = max(requested, available_date)`. `co2_estimate_kg` is a product-group average times quantity, labelled as an estimate.
 
