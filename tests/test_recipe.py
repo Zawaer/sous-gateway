@@ -320,3 +320,17 @@ def test_buyer_routes_menu_requests_to_the_planner():
     assert R.looks_like_menu("Karjalanpaisti 60 annosta")
     assert not R.looks_like_menu("We need 1,000 litres of lactose-free milk delivered on Monday.")
     assert not R.looks_like_menu("Lasagne plates, 10 packs")
+
+
+def test_an_undeliverable_ingredient_is_left_out_not_blocking_the_basket(gw, monkeypatch):
+    UNAVAILABLE.add("111")  # the only salt can't be delivered on Monday, and nothing replaces it
+    monkeypatch.setattr(substitutes, "suggest", lambda *a, **k: {
+        "original": {}, "constraints": {}, "considered": {}, "options": [], "no_safe_substitute": "none"})
+    spec = {**SOUP, "stock_on_hand": []}
+    p = R.plan("Creamy soup for 40", gateway=gw, mandate_id="M-HOTEL", agent_id="hotel-agent",
+               llm=FakeLLM([spec]), today=TODAY)
+    salt = {n.key: n for n in p.needs}["suola"]
+    assert salt.status == "not_orderable" and any("left out" in x for x in salt.notes)
+    assert "111" not in {l["product_id"] for l in p.quote["lines"]}
+    assert p.quote["mandate_preview"]["outcome"] != "block"
+    assert "salt (not orderable)" in p.summary()

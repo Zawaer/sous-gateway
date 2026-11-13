@@ -110,6 +110,26 @@ uv run python scripts/llm_eval.py --provider verda   # the eval sentences throug
 
 The LLM agent needs `GEMINI_API_KEY`, `VERDA_INFERENCE_API_KEY` or `LLM_API_KEY` with `LLM_BASE_URL` (see `agent/llm.py`).
 
+### From a menu to one order (recipe planner)
+
+A chef says what they are cooking, not what to buy. `agent/recipe.py` turns that into one basket quote:
+
+```sh
+uv run python -m agent.recipe --mandate M-HOTEL-AURORA --agent aurora-purchasing-agent \
+    "Lasagne for 120 on Monday, we have 10 kg flour and plenty of salt"            # add --order to place it
+```
+
+It prints the chain: **recipe** (dishes, portions, per-portion ingredients) -> **ingredients** (scaled, minus stock on
+hand, rounded up, in kg/L) -> **products** (up to 5 catalog candidates per ingredient, filtered by the mandate's
+allergen and claim rules) -> **one signed basket quote** (the gateway picks packs and the cheapest orderable product,
+reports what is uncovered) -> substitutes for gaps -> **mandate preview** -> order or ask. Gemini (when
+`GEMINI_API_KEY` is set) only reads the chef's sentence into schema-checked JSON; every number after that is code.
+Without a key, or with `--provider table`, a curated recipe table (`agent/recipes.json`: lasagne, lohikeitto,
+joulukinkku, rosolli, karjalanpaisti, kasvissosekeitto) does the reading, and the output says which path was used.
+`agent.buyer` routes menu-shaped requests here automatically. Eval: `uv run python scripts/recipe_eval.py --providers
+table gemini` (7 cases, `evals/recipe_cases.yaml`). See [docs/GEMINI.md](docs/GEMINI.md) and
+[PROTOCOL.md, section 20](docs/PROTOCOL.md#20-buyer-side-recipe-planning-reference-agent).
+
 Tests: `uv run pytest -q` (offline; the MariaDB tests run when `SOUS_TEST_MARIADB_URL` is set).
 
 ## Configuration

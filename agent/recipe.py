@@ -487,8 +487,19 @@ class Trace:
                            "is_error": is_error, "valio_api_calls": n, "result": brief})
 
 
-def _call(gw, trace: Trace, tool: str, args: dict) -> tuple[bool, dict]:
-    is_error, body = gw.call(tool, args)
+BUDGET_WAIT_S = 15.0
+
+
+def _call(gw, trace: Trace, tool: str, args: dict, sleep=None) -> tuple[bool, dict]:
+    """One gateway tool call. The gateway's own per-minute cap on live Valio calls is waited out (up to 5
+    times), like agent.buyer does; every other error goes back to the caller."""
+    import time
+    for attempt in range(6):
+        is_error, body = gw.call(tool, args)
+        if not (is_error and body.get("error") == "valio_unavailable" and "budget" in str(body.get("message"))
+                and attempt < 5):
+            break
+        (sleep or time.sleep)(BUDGET_WAIT_S)
     trace.add(tool, args, is_error, body)
     return is_error, body
 
@@ -579,6 +590,9 @@ def _fit_packs(cards: list[dict], n: Need) -> list[dict]:
         return cards
     limit = max(4 * n.to_buy, min(sizes))
     kept = [c for c in cards if (_pack(c) or 0) <= limit]
+    if len(kept) < 3:  # keep the smallest few, so the gateway still has an alternative if one can't be delivered
+        kept = sorted(cards, key=lambda c: _pack(c) or 0)[:min(3, len(cards))]
+        kept = [c for c in cards if c in kept]  # back in search order
     if len(kept) < len(cards):
         n.notes.append(f"{len(cards) - len(kept)} bulk pack(s) much bigger than the need left out")
     return kept
@@ -744,7 +758,8 @@ class Plan:
         for sub in self.substitutes:
             parts.append(f"Substitute: {sub['name']} for {sub['for_name']}"
                          + (f" ({'; '.join(sub['compromises'][:2])})" if sub["compromises"] else "") + ".")
-        missing = [n for n in self.needs if n.status in ("not_found", "ruled_out_by_mandate", "uncovered")
+        missing = [n for n in self.needs if n.status in ("not_found", "ruled_out_by_mandate", "uncovered",
+                                                         "not_orderable")
                    and not n.substitute]
         if missing:
             parts.append("Not covered: " + ", ".join(f"{n.name_en} ({n.status.replace('_', ' ')})"
@@ -865,8 +880,22 @@ def plan(request_text: str, *, gateway, mandate_id: str, agent_id: str, llm=None
                 entries.append((n, item))
                 continue
             n.status = "uncovered"
+            undeliverable = bool(lines) and not any(l["orderable"] for l in lines) and not gap
+
+            def keep_or_drop():
+                nonlocal changed
+                if undeliverable:
+                    # Nothing to buy for this ingredient on this date; leaving it in would block the whole
+                    # basket. It is listed as not orderable for the human; the rest of the basket goes ahead.
+                    reasons = sorted({i["message"] for l in lines for i in l["issues"] if i["severity"] == "blocking"})
+                    n.status = "not_orderable"
+                    n.notes.append("left out of the basket: " + "; ".join(reasons)[:300])
+                    changed = True
+                else:
+                    entries.append((n, item))
+
             if item.get("substitute_for") or sub_calls >= MAX_SUBSTITUTE_CALLS:
-                entries.append((n, item))
+                keep_or_drop()
                 continue
             ok = [l for l in lines if l["orderable"]]
             covered = sum((l.get("covers") or {}).get("amount") or 0 for l in ok)
@@ -878,8 +907,9 @@ def plan(request_text: str, *, gateway, mandate_id: str, agent_id: str, llm=None
                 "amount": missing, "unit": item["unit"]})
             o = None if err else _first_substitute(s, mandate, missing)
             if not o:
-                n.notes.append("no safe substitute; the gap stays in the quote for a human")
-                entries.append((n, item))
+                if not undeliverable:
+                    n.notes.append("no safe substitute; the gap stays in the quote for a human")
+                keep_or_drop()
                 continue
             n.substitute = _sub_view(orig[0], orig[1], o, missing, item["unit"])
             p.substitutes.append(n.substitute)
@@ -888,7 +918,7 @@ def plan(request_text: str, *, gateway, mandate_id: str, agent_id: str, llm=None
                 entries.append((n, {**item, "product_ids": [l["product_id"] for l in ok], "amount": round(covered, 3)}))
             entries.append((n, {"product_ids": [o["product_id"]], "amount": missing, "unit": item["unit"],
                                 "substitute_for": orig[0], "note": f"{n.name_fi} (substitute)"}))
-        if changed:
+        if changed and entries:
             kept = [it for _, it in entries]
             err, r2 = _call(gateway, p.trace, "request_quote",
                             {"agent_id": agent_id, "mandate_id": mandate_id, "delivery_date": dd, "items": kept})

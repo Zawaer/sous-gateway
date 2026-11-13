@@ -608,3 +608,34 @@ Every deployment (prod, staging, CI, demos) uses one Valio Aimo API key with und
 | `error` | (`local` while configured) the exception type, never the URL or password |
 
 `valio_aimo.circuit` is `open` when any deployment got a 429 and the pause (Retry-After) has not passed yet.
+
+## 20. Buyer-side recipe planning (reference agent)
+
+Not part of the gateway protocol: an example of buyer-side intelligence on top of it. The gateway sees an ordinary
+basket and stays free of LLM calls. Source: `agent/recipe.py`, `agent/recipes.json`.
+
+1. **Interpret** (the only model step). The chef's sentence -> `{dishes[{name, portions?, ingredients[{name_fi,
+   name_en, amount_per_portion, unit: g|ml|pcs, notes?}]}], portions, delivery_date?, stock_on_hand[{ingredient,
+   amount?, unit?, plenty}]}`. Sent as `response_format: json_schema` (structured output), validated with pydantic,
+   one retry with the validation error. A server that rejects the schema gets plain JSON prompting; an invalid answer
+   or a provider error falls back to the curated table if it knows the dish. `--provider table` never calls a model.
+2. **Arithmetic** (code). Scale by portions; g -> kg, ml -> L, pieces by a per-piece weight (eggs 60 g); stock bought
+   as concentrate (fish/vegetable stock) by weight at 15 g/L; add up the same ingredient across dishes; subtract stock
+   on hand ("plenty of salt" covers it); round up (0.01 kg below 1 kg, 0.1 below 20, 0.5 above).
+3. **Candidates** (code + `search_products`, no Valio calls). Finnish-first queries per ingredient from the lexicon,
+   filtered by the mandate's `avoid_allergens` and `required_claims` (plus per-ingredient notes such as
+   lactose-free), a name check (words a product must / must not contain; never a prepared dish that merely
+   mentions the ingredient), the unit (kg/L), packs far bigger than the need left out, and products with declared
+   allergens preferred over unknown ones. Up to 5 per ingredient.
+4. **One basket quote** (`request_quote` with `items[]`, one item per ingredient, `product_ids` = candidates, amount
+   in KG/L). The gateway fetches all candidates' prices and availability in one batched call each, picks packs and
+   the cheapest orderable product per kg/L, splits on short stock and reports `uncovered`. Where it chose a pack far
+   bigger than the need, the planner re-quotes that item without it and keeps the change only if the item gets
+   cheaper (live prices from the gateway's cache, no new Valio calls).
+5. **Substitutes** (`suggest_substitutes`, at most 4 per plan). For an ingredient that nothing satisfies under the
+   mandate (e.g. milk under an avoid-milk mandate), and for items left uncovered, the gateway's own substitutes
+   (which never relax allergen rules) go into one revised quote with `substitute_for`; the mandate's `substitutions`
+   rule then decides how visible that is (notify / ask).
+6. **Preview, then order or ask.** The plan shows `mandate_preview`; with `--order` it calls `place_order` with an
+   idempotency key per quote, and the gateway's tier decides (ordered, held for approval, refused).
+
