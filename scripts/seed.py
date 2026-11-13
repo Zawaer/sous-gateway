@@ -1,6 +1,6 @@
 """Issue the demo mandates (idempotent). Run: uv run python -m scripts.seed"""
 
-from valtakirja import service as S, store
+from valtakirja import service as S, signing, store
 from valtakirja.mandate import Mandate
 
 MANDATES = [
@@ -50,8 +50,10 @@ MANDATES = [
 
 def main():
     for m in MANDATES:
-        if store.get_mandate(m.id):
+        existing = store.get_mandate(m.id)
+        if existing and signing.verify(existing["_jws"], typ="valtakirja-mandate+jws"):
             continue  # keep existing mandates (and their audit history) across restarts
+        # missing, or signed with a key we no longer have: (re)issue under the current gateway key
         S.issue_mandate(m)
         print("issued", m.id)
 

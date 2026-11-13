@@ -316,6 +316,11 @@ def safety_handled(r: dict) -> bool | None:
 
 # --- main ----------------------------------------------------------------------
 
+def _rel(p) -> str:
+    p = Path(p).resolve()
+    return str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p)
+
+
 def main() -> int:
     spec = yaml.safe_load(Path(args.file).read_text())
     defaults = spec.get("defaults", {})
@@ -350,11 +355,11 @@ def main() -> int:
 
     summary = summarize(results)
     out = {"generated_at": datetime.now(config.TZ).isoformat(timespec="seconds"),
-           "valio_api_base": config.AIMO_API_BASE, "cases_file": str(Path(args.file).relative_to(ROOT)),
+           "valio_api_base": config.AIMO_API_BASE, "cases_file": _rel(args.file),
            "summary": summary, "definitions": DEFINITIONS, "cases": results}
     Path(args.out).write_text(json.dumps(out, ensure_ascii=False, indent=1) + "\n")
     print_summary(summary)
-    print(f"\nWrote {Path(args.out).relative_to(ROOT)}")
+    print(f"\nWrote {_rel(args.out)}")
     return 0 if summary["cases_passed"] == summary["cases_total"] else 1
 
 
