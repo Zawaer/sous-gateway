@@ -261,7 +261,7 @@ def _items(so: dict, amounts: list[float] | None) -> list[dict]:
 
 
 def renew(standing_id: str, delivery_date: date | None = None, *, agent_id: str | None = None,
-          amounts: list[float] | None = None) -> dict:
+          amounts: list[float] | None = None, agent_token: str | None = None) -> dict:
     """Quote this week's order live, check it for drift against past renewals, and place it.
 
     `amounts` (one per item) are this week's amounts if they differ from the standing order's usual ones.
@@ -273,6 +273,7 @@ def renew(standing_id: str, delivery_date: date | None = None, *, agent_id: str 
     if agent_id and agent_id != so["agent_id"]:
         raise S.GatewayError("standing_agent_mismatch",
                              f"Standing order {standing_id} belongs to agent '{so['agent_id']}'.", 403)
+    S.authorize_agent(so["mandate_id"], agent_id or so["agent_id"], agent_token, "renew_standing_order")
     when = delivery_date or next_delivery(so)
     rens = [_with_status(r) for r in SS.renewals(standing_id)]
     for r in rens:
@@ -287,7 +288,7 @@ def renew(standing_id: str, delivery_date: date | None = None, *, agent_id: str 
     q = S.request_quote(S.QuoteRequest(
         agent_id=so["agent_id"], mandate_id=so["mandate_id"], delivery_date=when,
         items=[S.QuoteItem(product_ids=it["product_ids"], amount=it["amount"], unit=it["unit"]) for it in items]
-    ))["quote"]
+    ), agent_token=agent_token)["quote"]
     snap = _snapshot(items, q)
     findings, base = drift(so, snap, hist)
     text = summary(findings, snap, base)
@@ -301,7 +302,8 @@ def renew(standing_id: str, delivery_date: date | None = None, *, agent_id: str 
 
     tries = sum(1 for r in rens if not r.get("simulated") and r["delivery_date"] == when.isoformat())
     order = S.place_order(so["agent_id"], so["mandate_id"], q["id"],
-                          idempotency_key=f"standing:{standing_id}:{when}:{tries + 1}", extra_findings=findings)
+                          idempotency_key=f"standing:{standing_id}:{when}:{tries + 1}", extra_findings=findings,
+                          agent_token=agent_token)
     ren = {"id": S._id("SR"), "standing_id": standing_id, "delivery_date": when.isoformat(), "simulated": False,
            "quote_id": q["id"], "order_id": order["id"], "status": order["status"],
            "outcome": order["decision"]["outcome"], **snap,

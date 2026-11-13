@@ -16,6 +16,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
@@ -106,6 +107,15 @@ def require_approver(x_approver_code: str | None = Header(default=None)):
         raise HTTPException(401, "Human approver code required (X-Approver-Code header).")
 
 
+_agent_bearer = HTTPBearer(auto_error=False, scheme_name="agentToken",
+                           description="Agent credential for mandates with require_agent_auth (see POST /mandates).")
+
+
+def agent_token(cred: HTTPAuthorizationCredentials | None = Depends(_agent_bearer)) -> str | None:
+    """The agent's credential from `Authorization: Bearer <token>` (only checked when the mandate requires it)."""
+    return cred.credentials if cred else None
+
+
 _HTTP_CODES = {400: "bad_request", 401: "unauthorized", 403: "forbidden", 404: "not_found",
                405: "method_not_allowed", 409: "conflict", 429: "rate_limited"}
 
@@ -154,6 +164,7 @@ def jwks():
 @app.get("/health", tags=["meta"])
 def health():
     return {"ok": True, "valio_api_calls": aimo.stats, "approver_code_required": bool(config.APPROVER_CODE),
+            "agent_auth_required_globally": config.REQUIRE_AGENT_AUTH,
             "storage": store.backend(), "valio_aimo": aimo.health()}
 
 
@@ -212,9 +223,11 @@ def suggest_substitutes(
 # --- quotes and orders ------------------------------------------------------
 
 @app.post("/quotes", tags=["ordering"])
-def request_quote(req: S.QuoteRequest):
-    """Live price + availability for a shortlist, as a signed, expiring quote (with a mandate preview)."""
-    return S.request_quote(req)
+def request_quote(req: S.QuoteRequest, token: str | None = Depends(agent_token)):
+    """Live price + availability for a shortlist, as a signed, expiring quote (with a mandate preview).
+
+    If the mandate requires agent authentication, send `Authorization: Bearer <agent token>`."""
+    return S.request_quote(req, agent_token=token)
 
 
 @app.get("/quotes/{quote_id}", tags=["ordering"])
@@ -235,9 +248,12 @@ class OrderRequest(BaseModel):
 
 
 @app.post("/orders", tags=["ordering"])
-def place_order(req: OrderRequest):
-    """Order a quote. The mandate decides: ordered, pending_approval or refused, with reasons."""
-    return S.place_order(req.agent_id, req.mandate_id, req.quote_id, req.idempotency_key)
+def place_order(req: OrderRequest, token: str | None = Depends(agent_token)):
+    """Order a quote. The mandate decides: ordered, pending_approval or refused, with reasons.
+
+    If the mandate requires agent authentication, send `Authorization: Bearer <agent token>`
+    (401 agent_auth_required without it, 403 agent_auth_invalid with a wrong one)."""
+    return S.place_order(req.agent_id, req.mandate_id, req.quote_id, req.idempotency_key, agent_token=token)
 
 
 @app.get("/orders", tags=["ordering"])
@@ -275,9 +291,12 @@ def reject(order_id: str, d: Decision):
 # --- mandates ---------------------------------------------------------------
 
 @app.post("/mandates", tags=["mandates"], dependencies=[Depends(require_approver)])
-def issue_mandate(m: Mandate):
-    """A human issues a mandate to their agent; the gateway signs it."""
-    return S.issue_mandate(m)
+def issue_mandate(m: Mandate, mint_agent_credential: bool | None = None):
+    """A human issues a mandate to their agent; the gateway signs it.
+
+    With require_agent_auth (or mint_agent_credential=true) the response includes agent_credential: the agent's
+    bearer token, shown this once."""
+    return S.issue_mandate(m, mint_agent_credential)
 
 
 @app.get("/mandates", tags=["mandates"])
@@ -303,6 +322,24 @@ def mandate_suggestions(mandate_id: str, delivery_date: date, agent_id: str, lim
     the buyer orders, seasonal and new products. Offers only, never orders; pre-checked against the mandate."""
     from . import suggest
     return suggest.suggestions(mandate_id, agent_id, delivery_date, basis or None, limit)
+
+
+class CredentialAction(BaseModel):
+    by: str
+    action: Literal["rotate", "revoke"] = "rotate"
+
+
+@app.get("/mandates/{mandate_id}/agent-credential", tags=["mandates"])
+def agent_credential_status(mandate_id: str):
+    """Whether the mandate's agent must authenticate, and which credential is active (last 4 chars; no secret)."""
+    return S.agent_credential_status(mandate_id)
+
+
+@app.post("/mandates/{mandate_id}/agent-credential", tags=["mandates"], dependencies=[Depends(require_approver)])
+def agent_credential(mandate_id: str, req: CredentialAction):
+    """Human-only. rotate: mint a new bearer token for the mandate's agent (shown once; the old one stops working).
+    revoke: delete it, so a mandate that requires agent auth can't be used until a new one is minted."""
+    return S.agent_credential(mandate_id, req.by, req.action)
 
 
 @app.post("/mandates/{mandate_id}/revoke", tags=["mandates"], dependencies=[Depends(require_approver)])
@@ -342,11 +379,12 @@ def get_standing_order(standing_id: str):
 
 
 @app.post("/standing-orders/{standing_id}/renew", tags=["standing orders"])
-def renew_standing_order(standing_id: str, req: RenewRequest):
+def renew_standing_order(standing_id: str, req: RenewRequest, token: str | None = Depends(agent_token)):
     """Quote this week's order live, check it for drift (quantity creep, cost, product switch, supply), order it.
 
     Any drift lifts the order to at least ask: it waits for a human with the drift findings."""
-    return standing.renew(standing_id, req.delivery_date, agent_id=req.agent_id, amounts=req.amounts)
+    return standing.renew(standing_id, req.delivery_date, agent_id=req.agent_id, amounts=req.amounts,
+                          agent_token=token)
 
 
 @app.post("/standing-orders/{standing_id}/pause", tags=["standing orders"], dependencies=[Depends(require_approver)])

@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import aimo, catalog, config, notify, quote as Q, signing, store, substitutes
+from . import agent_auth, aimo, catalog, config, notify, quote as Q, signing, store, substitutes
 from .mandate import Mandate, evaluate
 
 
@@ -50,12 +50,41 @@ def _mandate(mandate_id: str) -> Mandate:
 
 # --- mandates ---------------------------------------------------------------
 
-def issue_mandate(m: Mandate) -> dict:
+def issue_mandate(m: Mandate, mint_agent_credential: bool | None = None) -> dict:
+    """Sign and store the mandate. When the agent must authenticate (or when asked), also mint the agent's
+    credential: its token is in the response this once and never again."""
     data = m.model_dump(mode="json")
     jws = signing.sign(data, "valtakirja-mandate+jws")
     store.put_mandate(data, jws)
     store.audit("mandate.issued", m.issued_by, "human", m.id, m.buyer, {"mandate": data})
-    return {"mandate": data, "jws": jws}
+    out = {"mandate": data, "jws": jws}
+    if mint_agent_credential if mint_agent_credential is not None else agent_auth.required(m):
+        out["agent_credential"] = agent_auth.mint(m, m.issued_by)
+    return out
+
+
+def authorize_agent(mandate_id: str, agent_id: str, agent_token: str | None, operation: str) -> Mandate:
+    """Check the agent's bearer credential when the mandate requires one (agent_auth.py); returns the mandate."""
+    m = _mandate(mandate_id)
+    try:
+        agent_auth.check(m, agent_id, agent_token, operation)
+    except agent_auth.AuthError as e:
+        raise GatewayError(e.code, e.message, e.status) from None
+    return m
+
+
+def agent_credential(mandate_id: str, by: str, action: Literal["rotate", "revoke"] = "rotate") -> dict:
+    """Human-only: mint a new agent credential for the mandate (the old one stops working) or revoke it."""
+    with _order_lock:
+        m = _mandate(mandate_id)
+        if action == "revoke":
+            return {"status": agent_auth.revoke(m, by)}
+        cred = agent_auth.mint(m, by, rotated=agent_auth.status(m)["credential"] is not None)
+        return {"agent_credential": cred, "status": agent_auth.status(m)}
+
+
+def agent_credential_status(mandate_id: str) -> dict:
+    return agent_auth.status(_mandate(mandate_id))
 
 
 def get_mandate(mandate_id: str) -> dict:
@@ -111,7 +140,9 @@ def order_url(order_id: str) -> str:
     return f"{config.PUBLIC_BASE_URL}/ui/#/orders/{order_id}"
 
 
-def request_quote(req: QuoteRequest) -> dict:
+def request_quote(req: QuoteRequest, agent_token: str | None = None) -> dict:
+    if req.mandate_id:
+        authorize_agent(req.mandate_id, req.agent_id, agent_token, "request_quote")
     if sum(len(i.product_ids) for i in req.items) > config.MAX_CANDIDATES_PER_QUOTE:
         raise GatewayError("too_many_candidates",
                            f"At most {config.MAX_CANDIDATES_PER_QUOTE} candidate products per quote; narrow the search first.")
@@ -212,8 +243,10 @@ def _refresh_cutoffs(q: dict, now: datetime) -> None:
 # --- orders -----------------------------------------------------------------
 
 def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: str | None = None,
-                extra_findings=None) -> dict:
-    """`extra_findings` (list of mandate.Finding) join the mandate's own; standing.py passes drift findings."""
+                extra_findings=None, agent_token: str | None = None) -> dict:
+    """`extra_findings` (list of mandate.Finding) join the mandate's own; standing.py passes drift findings.
+    `agent_token` is the agent's bearer credential, needed when the mandate requires agent authentication."""
+    authorize_agent(mandate_id, agent_id, agent_token, "place_order")
     with _order_lock:
         order, mandate = _place_order(agent_id, mandate_id, quote_id, idempotency_key, extra_findings)
     if mandate is not None and order["decision"]["outcome"] in ("notify", "ask"):

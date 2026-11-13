@@ -49,7 +49,7 @@ Buyer and Valio Aimo read the same log (`/audit?buyer=`), so there's one version
 Production: periodically anchor the chain head somewhere neither party controls (signed and sent to the buyer, or a transparency log).
 
 ## 9. What we'd change for production
-- **Identity.** Replace the shared `X-Approver-Code` with the buyer's own login (OIDC from their identity provider). Agents authenticate with their own keys or OAuth client credentials, bound to the mandate's `agent_id`.
+- **Identity.** Replace the shared `X-Approver-Code` with the buyer's own login (OIDC from their identity provider). Today agents can be required to send a per-mandate bearer token (stored hashed, rotatable; PROTOCOL.md section 16); in production they would prove possession of their own key (mTLS or DPoP), bound to the mandate's `agent_id`.
 - **Mandate signed by the human.** The buyer signs the mandate (Verifiable Credential); the gateway verifies it rather than signing on their behalf.
 - **Per-customer prices.** Use the real customer number so quotes carry the buyer's contract prices. The mock ignores it.
 - **Valio Aimo's real order API.** `ordered` would submit to the order system, with its confirmation id in the receipt and the audit log.

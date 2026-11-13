@@ -1,6 +1,13 @@
-"""Issue the demo mandates (idempotent). Run: uv run python -m scripts.seed"""
+"""Issue the demo mandates (idempotent). Run: uv run python -m scripts.seed
 
-from valtakirja import service as S, signing, store
+M-HOTEL-AURORA-SECURE requires agent authentication: its bearer token is minted at runtime and printed
+once, the first time it is issued. Lost it? `uv run python -m scripts.seed --rotate-agent-credential`
+prints a new one (the old one stops working). Tokens are never stored in plain text or committed.
+"""
+
+import sys
+
+from valtakirja import agent_auth, service as S, signing, store
 from valtakirja.mandate import Mandate
 
 MANDATES = [
@@ -63,18 +70,47 @@ MANDATES = [
         min_delivery_reliability=0.9,
         later_delivery="ask",
     ),
+    # Same rules as M-HOTEL-AURORA, but the agent must prove who it is (Authorization: Bearer <token>):
+    # knowing the agent_id from GET /mandates is not enough to order.
+    Mandate(
+        id="M-HOTEL-AURORA-SECURE",
+        buyer="Hotel Aurora, Helsinki",
+        agent_id="aurora-secure-agent",
+        issued_by="Anna Virtanen, F&B manager",
+        require_agent_auth=True,
+        notify_above_eur=1000,
+        auto_approve_limit_eur=2500,
+        hard_limit_eur=10000,
+        daily_limit_eur=8000,
+        substitutions="notify",
+        terminal_products="silent",
+        min_delivery_reliability=0.9,
+        later_delivery="ask",
+        max_comparison_price_eur={"L": 2.5},
+    ),
 ]
 
 
-def main():
+def _print_credential(mid: str, cred: dict) -> None:
+    print(f"agent credential for {mid} (agent {cred['agent_id']}), shown once:")
+    print(f"  {cred['header']}")
+
+
+def main(rotate: bool = False):
     for m in MANDATES:
         existing = store.get_mandate(m.id)
         if existing and signing.verify(existing["_jws"], typ="valtakirja-mandate+jws"):
-            continue  # keep existing mandates (and their audit history) across restarts
+            # keep existing mandates (and their audit history) across restarts; mint a credential only if
+            # the mandate needs one and has none (e.g. VALTAKIRJA_REQUIRE_AGENT_AUTH was just turned on)
+            if agent_auth.required(m) and (rotate or agent_auth.status(m)["credential"] is None):
+                _print_credential(m.id, S.agent_credential(m.id, "seed script")["agent_credential"])
+            continue
         # missing, or signed with a key we no longer have: (re)issue under the current gateway key
-        S.issue_mandate(m)
+        r = S.issue_mandate(m)
         print("issued", m.id)
+        if "agent_credential" in r:
+            _print_credential(m.id, r["agent_credential"])
 
 
 if __name__ == "__main__":
-    main()
+    main(rotate="--rotate-agent-credential" in sys.argv[1:])

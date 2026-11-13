@@ -70,6 +70,14 @@ claude mcp add --transport http valtakirja http://localhost:8000/mcp/
 
 Then ask it, for example: *"You are aurora-purchasing-agent with mandate M-HOTEL-AURORA. Buy 1,000 litres of lactose-free milk for delivery on Monday."* Against the deployed gateway, use `https://135-181-8-209.sslip.io/mcp/` instead.
 
+Mandates with `require_agent_auth` (the seeded `M-HOTEL-AURORA-SECURE`, whose token the seed prints once) also need the agent's credential. Pass it as a header:
+
+```sh
+claude mcp add --transport http valtakirja http://localhost:8000/mcp/ --header "Authorization: Bearer <token>"
+```
+
+Without it, quotes and orders on that mandate get `agent_auth_required`. See [PROTOCOL.md, section 16](docs/PROTOCOL.md#16-agent-authentication).
+
 The MCP server also runs over stdio: `uv run python -m valtakirja.mcp_server`.
 
 Demos and evaluation (each takes `--base <gateway URL>`; see [docs/demo-runbook.md](docs/demo-runbook.md)):
@@ -101,6 +109,7 @@ Read from the environment, or from `.env` in development. Never commit `.env`.
 | `VALTAKIRJA_DB_URL` | (empty) | `mysql://user:pass@host:3306/db` to use MariaDB with system-versioned tables. |
 | `VALTAKIRJA_QUOTE_TTL` | `900` | Quote lifetime in seconds (shortened further by order cut-offs). |
 | `VALTAKIRJA_APPROVER_CODE` | (empty) | If set, human actions (approve, reject, issue or revoke a mandate) need it in the `X-Approver-Code` header. |
+| `VALTAKIRJA_REQUIRE_AGENT_AUTH` | (empty) | `1` = every mandate needs the agent's bearer credential for quotes, orders and renewals, not only those with `require_agent_auth`. |
 | `VALTAKIRJA_PUBLIC_BASE_URL` | (empty) | Public URL, used to build `order_url` and `approval_url` links. |
 | `VALTAKIRJA_RATE_LIMIT_PER_MIN` | `60` | POST requests per client IP per minute. |
 | `VALTAKIRJA_AIMO_CALLS_PER_MIN` | `60` | Global cap on live Valio Aimo API calls per minute. |

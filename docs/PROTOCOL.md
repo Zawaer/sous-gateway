@@ -9,7 +9,7 @@ The short version: a human issues a **mandate** to their purchasing agent. The a
 | Actor | Who | What they do |
 |---|---|---|
 | Buyer human | e.g. a hotel F&B manager | Issues and revokes the mandate. Approves or rejects held orders. |
-| Buyer agent | Any AI agent (Claude, Gemini, a script) | Searches, asks for quotes, places orders. Identified by `agent_id`. Can never approve its own orders. |
+| Buyer agent | Any AI agent (Claude, Gemini, a script) | Searches, asks for quotes, places orders. Identified by `agent_id`; on mandates that require it, authenticated with a bearer credential (section 16). Can never approve its own orders. |
 | Gateway | Valio Aimo's Valtakirja service (this repo) | Holds the catalog, calls Valio Aimo's price and availability APIs, signs mandates, quotes and receipts, enforces the mandate, writes the audit log. |
 | Approver | The buyer human (or someone they delegate to) | Calls approve or reject on orders in `pending_approval`. |
 
@@ -17,7 +17,7 @@ The short version: a human issues a **mandate** to their purchasing agent. The a
 
 Human actions (issue or revoke a mandate, approve or reject an order, pause or resume a standing order, store simulated standing-order history, send a test notification) require the `X-Approver-Code` header when `VALTAKIRJA_APPROVER_CODE` is set. This is a demo stand-in for the buyer's real login (see [DECISIONS.md](DECISIONS.md)).
 
-**Agent identity today** is the `agent_id` the agent sends plus the signed mandate issued to exactly that `agent_id`; quotes, orders and standing orders are bound to it. Opt-in bearer credentials for agents are being added. In production the agent would prove possession of a key bound to the mandate (mTLS, DPoP or a VC-bound key), see section 14.
+**Agent identity today** is the `agent_id` the agent sends plus the signed mandate issued to exactly that `agent_id`; quotes, orders and standing orders are bound to it. A mandate can also require the agent to authenticate with a bearer credential (`require_agent_auth`, section 16). In production the agent would prove possession of a key bound to the mandate (mTLS, DPoP or a VC-bound key), see section 14.
 
 ## 2. Transports
 
@@ -42,6 +42,7 @@ The same operations are exposed twice, over one service layer (`valtakirja/servi
 | Pause / resume (human) | `POST /standing-orders/{id}/pause`, `POST /standing-orders/{id}/resume` | none |
 | Simulated history (demo, human) | `POST /standing-orders/{id}/simulate-history` | none |
 | Notifications | `GET /notifications?buyer=&order_id=&limit=`, `POST /notifications/test` (human) | |
+| Agent credential | `GET /mandates/{id}/agent-credential`, `POST /mandates/{id}/agent-credential` (human: rotate or revoke) | none, on purpose |
 | Audit | `GET /audit?subject=&buyer=&limit=`, `GET /audit/verify` | |
 | Public key | `GET /.well-known/jwks.json` | |
 | Allergen codes | `GET /allergens` | resource `valtakirja://allergens` |
@@ -83,6 +84,7 @@ Source: `valtakirja/mandate.py`, class `Mandate`. All money is EUR excluding VAT
 | `issued_by` | string | required | The human who issued it. |
 | `valid_until` | datetime or null | null | After this, every order is blocked. |
 | `revoked` | bool | false | Set by `POST /mandates/{id}/revoke`. Blocks every order. |
+| `require_agent_auth` | bool | false | Quotes, orders and renewals under this mandate need the agent's bearer credential (section 16). |
 | `notify_above_eur` | number or null | null | Above this, the order goes through and the human gets an FYI. |
 | `auto_approve_limit_eur` | number | 500 | Up to this, no human is needed. Above it, the order is held. |
 | `hard_limit_eur` | number or null | 5000 | Above this, the order is refused. |
@@ -274,6 +276,8 @@ The `receipt_jws` is signed when the order is placed and **re-signed after the h
 | `rate_limited` | 429 | Per client IP, on POST (`VALTAKIRJA_RATE_LIMIT_PER_MIN`). | after a minute |
 | `valio_unavailable` | 503 | Valio Aimo error, timeout, rate limit or malformed reply, or the gateway's per-minute budget of live calls is used up, and no recent last-known copy of the data exists (otherwise the quote is served with `DATA_STALE`). Carries `retry_after` seconds in the body and a `Retry-After` header when known. | yes, after `retry_after` |
 | `internal_error` | (MCP only) | Unexpected error. | yes, once |
+| `agent_auth_required` | 401 | The mandate requires agent authentication and no `Authorization: Bearer` token was sent (section 16). | no, send the token |
+| `agent_auth_invalid` | 403 | Wrong, rotated or revoked agent token, or none issued for this mandate (section 16). | no |
 
 Over MCP each error also carries `hint` (what the agent should do next) and `retryable`.
 
@@ -370,7 +374,7 @@ sequenceDiagram
 
 ## 12. Audit log
 
-Every operation appends one event. Events: `mandate.issued`, `mandate.revoked`, `catalog.search`, `quote.issued`, `substitutes.suggested`, `order.ordered`, `order.pending_approval`, `order.refused`, `order.rejected` (expired quote), `order.approved`, `order.rejected_by_human`, `standing.created`, `standing.renewal_checked` (with the drift findings and baseline), `standing.renewed`, `standing.paused`, `standing.resumed`, `standing.history_simulated`, `suggestions.offered`, `notification.sent`, `notification.failed`.
+Every operation appends one event. Events: `mandate.issued`, `mandate.revoked`, `catalog.search`, `quote.issued`, `substitutes.suggested`, `order.ordered`, `order.pending_approval`, `order.refused`, `order.rejected` (expired quote), `order.approved`, `order.rejected_by_human`, `standing.created`, `standing.renewal_checked` (with the drift findings and baseline), `standing.renewed`, `standing.paused`, `standing.resumed`, `standing.history_simulated`, `suggestions.offered`, `notification.sent`, `notification.failed`, `agent.credential_issued`, `agent.credential_rotated`, `agent.credential_revoked` (with the token's last 4 characters only), `agent.auth_failed` (operation, claimed agent_id and reason; never a token value).
 
 Each row: `seq, ts, actor, actor_type (agent|human|system), event, subject, buyer, data, prev_hash, hash`.
 
@@ -427,7 +431,7 @@ The reference buyer in `buyer/` does the same in the browser with Web Crypto.
 ## 14. Known limits of v0.2
 
 - The gateway signs mandates on the human's behalf; the human authenticates with a shared approver code.
-- Agents are identified by `agent_id` plus the signed mandate issued to it. Opt-in bearer credentials are being added; production would bind a key to the mandate (mTLS, DPoP or a VC-bound key) so a leaked mandate id is useless without the key.
+- Agents are identified by `agent_id` plus the signed mandate issued to it, and, on mandates that require it, an opt-in bearer token (section 16). Production would bind a key to the mandate (mTLS, DPoP or a VC-bound key) so a leaked token is useless without the key.
 - One signing key, no rotation, no `exp` or `iat` JWS claims (expiry is inside the quote payload).
 - Prices are the mock's catalog prices; the mock ignores the customer number.
 - No real order is sent to Valio Aimo; `ordered` is the end state.
@@ -443,3 +447,38 @@ The reference buyer in `buyer/` does the same in the browser with Web Crypto.
 - For a standing order, renew it each week; if the result is `pending_approval`, show the buyer `drift.summary` and the `approval_url`.
 - Present `get_suggestions` results as Valio Aimo's sponsored suggestions, never as your own advice, and order one only when the buyer asks.
 - Search never costs live API calls. Quote only the products you would actually buy.
+
+## 16. Agent authentication
+
+`agent_id` on its own is a name, and `GET /mandates` lists every mandate's `agent_id`. So a mandate can require the agent to prove it is that agent. Source: `valtakirja/agent_auth.py`.
+
+**When it applies.** A mandate with `require_agent_auth: true`, or every mandate when the gateway runs with `VALTAKIRJA_REQUIRE_AGENT_AUTH=1`. Both default to off, so existing mandates and clients are unchanged. Then these calls need the credential: `request_quote` with that `mandate_id`, `place_order`, and `renew_standing_order`. Search, product details, substitutes, suggestions and every read stay open. On a mandate that doesn't require it, a presented token is ignored (so one MCP connection with a header can also use open mandates).
+
+**The credential.** When a mandate is issued with `require_agent_auth` (or `POST /mandates?mint_agent_credential=true`), the response has:
+
+```json
+"agent_credential": {"token": "vka_...", "header": "Authorization: Bearer vka_...", "agent_id": "aurora-secure-agent",
+                     "last4": "x9Q2", "created_at": "...", "note": "Shown once; ..."}
+```
+
+The token is 256 random bits, shown in this one response and never again. The gateway stores only its SHA-256 hash, with `agent_id`, `created_at`, `created_by` and the last 4 characters (so humans can tell credentials apart), in table `agent_credential` (SQLite or MariaDB, created on first use). One active credential per mandate, bound to the mandate's current `agent_id`: re-issuing the mandate to another agent invalidates it.
+
+**Sending it.**
+
+- REST: `Authorization: Bearer <token>` on `POST /quotes`, `POST /orders`, `POST /standing-orders/{id}/renew`. In `/docs` it is the `agentToken` security scheme ("Authorize").
+- MCP over Streamable HTTP: the same header on the HTTP connection; the tools read it from the request. With Claude Code:
+  `claude mcp add --transport http valtakirja <base>/mcp/ --header "Authorization: Bearer <token>"`
+- MCP clients that can't set headers (stdio, some hosts): the optional `agent_token` argument of `request_quote`, `place_order` and `renew_standing_order`. The header wins when both are present. Prefer the header: an argument passes through the model's context.
+
+**Errors.** No token: `401 agent_auth_required`. A wrong, rotated or revoked token, or none issued yet: `403 agent_auth_invalid`. Both are checked before anything else happens (no quote, no live call, no order), and both write `agent.auth_failed` to the audit log with the operation, the claimed `agent_id` and the reason, never the token.
+
+**Managing it (human only, `X-Approver-Code`).**
+
+- `GET /mandates/{id}/agent-credential`: `{required, required_by: "mandate" | "gateway" | null, credential: {agent_id, last4, created_at, created_by} | null}`. No secret.
+- `POST /mandates/{id}/agent-credential` with `{"by": "<name>", "action": "rotate"}`: mints a new token (shown once), the old one stops working at once. Audit: `agent.credential_issued` or `agent.credential_rotated` with `last4`.
+- `{"action": "revoke"}`: deletes it. A mandate that requires auth then can't be used until a new one is minted. Audit: `agent.credential_revoked`.
+- Agents have no tool for any of this, same as approvals.
+
+**Demo.** `scripts/seed.py` issues `M-HOTEL-AURORA-SECURE` (Hotel Aurora's rules, agent `aurora-secure-agent`, `require_agent_auth: true`) and prints its token once to stdout, the first time. `uv run python -m scripts.seed --rotate-agent-credential` prints a fresh one. Tokens are generated at runtime and never committed.
+
+**Production path.** A bearer token is a shared secret: whoever holds it is the agent. In production the agent would prove possession of a key instead: mTLS client certificates, or OAuth client credentials with DPoP-bound tokens (RFC 9449), with the agent's public key (or its DID) bound to `agent_id` inside the mandate, issued as a W3C Verifiable Credential signed by the buyer. The gateway would then verify the agent's signature on each order, so a leaked log or proxy can't replay it.

@@ -14,10 +14,10 @@ import json
 import logging
 from datetime import date
 
-from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver import Context, MCPServer
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
 
-from . import catalog, service as S, standing
+from . import agent_auth, catalog, service as S, standing
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +37,9 @@ Typical flow, 3-4 calls:
 3. place_order(quote_id, mandate_id, idempotency_key=<unique string you reuse on retry>).
    Result status: ordered | pending_approval (a human decides; give them approval_url, check get_order later)
    | refused (tell the buyer which rule fired; you cannot override it).
+
+If the mandate has require_agent_auth, quotes, orders and renewals need your agent credential: connect with
+the header "Authorization: Bearer <token>" (or, where headers are impossible, pass agent_token). Never print it.
 
 On an error, follow its "hint" field. Never state a price, stock level, delivery date or allergen fact
 that a tool did not return; say "unknown" instead. Allergen data marked 'unknown' is not safe."""
@@ -65,6 +68,11 @@ HINTS: dict[str, tuple[str, bool]] = {
     "standing_not_found": ("Use a standing order id (SO-...) from create_standing_order.", False),
     "standing_paused": ("The buyer paused this standing order; ask them before ordering it another way.", False),
     "already_renewed": ("This week is already renewed: call get_order with the order id in the message.", False),
+    "agent_auth_required": ("This mandate requires agent authentication. Reconnect with the header "
+                            "'Authorization: Bearer <agent token>' from the buyer (or pass agent_token); "
+                            "don't retry without it.", False),
+    "agent_auth_invalid": ("Your agent credential is wrong, revoked or for another mandate. Ask the buyer for a "
+                           "new one (they rotate it); don't guess or retry.", False),
     "invalid_argument": ("Fix the argument named in the message and call the tool again.", False),
     "internal_error": ("Unexpected gateway error. Retry once; if it persists, tell the buyer and stop.", True),
 }
@@ -100,6 +108,15 @@ def _date(value: str, field: str = "delivery_date") -> date:
         return date.fromisoformat(value)
     except (TypeError, ValueError):
         raise ValueError(f"{field} must be YYYY-MM-DD, got {value!r}.") from None
+
+
+def _agent_token(ctx: Context | None, agent_token: str | None) -> str | None:
+    """The agent credential: the HTTP request's Authorization: Bearer header (Streamable HTTP), else the argument."""
+    try:
+        headers = ctx.headers if ctx is not None else None
+    except ValueError:  # no request context (e.g. called outside a request)
+        headers = None
+    return agent_auth.bearer((headers or {}).get("authorization")) or agent_token or None
 
 
 READ_LOCAL = ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=False)
@@ -159,6 +176,8 @@ def request_quote(
     delivery_date: str,
     items: list[S.QuoteItem],
     mandate_id: str | None = None,
+    agent_token: str | None = None,
+    ctx: Context | None = None,
 ) -> dict:
     """Get a signed, expiring quote with live prices and availability from Valio Aimo. Places no order.
 
@@ -169,9 +188,11 @@ def request_quote(
     Always pass mandate_id: the quote then includes mandate_preview (silent | notify | ask | block, and why).
     Check quote.lines[].orderable, quote.uncovered and mandate_preview, then place_order with quote.id
     before quote.expires_at.
+    agent_token: only if you can't send the Authorization: Bearer header and the mandate requires agent auth.
     """
     return S.request_quote(S.QuoteRequest(agent_id=agent_id, mandate_id=mandate_id,
-                                          delivery_date=_date(delivery_date), items=items))
+                                          delivery_date=_date(delivery_date), items=items),
+                           agent_token=_agent_token(ctx, agent_token))
 
 
 @mcp.tool(title="Suggest substitutes", annotations=READ_LIVE)
@@ -200,14 +221,17 @@ def suggest_substitutes(
           annotations=ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False,
                                       open_world_hint=True))
 @_tool
-def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: str | None = None) -> dict:
+def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: str | None = None,
+                agent_token: str | None = None, ctx: Context | None = None) -> dict:
     """Order a quote under a mandate. This is the only call that commits the buyer to a purchase.
 
     The mandate engine decides, not you: status ordered (silent/notify), pending_approval (a human must approve
     at approval_url; poll get_order) or refused (decision.findings say which rule fired).
     Always send an idempotency_key and reuse it on retries: the same key never orders twice.
+    agent_token: only if you can't send the Authorization: Bearer header and the mandate requires agent auth.
     """
-    return S.place_order(agent_id, mandate_id, quote_id, idempotency_key)
+    return S.place_order(agent_id, mandate_id, quote_id, idempotency_key,
+                         agent_token=_agent_token(ctx, agent_token))
 
 
 @mcp.tool(title="Order status", annotations=READ_LOCAL)
@@ -262,16 +286,18 @@ def create_standing_order(mandate_id: str, agent_id: str, name: str, items: list
                                       open_world_hint=True))
 @_tool
 def renew_standing_order(standing_id: str, agent_id: str, delivery_date: str | None = None,
-                         amounts: list[float] | None = None) -> dict:
+                         amounts: list[float] | None = None, agent_token: str | None = None,
+                         ctx: Context | None = None) -> dict:
     """Renew this week's standing order: live quote, drift check against past renewals, then the order.
 
     amounts: this week's amount per item, in item order, if it differs from the usual (omit for the usual).
     The gateway compares with the median of recent renewals: quantity creep, cost or price drift, a different
     product, new Terminal or reliability issues. Any drift puts the order on hold for a human (pending_approval);
     tell the buyer drift.summary and share order.approval_url. delivery_date defaults to the next delivery day.
+    agent_token: only if you can't send the Authorization: Bearer header and the mandate requires agent auth.
     """
     return standing.renew(standing_id, _date(delivery_date) if delivery_date else None, agent_id=agent_id,
-                          amounts=amounts)
+                          amounts=amounts, agent_token=_agent_token(ctx, agent_token))
 
 
 @mcp.tool(title="Standing order, history and drift baseline", annotations=READ_LOCAL)

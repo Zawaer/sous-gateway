@@ -30,6 +30,7 @@ class Mandate(BaseModel):
     issued_by: str = Field(description="The human who issued the mandate")
     valid_until: datetime | None = None
     revoked: bool = False
+    require_agent_auth: bool = Field(False, description="Quotes and orders need the agent's bearer credential")
     notify_above_eur: float | None = Field(None, description="Orders above this (ex VAT) go through but the human gets an FYI")
     auto_approve_limit_eur: float = Field(500.0, description="Orders up to this (ex VAT) need no human")
     hard_limit_eur: float | None = Field(5000.0, description="Orders above this (ex VAT) are refused outright")
