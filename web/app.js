@@ -90,6 +90,12 @@ const isQAEvent = (e) => QA_AGENT.test(e.actor || "") || QA_MANDATE.test(e.subje
   QA_AGENT.test(e.data?.agent_id || "") || QA_MANDATE.test(e.data?.mandate_id || "");
 const noQA = (list, isQA) => (showQA ? list : list.filter((x) => !isQA(x)));
 
+// Agent auth can be required per mandate (require_agent_auth) or gateway-wide (SOUS_REQUIRE_AGENT_AUTH, /health).
+let authGlobal = false;
+const loadAuthGlobal = () => fetch(API + "/health").then((r) => r.json())
+  .then((h) => { authGlobal = !!h.agent_auth_required_globally; }).catch(() => {});
+const authRequired = (m) => !!m.require_agent_auth || authGlobal;
+
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -749,6 +755,7 @@ let allergenNames = null;
 views.mandates = {
   key: "",
   async load() {
+    await loadAuthGlobal();
     const mandates = noQA((await api("/mandates")).mandates, isQAMandate);
     allergenNames ||= await api("/allergens").then((r) => r.codes).catch(() => ({}));
     const key = mandates.map((m) => m.id + m.revoked).join();
@@ -866,7 +873,7 @@ function mandateCard(m) {
       ${(m.required_claims || []).length ? rule("Required claims", esc(m.required_claims.join(", "))) : ""}
       ${Object.entries(m.max_comparison_price_eur || {}).map(([u, v]) => rule("Price cap", `${eur(v)} / ${esc(u)}`)).join("")}
       ${m.allowed_categories ? rule("Categories", esc(m.allowed_categories.join(", "))) : ""}
-      ${rule("Agent must authenticate", m.require_agent_auth ? `<span class="tier t-silent">Bearer token</span>` : `<span class="muted">no (agent id only)</span>`)}
+      ${rule("Agent must authenticate", authRequired(m) ? `<span class="tier t-silent">Bearer token${!m.require_agent_auth ? " (gateway-wide)" : ""}</span>` : `<span class="muted">no (agent id only)</span>`)}
     </div>
     <div class="actions">
       <button class="btn plain" data-sig="${esc(m.id)}">🔏 Verify signature</button>
@@ -998,6 +1005,7 @@ const helsinkiDay = (iso) => new Date(iso).toLocaleDateString("sv-SE", { timeZon
 views.today = {
   key: "",
   async load() {
+    await loadAuthGlobal();
     const [ordersR, mandatesR, standingR, chain] = await Promise.all([
       api("/orders"), api("/mandates"), api("/standing-orders").catch(() => ({ standing_orders: [] })), api("/audit/verify")]);
     const orders = noQA(ordersR.orders, isQAOrder);
@@ -1025,7 +1033,7 @@ views.today = {
           <div class="small">${extra}</div></div>
         <div style="text-align:right">${tier(o.status)}<div class="small">${eur(o.total_ex_vat)}</div></div></a>`;
     const buyerSigned = mandates.filter((m) => m.issuer?.kind === "buyer").length;
-    const authed = mandates.filter((m) => m.require_agent_auth).length;
+    const authed = mandates.filter(authRequired).length;
     const tile = (label, value, sub) => `<div class="tile"><div class="muted small">${label}</div><div class="hero">${value}</div><div class="small muted">${sub}</div></div>`;
 
     view.innerHTML = `<div class="head"><div><h2>Today</h2>
