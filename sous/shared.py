@@ -111,13 +111,26 @@ def _failed(e: Exception) -> None:
     global _down_until, _logged_down, _last_error
     with _lock:
         _down_until = time.time() + RETRY_DOWN
-        _last_error = type(e).__name__
+        _last_error = _describe(e)
         _stats["errors"] += 1
         first = not _logged_down
         _logged_down = True
     if first:
         log.warning("Valkey unreachable (%s): using per-process Valio budget and cache until it is back",
-                    type(e).__name__)
+                    _last_error)
+
+
+def _describe(e: Exception) -> str:
+    """Exception type and message with the URL's host, port, user and password masked (safe for logs)."""
+    msg = str(e)
+    try:
+        u = urlsplit(URL)
+        for secret in (u.password, u.username, u.hostname, str(u.port) if u.port else None, URL):
+            if secret:
+                msg = msg.replace(secret, "***")
+    except ValueError:
+        msg = ""
+    return f"{type(e).__name__}: {msg[:160]}" if msg else type(e).__name__
 
 
 def _ok() -> None:
