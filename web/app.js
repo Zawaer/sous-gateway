@@ -1,0 +1,522 @@
+// Valtakirja gateway UI: approval inbox, orders, audit log and mandates.
+// Plain JS, no build step. Talks to the gateway's REST API on the same origin
+// (override with ?api=http://host:port for development).
+
+const API = new URLSearchParams(location.search).get("api") || "";
+const $ = (sel, el = document) => el.querySelector(sel);
+const view = $("#view");
+const REFRESH_MS = 4000;
+
+// --- helpers -----------------------------------------------------------------
+
+async function api(path, opts = {}) {
+  const res = await fetch(API + path, {
+    headers: { "content-type": "application/json" },
+    ...opts,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { message: text }; }
+  if (!res.ok) {
+    const msg = data?.message || data?.detail?.message || data?.detail || res.statusText;
+    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+  }
+  return data;
+}
+
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const eur = (n) => n == null ? "–" :
+  new Intl.NumberFormat("fi-FI", { style: "currency", currency: "EUR" }).format(n);
+
+const when = (iso) => {
+  if (!iso) return "–";
+  const d = new Date(iso);
+  if (isNaN(d)) return esc(iso);
+  return d.toLocaleString("fi-FI", { timeZone: "Europe/Helsinki", day: "numeric", month: "numeric",
+    hour: "2-digit", minute: "2-digit" });
+};
+const dateOnly = (iso) => {
+  if (!iso) return "–";
+  const d = new Date(iso.length === 10 ? iso + "T12:00:00" : iso);
+  return isNaN(d) ? esc(iso) : d.toLocaleDateString("fi-FI", { weekday: "short", day: "numeric", month: "numeric" });
+};
+
+function untilText(iso) {
+  const ms = new Date(iso) - Date.now();
+  if (isNaN(ms)) return null;
+  if (ms <= 0) return { text: "cut-off passed", late: true };
+  const m = Math.round(ms / 60000);
+  const h = Math.floor(m / 60);
+  const d = Math.floor(h / 24);
+  const text = d >= 2 ? `${d} days` : h >= 1 ? `${h} h ${m % 60} min` : `${m} min`;
+  return { text, late: ms < 30 * 60000 };
+}
+
+const STATUS_LABEL = {
+  ordered: "Ordered", pending_approval: "Needs approval", refused: "Refused",
+  rejected: "Rejected", expired: "Expired",
+};
+const TIER_LABEL = { silent: "Auto", notify: "Auto + FYI", ask: "Ask human", block: "Blocked" };
+const tier = (t) => `<span class="tier t-${esc(t)}">${esc(TIER_LABEL[t] || STATUS_LABEL[t] || t)}</span>`;
+
+function toast(msg, ms = 3500) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.hidden = false;
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => (t.hidden = true), ms);
+}
+
+// Who is approving. Kept in this browser only.
+function approver() {
+  try { return localStorage.getItem("vk-approver") || ""; } catch { return ""; }
+}
+function setApprover(name) {
+  try { localStorage.setItem("vk-approver", name); } catch { /* private mode */ }
+  renderWho();
+}
+function renderWho() {
+  $("#who").textContent = approver() || "Set your name";
+}
+$("#who").addEventListener("click", () => {
+  const n = prompt("Your name (recorded in the audit log when you approve or reject):", approver());
+  if (n !== null) setApprover(n.trim());
+});
+
+// --- signatures: verify the gateway's Ed25519 JWS in the browser -----------------
+
+let jwksCache = null;
+const b64u = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+
+async function verifyJws(token) {
+  try {
+    const [h, p, s] = token.split(".");
+    const header = JSON.parse(new TextDecoder().decode(b64u(h)));
+    jwksCache ||= await api("/.well-known/jwks.json");
+    const jwk = jwksCache.keys.find((k) => k.kid === header.kid);
+    if (!jwk) return { ok: false, why: "unknown key id" };
+    const key = await crypto.subtle.importKey("jwk", { kty: "OKP", crv: "Ed25519", x: jwk.x }, { name: "Ed25519" }, false, ["verify"]);
+    const ok = await crypto.subtle.verify({ name: "Ed25519" }, key, b64u(s), new TextEncoder().encode(`${h}.${p}`));
+    return { ok, why: ok ? `Ed25519 signature valid (key ${jwk.kid})` : "signature does not match", typ: header.typ };
+  } catch (e) {
+    return { ok: false, why: "this browser can't check Ed25519: " + e.message };
+  }
+}
+
+function sigButton(token, label = "Verify signature") {
+  if (!token) return "";
+  const id = "sig-" + Math.random().toString(36).slice(2);
+  queueMicrotask(() => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("click", async () => {
+      el.disabled = true;
+      const r = await verifyJws(token);
+      el.outerHTML = `<span class="sig ${r.ok ? "ok" : "bad"}">${r.ok ? "✔" : "✖"} ${esc(r.why)}</span>`;
+    });
+  });
+  return `<button class="btn plain" id="${id}">🔏 ${esc(label)}</button>`;
+}
+
+// --- shared order pieces ---------------------------------------------------------
+
+function findingsList(findings, { only } = {}) {
+  const fs = (findings || []).filter((f) => !only || only.includes(f.outcome));
+  if (!fs.length) return "";
+  return `<ul class="findings">${fs.map((f) => `
+    <li>${tier(f.outcome)}<div>${esc(f.message)}<div class="rule">${esc(f.rule)}${f.product_id ? " · " + esc(f.product_id) : ""}</div></div></li>`).join("")}
+  </ul>`;
+}
+
+function linesTable(lines) {
+  return `<table class="lines"><thead><tr>
+      <th>Product</th><th class="num">Qty</th><th class="num hide-s">Unit €</th><th class="num">Total €</th><th class="hide-s">Delivery</th>
+    </tr></thead><tbody>${(lines || []).map((l) => `
+    <tr>
+      <td>${esc(l.name)}<div class="muted small mono">${esc(l.product_id)}${l.logistic_model ? " · " + esc(l.logistic_model) : ""}</div></td>
+      <td class="num">${esc(l.quantity)} ${esc(l.sales_unit || "")}</td>
+      <td class="num hide-s">${eur(l.unit_price_ex_vat)}</td>
+      <td class="num">${eur(l.line_total_ex_vat)}</td>
+      <td class="hide-s">${dateOnly(l.delivery_date)}</td>
+    </tr>`).join("")}</tbody></table>`;
+}
+
+function earliestCutoff(order) {
+  const cs = (order.lines || []).map((l) => l.order_cutoff).filter(Boolean).sort();
+  return cs[0] || null;
+}
+
+// --- views ---------------------------------------------------------------------------
+
+const views = {};
+let current = null;
+let timer = null;
+
+// Approvals inbox: orders the mandate engine held for a human.
+views.inbox = {
+  key: "",
+  async load() {
+    const { orders } = await api("/orders?status=pending_approval");
+    setBadge(orders.length);
+    const key = orders.map((o) => o.id + o.updated_at).join();
+    if (key === this.key && view.dataset.view === "inbox") { tickDeadlines(); return; }
+    this.key = key;
+    view.dataset.view = "inbox";
+    if (!orders.length) {
+      view.innerHTML = `<div class="empty"><div class="big">Nothing waiting</div>
+        <p>Orders that fall outside an agent's mandate show up here for a human to approve or reject.</p>
+        <p><a href="#/orders">See all orders</a></p></div>`;
+      return;
+    }
+    view.innerHTML = `<div class="head"><div><h2>Waiting for a human</h2>
+      <div class="muted">${orders.length} order${orders.length > 1 ? "s" : ""} held by the mandate engine</div></div></div>
+      ${orders.map(inboxCard).join("")}`;
+    tickDeadlines();
+    for (const card of view.querySelectorAll("[data-order]")) wireDecision(card);
+  },
+};
+
+function inboxCard(o) {
+  const cut = earliestCutoff(o);
+  const asks = (o.decision?.findings || []).filter((f) => f.outcome === "ask");
+  return `<article class="card ask" data-order="${esc(o.id)}">
+    <div class="row">
+      <div><div class="muted small">${esc(o.buyer)}</div><div class="big">${eur(o.total_ex_vat)} <span class="muted small">ex VAT</span></div></div>
+      <div style="text-align:right">${tier("ask")}
+        ${cut ? `<div class="small">Decide within <span class="deadline" data-until="${esc(cut)}"></span></div>` : ""}</div>
+    </div>
+    <h3>Why it needs you</h3>
+    ${findingsList(asks)}
+    ${linesTable(o.lines)}
+    <dl class="kv small">
+      <dt>Agent</dt><dd class="mono">${esc(o.agent_id)}</dd>
+      <dt>Mandate</dt><dd class="mono">${esc(o.mandate_id)}</dd>
+      <dt>Order</dt><dd><a href="#" data-open="${esc(o.id)}" class="mono">${esc(o.id)}</a> · ${eur(o.total_inc_vat)} incl. VAT · delivery ${dateOnly(o.delivery_date)}</dd>
+    </dl>
+    <textarea rows="2" placeholder="Note for the agent and the log (optional)"></textarea>
+    <div class="actions">
+      <button class="btn no" data-act="reject">Reject</button>
+      <button class="btn yes" data-act="approve">Approve order</button>
+    </div>
+  </article>`;
+}
+
+function wireDecision(card) {
+  const id = card.dataset.order;
+  card.querySelector("[data-open]")?.addEventListener("click", (e) => { e.preventDefault(); openOrder(id); });
+  for (const b of card.querySelectorAll("[data-act]")) {
+    b.addEventListener("click", async () => {
+      let by = approver();
+      if (!by) {
+        by = (prompt("Your name, for the audit log:") || "").trim();
+        if (!by) return;
+        setApprover(by);
+      }
+      const act = b.dataset.act;
+      card.querySelectorAll("button").forEach((x) => (x.disabled = true));
+      try {
+        const o = await api(`/orders/${encodeURIComponent(id)}/${act}`, {
+          method: "POST", body: { by, note: card.querySelector("textarea").value.trim() || null },
+        });
+        const msg = o.status === "ordered" ? `${id} approved and ordered.`
+          : o.status === "rejected" ? `${id} rejected. The agent has been told.`
+          : `${id}: ${STATUS_LABEL[o.status] || o.status}. ${o.approval?.result_reason || ""}`;
+        toast(msg, 5000);
+        views.inbox.key = "";
+        refresh();
+      } catch (e) {
+        toast("Failed: " + e.message, 6000);
+        card.querySelectorAll("button").forEach((x) => (x.disabled = false));
+      }
+    });
+  }
+}
+
+function tickDeadlines() {
+  for (const el of document.querySelectorAll("[data-until]")) {
+    const u = untilText(el.dataset.until);
+    if (!u) continue;
+    el.textContent = u.text;
+    el.classList.toggle("late", u.late);
+    el.title = "Order cut-off " + when(el.dataset.until);
+  }
+}
+
+function setBadge(n) {
+  const b = $("#badge");
+  b.hidden = !n;
+  b.textContent = n;
+}
+
+// All orders, filterable by status.
+views.orders = {
+  filter: "",
+  key: "",
+  async load() {
+    const { orders } = await api("/orders" + (this.filter ? "?status=" + this.filter : ""));
+    const key = this.filter + orders.map((o) => o.id + o.status).join();
+    if (key === this.key && view.dataset.view === "orders") return;
+    this.key = key;
+    view.dataset.view = "orders";
+    const chips = [["", "All"], ...Object.entries(STATUS_LABEL)];
+    view.innerHTML = `<div class="head"><div><h2>Orders</h2><div class="muted">Every order an agent placed, and what the mandate decided</div></div></div>
+      <div class="chips" style="margin-bottom:12px">${chips.map(([k, v]) =>
+        `<button class="chip ${k === this.filter ? "on" : ""}" data-f="${k}">${v}</button>`).join("")}</div>
+      ${orders.length ? `<div class="list">${orders.map((o) => `
+        <button class="item" data-open="${esc(o.id)}">
+          <div><b>${esc(o.buyer)}</b> <span class="muted mono small">${esc(o.id)}</span>
+            <div class="muted small">${esc(o.agent_id)} · ${(o.lines || []).length} line${(o.lines || []).length === 1 ? "" : "s"} · ${when(o.created_at)}</div></div>
+          <div style="text-align:right">${tier(o.status)}<div class="small">${eur(o.total_ex_vat)}</div></div>
+        </button>`).join("")}</div>`
+        : `<div class="empty">No orders${this.filter ? " with this status" : " yet"}.</div>`}`;
+    view.querySelectorAll("[data-f]").forEach((c) => c.addEventListener("click", () => {
+      this.filter = c.dataset.f; this.key = ""; this.load();
+    }));
+    view.querySelectorAll("[data-open]").forEach((c) => c.addEventListener("click", () => openOrder(c.dataset.open)));
+  },
+};
+
+async function openOrder(id) {
+  const o = await api("/orders/" + encodeURIComponent(id));
+  const d = o.decision || {};
+  const a = o.approval;
+  openSheet(`
+    <div class="muted small">${esc(o.buyer)}</div>
+    <h2>${esc(o.id)} ${tier(o.status)}</h2>
+    <div class="big">${eur(o.total_ex_vat)} <span class="muted small">ex VAT · ${eur(o.total_inc_vat)} incl.</span></div>
+    <dl class="kv small">
+      <dt>Agent</dt><dd class="mono">${esc(o.agent_id)}</dd>
+      <dt>Mandate</dt><dd class="mono">${esc(o.mandate_id)}</dd>
+      <dt>Quote</dt><dd class="mono">${esc(o.quote_id)}</dd>
+      <dt>Delivery</dt><dd>${dateOnly(o.delivery_date)}</dd>
+      <dt>Placed</dt><dd>${when(o.created_at)}</dd>
+    </dl>
+    <h3>Mandate decision ${tier(d.outcome)}</h3>
+    <div class="muted small">By ${esc(d.by)} at ${when(d.at)}. Deterministic rules; no AI in this step.</div>
+    ${findingsList(d.findings)}
+    ${a ? `<h3>Human decision</h3>
+      <p>${a.approved ? "Approved" : "Rejected"} by <b>${esc(a.by)}</b> at ${when(a.at)}${a.note ? `: “${esc(a.note)}”` : ""}</p>
+      ${a.result_reason && a.result_reason !== a.note ? `<p class="muted">${esc(a.result_reason)}</p>` : ""}` : ""}
+    <h3>Lines</h3>
+    ${linesTable(o.lines)}
+    <h3>Signed receipt</h3>
+    <p class="small muted">The gateway signs every order. Anyone can check it against the public key at <a href="${API}/.well-known/jwks.json" target="_blank">/.well-known/jwks.json</a>.</p>
+    ${sigButton(o.receipt_jws, "Verify receipt signature")}
+    <details><summary>Raw JWS</summary><pre>${esc(o.receipt_jws)}</pre></details>
+    <h3>History</h3>
+    <div id="order-audit" class="list"><div class="empty">Loading…</div></div>
+  `);
+  const { events } = await api("/audit?subject=" + encodeURIComponent(o.id) + "&limit=50");
+  const q = await api("/audit?subject=" + encodeURIComponent(o.quote_id) + "&limit=50").catch(() => ({ events: [] }));
+  const all = [...new Map([...events, ...q.events].map((e) => [e.seq, e])).values()].sort((x, y) => x.seq - y.seq);
+  const el = $("#order-audit");
+  if (el) el.innerHTML = all.length ? all.map(eventRow).join("") : `<div class="empty">No events.</div>`;
+}
+
+// Audit log: the shared, hash-chained record.
+views.audit = {
+  q: "",
+  key: "",
+  async load() {
+    const params = new URLSearchParams({ limit: "200" });
+    if (this.q) params.set("subject", this.q);
+    const [{ events }, chain] = await Promise.all([api("/audit?" + params), api("/audit/verify")]);
+    const key = this.q + (events[0]?.seq ?? "") + chain.ok;
+    if (key === this.key && view.dataset.view === "audit") return;
+    this.key = key;
+    const focused = document.activeElement?.id === "audit-q";
+    view.dataset.view = "audit";
+    view.innerHTML = `<div class="head"><div><h2>Audit log</h2>
+        <div class="muted">One record for the buyer and Valio Aimo. Each entry includes the hash of the one before it.</div></div></div>
+      ${chain.ok
+        ? `<div class="chain ok">✔ <div><b>Chain intact</b><div class="small">${chain.events} events verified · head <span class="mono">${esc((chain.head || "").slice(0, 16))}…</span></div></div></div>`
+        : `<div class="chain bad">✖ <div><b>Chain broken at event #${esc(chain.broken_at_seq)}</b><div class="small">An entry was edited or deleted after it was written.</div></div></div>`}
+      <input id="audit-q" type="search" placeholder="Filter by order, quote or mandate id (e.g. PO-…, M-HOTEL-AURORA)" value="${esc(this.q)}">
+      <div class="list" style="margin-top:12px">${events.length ? events.map(eventRow).join("") : `<div class="empty">No events.</div>`}</div>`;
+    const input = $("#audit-q");
+    if (focused) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+    let t;
+    input.addEventListener("input", () => {
+      clearTimeout(t);
+      t = setTimeout(() => { this.q = input.value.trim(); this.key = ""; this.load(); }, 300);
+    });
+    view.querySelectorAll("[data-subject]").forEach((a) => a.addEventListener("click", (e) => {
+      e.preventDefault(); this.q = a.dataset.subject; this.key = ""; this.load();
+    }));
+  },
+};
+
+const EVENT_LABEL = {
+  "mandate.issued": "Mandate issued",
+  "mandate.revoked": "Mandate revoked",
+  "catalog.search": "Catalog searched",
+  "quote.issued": "Signed quote issued",
+  "order.ordered": "Order placed",
+  "order.pending_approval": "Order held for a human",
+  "order.refused": "Order refused",
+  "order.rejected": "Order attempt rejected",
+  "order.approved": "Approved by a human",
+  "order.rejected_by_human": "Rejected by a human",
+};
+
+function eventSummary(e) {
+  const d = e.data || {};
+  switch (e.event) {
+    case "catalog.search":
+      return `“${esc(d.query)}” → ${(d.results || []).length} products${d.avoid_allergens?.length ? ", avoiding " + esc(d.avoid_allergens.join(", ")) : ""} · 0 Valio API calls`;
+    case "quote.issued": {
+      const calls = d.valio_api_calls ? Object.values(d.valio_api_calls).reduce((a, b) => a + (Number(b) || 0), 0) : null;
+      return `${(d.lines || []).length} line(s), ${eur(d.total_ex_vat)} ex VAT${d.preview ? " · mandate preview " + tier(d.preview) : ""}${calls != null ? ` · ${calls} Valio API call(s)` : ""}`;
+    }
+    case "order.ordered": case "order.pending_approval": case "order.refused":
+      return `${eur(d.total_ex_vat)} ${tier(d.outcome)} ${(d.fired || []).map((f) => esc(f.message)).join(" · ")}`;
+    case "order.approved": case "order.rejected_by_human":
+      return `→ ${tier(d.resulting_status)}${d.note ? ` “${esc(d.note)}”` : ""}${d.reason && d.reason !== d.note ? " · " + esc(d.reason) : ""}`;
+    case "order.rejected":
+      return esc(d.reason || "");
+    case "mandate.issued": {
+      const m = d.mandate || {};
+      return `${esc(m.buyer)} → agent ${esc(m.agent_id)} · alone up to ${eur(m.auto_approve_limit_eur)}`;
+    }
+    default:
+      return "";
+  }
+}
+
+function eventRow(e) {
+  return `<div class="ev">
+    <div class="seq">#${esc(e.seq)}</div>
+    <div>
+      <div class="row"><span class="what">${esc(EVENT_LABEL[e.event] || e.event)}</span><span class="muted small">${when(e.ts)}</span></div>
+      <div class="small"><span class="actor ${esc(e.actor_type)}">${esc(e.actor_type)}</span> ${esc(e.actor)}
+        ${e.subject ? ` · <a href="#" class="mono" data-subject="${esc(e.subject)}">${esc(e.subject)}</a>` : ""}
+        ${e.buyer ? ` · <span class="muted">${esc(e.buyer)}</span>` : ""}</div>
+      <div class="small" style="margin-top:2px">${eventSummary(e)}</div>
+      <details><summary>Data and hashes</summary><pre>${esc(JSON.stringify(e.data, null, 2))}\n\nprev_hash ${esc(e.prev_hash)}\nhash      ${esc(e.hash)}</pre></details>
+    </div>
+  </div>`;
+}
+
+// Mandates: what each agent may do alone.
+let allergenNames = null;
+views.mandates = {
+  key: "",
+  async load() {
+    const { mandates } = await api("/mandates");
+    allergenNames ||= await api("/allergens").then((r) => r.codes).catch(() => ({}));
+    const key = mandates.map((m) => m.id + m.revoked).join();
+    if (key === this.key && view.dataset.view === "mandates") return;
+    this.key = key;
+    view.dataset.view = "mandates";
+    view.innerHTML = `<div class="head"><div><h2>Mandates</h2>
+      <div class="muted">A mandate (valtakirja) is what a human lets their purchasing agent do. The gateway signs it and enforces it on every order.</div></div></div>
+      ${mandates.length ? mandates.map(mandateCard).join("") : `<div class="empty">No mandates issued yet.</div>`}`;
+    view.querySelectorAll("[data-revoke]").forEach((b) => b.addEventListener("click", async () => {
+      const id = b.dataset.revoke;
+      const by = approver() || (prompt("Your name, for the audit log:") || "").trim();
+      if (!by) return;
+      if (!confirm(`Revoke ${id}? The agent can't place orders with it any more.`)) return;
+      try {
+        await api(`/mandates/${encodeURIComponent(id)}/revoke`, { method: "POST", body: { by } });
+        toast(`${id} revoked.`);
+        this.key = ""; this.load();
+      } catch (e) { toast("Failed: " + e.message, 6000); }
+    }));
+    view.querySelectorAll("[data-sig]").forEach((b) => b.addEventListener("click", async () => {
+      const { jws } = await api("/mandates/" + encodeURIComponent(b.dataset.sig));
+      const r = await verifyJws(jws);
+      b.outerHTML = `<span class="sig ${r.ok ? "ok" : "bad"}">${r.ok ? "✔" : "✖"} ${esc(r.why)}</span>`;
+    }));
+  },
+};
+
+function mandateCard(m) {
+  const a = m.auto_approve_limit_eur, n = m.notify_above_eur, h = m.hard_limit_eur;
+  const ladder = [
+    `<div class="l-silent">Alone ≤ ${eur(n != null && n < a ? n : a)}</div>`,
+    n != null && n < a ? `<div class="l-notify">FYI ≤ ${eur(a)}</div>` : "",
+    `<div class="l-ask">Ask ${h != null ? "≤ " + eur(h) : "above"}</div>`,
+    h != null ? `<div class="l-block">Refuse &gt; ${eur(h)}</div>` : "",
+  ].join("");
+  const allergens = (m.avoid_allergens || []).map((c) => (allergenNames?.[c] || c)).join(", ");
+  const rule = (k, v) => `<div><span class="muted">${k}</span><span>${v}</span></div>`;
+  return `<article class="card ${m.revoked ? "revoked" : ""}">
+    <div class="row"><div><div class="muted small mono">${esc(m.id)}</div><h2>${esc(m.buyer)}</h2></div>
+      ${m.revoked ? `<span class="tier t-block">Revoked</span>` : `<span class="tier t-silent">Active</span>`}</div>
+    <div class="small">Agent <span class="mono">${esc(m.agent_id)}</span> · issued by ${esc(m.issued_by)}${m.valid_until ? " · valid until " + when(m.valid_until) : ""}</div>
+    <div class="ladder">${ladder}</div>
+    <div class="muted small">Per order, ex VAT${m.daily_limit_eur != null ? ` · daily limit ${eur(m.daily_limit_eur)} before a human must approve` : ""}</div>
+    <div class="rules small">
+      ${rule("Avoid allergens", esc(allergens || "none") + (allergens ? (m.allow_may_contain ? " (may-contain OK)" : " (incl. may-contain)") : ""))}
+      ${rule("No allergen data", tier(m.unknown_allergens))}
+      ${rule("Substitutes", tier(m.substitutions))}
+      ${rule("Supplier-shipped (stock unknown)", tier(m.terminal_products))}
+      ${rule("Later delivery date", tier(m.later_delivery))}
+      ${rule("Min. delivery reliability", m.min_delivery_reliability != null ? Math.round(m.min_delivery_reliability * 100) + " %" : "–")}
+      ${(m.required_claims || []).length ? rule("Required claims", esc(m.required_claims.join(", "))) : ""}
+      ${Object.entries(m.max_comparison_price_eur || {}).map(([u, v]) => rule("Price cap", `${eur(v)} / ${esc(u)}`)).join("")}
+      ${m.allowed_categories ? rule("Categories", esc(m.allowed_categories.join(", "))) : ""}
+    </div>
+    <div class="actions">
+      <button class="btn plain" data-sig="${esc(m.id)}">🔏 Verify signature</button>
+      <a class="btn plain" href="#/audit" onclick="views.audit.q='${esc(m.id)}';views.audit.key=''">History</a>
+      ${m.revoked ? "" : `<button class="btn plain" data-revoke="${esc(m.id)}" style="color:var(--block)">Revoke</button>`}
+    </div>
+  </article>`;
+}
+
+// --- sheet, routing, refresh ------------------------------------------------------
+
+function openSheet(html) {
+  $("#sheet-body").innerHTML = html;
+  $("#sheet").hidden = false;
+  document.body.style.overflow = "hidden";
+}
+function closeSheet() {
+  $("#sheet").hidden = true;
+  document.body.style.overflow = "";
+}
+document.addEventListener("click", (e) => { if (e.target.closest("[data-close]")) closeSheet(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
+view.addEventListener("click", (e) => {
+  const a = e.target.closest("a[data-subject]");
+  if (a && view.dataset.view !== "audit") { e.preventDefault(); views.audit.q = a.dataset.subject; location.hash = "#/audit"; }
+});
+$("#sheet-body").addEventListener("click", (e) => {
+  const a = e.target.closest("a[data-subject]");
+  if (a) { e.preventDefault(); closeSheet(); views.audit.q = a.dataset.subject; views.audit.key = ""; location.hash = "#/audit"; route(); }
+});
+
+async function refresh() {
+  try {
+    await views[current].load();
+    if (current !== "inbox") {
+      const { orders } = await api("/orders?status=pending_approval");
+      setBadge(orders.length);
+    }
+  } catch (e) {
+    view.dataset.view = "";
+    view.innerHTML = `<div class="empty"><div class="big">Can't reach the gateway</div><p class="mono small">${esc(e.message)}</p></div>`;
+    for (const v of Object.values(views)) v.key = "";
+  }
+}
+
+function route() {
+  const name = (location.hash.match(/^#\/(\w+)/) || [])[1];
+  current = views[name] ? name : "inbox";
+  closeSheet();
+  document.querySelectorAll(".tabs a").forEach((a) => a.classList.toggle("on", a.dataset.tab === current));
+  view.dataset.view = "";
+  views[current].key = "";
+  view.innerHTML = `<div class="empty">Loading…</div>`;
+  refresh();
+  clearInterval(timer);
+  timer = setInterval(() => { if (!document.hidden) refresh(); tickDeadlines(); }, REFRESH_MS);
+}
+
+window.addEventListener("hashchange", route);
+renderWho();
+route();
