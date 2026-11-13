@@ -184,6 +184,28 @@ def _fts_query(text: str) -> str:
     return " AND ".join(f'"{t}"' for t in terms)
 
 
+def _relevance(p: dict, terms: list[str]) -> float:
+    """How well the product's names match the terms, word-aware.
+
+    Trigram FTS matches substrings, so 'voi' (butter) also hits 'Voima'. Rank a
+    whole word highest, then a Finnish compound ending in the term ('kasvivoi'),
+    then a word that merely starts with it, then any substring.
+    """
+    names = " ".join(v for v in p["names"].values() if v).lower()
+    score = 0.0
+    for t in terms:
+        e = re.escape(t)
+        if re.search(rf"\b{e}\b", names):
+            score += 3
+        elif re.search(rf"{e}\b", names):
+            score += 2
+        elif re.search(rf"\b{e}", names):
+            score += 1
+        elif t in names:
+            score += 0.5
+    return score
+
+
 def search(
     query: str = "",
     *,
@@ -209,9 +231,13 @@ def search(
         ).fetchall()
     else:
         rows = db.execute("SELECT data FROM product LIMIT 5000").fetchall()
+    products = [json.loads(d) for (d,) in rows]
+    if q:
+        terms = [t for t in re.findall(r"\w+", query.lower()) if len(t) >= 3]
+        # stable sort: relevance first, bm25 order breaks ties
+        products.sort(key=lambda p: -_relevance(p, terms))
     out = []
-    for (data,) in rows:
-        p = json.loads(data)
+    for p in products:
         if p["deleted"]:
             continue
         if claims and not set(claims) <= set(p["claims"]):
