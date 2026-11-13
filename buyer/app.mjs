@@ -201,7 +201,13 @@ async function renderOrder(gateway, order, quote) {
     content.append(element('p', error.message, 'notice'));
   }
   $('order-panel').hidden = false;
-  $('approvals').href = `${gateway.base}/ui/#/orders/${encodeURIComponent(order.id)}`;
+  const fallback = `${gateway.base}/ui/#/orders/${encodeURIComponent(order.id)}`;
+  let approval = fallback;
+  if (order.approval_url) {
+    const url = URL.parse(order.approval_url, `${gateway.base}/`);
+    if (url?.origin === new URL(gateway.base).origin && !url.username && !url.password) approval = url.href;
+  }
+  $('approvals').href = approval;
   $('approvals').hidden = order.status !== 'pending_approval';
 }
 
