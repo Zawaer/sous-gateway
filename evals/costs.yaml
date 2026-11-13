@@ -5,7 +5,7 @@
 
 prices_usd_per_1m:            # [input, output] per 1M tokens, as charged
   gemini-4-hydrogen: [1.5, 7.5]
-  kimi-k3-1-pro: [null, null]          # Verda Inference: see the Verda console
+  kimi-k3-1-pro: [2.0, 10.0]           # Verda Inference, standard tier (cached input 0.2); from GET /v1/inference/models
   nemotron-3.5-super-vl-120b-a12b: [0, 0]   # NVIDIA Build free tier
   codex: [null, null]                  # OpenAI credits (Codex), see the OpenAI usage page
 
@@ -21,8 +21,8 @@ runs:
 
 services:                      # running infrastructure, prorated
   - {provider: aiven, item: "Valkey, Developer plan (shared Valio budget)", usd_per_month: 15, since: "2026-11-13 22:30", note: "paid from Aiven's $50 trial credits"}
-  - {provider: verda, item: "CPU instance, prod (FIN-01)", usd_per_hour: null, since: "2026-11-13 20:00", note: "price: Verda console (Rene)"}
-  - {provider: verda, item: "CPU instance, staging", usd_per_hour: null, since: "2026-11-13 20:00", note: "price: Verda console (Rene)"}
+  - {provider: verda, item: "CPU instance CPU.4V.16G, prod (FIN-01)", usd_per_hour: 0.048, since: "2026-11-13 21:15", note: "Verda on-demand price from the instance record"}
+  - {provider: verda, item: "CPU instance CPU.4V.16G, staging (FIN-01)", usd_per_hour: 0.048, since: "2026-11-13 21:40", note: "Verda on-demand price from the instance record"}
   - {provider: craci, item: "CI runners (test, docker, smoke, eval, llm-eval)", usd_per_hour: null, since: "2026-11-13 21:40", note: "paid from CRACI's per-team compute credits; see the CRACI dashboard"}
 
 notes:
