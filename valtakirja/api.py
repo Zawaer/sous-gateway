@@ -246,6 +246,28 @@ def revoke_mandate(mandate_id: str, d: Decision):
     return S.revoke_mandate(mandate_id, d.by)
 
 
+# --- notifications ----------------------------------------------------------
+
+@app.get("/notifications", tags=["notifications"])
+def list_notifications(buyer: str | None = None, order_id: str | None = None, limit: int = 50):
+    """In-app feed of FYIs (notify tier), approval requests (ask tier) and decisions, newest first."""
+    from . import notifications_store
+    return {"notifications": notifications_store.list_(buyer, limit, order_id)}
+
+
+class NotificationTest(BaseModel):
+    mandate_id: str
+
+
+@app.post("/notifications/test", tags=["notifications"], dependencies=[Depends(require_approver)])
+def test_notification(t: NotificationTest):
+    """Send a test notification through every channel configured for this mandate (feed, ntfy, webhook)."""
+    from . import notify
+    m = S._mandate(t.mandate_id)
+    notify.send("test", {"id": None, "buyer": m.buyer, "mandate_id": m.id}, m)
+    return {"ok": True, "channels": ["feed", *sorted(notify.channels(m, "buyer"))]}
+
+
 # --- audit ------------------------------------------------------------------
 
 @app.get("/audit", tags=["audit"])

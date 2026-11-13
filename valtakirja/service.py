@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import aimo, catalog, config, quote as Q, signing, store, substitutes
+from . import aimo, catalog, config, notify, quote as Q, signing, store, substitutes
 from .mandate import Mandate, evaluate
 
 
@@ -239,6 +239,8 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
                 {"order_id": oid, "quote_id": quote_id, "agent_id": agent_id, "outcome": outcome,
                  "total_ex_vat": q["total_ex_vat"],
                  "fired": [f.model_dump() for f in findings if f.outcome != "silent"] or [findings[-1].model_dump()]})
+    if outcome in ("notify", "ask"):
+        notify.send(f"order.{outcome}", order, mandate)  # FYI / approval request; never blocks the order
     return order
 
 
@@ -266,6 +268,7 @@ def decide(order_id: str, approver: str, approve: bool, note: str | None = None)
     store.put_order(o)
     store.audit("order.approved" if approve else "order.rejected_by_human", approver, "human", order_id,
                 o["buyer"], {"order_id": order_id, "note": note, "resulting_status": status, "reason": reason})
+    notify.send("order.decided", o, mandate)  # FYI to the agent side
     return o
 
 
