@@ -1,0 +1,23 @@
+[project]
+name = "valtakirja"
+version = "0.1.0"
+description = "Mandate-enforcing purchasing gateway for AI buyer agents (Junction 2026, Valio Aimo: Trusted Trade Agents)"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "python-dotenv>=1.0",
+    "mcp>=1.9",
+    "cryptography>=42",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
