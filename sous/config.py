@@ -49,3 +49,13 @@ AIMO_CALLS_PER_MIN = int(env("AIMO_CALLS_PER_MIN", "60"))  # protects our Valio 
 MAX_CANDIDATES_PER_QUOTE = 200
 # MariaDB (system-versioned state): mysql://user:pass@host:port/db. Empty = local SQLite file.
 DB_URL = env("DB_URL", "")
+
+# Judge sandbox (sous/sandbox.py): POST /sandbox gives a visitor private copies of the demo mandates.
+SANDBOX_ENABLED = env("SANDBOX", "1") not in ("0", "false", "no")
+SANDBOX_TTL_HOURS = float(env("SANDBOX_TTL_HOURS", "24"))
+SANDBOX_PER_IP_HOUR = int(env("SANDBOX_PER_IP_HOUR", "3"))  # new sandboxes per client IP per hour
+SANDBOX_MAX_ACTIVE = int(env("SANDBOX_MAX_ACTIVE", "50"))
+SANDBOX_QUOTES = int(env("SANDBOX_QUOTES", "15"))  # live quote/substitute/suggestion lookups per sandbox
+# Live Valio Aimo calls per minute shared by all sandboxes: at most half the gateway's budget by default,
+# so visitors can never starve the curated demo.
+SANDBOX_CALLS_PER_MIN = int(env("SANDBOX_CALLS_PER_MIN", str(max(1, AIMO_CALLS_PER_MIN // 2))))

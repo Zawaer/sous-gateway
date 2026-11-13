@@ -73,14 +73,20 @@ HINTS: dict[str, tuple[str, bool]] = {
                             "don't retry without it.", False),
     "agent_auth_invalid": ("Your agent credential is wrong, revoked or for another mandate. Ask the buyer for a "
                            "new one (they rotate it); don't guess or retry.", False),
+    "sandbox_limit": ("This judge sandbox is out of live Valio lookups for now. Tell the user; retry after "
+                      "retry_after seconds, or reuse an earlier quote. Don't loop.", False),
+    "sandbox_expired": ("This sandbox has expired or was closed. The user can create a new one (POST /sandbox).",
+                        False),
     "invalid_argument": ("Fix the argument named in the message and call the tool again.", False),
     "internal_error": ("Unexpected gateway error. Retry once; if it persists, tell the buyer and stop.", True),
 }
 
 
-def _error(code: str, message: str) -> CallToolResult:
+def _error(code: str, message: str, retry_after: int | None = None) -> CallToolResult:
     hint, retryable = HINTS.get(code, ("Read the message and adjust the request.", False))
     body = {"error": code, "message": message, "hint": hint, "retryable": retryable}
+    if retry_after is not None:
+        body["retry_after"] = retry_after
     return CallToolResult(content=[TextContent(type="text", text=json.dumps(body, ensure_ascii=False))],
                           structured_content=body, is_error=True)
 
@@ -93,7 +99,7 @@ def _tool(fn):
         try:
             return fn(*args, **kwargs)
         except S.GatewayError as e:
-            return _error(e.code, e.message)
+            return _error(e.code, e.message, e.retry_after)
         except ValueError as e:
             return _error("invalid_argument", str(e))
         except Exception as e:  # noqa: BLE001 - the agent gets a clean error, the log gets the trace

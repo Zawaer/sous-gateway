@@ -83,10 +83,11 @@ def status(m: Mandate) -> dict:
             "credential": _public(_row(m.id))}
 
 
-def mint(m: Mandate, by: str, *, rotated: bool = False) -> dict:
-    """A new credential for the mandate's agent, replacing any earlier one. The token is returned only here."""
+def mint(m: Mandate, by: str, *, rotated: bool = False, token: str | None = None) -> dict:
+    """A new credential for the mandate's agent, replacing any earlier one. The token is returned only here.
+    `token`: reuse a token just minted for another mandate (a judge sandbox gives one token for its mandates)."""
     _ensure()
-    token = PREFIX + secrets.token_urlsafe(32)
+    token = token or PREFIX + secrets.token_urlsafe(32)
     row = {"mandate_id": m.id, "agent_id": m.agent_id, "token_sha256": _hash(token), "last4": token[-4:],
            "created_at": store.now_iso(), "created_by": by}
     store._upsert("agent_credential", list(row), tuple(row.values()))

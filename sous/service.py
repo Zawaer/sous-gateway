@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import agent_auth, aimo, catalog, config, credentials, notify, quote as Q, signing, store, substitutes
+from . import agent_auth, aimo, catalog, config, credentials, notify, quote as Q, sandbox, signing, store, substitutes
 from .mandate import Mandate, evaluate
 
 
@@ -22,6 +22,12 @@ class GatewayError(Exception):
     def __init__(self, code: str, message: str, status: int = 400, retry_after: int | None = None):
         super().__init__(message)
         self.code, self.message, self.status, self.retry_after = code, message, status, retry_after
+
+
+def valio_error(e: aimo.AimoError) -> GatewayError:
+    if isinstance(e, aimo.SandboxLimit):  # a judge sandbox over its share of the Valio key (sandbox.py)
+        return GatewayError("sandbox_limit", str(e), 429, e.retry_after)
+    return GatewayError("valio_unavailable", str(e), 503, e.retry_after)
 
 
 def _id(prefix: str) -> str:
@@ -333,15 +339,15 @@ def order_url(order_id: str) -> str:
 
 
 def request_quote(req: QuoteRequest, agent_token: str | None = None) -> dict:
-    if req.mandate_id:
-        authorize_agent(req.mandate_id, req.agent_id, agent_token, "request_quote")
+    m = authorize_agent(req.mandate_id, req.agent_id, agent_token, "request_quote") if req.mandate_id else None
     if sum(len(i.product_ids) for i in req.items) > config.MAX_CANDIDATES_PER_QUOTE:
         raise GatewayError("too_many_candidates",
                            f"At most {config.MAX_CANDIDATES_PER_QUOTE} candidate products per quote; narrow the search first.")
     try:
-        return _request_quote(req)
+        with sandbox.metered(m):
+            return _request_quote(req)
     except aimo.AimoError as e:
-        raise GatewayError("valio_unavailable", str(e), 503, e.retry_after)
+        raise valio_error(e)
 
 
 def _request_quote(req: QuoteRequest) -> dict:
@@ -601,12 +607,13 @@ def suggest_substitutes(agent_id: str, product_id: str, delivery_date: date, amo
     mandate = _mandate(mandate_id) if mandate_id else None
     before = dict(aimo.stats)
     try:
-        r = substitutes.suggest(product_id, delivery_date, amount, None if unit == "SALES_UNIT" else unit,
-                                mandate, avoid_allergens, limit=min(limit, 6))
+        with sandbox.metered(mandate):
+            r = substitutes.suggest(product_id, delivery_date, amount, None if unit == "SALES_UNIT" else unit,
+                                    mandate, avoid_allergens, limit=min(limit, 6))
     except KeyError:
         raise GatewayError("product_not_found", f"No product {product_id}.", 404)
     except aimo.AimoError as e:
-        raise GatewayError("valio_unavailable", str(e), 503, e.retry_after)
+        raise valio_error(e)
     r["valio_api_calls"] = {k: aimo.stats[k] - before[k] for k in aimo.stats}
     store.audit("substitutes.suggested", agent_id, "agent", product_id, mandate.buyer if mandate else None,
                 {"product_id": product_id, "constraints": r["constraints"],

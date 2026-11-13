@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
 
-from . import aimo, catalog, config, service as S, signing, standing, store
+from . import aimo, catalog, config, sandbox, service as S, signing, standing, store
 from .mandate import Mandate
 from .mcp_server import mcp
 
@@ -101,10 +101,22 @@ async def rate_limit(request: Request, call_next):
     return await call_next(request)
 
 
-def require_approver(x_approver_code: str | None = Header(default=None)):
-    """Human-only actions. In production this is the buyer's own login (e.g. OIDC); here a shared demo code."""
+def require_approver(request: Request, x_approver_code: str | None = Header(default=None)):
+    """Human-only actions. In production this is the buyer's own login (e.g. OIDC); here a shared demo code.
+    A judge sandbox's approver token (sandbox.py) also works, but only to approve/reject its own orders."""
+    if config.APPROVER_CODE and x_approver_code != config.APPROVER_CODE and not (
+            request.url.path.endswith(("/approve", "/reject"))
+            and sandbox.may_approve(x_approver_code, request.path_params.get("order_id"))):
+        raise HTTPException(401, "Human approver code required (X-Approver-Code header).")
+
+
+def require_global_approver(x_approver_code: str | None = Header(default=None)):
     if config.APPROVER_CODE and x_approver_code != config.APPROVER_CODE:
         raise HTTPException(401, "Human approver code required (X-Approver-Code header).")
+
+
+_SANDBOX_Q = Query(None, alias="sandbox", description="Judge sandbox id (e.g. SBX-7Q2K): show only its data. "
+                                     "Without it, sandbox data is hidden.")
 
 
 _agent_bearer = HTTPBearer(auto_error=False, scheme_name="agentToken",
@@ -258,8 +270,12 @@ def place_order(req: OrderRequest, token: str | None = Depends(agent_token)):
 
 @app.get("/orders", tags=["ordering"])
 def list_orders(status: Literal["ordered", "pending_approval", "refused", "rejected", "expired"] | None = None,
-                mandate_id: str | None = None):
-    return {"orders": store.list_orders(status, mandate_id)}
+                mandate_id: str | None = None, sandbox_id: str | None = _SANDBOX_Q):
+    scope = sandbox.list_scope(sandbox_id)
+    if scope is None:
+        return {"orders": []}
+    return {"orders": [o for o in store.list_orders(status, mandate_id)
+                       if (mandate_id and not sandbox_id) or sandbox.keep(scope, o["mandate_id"])]}
 
 
 @app.get("/orders/{order_id}", tags=["ordering"])
@@ -300,8 +316,11 @@ def issue_mandate(m: Mandate, mint_agent_credential: bool | None = None):
 
 
 @app.get("/mandates", tags=["mandates"])
-def list_mandates():
-    return {"mandates": store.list_mandates()}
+def list_mandates(sandbox_id: str | None = _SANDBOX_Q):
+    scope = sandbox.list_scope(sandbox_id)
+    if scope is None:
+        return {"mandates": []}
+    return {"mandates": [m for m in store.list_mandates() if sandbox.keep(scope, m["id"])]}
 
 
 @app.get("/mandates/{mandate_id}", tags=["mandates"])
@@ -435,8 +454,12 @@ def create_standing_order(req: standing.StandingOrderIn):
 
 
 @app.get("/standing-orders", tags=["standing orders"])
-def list_standing_orders(mandate_id: str | None = None):
-    return {"standing_orders": standing.list_(mandate_id)}
+def list_standing_orders(mandate_id: str | None = None, sandbox_id: str | None = _SANDBOX_Q):
+    scope = sandbox.list_scope(sandbox_id)
+    if scope is None:
+        return {"standing_orders": []}
+    return {"standing_orders": [so for so in standing.list_(mandate_id)
+                                if (mandate_id and not sandbox_id) or sandbox.keep(scope, so["mandate_id"])]}
 
 
 @app.get("/standing-orders/{standing_id}", tags=["standing orders"])
@@ -474,10 +497,15 @@ def simulate_standing_history(standing_id: str, req: SimulateHistory):
 # --- notifications ----------------------------------------------------------
 
 @app.get("/notifications", tags=["notifications"])
-def list_notifications(buyer: str | None = None, order_id: str | None = None, limit: int = Query(50, ge=1, le=500)):
+def list_notifications(buyer: str | None = None, order_id: str | None = None, limit: int = Query(50, ge=1, le=500),
+                       sandbox_id: str | None = _SANDBOX_Q):
     """In-app feed of FYIs (notify tier), approval requests (ask tier) and decisions, newest first."""
     from . import notifications_store
-    return {"notifications": notifications_store.list_(buyer, limit, order_id)}
+    scope = sandbox.list_scope(sandbox_id)
+    if scope is None:
+        return {"notifications": []}
+    return {"notifications": notifications_store.list_(buyer, limit, order_id,
+                                                       sandbox=None if order_id and not sandbox_id else scope)}
 
 
 class NotificationTest(BaseModel):
@@ -493,12 +521,43 @@ def test_notification(t: NotificationTest):
     return {"ok": True, "channels": ["feed", *sorted(notify.channels(m, "buyer"))]}
 
 
+# --- judge sandbox ----------------------------------------------------------
+
+@app.post("/sandbox", tags=["sandbox"])
+def create_sandbox(request: Request):
+    """Try Sous yourself: private copies of the hotel, hospital and school demo mandates for 24 h, an agent
+    token for them, an approver token for their orders only, and copy-paste quickstarts (MCP, curl, UIs).
+
+    No login; at most a few sandboxes per IP per hour. Tokens are shown once. Each sandbox has a small budget of
+    live Valio Aimo lookups (quotes_limit); cached offers are free."""
+    return sandbox.create(_client_ip(request), str(request.base_url))
+
+
+@app.get("/sandbox/{sandbox_id}", tags=["sandbox"])
+def get_sandbox(sandbox_id: str):
+    """A sandbox's status: active / expired / deleted, live lookups used, its mandates and orders."""
+    return sandbox.get(sandbox_id)
+
+
+@app.delete("/sandbox/{sandbox_id}", tags=["sandbox"], dependencies=[Depends(require_global_approver)])
+def delete_sandbox(sandbox_id: str, by: str = "approver"):
+    """Approver only: end a sandbox now (its mandates are revoked; its audit events stay in the chain)."""
+    return sandbox.delete(sandbox_id, by)
+
+
 # --- audit ------------------------------------------------------------------
 
 @app.get("/audit", tags=["audit"])
-def audit(subject: str | None = None, buyer: str | None = None, limit: int = Query(200, ge=1, le=5000)):
-    """The audit log, newest first. Both the buyer and Valio Aimo read the same record."""
-    return {"events": store.audit_events(subject, buyer, limit)}
+def audit(subject: str | None = None, buyer: str | None = None, limit: int = Query(200, ge=1, le=5000),
+          sandbox_id: str | None = _SANDBOX_Q):
+    """The audit log, newest first. Both the buyer and Valio Aimo read the same record.
+
+    Judge-sandbox events are in the same hash chain but hidden here unless ?sandbox=<id> (or a subject) is given."""
+    scope = sandbox.list_scope(sandbox_id)
+    if scope is None:
+        return {"events": []}
+    return {"events": store.audit_events(subject, buyer, limit,
+                                         sandbox=None if subject and not sandbox_id else scope)}
 
 
 @app.get("/audit/verify", tags=["audit"])

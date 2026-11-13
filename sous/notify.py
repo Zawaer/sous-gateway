@@ -138,6 +138,8 @@ def compose(event: str, order: dict, mandate: Mandate) -> dict:
 
 def channels(mandate: Mandate, audience: str) -> dict[str, str]:
     out = {}
+    if getattr(mandate, "sandbox", None):  # judge sandboxes: in-app feed only, never the demo phone or webhook
+        return out
     hook = getattr(mandate, "notify_webhook_url", None) or _env("SOUS_NOTIFY_WEBHOOK_URL")
     if hook:
         out["webhook"] = hook

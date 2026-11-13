@@ -44,10 +44,12 @@ def add(n: dict) -> dict:
     return {**rec, "seq": seq}
 
 
-def list_(buyer: str | None = None, limit: int = 50, order_id: str | None = None) -> list[dict]:
-    """Newest first."""
+def list_(buyer: str | None = None, limit: int = 50, order_id: str | None = None,
+          sandbox: str | None = None) -> list[dict]:
+    """Newest first. `sandbox`: see store.sandbox_where."""
     _ensure()
-    q, args = "SELECT * FROM notification WHERE 1=1", []
+    q, args = store.sandbox_where(sandbox, ("buyer",))
+    q = "SELECT * FROM notification WHERE 1=1" + q
     if buyer:
         q += " AND buyer = ?"
         args.append(buyer)

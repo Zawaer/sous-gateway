@@ -19,6 +19,7 @@ deployment, so the client degrades gracefully instead of failing a quote:
 
 from __future__ import annotations
 
+import contextvars
 import random
 import threading
 import time
@@ -56,19 +57,52 @@ class AimoError(RuntimeError):
         self.rate_limited = rate_limited
 
 
+class SandboxLimit(AimoError):
+    """A judge sandbox (sandbox.py) is out of its share of live calls; never served from a stale copy."""
+
+
+class Meter:
+    """Set (via `meter`) while a sandbox operation runs: `allowed` False = its quota is used up;
+    `live` becomes True once the operation made a live call (cached answers cost nothing)."""
+
+    def __init__(self, sandbox: str, allowed: bool = True):
+        self.sandbox, self.allowed, self.live = sandbox, allowed, False
+
+
+meter: contextvars.ContextVar[Meter | None] = contextvars.ContextVar("aimo_sandbox_meter", default=None)
 _calls: list[float] = []
+_sandbox_calls: list[float] = []  # live calls made for judge sandboxes, their own per-minute sub-budget
+
+
+def _prune(calls: list[float], now: float) -> None:
+    while calls and now - calls[0] > 60:
+        calls.pop(0)
 
 
 def _take_budget() -> None:
-    """Global cap on live Valio Aimo calls per minute (their rate limits are undisclosed)."""
+    """Global cap on live Valio Aimo calls per minute (their rate limits are undisclosed); sandbox calls also
+    count against a smaller shared sub-budget (config.SANDBOX_CALLS_PER_MIN)."""
     now = time.time()
+    m = meter.get()
     with _lock:
-        while _calls and now - _calls[0] > 60:
-            _calls.pop(0)
+        _prune(_calls, now)
+        if m is not None:
+            if not m.allowed:
+                raise SandboxLimit(f"Sandbox {m.sandbox} has used its {config.SANDBOX_QUOTES} live Valio Aimo "
+                                   "lookups. Cached offers still work; create a new sandbox to keep going.",
+                                   retry_after=3600, rate_limited=True)
+            _prune(_sandbox_calls, now)
+            if len(_sandbox_calls) >= config.SANDBOX_CALLS_PER_MIN:
+                raise SandboxLimit("Sandboxes share a small budget of live Valio Aimo calls and it is used up "
+                                   "for this minute; retry shortly.",
+                                   retry_after=max(1, int(60 - (now - _sandbox_calls[0])) + 1), rate_limited=True)
         if len(_calls) >= config.AIMO_CALLS_PER_MIN:
             raise AimoError("The gateway's budget of live Valio Aimo calls for this minute is used up; retry shortly.",
                             retry_after=max(1, int(60 - (now - _calls[0])) + 1), rate_limited=True)
         _calls.append(now)
+        if m is not None:
+            _sandbox_calls.append(now)
+            m.live = True
 
 
 _client = httpx.Client(
@@ -182,6 +216,8 @@ def _fetch_shared(kind: str, day: str, chunk: list[str]) -> list[dict]:
             _health["coalesced"] += 1
     if not leader:
         call.done.wait()
+        if isinstance(call.error, SandboxLimit):  # another sandbox's limit is not ours: make the call ourselves
+            return _fetch_shared(kind, day, chunk)
         if call.error:
             raise call.error
         return [i for i in call.items or [] if i["productId"] in want]
@@ -234,6 +270,8 @@ def _post(kind: str, requested: date, ids: list[str], ttl: int, stale_max: int) 
             for item in _fetch_shared(kind, day, chunk):
                 out[item["productId"]] = item
         except AimoError as e:
+            if isinstance(e, SandboxLimit):
+                raise
             stale = _stale(kind, day, chunk, stale_max, e)
             if not stale:
                 raise
@@ -259,6 +297,8 @@ def health() -> dict:
         return {
             "calls_last_minute": sum(1 for t in _calls if now - t <= 60),
             "budget_per_minute": config.AIMO_CALLS_PER_MIN,
+            "sandbox_calls_last_minute": sum(1 for t in _sandbox_calls if now - t <= 60),
+            "sandbox_budget_per_minute": config.SANDBOX_CALLS_PER_MIN,
             "circuit": "open" if wait > 0 else "closed",
             "circuit_retry_after_s": int(wait) + 1 if wait > 0 else 0,
             "last_429_at": datetime.fromtimestamp(last, config.TZ).isoformat(timespec="seconds") if last else None,
@@ -275,6 +315,7 @@ def reset() -> None:
     with _lock:
         _cache.clear()
         _calls.clear()
+        _sandbox_calls.clear()
         _inflight.clear()
         _circuit_until = 0.0
         _health.update(rate_limited=0, server_errors=0, stale_served=0, coalesced=0, last_429_at=None)
