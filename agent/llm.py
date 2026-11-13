@@ -5,6 +5,7 @@ One small httpx client covers every provider we use, because they all speak the 
     preset  base URL                                                   key env var              default model
     gemini  https://generativelanguage.googleapis.com/v1beta/openai/  GEMINI_API_KEY           gemini-4-hydrogen
     verda   https://inference.verda.com/v1                             VERDA_INFERENCE_API_KEY  kimi-k3-1-pro
+    nvidia  https://integrate.api.nvidia.com/v1                        NVIDIA_API_KEY           nvidia/nemotron-3.5-super-vl-120b-a12b
     local   $LLM_BASE_URL (vLLM, Ollama, llama.cpp server, ...)       LLM_API_KEY (optional)   $LLM_MODEL
 
 LLM_BASE_URL / LLM_API_KEY / LLM_MODEL override any preset; LLM_PROVIDER picks the preset when none is
@@ -31,6 +32,13 @@ PRESETS: dict[str, dict] = {
     "verda": {"base_url": "https://inference.verda.com/v1", "key_env": "VERDA_INFERENCE_API_KEY",
               "model": "kimi-k3-1-pro", "reasoning_effort": "low",
               "where": "Verda Inference (open-weight model on Verda GPUs in the EU; prompts not stored)"},
+    # Nemotron 3.5 Super VL (vision + text) on NVIDIA's API catalog (build.nvidia.com). Images go in the
+    # messages as OpenAI-style image_url parts (base64 data URLs); see agent/vision.py. Reasoning is a
+    # chat-template switch, not reasoning_effort: off by default (extraction, latency); LLM_THINKING=1 turns it on.
+    "nvidia": {"base_url": "https://integrate.api.nvidia.com/v1", "key_env": "NVIDIA_API_KEY",
+               "model": "nvidia/nemotron-3.5-super-vl-120b-a12b", "reasoning_effort": None,
+               "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+               "where": "NVIDIA API catalog (build.nvidia.com; NVIDIA-hosted NIM, US)"},
     "local": {"base_url": "http://127.0.0.1:8000/v1", "key_env": "LLM_API_KEY", "model": "",
               "reasoning_effort": None, "where": "self-hosted OpenAI-compatible server (e.g. vLLM on a Verda GPU)"},
 }
@@ -65,6 +73,7 @@ class LLMConfig:
     price_in: float | None = None   # USD per 1M input tokens
     price_out: float | None = None  # USD per 1M output tokens
     where: str = ""
+    extra_body: dict | None = None  # provider-specific body fields (e.g. NVIDIA's chat_template_kwargs)
 
     @property
     def label(self) -> str:
@@ -90,10 +99,13 @@ def config_from_env(provider: str | None = None, model: str | None = None, env: 
     price = PRICES.get(model, (None, None))
     price_in = float(env["LLM_PRICE_IN"]) if env.get("LLM_PRICE_IN") else price[0]
     price_out = float(env["LLM_PRICE_OUT"]) if env.get("LLM_PRICE_OUT") else price[1]
+    extra = dict(p.get("extra_body") or {})
+    if provider == "nvidia" and env.get("LLM_THINKING") in ("1", "true", "on"):
+        extra["chat_template_kwargs"] = {"enable_thinking": True}
     return LLMConfig(provider=provider, base_url=(env.get("LLM_BASE_URL") or p["base_url"]).rstrip("/"),
                      model=model, api_key=env.get("LLM_API_KEY") or env.get(p["key_env"], ""),
                      reasoning_effort=effort,
-                     price_in=price_in, price_out=price_out, where=p["where"])
+                     price_in=price_in, price_out=price_out, where=p["where"], extra_body=extra or None)
 
 
 def key_present(provider: str, env: dict | None = None) -> bool:
@@ -142,6 +154,8 @@ class ChatClient:
             body["max_tokens"] = c.max_tokens
         if c.reasoning_effort:
             body["reasoning_effort"] = c.reasoning_effort
+        if c.extra_body:
+            body.update(c.extra_body)
         headers = {"Content-Type": "application/json"}
         if c.api_key:
             headers["Authorization"] = f"Bearer {c.api_key}"
