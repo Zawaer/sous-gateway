@@ -93,6 +93,11 @@ def _comparable(m: Mandate) -> dict:
 def issue_mandate(m: Mandate, mint_agent_credential: bool | None = None) -> dict:
     """Sign and store the mandate. When the agent must authenticate (or when asked), also mint the agent's
     credential: its token is in the response this once and never again."""
+    with _order_lock:  # an order being placed or approved sees the mandate before or after the change, not both
+        return _issue_mandate(m, mint_agent_credential)
+
+
+def _issue_mandate(m: Mandate, mint_agent_credential: bool | None) -> dict:
     data = m.model_dump(mode="json")
     prev = store.get_mandate(m.id)
     if prev and prev.get("revoked") and not m.revoked:
