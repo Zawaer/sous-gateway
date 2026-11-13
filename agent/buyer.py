@@ -10,7 +10,7 @@ Tools are the gateway's own MCP tools (same names, descriptions and JSON schemas
 either in-process (the MCP server object, used by the eval) or over Streamable HTTP (a deployed gateway):
 
     uv run python -m agent.buyer "We need 1,000 litres of lactose-free milk delivered on Monday." \\
-        --mandate M-HOTEL-AURORA --agent aurora-purchasing-agent --gateway https://135-181-63-134.sslip.io
+        --mandate M-HOTEL-AURORA --agent aurora-purchasing-agent --gateway https://staging.135-181-63-134.sslip.io
 """
 
 from __future__ import annotations
@@ -443,7 +443,7 @@ def main(argv=None) -> int:
     ap.add_argument("request", help="what the buyer wants, in their own words")
     ap.add_argument("--mandate", required=True)
     ap.add_argument("--agent", required=True)
-    ap.add_argument("--gateway", default="https://135-181-63-134.sslip.io",
+    ap.add_argument("--gateway", default="https://staging.135-181-63-134.sslip.io",
                     help="gateway base URL (MCP at /mcp/), or 'local' for the in-process gateway")
     ap.add_argument("--provider", help="gemini | verda | local (default: $LLM_PROVIDER or gemini)")
     ap.add_argument("--model")

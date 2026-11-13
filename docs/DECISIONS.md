@@ -53,6 +53,6 @@ Production: periodically anchor the chain head somewhere neither party controls 
 - **Mandate signed by the human.** The buyer signs the mandate (Verifiable Credential); the gateway verifies it rather than signing on their behalf.
 - **Per-customer prices.** Use the real customer number so quotes carry the buyer's contract prices. The mock ignores it.
 - **Valio Aimo's real order API.** `ordered` would submit to the order system, with its confirmation id in the receipt and the audit log.
-- **Notifications.** Push `notify` FYIs and `ask` approval requests to the human's phone (push, email, Teams), with the approval deadline set by the earliest cut-off.
+- **Notifications.** Built for the demo: in-app feed, ntfy push and an HMAC-signed webhook, with the approval deadline set by the earliest cut-off. Production adds email/Teams and per-buyer channel settings (today the channels come from server env vars).
 - **Rate limits per mandate and agent**, not only per IP and globally.
-- **Key rotation.** Several keys in the JWKS, KMS/HSM-held private keys, `iat`/`exp` in the JWS header, and a re-signed receipt after a human decision.
+- **Key rotation.** Several keys in the JWKS, KMS/HSM-held private keys and `iat`/`exp` in the JWS header. (Receipts are already re-signed after a human decision.)
