@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Sous: Valio Aimo agent gateway",
-    version="0.1.0",
+    version="0.2.0",
     description=(
         "Lets external purchasing agents search Valio Aimo's catalog, get signed quotes with live price and "
         "availability, and place orders within a mandate (sous) issued by their human. The mandate engine "
@@ -555,7 +555,7 @@ def delete_sandbox(sandbox_id: str, by: str = "approver"):
 # --- audit ------------------------------------------------------------------
 
 @app.get("/audit", tags=["audit"])
-def audit(subject: str | None = None, buyer: str | None = None, limit: int = Query(200, ge=1, le=5000),
+def audit(subject: str | None = None, buyer: str | None = None, limit: int = Query(200, ge=1, le=20000),
           sandbox_id: str | None = _SANDBOX_Q):
     """The audit log, newest first. Both the buyer and Valio Aimo read the same record.
 

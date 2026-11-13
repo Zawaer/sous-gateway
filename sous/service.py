@@ -325,7 +325,7 @@ def search(agent_id: str, query: str, *, claims=None, avoid_allergens=None, labe
 # --- quotes -----------------------------------------------------------------
 
 class QuoteItem(BaseModel):
-    product_ids: list[str] = Field(description="One product, or several candidates for the gateway to choose and split across")
+    product_ids: list[str] = Field(min_length=1, description="One product, or several candidates for the gateway to choose and split across")
     amount: float = Field(gt=0, description="How much is needed")
     unit: Literal["L", "KG", "SALES_UNIT"] = Field("SALES_UNIT", description="L or KG for volume/weight, SALES_UNIT for packs")
     substitute_for: str | None = Field(None, description="Product id this item replaces, if it is a substitute")

@@ -1,6 +1,6 @@
 [project]
 name = "sous"
-version = "0.1.0"
+version = "0.2.0"
 description = "Mandate-enforcing purchasing gateway for AI buyer agents (Junction 2026, Valio Aimo: Trusted Trade Agents)"
 readme = "README.md"
 license = "MIT"
