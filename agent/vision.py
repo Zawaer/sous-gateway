@@ -322,7 +322,8 @@ def cross_check(it: ReadItem, kind: str) -> str | None:
     wu = _written_units(it.text_as_written)
     if it.unit is None:
         return "no unit read"
-    if wu and it.unit not in wu:
+    words = {norm_unit(w) for w in re.findall(r"[a-zA-ZäöåÄÖÅ]+", it.text_as_written)}
+    if wu and it.unit not in wu and it.unit not in words:  # "Voi 500 g | 5 | 5 | kg": the unit has its own column
         return f"unit {it.unit} but the line says {'/'.join(sorted(wu))}"
     if kind == "delivery_note":
         if it.delivered_quantity is None:
@@ -389,7 +390,7 @@ def read_order_image(src: str | Path | bytes, kind_hint: str | None = None, llm=
         rd.notes = ((rd.notes + " ") if rd.notes else "") + f"(read as {rd.kind}; the kitchen said {kind_hint})"
 
     suspicious = [(i, it, why) for i, it in enumerate(rd.items)
-                  if (why := cross_check(it, rd.kind) or (f"low confidence" if it.confidence < CONFIRM_BELOW else None))]
+                  if (why := cross_check(it, rd.kind) or ("low confidence" if it.confidence < CONFIRM_BELOW else None))]
     if verify and suspicious:
         msgs = [{"role": "system", "content": PROMPTS[prompt_version](today)},
                 {"role": "user", "content": [{"type": "text", "text": verify_prompt(suspicious)}, image_part(data, mime)]}]

@@ -267,3 +267,8 @@ def test_eval_scorer_counts_silent_errors():
     s = E.score_case(truth, bad, [])
     assert s["silent_errors"] == 3 and s["auto_correct"] == 0 and s["traps_ok"] == 0
     assert s["items_real"] == 2 and s["items_read"] == 4
+
+
+def test_unit_in_its_own_column_is_not_a_mismatch():
+    it = V.ReadItem(**item("Voi 500 g | 5 | 5 | kg", "voi", 5, "kg", delivered_quantity=5))
+    assert V.cross_check(it, "delivery_note") is None
