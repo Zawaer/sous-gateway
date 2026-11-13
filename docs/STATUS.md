@@ -1,6 +1,6 @@
 # Status
 
-_Last updated: Fri 13.11 ~21:10 (Helsinki)._ Live demo URL: not deployed yet.
+_Last updated: Fri 13.11 ~21:45 (Helsinki)._ Live demo URL: not deployed yet.
 
 ## Vision (one product: Valtakirja)
 Valio Aimo's front door for AI purchasing agents. Any buyer's agent (a hotel's, a hospital's) connects over **MCP or OpenAPI**, searches the catalog, gets a **signed quote** with live price and availability, and orders. Each agent carries a **mandate** (*valtakirja*) from its human: spend limits, allergen rules, substitution rules. Valio Aimo's gateway enforces the mandate in plain code and puts every order into one of four tiers:
@@ -22,6 +22,10 @@ Pitch line: *"AI purchasing agents carry a signed mandate from their human, and 
 - Approvals: approve/reject with a note; late approvals expire if the cut-off has passed.
 - Audit log: append-only, hash-chained, `/audit/verify`.
 - REST (`/docs`) and MCP (`/mcp`) expose the same operations.
+- Good / better / best substitutes (same category, claims and allergen rules kept; compromises listed).
+- MariaDB storage with system-versioned `mandate`, `purchase_order` and `audit_event`: `/orders/{id}/history` shows every version of an order and the mandate AS OF each decision; `/audit/verify` checks the hash chain and MariaDB's history (any edit or delete of an audit row shows up). SQLite remains the fallback when `VALTAKIRJA_DB_URL` is unset.
+- Hardening: approver code for human actions, per-IP rate limit, global cap on Valio API calls.
+- CI: pytest (offline + MariaDB service) on every push; runner switchable to CRACI via repo variable `CI_RUNNER`.
 
 ## In progress
 - Web UI in `web/` (Rene's agent): approval inbox, orders, audit view, mandate viewer.
@@ -29,8 +33,6 @@ Pitch line: *"AI purchasing agents carry a signed mandate from their human, and 
 
 ## Next
 - Public deployment for judges.
-- MariaDB for the audit log (system-versioned tables) for the MariaDB tech challenge.
-- Substitutes: good / better / best ranking within the category, allergen-safe.
 - Eval set (~30 scripted requests): % correct, % unsafe blocked, API calls per request.
 - Notifications (notify / ask) to the human's phone.
 

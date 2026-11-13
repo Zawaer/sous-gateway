@@ -3,9 +3,32 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    environment:
+      VALTAKIRJA_DB_URL: mysql://valtakirja:${MARIADB_PASSWORD:?set MARIADB_PASSWORD in .env}@mariadb:3306/valtakirja
     volumes:
-      - valtakirja-data:/data
+      - valtakirja-data:/data   # Valio data files, catalog index, Ed25519 signing key
     ports:
-      - "8000"
+      - "8000:8000"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+  mariadb:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: valtakirja
+      MARIADB_USER: valtakirja
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
+    volumes:
+      - mariadb-data:/var/lib/mysql   # mandates, quotes, orders, audit log (system-versioned)
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
 volumes:
   valtakirja-data:
+  mariadb-data:

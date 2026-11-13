@@ -34,3 +34,5 @@ APPROVER_CODE = os.getenv("VALTAKIRJA_APPROVER_CODE", "")
 RATE_LIMIT_PER_MIN = int(os.getenv("VALTAKIRJA_RATE_LIMIT_PER_MIN", "60"))  # POST requests per client IP
 AIMO_CALLS_PER_MIN = int(os.getenv("VALTAKIRJA_AIMO_CALLS_PER_MIN", "60"))  # protects our Valio API key
 MAX_CANDIDATES_PER_QUOTE = 200
+# MariaDB (system-versioned state): mysql://user:pass@host:port/db. Empty = local SQLite file.
+DB_URL = os.getenv("VALTAKIRJA_DB_URL", "")

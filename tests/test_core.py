@@ -165,11 +165,13 @@ def test_jws_roundtrip_and_tamper():
 def test_audit_chain_detects_edits(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "STATE_DB", tmp_path / "state.db")
     monkeypatch.setattr(store, "_conn", None)
+    monkeypatch.setattr(config, "DB_URL", "")
     for i in range(3):
         store.audit("test.event", "tester", "system", f"S{i}", None, {"i": i})
     assert store.verify_chain()["ok"]
     store.db().execute("UPDATE audit_event SET data = '{\"i\": 99}' WHERE seq = 2")
-    assert store.verify_chain() == {"ok": False, "events": 1, "broken_at_seq": 2}
+    r = store.verify_chain()
+    assert (r["ok"], r["events"], r["broken_at_seq"]) == (False, 1, 2)
 
 
 @pytest.fixture(autouse=True)

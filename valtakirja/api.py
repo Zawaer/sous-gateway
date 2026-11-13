@@ -100,7 +100,8 @@ def jwks():
 
 @app.get("/health", tags=["meta"])
 def health():
-    return {"ok": True, "valio_api_calls": aimo.stats, "approver_code_required": bool(config.APPROVER_CODE)}
+    return {"ok": True, "valio_api_calls": aimo.stats, "approver_code_required": bool(config.APPROVER_CODE),
+            "storage": store.backend()}
 
 
 # --- catalog ----------------------------------------------------------------
@@ -192,6 +193,12 @@ def get_order(order_id: str):
     return S.get_order(order_id)
 
 
+@app.get("/orders/{order_id}/history", tags=["audit"])
+def order_history(order_id: str):
+    """Every version of the order and the mandate AS OF each decision (MariaDB system-versioned tables)."""
+    return S.order_history(order_id)
+
+
 class Decision(BaseModel):
     by: str
     note: str | None = None
@@ -223,6 +230,12 @@ def list_mandates():
 @app.get("/mandates/{mandate_id}", tags=["mandates"])
 def get_mandate(mandate_id: str):
     return S.get_mandate(mandate_id)
+
+
+@app.get("/mandates/{mandate_id}/history", tags=["mandates"])
+def mandate_history(mandate_id: str):
+    """Every version of the mandate with its validity period."""
+    return S.mandate_history(mandate_id)
 
 
 @app.post("/mandates/{mandate_id}/revoke", tags=["mandates"], dependencies=[Depends(require_approver)])

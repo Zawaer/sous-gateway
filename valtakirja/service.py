@@ -149,8 +149,8 @@ def _request_quote(req: QuoteRequest) -> dict:
         "id": qid,
         "agent_id": req.agent_id,
         "mandate_id": req.mandate_id,
-        "issued_at": now.isoformat(timespec="seconds"),
-        "expires_at": Q.quote_expiry(now, [l for l in lines if l["orderable"]]).isoformat(timespec="seconds"),
+        "issued_at": now.isoformat(timespec="milliseconds"),
+        "expires_at": Q.quote_expiry(now, [l for l in lines if l["orderable"]]).isoformat(timespec="milliseconds"),
         "requested_delivery_date": req.delivery_date.isoformat(),
         "currency": "EUR",
         "lines": lines,
@@ -225,12 +225,12 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
                                      "line_total_ex_vat", "delivery_date", "logistic_model", "order_cutoff")}
                   for l in q["lines"]],
         "decision": {"outcome": outcome, "findings": [f.model_dump() for f in findings], "by": "mandate-engine",
-                     "at": now.isoformat(timespec="seconds")},
+                     "at": now.isoformat(timespec="milliseconds")},
         "approval": None,
         "order_url": order_url(oid),
         "approval_url": order_url(oid) if status == "pending_approval" else None,
         "idempotency_key": idempotency_key,
-        "created_at": now.isoformat(timespec="seconds"), "updated_at": now.isoformat(timespec="seconds"),
+        "created_at": now.isoformat(timespec="milliseconds"), "updated_at": now.isoformat(timespec="milliseconds"),
     }
     order["receipt_jws"] = signing.sign({k: order[k] for k in ("id", "quote_id", "mandate_id", "status", "total_ex_vat",
                                                                 "lines", "decision")}, "valtakirja-order+jws")
@@ -260,9 +260,9 @@ def decide(order_id: str, approver: str, approve: bool, note: str | None = None)
                 status = "expired"
                 reason = f"Approved too late: the order cut-off for {l['name']} ({l['order_cutoff']}) has passed."
     o["status"] = status
-    o["approval"] = {"by": approver, "approved": approve, "note": note, "at": now.isoformat(timespec="seconds"),
+    o["approval"] = {"by": approver, "approved": approve, "note": note, "at": now.isoformat(timespec="milliseconds"),
                      "result_reason": reason}
-    o["updated_at"] = now.isoformat(timespec="seconds")
+    o["updated_at"] = now.isoformat(timespec="milliseconds")
     store.put_order(o)
     store.audit("order.approved" if approve else "order.rejected_by_human", approver, "human", order_id,
                 o["buyer"], {"order_id": order_id, "note": note, "resulting_status": status, "reason": reason})
@@ -297,3 +297,34 @@ def suggest_substitutes(agent_id: str, product_id: str, delivery_date: date, amo
                              for o in r["options"]],
                  "no_safe_substitute": r["no_safe_substitute"], "valio_api_calls": r["valio_api_calls"]})
     return r
+
+
+# --- history (MariaDB system versioning) ------------------------------------
+
+def order_history(order_id: str) -> dict:
+    """Every version of an order, and the mandate exactly as it was when each decision was made."""
+    o = get_order(order_id)
+    out = {
+        "order_id": order_id,
+        "backend": store.backend(),
+        "versions": [{"valid_from": v["valid_from"], "valid_to": v["valid_to"], "status": v["status"]}
+                     for v in store.order_versions(order_id)],
+        "mandate_now": _mandate(o["mandate_id"]).model_dump(mode="json"),
+    }
+    if store.backend() == "mariadb":
+        out["mandate_at_decision"] = store.mandate_as_of(o["mandate_id"], o["decision"]["at"])
+        if o.get("approval"):
+            out["mandate_at_approval"] = store.mandate_as_of(o["mandate_id"], o["approval"]["at"])
+        out["query"] = ("SELECT data FROM mandate FOR SYSTEM_TIME AS OF TIMESTAMP '<decision time>' "
+                        "WHERE id = '<mandate id>'")
+        changed = [k for k in out["mandate_now"]
+                   if (out["mandate_at_decision"] or {}).get(k) != out["mandate_now"][k]]
+        out["mandate_changed_since_decision"] = changed
+    else:
+        out["note"] = "Point-in-time history needs MariaDB (VALTAKIRJA_DB_URL); SQLite keeps only the current row."
+    return out
+
+
+def mandate_history(mandate_id: str) -> dict:
+    _mandate(mandate_id)
+    return {"mandate_id": mandate_id, "backend": store.backend(), "versions": store.mandate_versions(mandate_id)}
