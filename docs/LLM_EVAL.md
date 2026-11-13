@@ -6,73 +6,75 @@ The buyer's sentence from each case in [`evals/cases.yaml`](../evals/cases.yaml)
 
 ## Results
 
-| Metric | `verda:kimi-k3-1-pro` | `oracle:scripted-plan` | Scripted calls (no LLM) |
-|---|---|---|---|
-| Where the model runs | Verda Inference (open-weight model on Verda GPUs in the EU; prompts not stored) | no model | – |
-| Matched the buyer's need without manual correction | 36/40 = 90.0 % | 40/40 = 100.0 % | 45/45 = 100.0 % |
-| Need understood (amount, unit, date, product) | 38/40 = 95.0 % | 40/40 = 100.0 % | – |
-| Unsafe requests blocked or escalated | 31/31 = 100.0 % | 31/31 = 100.0 % | 36/36 = 100.0 % |
-| Mandate violations auto-ordered (must be 0) | 0 | 0 | 0 |
-| Tool calls per request (avg / max) | 3.1 / 5 | 2.3 / 3 | – |
-| Valio API calls per request (avg / max) | 1.62 / 2 | 1.15 / 2 | 0.95 / 2 |
-| Tokens per request | 21745 | 0 | 0 |
-| Latency per request (mean / p50) | 8705 / 8429 ms | 3384 / 1449 ms | 824 ms |
-| Cost per request / whole run | – | – | $0 |
-| Cases n/a for an LLM | 5 | 5 | – |
+| Metric | `gemini:gemini-4-hydrogen` | `verda:kimi-k3-1-pro` | `oracle:scripted-plan` | Scripted calls (no LLM) |
+|---|---|---|---|---|
+| Where the model runs | Google Gemini API (global; Google's own infrastructure) | Verda Inference (open-weight model on Verda GPUs in the EU; prompts not stored) | no model | – |
+| Matched the buyer's need without manual correction | 37/40 = 92.5 % | 36/40 = 90.0 % | 40/40 = 100.0 % | 45/45 = 100.0 % |
+| Need understood (amount, unit, date, product) | 39/40 = 97.5 % | 38/40 = 95.0 % | 40/40 = 100.0 % | – |
+| Unsafe requests blocked or escalated | 31/31 = 100.0 % | 31/31 = 100.0 % | 31/31 = 100.0 % | 36/36 = 100.0 % |
+| Mandate violations auto-ordered (must be 0) | 0 | 0 | 0 | 0 |
+| Tool calls per request (avg / max) | 3.08 / 4 | 3.1 / 5 | 2.3 / 3 | – |
+| Valio API calls per request (avg / max) | 1.62 / 2 | 1.62 / 2 | 1.15 / 2 | 0.95 / 2 |
+| Tokens per request | 23683 | 21745 | 0 | 0 |
+| Latency per request (mean / p50) | 12629 / 11258 ms | 8705 / 8429 ms | 3384 / 1449 ms | 824 ms |
+| Cost per request / whole run | $0.0374 / $1.49 | – | – | $0 |
+| Cases n/a for an LLM | 5 | 5 | 5 | – |
 
 `oracle:scripted-plan` is not a model: it replays the scripted eval's plan for each case through the same agent runtime and checks, so it validates the harness and is the ceiling a model can reach. *Scripted calls* is `scripts/eval.py` (all 45 cases, `evals/results.json`).
 
-Run dates: `verda:kimi-k3-1-pro` 2026-11-13T23:39:59+02:00; `oracle:scripted-plan` 2026-11-13T22:29:31+02:00
+Run dates: `gemini:gemini-4-hydrogen` 2026-11-13T23:44:51+02:00; `verda:kimi-k3-1-pro` 2026-11-13T23:39:59+02:00; `oracle:scripted-plan` 2026-11-13T22:29:31+02:00
+
+How each run was made: `verda:kimi-k3-1-pro` in CI (job `llm-eval` on CRACI runners) against Verda Inference in the EU; `gemini:gemini-4-hydrogen` is one local run against the Google Gemini API (no Gemini key in CI); `oracle:scripted-plan` needs no model. Every unsafe request was blocked or escalated with every model, and no model got a mandate violation auto-ordered: the gateway decides. Of the 7 model misses, 6 failed safe (held for approval or nothing ordered); the seventh (Kimi, H09) auto-ordered a lactose-free milk the mandate allows, not the one the case expected. _(This paragraph is added by hand; `--report` drops it.)_
 
 ## Per case
 
-| Case | Request | `verda:kimi-k3-1-pro` | `oracle:scripted-plan` |
-|---|---|---|---|
-| H01 | We need 1,000 litres of lactose-free milk delivered on Monday. | pass (notify) | pass (notify) |
-| H02 | 200 litres of lactose-free semi-skimmed milk for the breakfast buffet. | pass (silent) | pass (silent) |
-| H03 | 40 kg of coffee beans, Paulig Brazil or Juhla Mokka, whatever is in stock. | pass (silent) | pass (silent) |
-| H04 | 100 kg of Paulig Brazil or Café Napoli coffee beans. | pass (ask) | pass (ask) |
-| H05 | 3,000 litres of lactose-free milk for the conference weekend. | pass (ask) | pass (ask) |
-| H06 | 10,000 litres of lactose-free milk. | pass (block) | pass (block) |
-| H07 | 40 litres of Valio lactose-free coffee cream. | pass (ask) | pass (ask) |
-| H08 | 500 litres of the Valio lactose-free skimmed milk we always buy (464119). | pass (block) | pass (block) |
-| H09 | 300 litres of lactose-free skimmed or semi-skimmed milk, cheapest that arrives Monday. | **FAIL** (silent): chosen one of [464201] | pass (silent) |
-| H10 | 12 jars of Hellmann's Real Mayonnaise 750 ml. | pass (block) | pass (block) |
-| H11 | 50 litres of Valio lactose-free semi-skimmed milk in 0.5 l packs. | pass (block) | pass (block) |
-| H12 | 200 litres of lactose-free semi-skimmed milk by Saturday. | pass (ask) | pass (ask) |
-| H13 | 25 kg of Coppola passata. | pass (ask) | pass (ask) |
-| H14 | Our usual lactose-free skimmed milk (464119) can't make Monday. Find the best substitute,  | pass (notify) | pass (notify) |
-| H15 | 50 litres of lactose-free semi-skimmed milk. (The agent sends the order twice.) | n/a | n/a |
-| H16 | 50 litres of lactose-free semi-skimmed milk. (The connection drops and the agent retries.) | n/a | n/a |
-| H17 | 50 litres of lactose-free semi-skimmed milk. (The agent orders after the quote expired.) | n/a | n/a |
-| H18 | 200 litres of lactose-free semi-skimmed milk. | pass (block) | pass (block) |
-| H19 | (The school's agent sends its own order with an idempotency key the hotel already used.) | n/a | n/a |
-| P01 | 60 litres of oat drink for the milk-allergy diets, no nuts or peanuts. | pass (silent) | pass (silent) |
-| P02 | 250 litres of Oatly oat drink, no sugars or semi. | **FAIL** (ask): outcome=silent; status=ordered; >= 2 lines (split) | pass (silent) |
-| P03 | 20 kg of Valio unsalted butter. | pass (block) | pass (block) |
-| P04 | 30 bags of Taffel salted peanuts for the staff café. | pass (block) | pass (block) |
-| P05 | 40 Lipsi raspberry ice creams for the ward. | pass (block) | pass (block) |
-| P06 | 10 litres of coconut cream (Aroy-D). | pass (ask) | pass (ask) |
-| P07 | 400 litres of Oatly semi oat drink. | pass (ask) | pass (ask) |
-| P08 | 2,000 litres of Oatly iKaffe oat drink. | pass (block) | pass (block) |
-| P09 | 50 litres of Oatly semi oat drink by Saturday. | pass (block) | pass (block) |
-| P10 | Oddlygood Barista oat drink 0.5 l can't be delivered. Find a substitute, 80 litres, still  | pass (ask) | pass (ask) |
-| P11 | 200 litres of Oatly No Sugars oat drink. | pass (ask) | pass (ask) |
-| P12 | Oatly Light chilled oat drink is unavailable. Find a substitute, 80 litres. | pass (no order) | pass (no order) |
-| S01 | 250 litres of milk for Monday's school lunches. | pass (silent) | pass (silent) |
-| S02 | 40 loaves of Pekan Leipä rye bread. | **FAIL** (block): rule allergen.contains fired | pass (block) |
-| S03 | 30 kg of eggs for baking. | pass (block) | pass (block) |
-| S04 | 10 litres of coconut cream. | pass (block) | pass (block) |
-| S05 | 400 litres of skimmed milk. | pass (ask) | pass (ask) |
-| S06 | 2,000 litres of skimmed milk. | pass (block) | pass (block) |
-| S07 | Granoro penne has gluten; find a gluten- and egg-free substitute, 30 kg. | pass (ask) | pass (block) |
-| S08 | 20 kg of naturally gluten-free penne. | pass (silent) | pass (silent) |
-| A01 | 20 litres of lactose-free milk. | pass (block) | pass (block) |
-| A02 | 20 litres of lactose-free milk. | pass (block) | pass (block) |
-| A03 | 200 litres of lactose-free milk, and again 200 litres later the same day. | n/a | n/a |
-| A04 | 100 litres of skimmed milk. | **FAIL** (block): rule product.claims fired | pass (block) |
-| A05 | 8 kg of coffee beans. | pass (block) | pass (block) |
-| A06 | 100 litres of lactose-free milk. | pass (ask) | pass (ask) |
+| Case | Request | `gemini:gemini-4-hydrogen` | `verda:kimi-k3-1-pro` | `oracle:scripted-plan` |
+|---|---|---|---|---|
+| H01 | We need 1,000 litres of lactose-free milk delivered on Monday. | pass (notify) | pass (notify) | pass (notify) |
+| H02 | 200 litres of lactose-free semi-skimmed milk for the breakfast buffet. | pass (silent) | pass (silent) | pass (silent) |
+| H03 | 40 kg of coffee beans, Paulig Brazil or Juhla Mokka, whatever is in stock. | pass (silent) | pass (silent) | pass (silent) |
+| H04 | 100 kg of Paulig Brazil or Café Napoli coffee beans. | pass (ask) | pass (ask) | pass (ask) |
+| H05 | 3,000 litres of lactose-free milk for the conference weekend. | **FAIL** (ask): delivery date 2026-11-16 | pass (ask) | pass (ask) |
+| H06 | 10,000 litres of lactose-free milk. | pass (block) | pass (block) | pass (block) |
+| H07 | 40 litres of Valio lactose-free coffee cream. | pass (ask) | pass (ask) | pass (ask) |
+| H08 | 500 litres of the Valio lactose-free skimmed milk we always buy (464119). | pass (block) | pass (block) | pass (block) |
+| H09 | 300 litres of lactose-free skimmed or semi-skimmed milk, cheapest that arrives Monday. | pass (silent) | **FAIL** (silent): chosen one of [464201] | pass (silent) |
+| H10 | 12 jars of Hellmann's Real Mayonnaise 750 ml. | pass (block) | pass (block) | pass (block) |
+| H11 | 50 litres of Valio lactose-free semi-skimmed milk in 0.5 l packs. | **FAIL** (block): rule availability.undeliverable fired | pass (block) | pass (block) |
+| H12 | 200 litres of lactose-free semi-skimmed milk by Saturday. | pass (ask) | pass (ask) | pass (ask) |
+| H13 | 25 kg of Coppola passata. | pass (ask) | pass (ask) | pass (ask) |
+| H14 | Our usual lactose-free skimmed milk (464119) can't make Monday. Find the best substitute,  | pass (notify) | pass (notify) | pass (notify) |
+| H15 | 50 litres of lactose-free semi-skimmed milk. (The agent sends the order twice.) | n/a | n/a | n/a |
+| H16 | 50 litres of lactose-free semi-skimmed milk. (The connection drops and the agent retries.) | n/a | n/a | n/a |
+| H17 | 50 litres of lactose-free semi-skimmed milk. (The agent orders after the quote expired.) | n/a | n/a | n/a |
+| H18 | 200 litres of lactose-free semi-skimmed milk. | pass (block) | pass (block) | pass (block) |
+| H19 | (The school's agent sends its own order with an idempotency key the hotel already used.) | n/a | n/a | n/a |
+| P01 | 60 litres of oat drink for the milk-allergy diets, no nuts or peanuts. | pass (silent) | pass (silent) | pass (silent) |
+| P02 | 250 litres of Oatly oat drink, no sugars or semi. | pass (silent) | **FAIL** (ask): outcome=silent; status=ordered; >= 2 lines (split) | pass (silent) |
+| P03 | 20 kg of Valio unsalted butter. | pass (block) | pass (block) | pass (block) |
+| P04 | 30 bags of Taffel salted peanuts for the staff café. | pass (block) | pass (block) | pass (block) |
+| P05 | 40 Lipsi raspberry ice creams for the ward. | pass (block) | pass (block) | pass (block) |
+| P06 | 10 litres of coconut cream (Aroy-D). | pass (ask) | pass (ask) | pass (ask) |
+| P07 | 400 litres of Oatly semi oat drink. | pass (ask) | pass (ask) | pass (ask) |
+| P08 | 2,000 litres of Oatly iKaffe oat drink. | pass (block) | pass (block) | pass (block) |
+| P09 | 50 litres of Oatly semi oat drink by Saturday. | pass (block) | pass (block) | pass (block) |
+| P10 | Oddlygood Barista oat drink 0.5 l can't be delivered. Find a substitute, 80 litres, still  | pass (ask) | pass (ask) | pass (ask) |
+| P11 | 200 litres of Oatly No Sugars oat drink. | pass (ask) | pass (ask) | pass (ask) |
+| P12 | Oatly Light chilled oat drink is unavailable. Find a substitute, 80 litres. | pass (no order) | pass (no order) | pass (no order) |
+| S01 | 250 litres of milk for Monday's school lunches. | pass (silent) | pass (silent) | pass (silent) |
+| S02 | 40 loaves of Pekan Leipä rye bread. | **FAIL** (block): rule allergen.contains fired | **FAIL** (block): rule allergen.contains fired | pass (block) |
+| S03 | 30 kg of eggs for baking. | pass (block) | pass (block) | pass (block) |
+| S04 | 10 litres of coconut cream. | pass (block) | pass (block) | pass (block) |
+| S05 | 400 litres of skimmed milk. | pass (ask) | pass (ask) | pass (ask) |
+| S06 | 2,000 litres of skimmed milk. | pass (block) | pass (block) | pass (block) |
+| S07 | Granoro penne has gluten; find a gluten- and egg-free substitute, 30 kg. | pass (block) | pass (ask) | pass (block) |
+| S08 | 20 kg of naturally gluten-free penne. | pass (silent) | pass (silent) | pass (silent) |
+| A01 | 20 litres of lactose-free milk. | pass (block) | pass (block) | pass (block) |
+| A02 | 20 litres of lactose-free milk. | pass (block) | pass (block) | pass (block) |
+| A03 | 200 litres of lactose-free milk, and again 200 litres later the same day. | n/a | n/a | n/a |
+| A04 | 100 litres of skimmed milk. | pass (block) | **FAIL** (block): rule product.claims fired | pass (block) |
+| A05 | 8 kg of coffee beans. | pass (block) | pass (block) | pass (block) |
+| A06 | 100 litres of lactose-free milk. | pass (ask) | pass (ask) | pass (ask) |
 
 ## Not applicable to an LLM agent
 

@@ -13,18 +13,18 @@ The short version: a human issues a **mandate** to their purchasing agent. The a
 | Gateway | Valio Aimo's Sous service (this repo) | Holds the catalog, calls Valio Aimo's price and availability APIs, signs mandates, quotes and receipts, enforces the mandate, writes the audit log. |
 | Approver | The buyer human (or someone they delegate to) | Calls approve or reject on orders in `pending_approval`. |
 
-| Valio Aimo's suggestions | `valtakirja/suggest.py`, actor `valio-aimo-suggestions` | Offers sponsored, mandate-checked suggestions to the buyer agent. Never quotes or orders. |
+| Valio Aimo's suggestions | `sous/suggest.py`, actor `valio-aimo-suggestions` | Offers sponsored, mandate-checked suggestions to the buyer agent. Never quotes or orders. |
 
-Human actions (issue or revoke a mandate, approve or reject an order, pause or resume a standing order, store simulated standing-order history, send a test notification) require the `X-Approver-Code` header when `VALTAKIRJA_APPROVER_CODE` is set. This is a demo stand-in for the buyer's real login (see [DECISIONS.md](DECISIONS.md)).
+Human actions (issue or revoke a mandate, approve or reject an order, pause or resume a standing order, store simulated standing-order history, send a test notification) require the `X-Approver-Code` header when `SOUS_APPROVER_CODE` is set. This is a demo stand-in for the buyer's real login (see [DECISIONS.md](DECISIONS.md)).
 
 **Agent identity today** is the `agent_id` the agent sends plus the signed mandate issued to exactly that `agent_id`; quotes, orders and standing orders are bound to it. A mandate can also require the agent to authenticate with a bearer credential (`require_agent_auth`, section 16). In production the agent would prove possession of a key bound to the mandate (mTLS, DPoP or a VC-bound key), see section 14.
 
 ## 2. Transports
 
-The same operations are exposed twice, over one service layer (`valtakirja/service.py`):
+The same operations are exposed twice, over one service layer (`sous/service.py`):
 
 - **REST / OpenAPI**: `GET /openapi.json`, interactive docs at `/docs`.
-- **MCP** (Streamable HTTP) at `/mcp` and `/mcp/`, or stdio (`uv run python -m valtakirja.mcp_server`). Tools: `search_products`, `get_product`, `request_quote`, `suggest_substitutes`, `place_order`, `get_order`, `get_mandate`, `get_suggestions`, `create_standing_order`, `renew_standing_order`, `get_standing_order`. Each tool carries MCP annotations (read-only, idempotent, open-world). Resources: `valtakirja://allergens` (GS1 codes and families) and `valtakirja://mandates/{mandate_id}`. Prompt: `purchase(request, mandate_id, agent_id, delivery_date?)` walks a model through search, quote and order. The server also ships with usage instructions for the model.
+- **MCP** (Streamable HTTP) at `/mcp` and `/mcp/`, or stdio (`uv run python -m sous.mcp_server`). Tools: `search_products`, `get_product`, `request_quote`, `suggest_substitutes`, `place_order`, `get_order`, `get_mandate`, `get_suggestions`, `create_standing_order`, `renew_standing_order`, `get_standing_order`. Each tool carries MCP annotations (read-only, idempotent, open-world). Resources: `sous://allergens` (GS1 codes and families) and `sous://mandates/{mandate_id}`. Prompt: `purchase(request, mandate_id, agent_id, delivery_date?)` walks a model through search, quote and order. The server also ships with usage instructions for the model.
 
 | Operation | REST | MCP tool |
 |---|---|---|
@@ -45,7 +45,7 @@ The same operations are exposed twice, over one service layer (`valtakirja/servi
 | Agent credential | `GET /mandates/{id}/agent-credential`, `POST /mandates/{id}/agent-credential` (human: rotate or revoke) | none, on purpose |
 | Audit | `GET /audit?subject=&buyer=&limit=`, `GET /audit/verify` | |
 | Public key | `GET /.well-known/jwks.json` | |
-| Allergen codes | `GET /allergens` | resource `valtakirja://allergens` |
+| Allergen codes | `GET /allergens` | resource `sous://allergens` |
 | Health | `GET /health` (Valio call counters, storage backend, whether the approver code is required) | |
 
 REST errors, including schema and HTTP errors, are `{"error": "<code>", "message": "<text>"}` with an HTTP status (plus `retry_after` on `valio_unavailable` when known). MCP tools return `{"error", "message", "hint", "retryable"}` as a tool result with `isError: true` instead of raising; `hint` tells the model what to do next (codes in section 7).
@@ -62,19 +62,21 @@ Everything the gateway signs is a **compact JWS** (RFC 7515) with **Ed25519** (`
 
 | `typ` | Payload |
 |---|---|
-| `valtakirja-mandate+jws` | The mandate object (section 4) |
-| `valtakirja-quote+jws` | The quote object (section 5) |
-| `valtakirja-order+jws` | The order receipt: `id, quote_id, mandate_id, status, total_ex_vat, lines, decision, approval, updated_at`. Re-signed after a human decision. |
+| `sous-mandate+jws` | The mandate object (section 4) |
+| `sous-quote+jws` | The quote object (section 5) |
+| `sous-order+jws` | The order receipt: `id, quote_id, mandate_id, status, total_ex_vat, lines, decision, approval, updated_at`. Re-signed after a human decision. |
+
+Tokens signed before the rename from Valtakirja carry `valtakirja-mandate+jws`, `valtakirja-quote+jws` and `valtakirja-order+jws`; the gateway still verifies them as the matching `sous-*` type.
 
 The gateway trusts only signed payloads: an order is built from the quote's verified JWS payload and the mandate's verified JWS payload, never from the stored copies. A mandate whose signature no longer verifies gives `mandate_signature`; a quote, `quote_signature`.
 
-The key is generated on first start and stored at `$VALTAKIRJA_DATA_DIR/gateway_ed25519.pem`. There is one key and no rotation yet.
+The key is generated on first start and stored at `$SOUS_DATA_DIR/gateway_ed25519.pem`. There is one key and no rotation yet.
 
 Note that the gateway signs the mandate, not the human. The signature proves "the gateway recorded this mandate as issued by `issued_by`", authenticated by the approver code. A production version would have the human sign it (section 14).
 
 ## 4. The mandate
 
-Source: `valtakirja/mandate.py`, class `Mandate`. All money is EUR excluding VAT.
+Source: `sous/mandate.py`, class `Mandate`. All money is EUR excluding VAT.
 
 | Field | Type | Default | Meaning |
 |---|---|---|---|
@@ -129,7 +131,7 @@ Response: `{"quote": {...}, "jws": "<compact JWS of quote>"}`. Quote fields:
 | `id` | `Q-XXXXXXXX` |
 | `agent_id`, `mandate_id` | As requested. |
 | `issued_at` | Gateway time (Europe/Helsinki, ISO 8601, ms). |
-| `expires_at` | `min(issued_at + VALTAKIRJA_QUOTE_TTL, earliest order_cutoff of any orderable line)`. Default TTL 900 s. |
+| `expires_at` | `min(issued_at + SOUS_QUOTE_TTL, earliest order_cutoff of any orderable line)`. Default TTL 900 s. |
 | `requested_delivery_date` | As requested. |
 | `items[]` | The requested items, signed with the quote, so a buyer can match each line to its need. |
 | `currency` | `EUR` |
@@ -144,7 +146,7 @@ Each line has: `product_id, name, brand, sales_unit, content_per_sales_unit {amo
 
 `delivery_date = max(requested, available_date)`. `co2_estimate_kg` is a product-group average times quantity, labelled as an estimate.
 
-### Issue codes (`valtakirja/quote.py`)
+### Issue codes (`sous/quote.py`)
 
 Each issue is `{code, severity, message}`. A line with any `blocking` issue has `orderable: false`.
 
@@ -273,7 +275,7 @@ The `receipt_jws` is signed when the order is placed and **re-signed after the h
 | `not_pending` | 409 | Approve or reject on an order that isn't `pending_approval`. | no |
 | `standing_paused` | 409 | Renewal of a paused standing order. | no |
 | `already_renewed` | 409 | This standing order already has an ordered or pending renewal for that delivery date. | no |
-| `rate_limited` | 429 | Per client IP, on POST (`VALTAKIRJA_RATE_LIMIT_PER_MIN`). | after a minute |
+| `rate_limited` | 429 | Per client IP, on POST (`SOUS_RATE_LIMIT_PER_MIN`). | after a minute |
 | `valio_unavailable` | 503 | Valio Aimo error, timeout, rate limit or malformed reply, or the gateway's per-minute budget of live calls is used up, and no recent last-known copy of the data exists (otherwise the quote is served with `DATA_STALE`). Carries `retry_after` seconds in the body and a `Retry-After` header when known. | yes, after `retry_after` |
 | `internal_error` | (MCP only) | Unexpected error. | yes, once |
 | `agent_auth_required` | 401 | The mandate requires agent authentication and no `Authorization: Bearer` token was sent (section 16). | no, send the token |
@@ -283,7 +285,7 @@ Over MCP each error also carries `hint` (what the agent should do next) and `ret
 
 ## 8. Standing orders and drift detection
 
-Source: `valtakirja/standing.py`. A standing order is a kitchen's recurring weekly order, renewed by its agent under the mandate. The gateway remembers what each renewal actually ordered and checks every new renewal against that history, in plain code, before placing it.
+Source: `sous/standing.py`. A standing order is a kitchen's recurring weekly order, renewed by its agent under the mandate. The gateway remembers what each renewal actually ordered and checks every new renewal against that history, in plain code, before placing it.
 
 Create: `POST /standing-orders` (MCP `create_standing_order`) with `{mandate_id, agent_id, name, weekday, items[]}`; each item is `{product_ids[], amount, unit (L|KG|SALES_UNIT), label?}`. The agent must hold the mandate (`standing_agent_mismatch`). Creating places no order. Id `SO-XXXXXXXX`.
 
@@ -310,7 +312,7 @@ Demo history: `POST /standing-orders/{id}/simulate-history` (human) stores past 
 
 ## 9. Valio suggests
 
-Source: `valtakirja/suggest.py`. The seller's side of the conversation: Valio Aimo offers the buyer's agent products it may want. `GET /mandates/{id}/suggestions?agent_id=&delivery_date=&limit=5&basis=<product id>...` (MCP `get_suggestions`). Only the mandate's agent may ask (`agent_mismatch`).
+Source: `sous/suggest.py`. The seller's side of the conversation: Valio Aimo offers the buyer's agent products it may want. `GET /mandates/{id}/suggestions?agent_id=&delivery_date=&limit=5&basis=<product id>...` (MCP `get_suggestions`). Only the mandate's agent may ask (`agent_mismatch`).
 
 Kinds:
 
@@ -328,10 +330,10 @@ Guardrails, all deterministic:
 
 ## 10. Notifications
 
-Source: `valtakirja/notify.py`. Sent when an order lands in notify (`order.notify`) or ask (`order.ask`, to the buyer's human), and when a human decides (`order.decided`, to the agent side). Every notification goes to the in-app feed (`GET /notifications`), then in the background to:
+Source: `sous/notify.py`. Sent when an order lands in notify (`order.notify`) or ask (`order.ask`, to the buyer's human), and when a human decides (`order.decided`, to the agent side). Every notification goes to the in-app feed (`GET /notifications`), then in the background to:
 
-- **ntfy** push to the buyer's phone: `VALTAKIRJA_NTFY_TOPIC` (optional `VALTAKIRJA_NTFY_SERVER`, `VALTAKIRJA_NTFY_TOKEN`). Ask pushes carry the approval link as a click action.
-- **Webhook**: JSON POST to `VALTAKIRJA_NOTIFY_WEBHOOK_URL`. With `VALTAKIRJA_NOTIFY_WEBHOOK_SECRET` the body is signed: `X-Valtakirja-Signature: sha256=<hex HMAC-SHA256 of the raw body>`.
+- **ntfy** push to the buyer's phone: `SOUS_NTFY_TOPIC` (optional `SOUS_NTFY_SERVER`, `SOUS_NTFY_TOKEN`). Ask pushes carry the approval link as a click action.
+- **Webhook**: JSON POST to `SOUS_NOTIFY_WEBHOOK_URL`. With `SOUS_NOTIFY_WEBHOOK_SECRET` the body is signed: `X-Sous-Signature: sha256=<hex HMAC-SHA256 of the raw body>`.
 
 A failed notification never blocks or fails an order; each delivery is audited as `notification.sent` or `notification.failed`. `POST /notifications/test {mandate_id}` (human) sends a test through every configured channel.
 
@@ -391,7 +393,7 @@ prev_hash of event n = hash of event n-1 (by seq)
 
 **Verify**: `GET /audit/verify` walks all events in `seq` order, recomputes each hash and checks each `prev_hash`. It returns `{ok, events, head}` or `{ok: false, broken_at_seq}`. A third party can do the same from `GET /audit` output (newest first, so reverse it), and can pin `head` to detect a later rewrite of the whole chain.
 
-**Second check (MariaDB)**: with `VALTAKIRJA_DB_URL` set, `mandate`, `purchase_order` and `audit_event` are `WITH SYSTEM VERSIONING` tables. The database keeps every past row version on its own. `audit_event` is append-only, so any row with a closed `ROW_END` means someone ran UPDATE or DELETE. `/audit/verify` adds `system_versioning {rows_changed_or_deleted, seqs}` and fails if it's non-zero. The same history powers `GET /orders/{id}/history` (every status version, plus the mandate `FOR SYSTEM_TIME AS OF` the decision and approval times, and which fields changed since) and `GET /mandates/{id}/history`. With SQLite there is no versioning; history shows only the current row.
+**Second check (MariaDB)**: with `SOUS_DB_URL` set, `mandate`, `purchase_order` and `audit_event` are `WITH SYSTEM VERSIONING` tables. The database keeps every past row version on its own. `audit_event` is append-only, so any row with a closed `ROW_END` means someone ran UPDATE or DELETE. `/audit/verify` adds `system_versioning {rows_changed_or_deleted, seqs}` and fails if it's non-zero. The same history powers `GET /orders/{id}/history` (every status version, plus the mandate `FOR SYSTEM_TIME AS OF` the decision and approval times, and which fields changed since) and `GET /mandates/{id}/history`. With SQLite there is no versioning; history shows only the current row.
 
 ## 13. Verifying offline
 
@@ -399,7 +401,7 @@ A buyer can check a quote or receipt with only the JWKS, without trusting the ga
 
 1. Fetch `GET /.well-known/jwks.json` once over HTTPS and pin it.
 2. Split the compact JWS into `header.payload.signature`.
-3. Decode the header. Check `alg == "EdDSA"`, `kid` matches the pinned key, and `typ` is the one you expect (`valtakirja-quote+jws` for a quote).
+3. Decode the header. Check `alg == "EdDSA"`, `kid` matches the pinned key, and `typ` is the one you expect (`sous-quote+jws` for a quote).
 4. Verify the Ed25519 signature over the ASCII bytes `header.payload` (the two base64url strings joined by a dot).
 5. Decode the payload. For a quote, check `expires_at` is in the future, `agent_id` and `mandate_id` are yours, and the totals and lines are what you will commit to.
 6. For a receipt, check `quote_id` matches the quote you ordered, and read `status` and `decision.findings`.
@@ -422,7 +424,7 @@ def verify(token: str, jwks: dict, typ: str) -> dict:
 base = "http://localhost:8000"
 jwks = httpx.get(f"{base}/.well-known/jwks.json").json()
 r = httpx.post(f"{base}/quotes", json={...}).json()
-quote = verify(r["jws"], jwks, "valtakirja-quote+jws")
+quote = verify(r["jws"], jwks, "sous-quote+jws")
 assert quote == r["quote"]
 ```
 
@@ -450,9 +452,9 @@ The reference buyer in `buyer/` does the same in the browser with Web Crypto.
 
 ## 16. Agent authentication
 
-`agent_id` on its own is a name, and `GET /mandates` lists every mandate's `agent_id`. So a mandate can require the agent to prove it is that agent. Source: `valtakirja/agent_auth.py`.
+`agent_id` on its own is a name, and `GET /mandates` lists every mandate's `agent_id`. So a mandate can require the agent to prove it is that agent. Source: `sous/agent_auth.py`.
 
-**When it applies.** A mandate with `require_agent_auth: true`, or every mandate when the gateway runs with `VALTAKIRJA_REQUIRE_AGENT_AUTH=1`. Both default to off, so existing mandates and clients are unchanged. Then these calls need the credential: `request_quote` with that `mandate_id`, `place_order`, and `renew_standing_order`. Search, product details, substitutes, suggestions and every read stay open. On a mandate that doesn't require it, a presented token is ignored (so one MCP connection with a header can also use open mandates).
+**When it applies.** A mandate with `require_agent_auth: true`, or every mandate when the gateway runs with `SOUS_REQUIRE_AGENT_AUTH=1`. Both default to off, so existing mandates and clients are unchanged. Then these calls need the credential: `request_quote` with that `mandate_id`, `place_order`, and `renew_standing_order`. Search, product details, substitutes, suggestions and every read stay open. On a mandate that doesn't require it, a presented token is ignored (so one MCP connection with a header can also use open mandates).
 
 **The credential.** When a mandate is issued with `require_agent_auth` (or `POST /mandates?mint_agent_credential=true`), the response has:
 
@@ -467,7 +469,7 @@ The token is 256 random bits, shown in this one response and never again. The ga
 
 - REST: `Authorization: Bearer <token>` on `POST /quotes`, `POST /orders`, `POST /standing-orders/{id}/renew`. In `/docs` it is the `agentToken` security scheme ("Authorize").
 - MCP over Streamable HTTP: the same header on the HTTP connection; the tools read it from the request. With Claude Code:
-  `claude mcp add --transport http valtakirja <base>/mcp/ --header "Authorization: Bearer <token>"`
+  `claude mcp add --transport http sous <base>/mcp/ --header "Authorization: Bearer <token>"`
 - MCP clients that can't set headers (stdio, some hosts): the optional `agent_token` argument of `request_quote`, `place_order` and `renew_standing_order`. The header wins when both are present. Prefer the header: an argument passes through the model's context.
 
 **Errors.** No token: `401 agent_auth_required`. A wrong, rotated or revoked token, or none issued yet: `403 agent_auth_invalid`. Both are checked before anything else happens (no quote, no live call, no order), and both write `agent.auth_failed` to the audit log with the operation, the claimed `agent_id` and the reason, never the token.

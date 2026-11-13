@@ -3,7 +3,7 @@
 Short ADR-style notes: what we chose, why, and what we'd do in production. The protocol itself is in [PROTOCOL.md](PROTOCOL.md).
 
 ## 1. MCP and OpenAPI over one service layer
-All operations live in `valtakirja/service.py`. `api.py` exposes them as REST with an OpenAPI schema; `mcp_server.py` exposes the same functions as MCP tools.
+All operations live in `sous/service.py`. `api.py` exposes them as REST with an OpenAPI schema; `mcp_server.py` exposes the same functions as MCP tools.
 MCP is how today's agents (Claude, and others via adapters) discover tools. OpenAPI is what every other client and integration team already uses.
 One service layer means the rules, signing and audit log are identical whichever door an agent uses. Neither transport has logic of its own.
 Approve and reject are REST-only on purpose: an agent should not have a tool that approves its own order.
@@ -29,7 +29,7 @@ For a hospital or school kitchen a false "safe" is the one error that can't be u
 Valio Aimo asked teams not to poll the whole catalog. Search runs against a local index of the static product file and costs zero live calls.
 Only the products the agent asks to quote are priced: one batched `/price` and one `/availability` call per quote item (up to 1000 ids each), price cached 10 min, availability 60 s.
 A typical request (search, then a one-item quote over a few candidates) costs 2 live calls. Substitute suggestions price the top 25 candidates, also in 2 calls. Every quote reports its `valio_api_calls`.
-A global per-minute cap (`VALTAKIRJA_AIMO_CALLS_PER_MIN`) protects Valio Aimo's systems from a runaway agent.
+A global per-minute cap (`SOUS_AIMO_CALLS_PER_MIN`) protects Valio Aimo's systems from a runaway agent.
 
 ## 6. SQLite FTS5 trigram index for the catalog
 The catalog has names in Finnish, Swedish and English. Finnish compounds ("laktoositon", "kevytmaitojuoma") defeat word tokenisers and stemmers.

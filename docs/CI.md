@@ -31,7 +31,7 @@ value, so the gateway builds its index from the fixtures and never calls Valio.
 Run it locally:
 
 ```bash
-docker build -t valtakirja:ci .
+docker build -t sous:ci .
 cp -r tests/fixtures/catalog /tmp/vk-smoke && echo "MARIADB_PASSWORD=dev" > .env
 SMOKE_DATA_DIR=/tmp/vk-smoke docker compose -f compose.yaml -f tests/fixtures/compose.smoke.yaml up -d --no-build
 EXPECT_STORAGE=mariadb tests/fixtures/smoke.sh

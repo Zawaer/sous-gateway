@@ -33,7 +33,7 @@ Terminal (supplier-shipped) products show an order cut-off that has already pass
 - **Two audit layers.** A hash chain (`/audit/verify`) and MariaDB system versioning: "what did the mandate say when this order was decided?" is one `AS OF` query.
 
 ### Any agent, any model
-MCP and OpenAPI expose the same operations. A browser reference buyer verifies signatures itself. Our LLM buyer agent runs on any OpenAI-compatible model: Gemini, open-weight models on Verda Inference in the EU, or self-hosted vLLM. The runtime binds identity, mandate and idempotency; the model only fills in the request. We score each model on the same cases: [LLM EVAL].
+MCP and OpenAPI expose the same operations. A browser reference buyer verifies signatures itself. Our LLM buyer agent runs on any OpenAI-compatible model: Gemini, open-weight models on Verda Inference in the EU, or self-hosted vLLM. The runtime binds identity, mandate and idempotency; the model only fills in the request. We score each model on the same cases: Kimi K3.1 Pro on Verda Inference (EU) matched the buyer without correction in 36/40 cases (90 %), Gemini 4 Hydrogen in 37/40 (92.5 %); both stopped 31/31 unsafe requests (blocked or held for a human) with 0 mandate violations auto-ordered. The mandate engine, not the model, keeps every unsafe request out.
 
 ### Results
 45/45 scripted buyer requests handled correctly with no manual fixes. 36/36 unsafe actions blocked or escalated. ≤2 Valio API calls per uncached request. Search first-result accuracy 56 % → 100 % on 39 fi/sv/en queries.
@@ -62,13 +62,13 @@ Agent keys bound to the mandate (mTLS, DPoP or VC-bound keys) and buyer login vi
 - **Best Use of Verda**: the gateway (with MariaDB) runs on a Verda CPU instance in Finland; the buyer agent runs open-weight models on Verda Inference in the EU, scored per model. Write-up: [docs/VERDA.md](../VERDA.md).
 - **Best use of CRACI**: CI runs on CRACI runners: tests with MariaDB, Docker build with SBOM and grype gate, compose smoke under deny-by-default egress, eval jobs whose egress is limited to PyPI, Valio and the model APIs. Write-up: [docs/CI.md](../CI.md).
 - **Best Use of Codex**: Rene's reference buyer (`buyer/`) was built with Codex and acts as an independent agent against the gateway.
-- **Best Use of Gemini API** `[CONFIRM: only if a Gemini key arrives and the Gemini run is in docs/LLM_EVAL.md]`: Gemini as one of the buyer agent's models, scored on the eval cases.
+- **Best Use of Gemini API**: Gemini as one of the buyer agent's models, scored on the eval cases.
 
 (MariaDB has no tech-challenge prize at this event. System versioning still matters for Valio's auditability criterion, so it stays in the description.)
 
 ## Before submitting
-- [ ] Fill `[LLM EVAL]` in this description, the deck and `docs/STATUS.md` from `docs/LLM_EVAL.md`; if a model didn't run, delete the placeholder sentence instead.
-- [ ] Resolve `[CONFIRM]` on Gemini: tick it only if the Gemini run exists.
+- [x] Fill `[LLM EVAL]` in this description, the deck and `docs/STATUS.md` from `docs/LLM_EVAL.md`; if a model didn't run, delete the placeholder sentence instead.
+- [x] Resolve `[CONFIRM]` on Gemini: tick it only if the Gemini run exists.
 - [ ] Verda: the process is documented in `docs/VERDA.md`; **post a short summary in Verda's Discord challenge channel** (what runs where, which Verda products and why, link to the repo and the doc).
 - [ ] CRACI: link a green CRACI run, with the SBOM and the network trace, from `docs/CI.md`.
 - [ ] Video ≤ 2:00 uploaded; demo URL and repo link work in a private browser window.

@@ -450,17 +450,19 @@ svg .m, svg .m text { font-family: var(--mono); }
   <div class="kicker">Any model can be the buyer</div>
   <h1>Any agent. The gateway still decides.</h1>
   <p class="lede" style="font-size:34px;margin-bottom:24px">Our buyer agent drives the gateway's MCP tools with any OpenAI-compatible model. The runtime binds agent id, mandate and idempotency key; the model only picks search terms, products, amount and date.</p>
-  <table style="width:100%;border-collapse:collapse;font-size:26px">
+  <style>#models th, #models td { padding-right: 22px; }</style>
+  <table id="models" style="width:100%;border-collapse:collapse;font-size:26px">
     <thead><tr style="font:22px/1.2 var(--mono);color:var(--ink-55);text-align:left">
-      <th style="padding:14px 10px 14px 0">model</th><th>where it runs</th><th>need matched</th><th>unsafe stopped</th><th>violations auto-ordered</th><th>tool calls</th><th>latency p50</th></tr></thead>
+      <th style="padding:14px 10px 14px 0">model</th><th>where it runs</th><th>need<br>matched</th><th>unsafe<br>stopped</th><th>violations<br>auto-ordered</th><th>tool<br>calls</th><th>latency<br>p50</th></tr></thead>
     <tbody>
       <tr style="border-top:1px solid var(--rule)"><td style="padding:20px 10px 20px 0">Oracle: scripted plan</td><td class="muted">no model</td><td>40/40</td><td>31/31</td><td>0</td><td>2.3</td><td>1.4 s</td></tr>
-      <tr style="border-top:1px solid var(--rule)"><td style="padding:20px 10px 20px 0">Gemini</td><td class="muted">Google API</td><td><span class="ph">[LLM EVAL]</span></td><td><span class="ph">[LLM EVAL]</span></td><td><span class="ph">[LLM EVAL]</span></td><td><span class="ph">[LLM EVAL]</span></td><td><span class="ph">[LLM EVAL]</span></td></tr>
-      <tr style="border-top:1px solid var(--rule)"><td style="padding:20px 10px 20px 0">Open-weight model</td><td class="muted">Verda Inference, EU</td><td><span class="ph">[LLM EVAL]</span></td><td><span class="ph">[LLM EVAL]</span></td><td><span class="ph">[LLM EVAL]</span></td><td><span class="ph">[LLM EVAL]</span></td><td><span class="ph">[LLM EVAL]</span></td></tr>
+      <tr style="border-top:1px solid var(--rule)"><td style="padding:20px 10px 20px 0">Gemini 4 Hydrogen</td><td class="muted">Google API (one local run)</td><td>37/40</td><td>31/31</td><td>0</td><td>3.1</td><td>11.3 s</td></tr>
+      <tr style="border-top:1px solid var(--rule)"><td style="padding:20px 10px 20px 0">Kimi K3.1 Pro (open-weight)</td><td class="muted">Verda Inference, EU (CI)</td><td>36/40</td><td>31/31</td><td>0</td><td>3.1</td><td>8.4 s</td></tr>
       <tr style="border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)"><td style="padding:20px 10px 20px 0">Claude Code · Codex</td><td class="muted">over MCP</td><td colspan="5" class="muted">real external run: 1,000 L ordered within the mandate, 2 Valio API calls</td></tr>
     </tbody>
   </table>
-  <p class="src" style="margin-top:18px">Same 45 cases as the scripted eval; 40 apply to an LLM. Mandate violations auto-ordered must be 0. Source: docs/LLM_EVAL.md.</p>
+  <p style="font-size:26px;margin:22px 0 0">Every unsafe request was stopped with every model: the mandate engine decides, not the model. Misses were held for approval or refused, except one in-mandate order for a different milk.</p>
+  <p class="src" style="margin-top:12px">Same 45 cases as the scripted eval; 40 apply to an LLM. ~22-24k tokens and 1.6 Valio API calls per request. Source: docs/LLM_EVAL.md.</p>
   <div class="foot"><span>Sous</span><span>11 / 14</span></div>
 </section>
 

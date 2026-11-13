@@ -34,13 +34,13 @@ Pitch line: *"AI purchasing agents carry a signed mandate from their human, and 
 
 **Beyond one order**
 - Good / better / best substitutes that understand product type (sour milk is not milk), keep category, claims and allergen rules, show pack sizes and list each compromise.
-- Standing orders with drift detection (`valtakirja/standing.py`): a weekly order is renewed by its agent (live quote) and compared with the median of its last 4 ordered renewals: quantity creep > +15 % or 3 rises in a row, total or price per L/KG > +10 %, product switched, new Terminal or low-reliability product. Any drift lifts the renewal to ask. Demo `scripts/demo_standing.py` (history marked simulated, priced at one real signed quote): milk +18 % vs the 4-week median, cost +€135 (+16 %), so the gateway asks before renewing.
-- Valio suggests (`valtakirja/suggest.py`): cheaper / certified / more reliable / lower-CO₂ alternatives to what the buyer orders, seasonal and new products. Labelled sponsored by Valio Aimo, pre-checked against the mandate (nothing it would block is shown; unknown allergens are never pushed to a buyer with allergen rules), offers only, audited as `suggestions.offered`.
-- Notifications (`valtakirja/notify.py`) for notify and ask orders and human decisions: in-app feed (`GET /notifications`), ntfy push with the approval link, HMAC-signed webhook. A failed notification never blocks an order.
+- Standing orders with drift detection (`sous/standing.py`): a weekly order is renewed by its agent (live quote) and compared with the median of its last 4 ordered renewals: quantity creep > +15 % or 3 rises in a row, total or price per L/KG > +10 %, product switched, new Terminal or low-reliability product. Any drift lifts the renewal to ask. Demo `scripts/demo_standing.py` (history marked simulated, priced at one real signed quote): milk +18 % vs the 4-week median, cost +€135 (+16 %), so the gateway asks before renewing.
+- Valio suggests (`sous/suggest.py`): cheaper / certified / more reliable / lower-CO₂ alternatives to what the buyer orders, seasonal and new products. Labelled sponsored by Valio Aimo, pre-checked against the mandate (nothing it would block is shown; unknown allergens are never pushed to a buyer with allergen rules), offers only, audited as `suggestions.offered`.
+- Notifications (`sous/notify.py`) for notify and ask orders and human decisions: in-app feed (`GET /notifications`), ntfy push with the approval link, HMAC-signed webhook. A failed notification never blocks an order.
 
 **Audit and trust**
 - Audit log: append-only, hash-chained, `/audit/verify`.
-- MariaDB storage with system-versioned `mandate`, `purchase_order` and `audit_event`: `/orders/{id}/history` shows every version of an order and the mandate AS OF each decision; `/audit/verify` also checks MariaDB's history (any edit or delete of an audit row shows up). SQLite remains the fallback when `VALTAKIRJA_DB_URL` is unset.
+- MariaDB storage with system-versioned `mandate`, `purchase_order` and `audit_event`: `/orders/{id}/history` shows every version of an order and the mandate AS OF each decision; `/audit/verify` also checks MariaDB's history (any edit or delete of an audit row shows up). SQLite remains the fallback when `SOUS_DB_URL` is unset. (Env vars are `SOUS_*` since the rename from Valtakirja; the old `VALTAKIRJA_*` names still work.)
 - Hardening: approver code for human actions, per-IP rate limit, global cap on Valio API calls.
 
 **Interfaces and agents**
@@ -57,17 +57,15 @@ Pitch line: *"AI purchasing agents carry a signed mandate from their human, and 
 
 ## In progress
 - Opt-in bearer credentials for agents, on top of `agent_id` + signed mandate.
-- Per-model LLM eval: [LLM EVAL] numbers land in [LLM_EVAL.md](LLM_EVAL.md) when the model runs finish.
 
 ## Next
 - Record the demo video before Sun 15.11 17:00 (after that the mock's Stock cut-off has passed).
-- Run the LLM eval on Verda Inference and Gemini; put the numbers in the pitch.
 - Self-hosted vLLM on a Verda GPU as a third model in the eval.
 - Production identity: buyer login (OIDC) instead of the approver code; agent keys bound to the mandate (mTLS, DPoP or VC-bound keys).
 - Signing-key rotation via JWKS `kid`; anchor the audit chain head outside the gateway.
 
 ## Evaluation
-`uv run python scripts/eval.py` runs the 45 scripted buyer requests in `evals/cases.yaml` (hotel, hospital, school and 6 ad-hoc mandates: happy path, splits, partial stock, ask/hard limits, price cap, allergen contains / may contain / unknown, substitutes, Terminal cut-off, out of stock, undeliverable, later delivery, wrong agent, revoked/expired mandate, daily budget, double order, expired quote, idempotent retry, late approval after revocation) through `valtakirja.service` with live Valio Aimo prices and availability, and writes `evals/results.json`. Uses a fresh SQLite state file, never `data/state.db`. Needs `data/` and the API key, and the mock's cut-off of Sun 15.11 17:00 must still be ahead (after that every Stock product reads as cut-off passed). CI runs it on `main` (job `eval`, egress limited to PyPI and Valio).
+`uv run python scripts/eval.py` runs the 45 scripted buyer requests in `evals/cases.yaml` (hotel, hospital, school and 6 ad-hoc mandates: happy path, splits, partial stock, ask/hard limits, price cap, allergen contains / may contain / unknown, substitutes, Terminal cut-off, out of stock, undeliverable, later delivery, wrong agent, revoked/expired mandate, daily budget, double order, expired quote, idempotent retry, late approval after revocation) through `sous.service` with live Valio Aimo prices and availability, and writes `evals/results.json`. Uses a fresh SQLite state file, never `data/state.db`. Needs `data/` and the API key, and the mock's cut-off of Sun 15.11 17:00 must still be ahead (after that every Stock product reads as cut-off passed). CI runs it on `main` (job `eval`, egress limited to PyPI and Valio).
 
 Run of Fri 13.11 ~22:00 (main at 2931d2d + eval):
 
@@ -80,7 +78,19 @@ Run of Fri 13.11 ~22:00 (main at 2931d2d + eval):
 | Valio API calls per request | at most 2 uncached; avg 0.95 with the cache (42 live calls for 45 requests; 128 cache hits) |
 | Latency per request | mean ~0.8 s (quote ~0.6 s, almost all of it the live Valio call) |
 
-LLM buyer agent per model: [LLM EVAL] (see [LLM_EVAL.md](LLM_EVAL.md)). The oracle run, which replays the scripted plan through the agent runtime, passes all 40 cases that apply to an LLM.
+LLM buyer agent per model, same cases (40 of 45 apply to an LLM; full table in [LLM_EVAL.md](LLM_EVAL.md)):
+
+| Metric | Kimi K3.1 Pro (Verda Inference, EU; CI on CRACI) | Gemini 4 Hydrogen (Google API; one local run) | Oracle (scripted plan, no model) |
+|---|---|---|---|
+| Matched the buyer without correction | 36/40 = 90 % | 37/40 = 92.5 % | 40/40 = 100 % |
+| Need understood (amount, unit, date, product) | 38/40 = 95 % | 39/40 = 97.5 % | 40/40 = 100 % |
+| Unsafe requests blocked or escalated | 31/31 | 31/31 | 31/31 |
+| Mandate violations auto-ordered | 0 | 0 | 0 |
+| Tool calls / Valio API calls per request | 3.1 / 1.62 | 3.08 / 1.62 | 2.3 / 1.15 |
+| Latency per request, p50 | 8.4 s | 11.3 s | 1.4 s |
+| Tokens per request | ~21.7k | ~23.7k | 0 |
+
+The mandate engine kept 100 % of unsafe requests blocked or escalated with every model. Of the 7 misses, 6 failed safe (held for approval or nothing ordered); the seventh (Kimi, H09) auto-ordered a lactose-free milk the mandate allows, but not the one the case expected.
 
 Before 8d9efc1 the set caught two gateway bugs (now fixed, cases kept as regressions): **P11**, a single product with less stock than needed was ordered silently (200 L ordered, 131 in stock); **H19**, another agent sending an idempotency key the hotel had used got the hotel's order back.
 

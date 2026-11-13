@@ -42,7 +42,7 @@ Built at Junction 2026 for Valio Aimo's challenge "Trusted Trade Agents".
 | Notifications | `GET /notifications`, `POST /notifications/test` (human) | |
 | Audit and trust | `GET /audit`, `GET /audit/verify`, `GET /.well-known/jwks.json`, `GET /health` | |
 
-MCP also offers the resources `valtakirja://allergens` and `valtakirja://mandates/{id}`, and a `purchase` prompt. Full details, error codes and rule ids: [docs/PROTOCOL.md](docs/PROTOCOL.md).
+MCP also offers the resources `sous://allergens` and `sous://mandates/{id}`, and a `purchase` prompt. Full details, error codes and rule ids: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 ## Quick start
 
@@ -53,7 +53,7 @@ uv sync
 cp .env.example .env                    # set VALIO_AIMO_API_KEY
 uv run python -m scripts.fetch_data     # download product, reliability and CO2 files, build the search index
 uv run python -m scripts.seed           # issue the demo mandates (hotel, hospital, school, Kaarna Catering)
-uv run uvicorn valtakirja.api:app --port 8000
+uv run uvicorn sous.api:app --port 8000
 ```
 
 Then open:
@@ -65,7 +65,7 @@ Then open:
 Connect Claude Code as the buyer agent over MCP:
 
 ```sh
-claude mcp add --transport http valtakirja http://localhost:8000/mcp/
+claude mcp add --transport http sous http://localhost:8000/mcp/
 ```
 
 Then ask it, for example: *"You are aurora-purchasing-agent with mandate M-HOTEL-AURORA. Buy 1,000 litres of lactose-free milk for delivery on Monday."* Against the deployed gateway, use `https://135-181-8-209.sslip.io/mcp/` instead.
@@ -73,12 +73,12 @@ Then ask it, for example: *"You are aurora-purchasing-agent with mandate M-HOTEL
 Mandates with `require_agent_auth` (the seeded `M-HOTEL-AURORA-SECURE`, whose token the seed prints once) also need the agent's credential. Pass it as a header:
 
 ```sh
-claude mcp add --transport http valtakirja http://localhost:8000/mcp/ --header "Authorization: Bearer <token>"
+claude mcp add --transport http sous http://localhost:8000/mcp/ --header "Authorization: Bearer <token>"
 ```
 
 Without it, quotes and orders on that mandate get `agent_auth_required`. See [PROTOCOL.md, section 16](docs/PROTOCOL.md#16-agent-authentication).
 
-The MCP server also runs over stdio: `uv run python -m valtakirja.mcp_server`.
+The MCP server also runs over stdio: `uv run python -m sous.mcp_server`.
 
 Demos and evaluation (each takes `--base <gateway URL>`; see [docs/demo-runbook.md](docs/demo-runbook.md)):
 
@@ -93,37 +93,37 @@ uv run python scripts/llm_eval.py --provider verda   # the eval sentences throug
 
 The LLM agent needs `GEMINI_API_KEY`, `VERDA_INFERENCE_API_KEY` or `LLM_API_KEY` with `LLM_BASE_URL` (see `agent/llm.py`).
 
-Tests: `uv run pytest -q` (offline; the MariaDB tests run when `VALTAKIRJA_TEST_MARIADB_URL` is set).
+Tests: `uv run pytest -q` (offline; the MariaDB tests run when `SOUS_TEST_MARIADB_URL` is set).
 
 ## Configuration
 
-Read from the environment, or from `.env` in development. Never commit `.env`.
+Read from the environment, or from `.env` in development. Never commit `.env`. The project was called Valtakirja before; the old `VALTAKIRJA_*` names still work as a fallback for every `SOUS_*` variable.
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `VALIO_AIMO_API_KEY` | (empty) | Key for Valio Aimo's price, availability and download APIs. Required. |
 | `VALIO_AIMO_API_BASE` | `https://junction26.valioaimo.fi/api` | Valio Aimo API base URL. |
 | `VALIO_AIMO_CUSTOMER` | `123` | Customer number sent to Valio Aimo (the mock ignores it). |
-| `VALTAKIRJA_DATA_DIR` | `./data` | Data files, catalog index, SQLite state and the Ed25519 signing key. |
-| `VALTAKIRJA_STATE_DB` | `$DATA_DIR/state.db` | SQLite state file, used when no MariaDB URL is set. |
-| `VALTAKIRJA_DB_URL` | (empty) | `mysql://user:pass@host:3306/db` to use MariaDB with system-versioned tables. |
-| `VALTAKIRJA_QUOTE_TTL` | `900` | Quote lifetime in seconds (shortened further by order cut-offs). |
-| `VALTAKIRJA_APPROVER_CODE` | (empty) | If set, human actions (approve, reject, issue or revoke a mandate) need it in the `X-Approver-Code` header. |
-| `VALTAKIRJA_REQUIRE_AGENT_AUTH` | (empty) | `1` = every mandate needs the agent's bearer credential for quotes, orders and renewals, not only those with `require_agent_auth`. |
-| `VALTAKIRJA_PUBLIC_BASE_URL` | (empty) | Public URL, used to build `order_url` and `approval_url` links. |
-| `VALTAKIRJA_RATE_LIMIT_PER_MIN` | `60` | POST requests per client IP per minute. |
-| `VALTAKIRJA_AIMO_CALLS_PER_MIN` | `60` | Global cap on live Valio Aimo API calls per minute. |
-| `MARIADB_PASSWORD` | (empty) | Used by `compose.yaml` for the MariaDB service and to build `VALTAKIRJA_DB_URL`. |
-| `VALTAKIRJA_TRUST_CF_HEADER` | (empty) | `1` to take the client IP from `CF-Connecting-IP` (only behind Cloudflare). |
-| `VALTAKIRJA_NTFY_TOPIC` | (empty) | ntfy topic for push notifications to the buyer's phone. Optional `VALTAKIRJA_NTFY_SERVER` (default `https://ntfy.sh`) and `VALTAKIRJA_NTFY_TOKEN`. |
-| `VALTAKIRJA_NOTIFY_WEBHOOK_URL` | (empty) | Webhook that receives notifications as JSON. With `VALTAKIRJA_NOTIFY_WEBHOOK_SECRET` the body is HMAC-SHA256 signed. |
+| `SOUS_DATA_DIR` | `./data` | Data files, catalog index, SQLite state and the Ed25519 signing key. |
+| `SOUS_STATE_DB` | `$DATA_DIR/state.db` | SQLite state file, used when no MariaDB URL is set. |
+| `SOUS_DB_URL` | (empty) | `mysql://user:pass@host:3306/db` to use MariaDB with system-versioned tables. |
+| `SOUS_QUOTE_TTL` | `900` | Quote lifetime in seconds (shortened further by order cut-offs). |
+| `SOUS_APPROVER_CODE` | (empty) | If set, human actions (approve, reject, issue or revoke a mandate) need it in the `X-Approver-Code` header. |
+| `SOUS_REQUIRE_AGENT_AUTH` | (empty) | `1` = every mandate needs the agent's bearer credential for quotes, orders and renewals, not only those with `require_agent_auth`. |
+| `SOUS_PUBLIC_BASE_URL` | (empty) | Public URL, used to build `order_url` and `approval_url` links. |
+| `SOUS_RATE_LIMIT_PER_MIN` | `60` | POST requests per client IP per minute. |
+| `SOUS_AIMO_CALLS_PER_MIN` | `60` | Global cap on live Valio Aimo API calls per minute. |
+| `MARIADB_PASSWORD` | (empty) | Used by `compose.yaml` for the MariaDB service and to build `SOUS_DB_URL`. |
+| `SOUS_TRUST_CF_HEADER` | (empty) | `1` to take the client IP from `CF-Connecting-IP` (only behind Cloudflare). |
+| `SOUS_NTFY_TOPIC` | (empty) | ntfy topic for push notifications to the buyer's phone. Optional `SOUS_NTFY_SERVER` (default `https://ntfy.sh`) and `SOUS_NTFY_TOKEN`. |
+| `SOUS_NOTIFY_WEBHOOK_URL` | (empty) | Webhook that receives notifications as JSON. With `SOUS_NOTIFY_WEBHOOK_SECRET` the body is HMAC-SHA256 signed. |
 | `GEMINI_API_KEY`, `VERDA_INFERENCE_API_KEY` | (empty) | Model keys for the LLM buyer agent (`agent/`) and `scripts/llm_eval.py`. Not used by the gateway. |
 | `LLM_PROVIDER`, `LLM_MODEL`, `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_REASONING_EFFORT` | (presets) | Override the agent's model: `gemini`, `verda` or `local` (any OpenAI-compatible server). |
 
 ## Docker
 
 ```sh
-cp .env.example .env   # set VALIO_AIMO_API_KEY, MARIADB_PASSWORD (any random string), VALTAKIRJA_APPROVER_CODE
+cp .env.example .env   # set VALIO_AIMO_API_KEY, MARIADB_PASSWORD (any random string), SOUS_APPROVER_CODE
 docker compose up -d --build
 ```
 
@@ -171,7 +171,7 @@ flowchart LR
 ## Repo layout
 
 ```
-valtakirja/       the gateway
+sous/             the gateway
   api.py          REST API, mounts MCP, UI and buyer
   mcp_server.py   MCP tools, resources and prompt (same operations as REST)
   service.py      search, quote, order, approve, substitutes, history

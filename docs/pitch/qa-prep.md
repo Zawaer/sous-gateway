@@ -50,7 +50,7 @@ Because a good sales rep does it today, and the buyer's rules still apply. Every
 Today: the `agent_id` plus a mandate signed by the gateway and issued to exactly that `agent_id`; quotes, orders and standing orders are bound to it. Opt-in bearer credentials for agents are being added. In production the agent proves possession of a key: mTLS, DPoP-bound tokens, or a key named in the mandate as a Verifiable Credential. A leaked mandate id then buys nothing.
 
 **16. Does it depend on one LLM?**
-No. The gateway decides without any model. Our buyer agent works with any OpenAI-compatible model (Gemini, open-weight models on Verda Inference in the EU, self-hosted vLLM), and Claude Code works over MCP as it is. We score each model on the same 45 cases: [LLM EVAL]. The runtime, not the model, fills in agent id, mandate and idempotency key.
+No. The gateway decides without any model. Our buyer agent works with any OpenAI-compatible model (Gemini, open-weight models on Verda Inference in the EU, self-hosted vLLM), and Claude Code works over MCP as it is. We score each model on the same 45 cases: Kimi K3.1 Pro on Verda Inference (EU) matched the buyer without correction in 36/40 cases (90 %), Gemini 4 Hydrogen in 37/40 (92.5 %); both stopped 31/31 unsafe requests (blocked or held for a human) with 0 mandate violations auto-ordered. The runtime, not the model, fills in agent id, mandate and idempotency key.
 
 **17. Standing orders: why not just repeat last week's order?**
 Because "same as usual" is where creep hides. Each renewal is quoted live and compared with the median of the last 4 ordered weeks. Quantity up more than 15 % (or 3 rises in a row), cost or price per litre up more than 10 %, a switched product or a new supply risk: the renewal waits for a human. In the demo, milk is +18 % and the bill +€135 (+16 %), so it asks.
@@ -68,7 +68,7 @@ Because "same as usual" is where creep hides. Each renewal is quoted live and co
 - Tiers: silent / notify / ask / block. Late approvals expire after the cut-off or delivery date.
 - Signatures: Ed25519 JWS; public keys at `/.well-known/jwks.json`.
 - Eval: 45/45 cases pass; 36/36 unsafe actions blocked or escalated; human-approval rate 26.7 % (silent 12, notify 2, ask 12, block 19).
-- LLM eval per model: [LLM EVAL].
+- LLM eval per model (40 cases apply): Kimi K3.1 Pro on Verda Inference (EU) 36/40 matched (90 %), need understood 95 %; Gemini 4 Hydrogen 37/40 (92.5 %), 97.5 %; both 31/31 unsafe blocked or escalated, 0 mandate violations auto-ordered; ~3.1 tool calls and 1.62 Valio calls per request; p50 8.4 s (Kimi) / 11.3 s (Gemini); ~22-24k tokens per request. 6 of 7 misses failed safe; the 7th was an in-mandate order for a different milk.
 - Standing-order demo: milk +18 % vs 4-week median, cost +€135 (+16 %) → ask before renewing.
 - Live: production https://135-181-8-209.sslip.io (Verda, Finland); staging https://staging.135-181-63-134.sslip.io.
 - CI on CRACI: SBOM + grype gate; smoke under deny-by-default egress.

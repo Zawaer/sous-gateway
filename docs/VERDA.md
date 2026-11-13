@@ -1,9 +1,8 @@
 # Sous on Verda
 
 Verda's challenge asks for open-weight models run in Europe on infrastructure you control, a documented
-process, and a clear reason for each Verda product used. This page is that write-up. Numbers that depend
-on the model runs still pending are marked **[TODO numbers]**; they come from `docs/LLM_EVAL.md` as soon
-as the CI job `llm-eval` has run with the Verda key.
+process, and a clear reason for each Verda product used. This page is that write-up. The model numbers come
+from `docs/LLM_EVAL.md`: Kimi K3.1 Pro ran in CI (job `llm-eval` on CRACI runners) against Verda Inference.
 
 ## Why Europe matters here
 
@@ -76,15 +75,25 @@ Scaling).
 
 ## Results
 
-**[TODO numbers]** from `docs/LLM_EVAL.md` once the Verda key is in the Actions secrets:
+From `docs/LLM_EVAL.md` (45 cases, 40 apply to an LLM). Kimi ran in CI on CRACI runners against Verda
+Inference; Gemini is one local run.
 
-| | `verda:kimi-k3-1-pro` | `verda:deepseek-4-1-flash-1017` | `gemini:gemini-4-hydrogen` |
-|---|---|---|---|
-| Matched the buyer's need without manual correction | [TODO] | [TODO] | [TODO] |
-| Unsafe requests blocked or escalated | [TODO] (gateway: 100 %) | [TODO] | [TODO] |
-| Mandate violations auto-ordered | must be 0 | must be 0 | must be 0 |
-| Tokens / latency / cost per request | [TODO] | [TODO] | [TODO] |
-| Buyer data stays in the EU | yes | yes | no guarantee |
+| | `verda:kimi-k3-1-pro` | `gemini:gemini-4-hydrogen` |
+|---|---|---|
+| Matched the buyer's need without manual correction | 36/40 = 90 % | 37/40 = 92.5 % |
+| Need understood (amount, unit, date, product) | 38/40 = 95 % | 39/40 = 97.5 % |
+| Unsafe requests blocked or escalated | 31/31 = 100 % | 31/31 = 100 % |
+| Mandate violations auto-ordered | 0 | 0 |
+| Tool calls / Valio API calls per request | 3.1 / 1.62 | 3.08 / 1.62 |
+| Tokens per request | 21,745 | 23,683 |
+| Latency per request (p50) | 8.4 s | 11.3 s |
+| Cost per request | not published in the run | $0.037 (list price) |
+| Buyer data stays in the EU | yes | no guarantee |
+
+The EU-hosted open-weight model is within 1 case of Gemini on matching and faster at p50. With both models the
+mandate engine kept every unsafe request blocked or escalated; 6 of the 7 misses failed safe (held for
+approval or nothing ordered), the seventh (Kimi, H09) was an in-mandate order for a different milk than the
+case expected. `deepseek-4-1-flash-1017` has not been run yet.
 
 The harness itself is validated without a model: replaying the scripted plan through the same agent
 runtime passes 40/40 (`evals/llm_results.oracle.json`).
@@ -126,8 +135,8 @@ is cheaper and already keeps data in the EU.
   50-100k orders a day with a peak of a few orders per second: two or three CPU instances plus a managed
   MariaDB, not a GPU problem. The binding limit is Valio's API: each request costs at most 2 live calls
   (batched shortlist, cached), measured 0.95 per request in the scripted eval.
-- **Model.** Tokens per request x requests per day decides the product: **[TODO numbers]** tokens per
-  request from the eval. At 75k requests/day and N tokens each that is 75k x N tokens/day; per-token
+- **Model.** Tokens per request x requests per day decides the product: about 22k tokens per
+  request in the eval (21,745 for Kimi K3.1 Pro). At 75k requests/day that is about 1.6 billion tokens/day; per-token
   Inference API pricing scales linearly with no idle cost and per-model rate limits (requests and tokens per
   minute, raised on request). Past a steady load, the same model on Verda serverless containers (autoscaling
   GPU containers, scale to zero at night) or reserved GPU instances with vLLM becomes cheaper per token,

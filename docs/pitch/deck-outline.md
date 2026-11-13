@@ -1,6 +1,6 @@
 # Deck outline (PDF, 13 slides)
 
-One idea per slide. Big type, few words. Numbers must match `docs/STATUS.md` and `evals/results.json`. `[LLM EVAL]` placeholders wait for the per-model run (`docs/LLM_EVAL.md`).
+One idea per slide. Big type, few words. Numbers must match `docs/STATUS.md` and `evals/results.json`. LLM numbers come from `docs/LLM_EVAL.md`.
 
 ---
 
@@ -58,7 +58,7 @@ One idea per slide. Big type, few words. Numbers must match `docs/STATUS.md` and
 ### 10. Any model can be the buyer
 - Our LLM buyer agent (`agent/`) speaks the gateway's MCP tools with any OpenAI-compatible model: Gemini, open-weight models on Verda Inference in the EU, self-hosted vLLM. Claude Code and Codex work as they are.
 - The runtime binds agent id, mandate and idempotency key; the model only picks search terms, products, amount and date.
-- Per-model eval on the same 45 cases: [LLM EVAL] need understood · [LLM EVAL] unsafe blocked or escalated · mandate violations auto-ordered: must be 0.
+- Per-model eval on the same 45 cases (40 apply): Kimi K3.1 Pro (Verda, EU) 36/40 matched, 38/40 need understood · Gemini 4 Hydrogen 37/40, 39/40 · both 31/31 unsafe blocked or escalated · mandate violations auto-ordered: 0.
 - **Visual:** a small table, one row per model: correct, unsafe stopped, tool calls, latency, where it runs.
 
 ### 11. Numbers
