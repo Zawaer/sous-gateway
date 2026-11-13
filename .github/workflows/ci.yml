@@ -200,6 +200,7 @@ jobs:
     timeout-minutes: 20
     env:
       VALIO_AIMO_API_KEY: ${{ secrets.VALIO_AIMO_API_KEY }}
+      VALTAKIRJA_AIMO_CALLS_PER_MIN: "30"  # leave headroom on the shared key for the live demos
     steps:
       # The security property on show: this job can reach PyPI (uv + dependencies) and
       # junction26.valioaimo.fi, nothing else. The network trace should list only those.
@@ -250,12 +251,15 @@ jobs:
     # Spends model tokens and live Valio calls: by hand, or on a push to main that changes the agent,
     # its prompt/tools or the cases. Skips itself with a notice when a key is missing. It never fails
     # because a model misunderstood a buyer (that is the score), only if an order got past the mandate.
-    if: ${{ github.event_name != 'pull_request' }}
-    needs: test
+    # After the eval job, never alongside it: both share one Valio key with undisclosed rate
+    # limits (two parallel runs got HTTP 429), and the demo servers use the same key.
+    if: ${{ always() && github.event_name != 'pull_request' && needs.test.result == 'success' }}
+    needs: [test, eval]
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 60
     env:
       VALIO_AIMO_API_KEY: ${{ secrets.VALIO_AIMO_API_KEY }}
+      VALTAKIRJA_AIMO_CALLS_PER_MIN: "30"
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       VERDA_INFERENCE_API_KEY: ${{ secrets.VERDA_INFERENCE_API_KEY }}
       # provider:model pairs; override with the repo variable LLM_EVAL_MODELS
