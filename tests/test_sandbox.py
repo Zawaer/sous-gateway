@@ -339,3 +339,69 @@ def test_approver_deletes_a_sandbox(c):
     assert all(S._mandate(m["mandate_id"]).revoked for m in s["mandates"])
     assert c.get("/mandates", params={"sandbox": sid}).json()["mandates"] == []
     assert c.get("/sandbox/SBX-ZZZZ").status_code == 404
+
+
+# --- nobody else can drain a sandbox, and nobody can hide by naming --------------------------
+
+def test_substitutes_and_suggestions_under_a_sandbox_mandate_need_its_token(c, monkeypatch):
+    from sous import substitutes, suggest
+    s, other = new(c, "10.0.0.1"), new(c, "10.0.0.2")
+    m = next(x for x in s["mandates"] if x["scenario"] == "hospital")
+    calls = []
+    monkeypatch.setattr(substitutes, "suggest", lambda *a, **k: calls.append(a) or
+                        {"constraints": {}, "options": [], "no_safe_substitute": True})
+    params = {"delivery_date": "2026-11-16", "amount": 4, "mandate_id": m["mandate_id"], "agent_id": m["agent_id"]}
+
+    def subs(token=None, **extra):
+        return c.get("/products/OAT/substitutes", params={**params, **extra},
+                     headers={"Authorization": f"Bearer {token}"} if token else {})
+
+    r = subs()
+    assert r.status_code == 401 and r.json()["error"] == "agent_auth_required" and not calls
+    assert subs(other["agent_token"]).status_code == 403 and not calls  # another sandbox's token
+    assert subs(s["agent_token"]).status_code == 200
+    assert subs(s["approver_token"]).status_code == 200
+    assert subs(other["approver_token"]).status_code == 403
+    assert len(calls) == 2
+    r = c.get(f"/mandates/{m['mandate_id']}/suggestions",
+              params={"delivery_date": "2026-11-16", "agent_id": m["agent_id"]})
+    assert r.status_code == 401 and r.json()["error"] == "agent_auth_required"
+    with pytest.raises(S.GatewayError) as e:
+        suggest.suggestions(m["mandate_id"], m["agent_id"], date(2026, 11, 16), agent_token="vka_nope")
+    assert e.value.status == 403
+    # curated mandates are unchanged: no token needed
+    seed_curated()
+    assert subs(mandate_id="M-HOSPITAL-KITCHEN", agent_id="meilahti-kitchen-agent").status_code == 200
+
+
+def test_hiding_follows_the_sandbox_registry_not_names(c):
+    from sous.mandate import Mandate
+    s = new(c)
+    sid = s["sandbox"]["id"]
+    # an approver-issued mandate that only looks like a sandbox, and one claiming an unregistered sandbox
+    S.issue_mandate(Mandate(id="M-LOOKALIKE-SBX-AAAA", buyer="Lookalike (sandbox SBX-AAAA)",
+                            agent_id="x-sbx-aaaa", issued_by="h", min_delivery_reliability=None))
+    S.issue_mandate(Mandate(id="M-CLAIM", buyer="Claim", agent_id="claim-agent", issued_by="h",
+                            sandbox="SBX-AAAA", min_delivery_reliability=None))
+    mids = [m["id"] for m in c.get("/mandates").json()["mandates"]]
+    assert "M-LOOKALIKE-SBX-AAAA" in mids and "M-CLAIM" in mids and not any(sid in m for m in mids)
+    q = c.post("/quotes", json={"agent_id": "x-sbx-aaaa", "mandate_id": "M-LOOKALIKE-SBX-AAAA",
+                                "delivery_date": "2026-11-16",
+                                "items": [{"product_ids": ["OAT"], "amount": 10, "unit": "L"}]}).json()
+    o = c.post("/orders", json={"agent_id": "x-sbx-aaaa", "mandate_id": "M-LOOKALIKE-SBX-AAAA",
+                                "quote_id": q["quote"]["id"]}).json()
+    assert o["id"] in [x["id"] for x in c.get("/orders").json()["orders"]]
+    # a self-chosen agent id with the sandbox's name in it doesn't hide anything
+    c.get("/products", params={"q": "oat", "agent_id": f"sneaky-{sid.lower()}"})
+    events = c.get("/audit", params={"limit": 1000}).json()["events"]
+    assert any(e["actor"] == f"sneaky-{sid.lower()}" for e in events)
+    assert any(e["subject"] == o["id"] for e in events)
+    assert any(e["subject"] == "M-LOOKALIKE-SBX-AAAA" for e in events)
+    assert not any(e["subject"] == sid or (e["buyer"] or "").endswith(f"(sandbox {sid})") for e in events)
+    # none of it shows inside the real sandbox's view
+    sbx = c.get("/audit", params={"limit": 1000, "sandbox": sid}).json()["events"]
+    assert sbx and not any(e["subject"] in (o["id"], "M-LOOKALIKE-SBX-AAAA") for e in sbx)
+    assert c.get("/orders", params={"sandbox": sid}).json()["orders"] == []
+    # ownership comes from the registry, so a sandbox approver token can't touch lookalikes
+    assert sandbox.owner("M-LOOKALIKE-SBX-AAAA") is None and sandbox.owner("M-CLAIM") is None
+    assert sandbox.owner(s["mandates"][0]["mandate_id"]) == sid

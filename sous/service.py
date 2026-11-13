@@ -603,8 +603,10 @@ def get_order(order_id: str) -> dict:
 
 def suggest_substitutes(agent_id: str, product_id: str, delivery_date: date, amount: float,
                         unit: str = "SALES_UNIT", mandate_id: str | None = None,
-                        avoid_allergens: list[str] | None = None, limit: int = 3) -> dict:
+                        avoid_allergens: list[str] | None = None, limit: int = 3,
+                        agent_token: str | None = None) -> dict:
     mandate = _mandate(mandate_id) if mandate_id else None
+    sandbox.authorize(mandate, agent_id, agent_token, "suggest_substitutes")
     before = dict(aimo.stats)
     try:
         with sandbox.metered(mandate):

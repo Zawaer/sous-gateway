@@ -45,11 +45,10 @@ def add(n: dict) -> dict:
 
 
 def list_(buyer: str | None = None, limit: int = 50, order_id: str | None = None,
-          sandbox: str | None = None) -> list[dict]:
-    """Newest first. `sandbox`: see store.sandbox_where."""
+          where: tuple[str, list] | None = None) -> list[dict]:
+    """Newest first. `where`: an extra (" AND ...", args) condition (sandbox.where)."""
     _ensure()
-    q, args = store.sandbox_where(sandbox, ("buyer",))
-    q = "SELECT * FROM notification WHERE 1=1" + q
+    q, args = "SELECT * FROM notification WHERE 1=1" + (where[0] if where else ""), list(where[1] if where else [])
     if buyer:
         q += " AND buyer = ?"
         args.append(buyer)

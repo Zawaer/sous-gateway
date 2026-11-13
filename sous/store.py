@@ -156,22 +156,12 @@ def _audit_row(r: dict) -> dict:
     return d
 
 
-def sandbox_where(sandbox: str | None, cols: tuple[str, ...]) -> tuple[str, list]:
-    """SQL condition on judge-sandbox rows (sandbox.py), matched by the sandbox id in `cols`:
-    None = no filter, "" = hide every sandbox, "SBX-XXXX" = only that sandbox's rows."""
-    if sandbox is None:
-        return "", []
-    match = " OR ".join(f"LOWER(COALESCE({c}, '')) LIKE ?" for c in cols)
-    if sandbox == "":
-        return f" AND NOT ({match})", ["%sbx-%"] * len(cols)
-    return f" AND ({match})", [f"%{sandbox.lower()}%"] * len(cols)
-
-
 def audit_events(subject: str | None = None, buyer: str | None = None, limit: int = 500,
-                 sandbox: str | None = None) -> list[dict]:
+                 where: tuple[str, list] | None = None) -> list[dict]:
+    """`where`: an extra (" AND ...", args) condition, e.g. sandbox.where() for the judge-sandbox views."""
     q, args = "SELECT * FROM audit_event WHERE 1=1", []
-    sql, sargs = sandbox_where(sandbox, ("subject", "buyer", "actor"))
-    q, args = q + sql, args + sargs
+    if where:
+        q, args = q + where[0], args + list(where[1])
     if subject:
         q += " AND (subject = ? OR data LIKE ?)"
         args += [subject, f'%"{subject}"%']

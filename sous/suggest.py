@@ -211,8 +211,9 @@ def _allergen_phrase(alt: dict, orig: dict) -> str | None:
 # --- the engine -------------------------------------------------------------
 
 def suggestions(mandate_id: str, agent_id: str, delivery_date: date, basis: list[str] | None = None,
-                limit: int = 5) -> dict:
+                limit: int = 5, agent_token: str | None = None) -> dict:
     m = S._mandate(mandate_id)
+    sandbox.authorize(m, agent_id, agent_token, "get_suggestions")
     if agent_id != m.agent_id:
         raise S.GatewayError("agent_mismatch", f"Agent '{agent_id}' is not the holder of mandate {m.id}.", 403)
     limit = max(1, min(limit, 10))

@@ -212,6 +212,8 @@ def suggest_substitutes(
     mandate_id: str | None = None,
     avoid_allergens: list[str] | None = None,
     limit: int = 3,
+    agent_token: str | None = None,
+    ctx: Context | None = None,
 ) -> dict:
     """Good / better / best substitutes for a product that can't be ordered (or for any product).
 
@@ -220,7 +222,7 @@ def suggest_substitutes(
     Tell the buyer the compromises, then request_quote for the chosen one with substitute_for=<original id>.
     """
     return S.suggest_substitutes(agent_id, product_id, _date(delivery_date), amount, unit,
-                                 mandate_id, avoid_allergens, limit)
+                                 mandate_id, avoid_allergens, limit, agent_token=_agent_token(ctx, agent_token))
 
 
 @mcp.tool(title="Place an order under the mandate",
@@ -257,7 +259,8 @@ def get_mandate(mandate_id: str) -> dict:
 @mcp.tool(title="Valio Aimo's suggestions (sponsored)", annotations=READ_LIVE)
 @_tool
 def get_suggestions(mandate_id: str, agent_id: str, delivery_date: str, limit: int = 5,
-                    basis: list[str] | None = None) -> dict:
+                    basis: list[str] | None = None, agent_token: str | None = None,
+                    ctx: Context | None = None) -> dict:
     """Valio Aimo's own COMMERCIAL suggestions for your buyer: the seller promoting products, not neutral advice.
 
     Better-value alternatives to what the buyer usually orders (cheaper per L/KG, a certification label,
@@ -269,7 +272,8 @@ def get_suggestions(mandate_id: str, agent_id: str, delivery_date: str, limit: i
     recommendation, and never order one unless the buyer asks: then request_quote as how_to_accept says.
     """
     from . import suggest
-    return suggest.suggestions(mandate_id, agent_id, _date(delivery_date), basis, limit)
+    return suggest.suggestions(mandate_id, agent_id, _date(delivery_date), basis, limit,
+                               agent_token=_agent_token(ctx, agent_token))
 
 
 @mcp.tool(title="Create a weekly standing order",

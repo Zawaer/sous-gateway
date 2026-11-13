@@ -38,7 +38,6 @@ from . import agent_auth, aimo, config, store
 from .mandate import Mandate
 
 ID_RE = re.compile(r"^SBX-[0-9A-Z]{4}$")
-_TAG_RE = re.compile(r"-(SBX-[0-9A-Z]{4})$", re.IGNORECASE)
 _ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"  # no 0/O, 1/I/L
 APPROVER_PREFIX = "sbxa_"
 # (scenario, curated mandate copied from scripts/seed.py)
@@ -86,10 +85,50 @@ def normalize(sandbox_id: str) -> str:
     return sid
 
 
-def tag(mandate_id: str | None) -> str | None:
-    """The sandbox a mandate id belongs to (M-HOTEL-AURORA-SBX-7Q2K -> SBX-7Q2K), or None."""
-    m = _TAG_RE.search(mandate_id or "")
-    return m.group(1).upper() if m else None
+def owner(mandate_id: str | None) -> str | None:
+    """The sandbox a mandate belongs to: its signed `sandbox` field, if that sandbox is registered and lists it.
+    Never inferred from the id, so nobody can put their data into (or out of) a sandbox by naming."""
+    m = store.get_mandate(mandate_id) if mandate_id else None
+    sid = (m or {}).get("sandbox")
+    row = _row(sid) if sid else None
+    return sid if row and mandate_id in row["data"]["mandates"].values() else None
+
+
+def index() -> dict:
+    """Every registered sandbox's mandate ids and buyer names (any status), from the sandbox table."""
+    _ensure()
+    out: dict = {"mandates": {}, "buyers": {}, "ids": set()}
+    tpl = None
+    for r in store._exec("SELECT id, data FROM sandbox")[0]:
+        sid, data = r["id"], json.loads(r["data"])
+        out["ids"].add(sid)
+        for mid in data["mandates"].values():
+            out["mandates"][mid] = sid
+        buyers = data.get("buyers")
+        if buyers is None:
+            tpl = tpl or _templates()
+            buyers = {name: f"{tpl[base].buyer} (sandbox {sid})" for name, base in SCENARIOS}
+        for b in buyers.values():
+            out["buyers"][b] = sid
+    return out
+
+
+def where(scope: str, cols: dict[str, str]) -> tuple[str, list]:
+    """SQL condition for list queries: scope "" hides every sandbox's rows, "SBX-XXXX" keeps only that one's.
+    `cols` maps a column to what it holds: "buyer" (buyer name) or "subject" (mandate or sandbox id).
+    Matches exact registered values only (see index), never a substring of a self-chosen id."""
+    idx = index()
+    values = {"buyer": idx["buyers"], "subject": {**idx["mandates"], **{i: i for i in idx["ids"]}}}
+    parts, args = [], []
+    for col, kind in cols.items():
+        vals = [v for v, sid in values[kind].items() if not scope or sid == scope]
+        if vals:
+            parts.append(f"COALESCE({col}, '') IN ({','.join('?' * len(vals))})")
+            args += vals
+    if not parts:
+        return ("", []) if not scope else (" AND 1=0", [])
+    cond = " OR ".join(parts)
+    return (f" AND NOT ({cond})", args) if not scope else (f" AND ({cond})", args)
 
 
 def _row(sid: str) -> dict | None:
@@ -189,7 +228,8 @@ def create(ip: str, base_url: str = "") -> dict:
         tpl = _templates()
         mandates = {name: f"{base}-{sid}" for name, base in SCENARIOS}
         data = {"mandates": mandates,
-                "agents": {name: f"{tpl[base].agent_id}-{sid.lower()}" for name, base in SCENARIOS}}
+                "agents": {name: f"{tpl[base].agent_id}-{sid.lower()}" for name, base in SCENARIOS},
+                "buyers": {name: f"{tpl[base].buyer} (sandbox {sid})" for name, base in SCENARIOS}}
         store._exec("INSERT INTO sandbox (id, status, created_at, created_ts, expires_at, expires_ts, ip_sha256, "
                     "approver_sha256, quotes_used, data) VALUES (?,?,?,?,?,?,?,?,?,?)",
                     (sid, "active", _iso(now), now, _iso(expires), expires, ip_hash, _sha(approver), 0,
@@ -200,7 +240,7 @@ def create(ip: str, base_url: str = "") -> dict:
     for name, base in SCENARIOS:
         t = tpl[base]
         m = Mandate(**{**t.model_dump(), "id": mandates[name], "agent_id": data["agents"][name],
-                       "buyer": f"{t.buyer} (sandbox {sid})", "valid_until": valid_until, "revoked": False,
+                       "buyer": data["buyers"][name], "valid_until": valid_until, "revoked": False,
                        "require_agent_auth": True, "sandbox": sid})
         S.issue_mandate(m, False)
         token = agent_auth.mint(m, f"sandbox {sid}", token=token)["token"]
@@ -330,7 +370,7 @@ def may_approve(token: str | None, order_id: str | None) -> bool:
     if not token or not token.startswith(APPROVER_PREFIX) or not order_id:
         return False
     o = store.get_order(order_id)
-    sid = tag(o["mandate_id"]) if o else None
+    sid = owner(o["mandate_id"]) if o else None
     row = _row(sid) if sid else None
     return bool(row and _state(row) == "active" and hmac.compare_digest(row["approver_sha256"], _sha(token)))
 
@@ -346,9 +386,25 @@ def list_scope(sandbox_id: str | None) -> str | None:
     return sid if row and _state(row) == "active" else None
 
 
-def keep(scope: str, mandate_id: str | None) -> bool:
-    """Whether a row under `mandate_id` belongs in a list with this scope (see list_scope)."""
-    return (tag(mandate_id) or "") == scope
+def keep(scope: str, mandate_id: str | None, idx: dict) -> bool:
+    """Whether a row under `mandate_id` belongs in a list with this scope (see list_scope); idx = index()."""
+    return idx["mandates"].get(mandate_id or "", "") == scope
+
+
+def authorize(m, agent_id: str, token: str | None, operation: str) -> None:
+    """Live lookups (substitutes, suggestions) under a sandbox mandate need the sandbox's agent token or its
+    approver token, so nobody else can drain the sandbox's Valio budget. No-op for other mandates."""
+    sid = getattr(m, "sandbox", None)
+    if not sid:
+        return
+    row = _row(sid)
+    if token and token.startswith(APPROVER_PREFIX) and row and \
+            hmac.compare_digest(row["approver_sha256"], _sha(token)):
+        return
+    try:
+        agent_auth.check(m, agent_id, token, operation)
+    except agent_auth.AuthError as e:
+        raise _err(e.code, e.message, e.status) from None
 
 
 @contextlib.contextmanager

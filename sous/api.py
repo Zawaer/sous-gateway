@@ -226,10 +226,11 @@ def suggest_substitutes(
     avoid_allergens: list[str] = Query(default=[]),
     limit: int = Query(3, ge=1, le=6),
     agent_id: str = "anonymous-agent",
+    token: str | None = Depends(agent_token),
 ):
     """Good / better / best substitutes with their compromises and live offers."""
     return S.suggest_substitutes(agent_id, product_id, delivery_date, amount, unit, mandate_id,
-                                 avoid_allergens or None, limit)
+                                 avoid_allergens or None, limit, agent_token=token)
 
 
 # --- quotes and orders ------------------------------------------------------
@@ -274,8 +275,9 @@ def list_orders(status: Literal["ordered", "pending_approval", "refused", "rejec
     scope = sandbox.list_scope(sandbox_id)
     if scope is None:
         return {"orders": []}
+    idx = sandbox.index()
     return {"orders": [o for o in store.list_orders(status, mandate_id)
-                       if (mandate_id and not sandbox_id) or sandbox.keep(scope, o["mandate_id"])]}
+                       if (mandate_id and not sandbox_id) or sandbox.keep(scope, o["mandate_id"], idx)]}
 
 
 @app.get("/orders/{order_id}", tags=["ordering"])
@@ -320,7 +322,8 @@ def list_mandates(sandbox_id: str | None = _SANDBOX_Q):
     scope = sandbox.list_scope(sandbox_id)
     if scope is None:
         return {"mandates": []}
-    return {"mandates": [m for m in store.list_mandates() if sandbox.keep(scope, m["id"])]}
+    idx = sandbox.index()
+    return {"mandates": [m for m in store.list_mandates() if sandbox.keep(scope, m["id"], idx)]}
 
 
 @app.get("/mandates/{mandate_id}", tags=["mandates"])
@@ -336,11 +339,11 @@ def mandate_history(mandate_id: str):
 
 @app.get("/mandates/{mandate_id}/suggestions", tags=["mandates"])
 def mandate_suggestions(mandate_id: str, delivery_date: date, agent_id: str, limit: int = Query(5, ge=1, le=20),
-                        basis: list[str] = Query(default=[])):
+                        basis: list[str] = Query(default=[]), token: str | None = Depends(agent_token)):
     """Valio Aimo's own commercial suggestions (sponsored, not neutral advice): better-value alternatives to what
     the buyer orders, seasonal and new products. Offers only, never orders; pre-checked against the mandate."""
     from . import suggest
-    return suggest.suggestions(mandate_id, agent_id, delivery_date, basis or None, limit)
+    return suggest.suggestions(mandate_id, agent_id, delivery_date, basis or None, limit, agent_token=token)
 
 
 class CredentialAction(BaseModel):
@@ -458,8 +461,9 @@ def list_standing_orders(mandate_id: str | None = None, sandbox_id: str | None =
     scope = sandbox.list_scope(sandbox_id)
     if scope is None:
         return {"standing_orders": []}
+    idx = sandbox.index()
     return {"standing_orders": [so for so in standing.list_(mandate_id)
-                                if (mandate_id and not sandbox_id) or sandbox.keep(scope, so["mandate_id"])]}
+                                if (mandate_id and not sandbox_id) or sandbox.keep(scope, so["mandate_id"], idx)]}
 
 
 @app.get("/standing-orders/{standing_id}", tags=["standing orders"])
@@ -504,8 +508,8 @@ def list_notifications(buyer: str | None = None, order_id: str | None = None, li
     scope = sandbox.list_scope(sandbox_id)
     if scope is None:
         return {"notifications": []}
-    return {"notifications": notifications_store.list_(buyer, limit, order_id,
-                                                       sandbox=None if order_id and not sandbox_id else scope)}
+    where = None if order_id and not sandbox_id else sandbox.where(scope, {"buyer": "buyer"})
+    return {"notifications": notifications_store.list_(buyer, limit, order_id, where=where)}
 
 
 class NotificationTest(BaseModel):
@@ -556,8 +560,8 @@ def audit(subject: str | None = None, buyer: str | None = None, limit: int = Que
     scope = sandbox.list_scope(sandbox_id)
     if scope is None:
         return {"events": []}
-    return {"events": store.audit_events(subject, buyer, limit,
-                                         sandbox=None if subject and not sandbox_id else scope)}
+    where = None if subject and not sandbox_id else sandbox.where(scope, {"buyer": "buyer", "subject": "subject"})
+    return {"events": store.audit_events(subject, buyer, limit, where=where)}
 
 
 @app.get("/audit/verify", tags=["audit"])
