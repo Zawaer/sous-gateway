@@ -207,6 +207,7 @@ jobs:
       - uses: cracicorp/setup@5cbae507e2547dca6c402e413c645767fbae3534 # v1
         if: ${{ vars.CI_RUNNER == 'craci' }}
         with:
+          size: "8"   # loads the 87 MB Valio catalog to build the index; the default VM ran out
           network: |
             default: deny
             presets: [pypi]
@@ -269,6 +270,7 @@ jobs:
       - uses: cracicorp/setup@5cbae507e2547dca6c402e413c645767fbae3534 # v1
         if: ${{ vars.CI_RUNNER == 'craci' }}
         with:
+          size: "8"   # loads the 87 MB Valio catalog to build the index; the default VM ran out
           network: |
             default: deny
             presets: [pypi]
