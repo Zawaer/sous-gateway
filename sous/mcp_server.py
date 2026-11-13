@@ -32,6 +32,8 @@ Typical flow, 3-4 calls:
    unit "L" or "KG" (e.g. 1000 L of milk), not pack counts. The gateway prices live, picks pack sizes,
    checks cut-off and stock, splits across products, and returns quote.mandate_preview.
    Read mandate_preview (outcome silent | notify | ask | block, with findings) and quote.uncovered BEFORE ordering.
+   If quote.options is present (an item can't be covered as asked), present them to the buyer or pick per the
+   mandate, then request_quote(option_id=...); never silently drop the uncovered amount.
    If a line is not orderable or the preview blocks it, call suggest_substitutes and re-quote with
    substitute_for=<original id>.
 3. place_order(quote_id, mandate_id, idempotency_key=<unique string you reuse on retry>).
@@ -77,6 +79,8 @@ HINTS: dict[str, tuple[str, bool]] = {
                       "retry_after seconds, or reuse an earlier quote. Don't loop.", False),
     "sandbox_expired": ("This sandbox has expired or was closed. The user can create a new one (POST /sandbox).",
                         False),
+    "option_not_found": ("Use an options[].id (Q-...O<n>) from your own latest quote, or request a new quote.", False),
+    "invalid_request": ("Pass delivery_date and items, or option_id from a previous quote's options[].", False),
     "invalid_argument": ("Fix the argument named in the message and call the tool again.", False),
     "internal_error": ("Unexpected gateway error. Retry once; if it persists, tell the buyer and stop.", True),
 }
@@ -179,10 +183,11 @@ def get_product(product_id: str) -> dict:
 @_tool
 def request_quote(
     agent_id: str,
-    delivery_date: str,
-    items: list[S.QuoteItem],
+    delivery_date: str | None = None,
+    items: list[S.QuoteItem] | None = None,
     mandate_id: str | None = None,
     rationale: str | None = None,
+    option_id: str | None = None,
     agent_token: str | None = None,
     ctx: Context | None = None,
 ) -> dict:
@@ -195,13 +200,19 @@ def request_quote(
     Always pass mandate_id: the quote then includes mandate_preview (silent | notify | ask | block, and why).
     Check quote.lines[].orderable, quote.uncovered and mandate_preview, then place_order with quote.id
     before quote.expires_at.
+    If quote.options is present, an item can't be covered as asked (stock short, later date, cut-off passed,
+      undeliverable). Each option is a complete alternative for that item (kind, lines, total, delivery_dates,
+      tradeoff, substitute, mandate_preview), best first. Present them to the buyer, or pick per the mandate
+      (an option whose mandate_preview is silent/notify needs no human). Never silently drop the uncovered amount.
+    option_id: to take an option, call request_quote again with only agent_id, mandate_id and option_id
+      (e.g. 'Q-1A2B3C4D.O2'): you get a fresh signed quote with that item's lines replaced; then place_order it.
     rationale: one sentence on the buyer's business need (e.g. "breakfast milk for 400 guests"); it is signed into
       the quote and shown to the humans who audit or approve. State the need, not your reasoning steps.
     agent_token: only if you can't send the Authorization: Bearer header and the mandate requires agent auth.
     """
     return S.request_quote(S.QuoteRequest(agent_id=agent_id, mandate_id=mandate_id,
-                                          delivery_date=_date(delivery_date), items=items,
-                                          rationale=rationale),
+                                          delivery_date=_date(delivery_date) if delivery_date else None,
+                                          items=items or [], rationale=rationale, option_id=option_id),
                            agent_token=_agent_token(ctx, agent_token))
 
 

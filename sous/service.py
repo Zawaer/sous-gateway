@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import agent_auth, aimo, catalog, config, credentials, notify, quote as Q, sandbox, signing, store, substitutes
+from . import agent_auth, aimo, catalog, config, credentials, notify, options as OPT, quote as Q, sandbox, signing, store, substitutes
 from .mandate import Mandate, evaluate
 
 
@@ -345,9 +345,12 @@ def clean_rationale(text: str | None) -> str | None:
 class QuoteRequest(BaseModel):
     agent_id: str
     mandate_id: str | None = None
-    delivery_date: date
-    items: list[QuoteItem] = Field(min_length=1, max_length=50)
+    delivery_date: date | None = Field(None, description="Required unless option_id is given")
+    items: list[QuoteItem] = Field(default_factory=list, max_length=50,
+                                   description="Required (at least one) unless option_id is given")
     rationale: str | None = Field(None, max_length=500, description=RATIONALE_DOC)
+    option_id: str | None = Field(None, description="Re-quote with one of a previous quote's options[] "
+                                  "(e.g. 'Q-1A2B3C4D.O2'): that item's lines become the option's, other items stay")
 
 
 def order_url(order_id: str) -> str:
@@ -356,22 +359,60 @@ def order_url(order_id: str) -> str:
 
 def request_quote(req: QuoteRequest, agent_token: str | None = None) -> dict:
     m = authorize_agent(req.mandate_id, req.agent_id, agent_token, "request_quote") if req.mandate_id else None
+    skip: set[int] = set()
+    if req.option_id:
+        req, skip = _apply_option(req)
+    if not req.items or req.delivery_date is None:
+        raise GatewayError("invalid_request", "Give delivery_date and at least one item, or an option_id.", 422)
     if sum(len(i.product_ids) for i in req.items) > config.MAX_CANDIDATES_PER_QUOTE:
         raise GatewayError("too_many_candidates",
                            f"At most {config.MAX_CANDIDATES_PER_QUOTE} candidate products per quote; narrow the search first.")
     try:
         with sandbox.metered(m):
-            return _request_quote(req)
+            return _request_quote(req, skip)
     except aimo.AimoError as e:
         raise valio_error(e)
 
 
-def _request_quote(req: QuoteRequest) -> dict:
+def _apply_option(req: QuoteRequest) -> tuple[QuoteRequest, set[int]]:
+    """The request with the chosen option's lines in place of its item, from the previous quote's signed payload."""
+    qid = req.option_id.rpartition(".")[0]
+    row = store.get_quote(qid) if qid else None
+    if not row:
+        raise GatewayError("option_not_found", f"No quote {qid or req.option_id} for option {req.option_id}.", 404)
+    q = signing.verify(row["_jws"], "sous-quote+jws")
+    if q is None or q.get("id") != qid:
+        raise GatewayError("quote_signature", "Quote signature does not verify.", 409)
+    if q.get("agent_id") != req.agent_id or q.get("mandate_id") != req.mandate_id:
+        raise GatewayError("quote_mismatch", f"Quote {qid} was issued to agent '{q.get('agent_id')}' under mandate "
+                           f"{q.get('mandate_id')}; ask for a quote of your own.", 409)
+    if _now() > datetime.fromisoformat(q["expires_at"]):
+        raise GatewayError("quote_expired", f"Quote {qid} expired at {q['expires_at']}; ask for a new one.", 409)
+    opt = next((o for o in q.get("options") or [] if o["id"] == req.option_id), None)
+    if not opt:
+        raise GatewayError("option_not_found", f"Quote {qid} has no option {req.option_id}.", 404)
+    items, skip = [], set()
+    for i, it in enumerate(q["items"]):
+        if i != opt["item_index"]:
+            items.append(QuoteItem(**it))
+            continue
+        for l in opt["lines"]:
+            skip.add(len(items))
+            items.append(QuoteItem(product_ids=[l["product_id"]], amount=l["quantity"], unit="SALES_UNIT",
+                                   substitute_for=l.get("substitute_for") or it.get("substitute_for"),
+                                   note=f"{opt['id']} ({opt['kind']})"))
+    return req.model_copy(update={
+        "items": items, "delivery_date": date.fromisoformat(q["requested_delivery_date"]),
+        "rationale": req.rationale or q.get("rationale")}), skip
+
+
+def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset()) -> dict:
     mandate = _mandate(req.mandate_id) if req.mandate_id else None
     before = dict(aimo.stats)
     lines: list[dict] = []
     considered: list[dict] = []
     gaps: list[dict] = []
+    troubled: list[tuple[int, QuoteItem, list[dict], list[dict]]] = []
     now = _now()
     if len(req.items) > 1:
         Q.prefetch([pid for i in req.items for pid in i.product_ids], req.delivery_date)
@@ -402,6 +443,8 @@ def _request_quote(req: QuoteRequest) -> dict:
                        for o in sorted(offers, key=Q.rank_key) if o["product_id"] not in picked][:6]
         if uncovered > 0:
             gaps.append({"item": item.model_dump(), "item_index": item_index, "uncovered": uncovered, "unit": item.unit})
+        if item_index not in skip_options and OPT.trouble(chosen, uncovered, req.delivery_date):
+            troubled.append((item_index, item, offers, chosen))
 
     # Lines that can't be ordered are shown for their reasons but never bought, so they cost nothing.
     total_ex = round(sum(l["line_total_ex_vat"] or 0 for l in lines if l["orderable"]), 2)
@@ -425,6 +468,11 @@ def _request_quote(req: QuoteRequest) -> dict:
     }
     if rationale := clean_rationale(req.rationale):
         body["rationale"] = rationale
+    if req.option_id:
+        body["chosen_option"] = req.option_id
+    if troubled and (opts := _options(body, troubled, req.delivery_date, mandate, now)):
+        body["options"] = opts
+    body["valio_api_calls"] = {k: aimo.stats[k] - before[k] for k in aimo.stats}
     if mandate:
         outcome, findings = _evaluate(mandate, req.agent_id, body, now)
         body["mandate_preview"] = {"outcome": outcome, "findings": [f.model_dump() for f in findings]}
@@ -436,6 +484,35 @@ def _request_quote(req: QuoteRequest) -> dict:
                     for l in lines], "uncovered": gaps, "preview": body.get("mandate_preview", {}).get("outcome"),
                  "valio_api_calls": body["valio_api_calls"], "rationale": body.get("rationale")})
     return {"quote": body, "jws": jws}
+
+
+MAX_SUBSTITUTE_LOOKUPS = 3  # items per quote whose options look up substitutes (2 batched Valio calls each)
+
+
+def _options(body: dict, troubled: list, requested: date, mandate: Mandate | None, now: datetime) -> list[dict]:
+    """Response options for every item that can't be covered as asked (sous/options.py)."""
+    out, lookups = [], 0
+    for item_index, item, offers, chosen in troubled:
+        unit = None if item.unit == "SALES_UNIT" else item.unit
+        opts = OPT.build(item_index, item.amount, unit, offers, chosen, requested)
+        original = item.substitute_for or item.product_ids[0]
+        if not any(o["on_time"] for o in opts) and lookups < MAX_SUBSTITUTE_LOOKUPS and catalog.get(original):
+            lookups += 1
+            try:
+                subs = substitutes.suggest(original, requested, item.amount, unit, mandate, None, 4)["options"]
+            except (aimo.AimoError, KeyError):
+                subs = []
+            subs = [s for s in subs if s["product_id"] not in item.product_ids]
+            opts = OPT.build(item_index, item.amount, unit, offers, chosen, requested, subs, original)
+        out += opts
+
+    def preview(opt: dict):
+        q = {**body, "lines": [l for l in body["lines"] if l.get("item_index") != opt["item_index"]] + opt["_lines"],
+             "uncovered": [g for g in body["uncovered"] if g["item_index"] != opt["item_index"]]}
+        tier, findings = _evaluate(mandate, body["agent_id"], q, now)
+        return tier, sorted({f.rule for f in findings if f.outcome != "silent" and f.rule != "mandate.ok"})
+
+    return OPT.finish(out, body["id"], preview if mandate else None)
 
 
 def _evaluate(mandate: Mandate, agent_id: str, q: dict, now: datetime, extra_findings=None):

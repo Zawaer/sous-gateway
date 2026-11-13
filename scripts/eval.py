@@ -137,6 +137,12 @@ def run_case(case: dict, defaults: dict) -> dict:
                              "issues": [i["code"] for i in l["issues"]]} for l in q["lines"]],
                   "uncovered": [{"uncovered": g["uncovered"], "reason": g.get("reason")} for g in q["uncovered"]]}
     r["_quote"] = q
+    if q.get("options"):
+        r["options"] = [{"id": o["id"], "rank": o["rank"], "kind": o["kind"], "covers": o["covers"],
+                         "delivery_dates": o["delivery_dates"], "total_ex_vat": o["total_ex_vat"],
+                         "substitute_tier": (o.get("substitute") or {}).get("tier"),
+                         "preview": (o.get("mandate_preview") or {}).get("outcome"), "tradeoff": o["tradeoff"],
+                         "lines": [(l["product_id"], l["quantity"]) for l in o["lines"]]} for o in q["options"]]
 
     # 4. flow
     key = f"eval-{case['id']}-{q['id']}"
@@ -164,6 +170,19 @@ def run_case(case: dict, defaults: dict) -> dict:
                 r["valio_api_calls"] += api_calls(q2["valio_api_calls"])
                 o = call(S.place_order, other["agent"], other["mandate"], q2["id"], idempotency_key=key)
                 r["orders"].append({**_order_summary(o, "second"), "requested_by": other["agent"]})
+            elif step == "choose_option":  # the agent takes one of the quote's options: re-quote, then order
+                want = case.get("choose") or {}
+                opts = [o for o in q.get("options") or [] if o["kind"] == want.get("kind", o["kind"])]
+                if not opts:
+                    raise RuntimeError(f"no option to choose ({want or 'any'})")
+                req = S.QuoteRequest(agent_id=agent, mandate_id=mid, option_id=opts[0]["id"])
+                q2 = call(S.request_quote, req)["quote"]
+                r["valio_api_calls"] += api_calls(q2["valio_api_calls"])
+                r["chosen_option"] = {"id": opts[0]["id"], "kind": opts[0]["kind"], "quote_id": q2["id"],
+                                      "lines": [(l["product_id"], l["quantity"]) for l in q2["lines"]],
+                                      "uncovered": [g["uncovered"] for g in q2["uncovered"]]}
+                o = call(S.place_order, agent, mid, q2["id"], idempotency_key=f"eval-{case['id']}-{q2['id']}")
+                r["orders"].append(_order_summary(o, "second"))
             elif step in ("approve", "reject"):
                 o = S.decide(first["id"], APPROVER, approve=step == "approve", note="eval")
                 first = o

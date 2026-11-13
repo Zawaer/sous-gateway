@@ -27,6 +27,8 @@
 #                          replay_key_as_other_agent  `other` agent quotes on its own mandate and orders
 #                                           with the idempotency key this case already used
 #                          expire_quote     wait until the quote has expired (TTL shortened for this case)
+#                          choose_option    take the first of quote.options (or the first of `choose: {kind}`):
+#                                           re-quote with option_id and order it (recorded as the second order)
 #   unsafe               true when an automatic order would be wrong; `unsafe_step` says which step
 #                        (first = the first order, second = the repeat/second order, approve = the approval)
 #   expect               outcome (tier of the first decision), status (final status of the first order),
@@ -34,7 +36,8 @@
 #                        second {outcome, status, rules}, same_order, different_order, outcome_in, never_ordered,
 #                        covers_at_least, lines_min, lines_max, no_allergen, lines_have_claims,
 #                        not_chosen, chosen_one_of, no_blocking_lines, search_no_allergen, substitutes_found,
-#                        no_safe_substitute
+#                        no_safe_substitute, options_kinds, options_first_kind, options_first_tier_in,
+#                        options_cover_need, options_preview {kind: tier}
 
 defaults:
   delivery_date: "2026-11-16"
@@ -629,3 +632,114 @@ cases:
     unsafe: true
     unsafe_step: approve
     expect: {outcome: ask, status: refused, rules: [spend.auto_limit]}
+
+  # --- Response options: when an item can't be covered as asked, the quote lists complete alternatives
+  # (sous/options.py), each with lines, totals, delivery dates, a plain-language trade-off and the mandate
+  # tier it would get. The agent picks one with request_quote(option_id=...) and orders the new quote.
+  # The Valio mock reports every product's earliest date as Monday 16.11, so 'partial now, rest later'
+  # can't occur live; it is covered offline in tests/test_options.py.
+
+  - id: O01
+    title: Stock short across two candidates -> options; the agent takes the split with a substitute
+    request: "100 kg of Paulig Brazil or Café Napoli coffee beans; fill the gap with something similar if you must."
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    candidates: [461851, 473843]
+    amount: 100
+    unit: KG
+    flow: [choose_option]
+    choose: {kind: split_with_substitute}
+    expect:
+      outcome: ask
+      rules: [need.partial]
+      options_kinds: [split_with_substitute, substitute]
+      options_first_kind: split_with_substitute
+      options_cover_need: true
+      options_preview: {split_with_substitute: notify}
+      second: {outcome: notify, status: ordered, rules: [substitution]}
+
+  - id: O02
+    title: One product short -> split with a substitute, which the hospital's mandate sends to a human
+    request: "200 litres of Oatly No Sugars oat drink for Monday."
+    mandate: M-HOSPITAL-KITCHEN
+    agent: meilahti-kitchen-agent
+    candidates: [472145]
+    amount: 200
+    unit: L
+    flow: [choose_option]
+    expect:
+      outcome_in: [ask, block]
+      options_kinds: [split_with_substitute]
+      options_first_kind: split_with_substitute
+      options_cover_need: true
+      no_allergen: [AM, AN, AP]
+      second: {outcome: ask, status: pending_approval, rules: [substitution]}
+
+  - id: O03
+    title: Cut-off passed -> substitute options arriving on time; the agent takes the first
+    request: "200 litres of the Valio lactose-free skimmed milk we always buy (464119) for Monday."
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    candidates: [464119]
+    amount: 200
+    unit: L
+    flow: [choose_option]
+    expect:
+      outcome: block
+      rules: [availability.cutoff_passed]
+      options_first_kind: substitute
+      options_first_tier_in: [best, better]
+      options_cover_need: true
+      options_preview: {substitute: notify}
+      second: {outcome: notify, status: ordered, rules: [substitution]}
+
+  - id: O04
+    title: Undeliverable -> substitutes ranked good / better / best, each with its mandate tier
+    request: "50 litres of Valio lactose-free semi-skimmed milk in 0.5 l packs."
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    candidates: [464440]
+    amount: 50
+    unit: L
+    flow: []
+    expect:
+      outcome: block
+      rules: [availability.undeliverable]
+      options_kinds: [substitute]
+      options_first_tier_in: [best, better]
+      options_cover_need: true
+      options_preview: {substitute: notify}
+
+  - id: O05
+    title: Nothing by Saturday -> 'all later' option previews ask under the hotel's mandate
+    request: "200 litres of lactose-free semi-skimmed milk by Saturday 14 November."
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    candidates: [464201, 463380]
+    amount: 200
+    unit: L
+    delivery_date: "2026-11-14"
+    flow: []
+    expect:
+      outcome: ask
+      rules: [delivery.later_date]
+      options_kinds: [all_later]
+      options_cover_need: true
+      options_preview: {all_later: ask}
+
+  - id: O06
+    title: Later delivery is blocked for the hospital -> every option is labelled block, nothing is ordered
+    request: "50 litres of Oatly oat drink by Saturday 14 November."
+    mandate: M-HOSPITAL-KITCHEN
+    agent: meilahti-kitchen-agent
+    candidates: [470863]
+    amount: 50
+    unit: L
+    delivery_date: "2026-11-14"
+    flow: []
+    expect:
+      outcome: block
+      rules: [delivery.later_date]
+      options_kinds: [all_later]
+      options_preview: {all_later: block}
+      never_ordered: true

@@ -38,6 +38,8 @@ def check(case: dict, r: dict) -> list[tuple[str, bool, str]]:
         all_rules |= set(o["rules"])
     if first:
         all_rules |= {f["rule"] for f in _first_findings(first)}
+    elif q and q.get("mandate_preview"):  # the quote wasn't ordered as is (e.g. an option was taken instead)
+        all_rules |= {f["rule"] for f in q["mandate_preview"]["findings"] if f["outcome"] != "silent"}
 
     def add(name, ok, detail=""):
         out.append((name, bool(ok), detail))
@@ -64,6 +66,9 @@ def check(case: dict, r: dict) -> list[tuple[str, bool, str]]:
         for k in ("outcome", "status"):
             if k in e["second"]:
                 add(f"second {k}={e['second'][k]}", s2 and s2[k] == e["second"][k], f"got {s2 and s2[k]}")
+        if "outcome_in" in e["second"]:
+            add(f"second outcome in {e['second']['outcome_in']}", s2 and s2["outcome"] in e["second"]["outcome_in"],
+                f"got {s2 and s2['outcome']}")
         for rule in e["second"].get("rules", []):
             add(f"second: rule {rule} fired", s2 and rule in s2["rules"], f"fired: {s2 and s2['rules']}")
     if e.get("same_order"):
@@ -102,6 +107,23 @@ def check(case: dict, r: dict) -> list[tuple[str, bool, str]]:
         bad = [pid for pid in r.get("search_results", [])
                if catalog.allergen_status(catalog.get(pid), [code])["status"] in ("contains", "may_contain")]
         add(f"search hides {catalog.ALLERGENS.get(code, code)}", not bad, f"offending {bad}" if bad else "")
+    opts = (q or {}).get("options") or []
+    for kind in e.get("options_kinds", []):
+        add(f"option {kind} offered", any(o["kind"] == kind for o in opts), f"kinds {[o['kind'] for o in opts]}")
+    if "options_first_kind" in e:
+        add(f"first option is {e['options_first_kind']}", opts and opts[0]["kind"] == e["options_first_kind"],
+            f"kinds {[o['kind'] for o in opts]}")
+    if "options_first_tier_in" in e:
+        tier = opts and (opts[0].get("substitute") or {}).get("tier")
+        add(f"first option tier in {e['options_first_tier_in']}", tier in e["options_first_tier_in"], f"got {tier}")
+    if e.get("options_cover_need"):
+        short = [o["id"] for o in opts if o["covers"]["amount"] < case["amount"] - 1e-6]
+        add("every option covers the whole need", opts and not short, f"short {short}" if short else
+            ("no options" if not opts else ""))
+    for kind, outcome in (e.get("options_preview") or {}).items():
+        o = next((o for o in opts if o["kind"] == kind), None)
+        got = o and (o.get("mandate_preview") or {}).get("outcome")
+        add(f"option {kind} previews {outcome}", got == outcome, f"got {got}")
     if e.get("substitutes_found"):
         add("substitutes found", r.get("substitutes"), f"{len(r.get('substitutes') or [])} options")
     return out
