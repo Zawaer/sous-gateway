@@ -16,10 +16,18 @@ const store = {
   set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
 };
 
+// Judge sandbox: /ui/?sandbox=SBX-XXXX shows only that sandbox's mandates, orders and audit events.
+// Its approver token (sbxa_…) is kept per sandbox, and also unlocks substitutes and suggestions there.
+const SANDBOX = (new URLSearchParams(location.search).get("sandbox") || "").trim().toUpperCase();
+const CODE_KEY = "vk-approver-code" + (SANDBOX ? ":" + SANDBOX : "");
+const SANDBOX_LISTS = /^\/(orders|mandates|audit|notifications|standing-orders)(\?|$)/;
+
 async function api(path, opts = {}, retried = false) {
   const headers = { "content-type": "application/json" };
-  const code = store.get("vk-approver-code");
+  const code = store.get(CODE_KEY);
   if (opts.method === "POST" && code) headers["x-approver-code"] = code;
+  if (SANDBOX && SANDBOX_LISTS.test(path)) path += (path.includes("?") ? "&" : "?") + "sandbox=" + encodeURIComponent(SANDBOX);
+  if (SANDBOX && code) headers.authorization = "Bearer " + code;
   const res = await fetch(API + path, {
     ...opts,
     headers,
@@ -28,14 +36,15 @@ async function api(path, opts = {}, retried = false) {
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { message: text }; }
-  if (res.status === 401 && opts.method === "POST") {
+  if (res.status === 401 && (opts.method === "POST" || SANDBOX)) {
     // Ask in-page (masked, no auto-capitalise/autocorrect: phone keyboards change codes) until it
     // is accepted or the human cancels.
     const c = await askCode(code || retried
       ? "That approver code was not accepted. Check it and try again (it is case-sensitive)."
+      : SANDBOX ? `This needs the approver token of sandbox ${SANDBOX} (sbxa_…, from POST /sandbox).`
       : "This action needs the human approver code.");
-    if (c) { store.set("vk-approver-code", c); return api(path, opts, true); }
-    store.set("vk-approver-code", "");
+    if (c) { store.set(CODE_KEY, c); return api(path, opts, true); }
+    store.set(CODE_KEY, "");
     throw new Error("Approver code needed for this action.");
   }
   if (!res.ok) {
@@ -486,8 +495,9 @@ function flowSteps(o, q, searches, events) {
         ${who ? `<div class="small"><span class="actor ${who[0]}">${who[0]}</span> ${esc(who[1])}</div>` : ""}
         <div class="small">${body}</div></div></li>`;
 
+  const why = o.agent_rationale || q?.rationale;  // the agent's own stated reason (signed into the quote); not used by any rule
   const request = step(1, "Request", search?.ts || q?.issued_at, ["agent", o.agent_id],
-    `Needs delivery by ${dateOnly(q?.requested_delivery_date || o.delivery_date)}
+    `${why ? `<span class="rationale">“${esc(why)}”</span> ` : ""}Needs delivery by ${dateOnly(q?.requested_delivery_date || o.delivery_date)}
      ${search ? ` · searched ${searches.map((s) => `“${esc(s.data.query)}”`).join(", ")}${search.data.claims?.length ? ` with ${esc(search.data.claims.join(", "))}` : ""}${search.data.avoid_allergens?.length ? `, avoiding ${esc(search.data.avoid_allergens.map((c) => allergenNames?.[c] || c).join(", "))}` : ""}
        → ${found.size} products from the static catalog, 0 Valio API calls`
        : !subs.length && q ? ` · named ${(q.lines || []).map((l) => `<span class="mono">${esc(l.product_id)}</span>`).join(", ")} directly, no catalog search` : ""}
@@ -746,7 +756,8 @@ views.mandates = {
     this.key = key;
     view.dataset.view = "mandates";
     view.innerHTML = `<div class="head"><div><h2>Mandates</h2>
-      <div class="muted">A mandate (valtakirja) is what a human lets their purchasing agent do. The gateway signs it and enforces it on every order.</div></div></div>
+      <div class="muted">A mandate (valtakirja) is what a human lets their purchasing agent do. The gateway signs it and enforces it on every order.</div></div>
+      <a class="btn plain" href="sign-mandate.html${SANDBOX ? "?sandbox=" + encodeURIComponent(SANDBOX) : ""}">Sign a mandate with your own key →</a></div>
       ${mandates.length ? mandates.map(mandateCard).join("") : `<div class="empty">No mandates issued yet.</div>`}`;
     view.querySelectorAll("[data-revoke]").forEach((b) => b.addEventListener("click", async () => {
       const id = b.dataset.revoke;
@@ -761,9 +772,16 @@ views.mandates = {
     }));
     view.querySelectorAll("[data-suggest]").forEach((b) => b.addEventListener("click", () => showSuggestions(b)));
     view.querySelectorAll("[data-sig]").forEach((b) => b.addEventListener("click", async () => {
-      const { jws } = await api("/mandates/" + encodeURIComponent(b.dataset.sig));
-      const r = await verifyJws(jws);
-      b.outerHTML = `<span class="sig ${r.ok ? "ok" : "bad"}">${r.ok ? "✔" : "✖"} ${esc(r.why)}</span>`;
+      const id = b.dataset.sig;
+      const [{ jws }, rep] = await Promise.all([api("/mandates/" + encodeURIComponent(id)),
+        api(`/mandates/${encodeURIComponent(id)}/verify`).catch(() => null)]);
+      const r = await verifyJws(jws);  // the gateway's signature, checked here in the browser
+      const bs = rep?.buyer_signature;
+      const parts = [`<span class="sig ${r.ok ? "ok" : "bad"}">${r.ok ? "✔" : "✖"} gateway: ${esc(r.why)}</span>`];
+      if (bs) parts.push(`<span class="sig ${bs.ok ? "ok" : "bad"}">${bs.ok ? "✔" : "✖"} buyer's own signature (W3C VC, ${esc(bs.alg || "")})${
+        rep.issuer_authorised?.ok ? `, key ${esc(rep.issuer_authorised.how || "registered")}` : ", key not authorised"}${bs.error ? ": " + esc(bs.error) : ""}</span>`);
+      if (rep) parts.push(`<span class="sig ${rep.verdict === "valid" ? "ok" : "bad"}">verdict: ${esc(rep.verdict.replace(/_/g, " "))}</span>`);
+      b.outerHTML = parts.join(" ");
     }));
   },
 };
@@ -831,7 +849,10 @@ function mandateCard(m) {
   const rule = (k, v) => `<div><span class="muted">${k}</span><span>${v}</span></div>`;
   return `<article class="card ${m.revoked ? "revoked" : ""}">
     <div class="row"><div><div class="muted small mono">${esc(m.id)}</div><h2>${esc(m.buyer)}</h2></div>
-      ${m.revoked ? `<span class="tier t-block">Revoked</span>` : `<span class="tier t-silent">Active</span>`}</div>
+      <div style="text-align:right">${m.revoked ? `<span class="tier t-block">Revoked</span>` : `<span class="tier t-silent">Active</span>`}
+        <div class="small" style="margin-top:4px">${m.issuer?.kind === "buyer"
+          ? `<span class="match m-same" title="${esc(m.issuer.did || "")}">buyer-signed</span>`
+          : `<span class="match">signed by the gateway</span>`}</div></div></div>
     <div class="small">Agent <span class="mono">${esc(m.agent_id)}</span> · issued by ${esc(m.issued_by)}${m.valid_until ? " · valid until " + when(m.valid_until) : ""}</div>
     <div class="ladder">${ladder}</div>
     <div class="muted small">Per order, ex VAT${m.daily_limit_eur != null ? ` · daily limit ${eur(m.daily_limit_eur)} before a human must approve` : ""}</div>
@@ -1164,6 +1185,32 @@ $("#qa-toggle")?.addEventListener("click", () => {
   route();
 });
 renderQAToggle();
+
+// Sandbox banner: which sandbox this is, its status and how many live lookups are left.
+async function renderSandboxBanner() {
+  if (!SANDBOX) return;
+  let el = $("#sbx");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "sbx";
+    el.className = "sbx";
+    $(".top").after(el);
+  }
+  try {
+    const s = await api("/sandbox/" + encodeURIComponent(SANDBOX));
+    const live = s.status === "active";
+    el.classList.toggle("off", !live);
+    el.innerHTML = `<b>Sandbox ${esc(s.id)}</b> <span class="tier t-${live ? "silent" : "block"}">${esc(s.status)}</span>
+      <span>Only this sandbox's mandates, orders and audit events are shown · ${esc(s.quotes_left)} of ${esc(s.quotes_limit)}
+      live lookups left · expires ${when(s.expires_at)} · ${esc(s.orders?.total ?? 0)} order(s)</span>
+      <a href="${location.pathname}${location.hash}">Leave sandbox</a>`;
+  } catch (e) {
+    el.classList.add("off");
+    el.innerHTML = `<b>Sandbox ${esc(SANDBOX)}</b> <span>${esc(e.message)}</span> <a href="${location.pathname}">Leave sandbox</a>`;
+  }
+}
+renderSandboxBanner();
+if (SANDBOX) setInterval(() => { if (!document.hidden) renderSandboxBanner(); }, 30000);
 
 window.addEventListener("hashchange", route);
 renderWho();

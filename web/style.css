@@ -251,6 +251,14 @@ pre {
 .spark i { display: block; width: 7px; background: var(--ink-40); border-radius: 1px 1px 0 0; }
 .spark i.hot { background: var(--ask); }
 
+/* judge sandbox banner */
+.sbx { max-width: 1080px; margin: 12px auto 0; padding: 10px 16px; border-radius: 6px; background: var(--notify-bg);
+  color: var(--ink-80); display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: .86rem; }
+.sbx b { font: 400 1.05rem var(--serif); color: var(--ink); }
+.sbx a { margin-left: auto; }
+.sbx.off { background: var(--block-bg); }
+@media (max-width: 860px) { .sbx { margin: 12px 16px 0; } }
+
 /* approver code dialog */
 .codebox { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px;
   background: rgba(20, 20, 18, .35); animation: fade .2s ease-out; }
@@ -337,3 +345,6 @@ pre {
   .tabs { gap: 4px 16px; flex-wrap: wrap; overflow: visible; }
   .tabs a { font-size: .84rem; }
 }
+
+/* the agent's stated reason in the order timeline */
+.rationale { display: block; font: italic 400 1rem/1.4 var(--serif); color: var(--ink); margin: 2px 0 4px; }
