@@ -111,8 +111,9 @@ def test_required_mandate_checks_quote_order_and_audits_failures():
     assert {e["data"]["operation"] for e in fails} == {"request_quote", "place_order"}
 
 
-def test_quote_without_mandate_stays_open_and_search_is_open():
+def test_quote_without_mandate_stays_open_and_search_is_open(monkeypatch):
     issue(require_agent_auth=True)
+    monkeypatch.setattr(S.catalog, "search", lambda *a, **k: [])  # CI has no catalog data
     no_mandate = S.QuoteRequest(agent_id="a", delivery_date=MON, items=[S.QuoteItem(product_ids=["MILK"], amount=1)])
     assert S.request_quote(no_mandate)["quote"]["mandate_id"] is None
     assert S.search("a", "milk")["products"] is not None
