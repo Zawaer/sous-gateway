@@ -45,6 +45,24 @@ MANDATES = [
         unknown_allergens="block",
         substitutions="ask",
     ),
+    # Demo scene 5 (scripts/demo.py KAARNA): an event caterer with a vegan, nut-free menu.
+    Mandate(
+        id="M-KAARNA-CATERING",
+        buyer="Kaarna Catering Oy, Espoo",
+        agent_id="kaarna-event-agent",
+        issued_by="Laura Niemi, kitchen manager",
+        notify_above_eur=300,
+        auto_approve_limit_eur=600,
+        hard_limit_eur=2500,
+        daily_limit_eur=3000,
+        avoid_allergens=["AM", "AE", "AN", "AP"],
+        allow_may_contain=False,
+        unknown_allergens="ask",
+        substitutions="notify",
+        terminal_products="ask",
+        min_delivery_reliability=0.9,
+        later_delivery="ask",
+    ),
 ]
 
 
