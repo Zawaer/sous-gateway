@@ -262,6 +262,7 @@ def prompts(mandates: list[dict]) -> list[dict]:
     by = {m["scenario"]: m for m in mandates}
     day = next_delivery_day()
     when = f"{day:%A} {day.isoformat()}"
+    tomorrow = datetime.fromtimestamp(_clock(), config.TZ).date() + timedelta(days=1)
 
     def who(s):
         return f"Using the sous MCP tools, as agent {by[s]['agent_id']} under mandate {by[s]['mandate_id']}: "
@@ -279,8 +280,8 @@ def prompts(mandates: list[dict]) -> list[dict]:
                    "(ask tier: substitutes need approval, and any product without allergen data is flagged). "
                    "Approve or reject it in the seller UI with your approver token."},
         {"title": "Past the cut-off",
-         "prompt": who("hotel") + "order 50 litres of exactly product 464119 for delivery tomorrow, "
-                   "no other product.",
+         "prompt": who("hotel") + f"order 50 litres of exactly product 464119 for delivery tomorrow "
+                   f"({tomorrow.isoformat()}), no other product.",
          "expect": "Refused with the rule that fired when the order cut-off for tomorrow has passed "
                    "(availability.cutoff_passed), or a later delivery date flagged for a human. Never ordered "
                    "silently."},

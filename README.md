@@ -27,6 +27,22 @@ Built at Junction 2026 for Valio Aimo's challenge "Trusted Trade Agents".
 - **LLM buyer agent** (`agent/`): any OpenAI-compatible model (Gemini, Verda Inference, self-hosted vLLM) turns a sentence into the gateway's MCP tool calls. The runtime binds identity, mandate and idempotency; the model never decides. Scored per model by `scripts/llm_eval.py`.
 - **Evaluation**: 45 scripted buyer requests pass 45/45; 36/36 unsafe actions are blocked or escalated. See [docs/STATUS.md](docs/STATUS.md#evaluation).
 
+## Try it yourself
+
+Get a private sandbox on the live gateway (copies of the hotel, hospital and school mandates, valid 24 h, kept out of the curated demo data):
+
+```bash
+curl -s -X POST https://135-181-8-209.sslip.io/sandbox | jq
+```
+
+The response has your sandbox id (e.g. `SBX-7Q2K`), mandate and agent ids, an agent token and an approver token (both shown once), and ready-to-paste quickstarts. Then:
+
+1. Connect Claude Code with the `quickstart.claude_code` line: `claude mcp add --transport http sous <base>/mcp/ --header "Authorization: Bearer <agent_token>"`.
+2. Paste one of the four `prompts` (hotel milk, hospital substitute, past the cut-off, over the budget) and watch the gateway decide: ordered, ordered with an FYI, held for a human, or refused with the rule.
+3. Open `quickstart.seller_ui` (`/ui/?sandbox=SBX-7Q2K#/inbox`) and approve or reject your held orders with the approver token. It works only on your sandbox's orders.
+
+Each sandbox has 15 live Valio Aimo lookups (cached offers are free); `GET /sandbox/<id>` shows what's left. One-page handout: [docs/pitch/try-it.md](docs/pitch/try-it.md); details in [PROTOCOL.md section 18](docs/PROTOCOL.md#18-judge-sandbox).
+
 ## API and MCP at a glance
 
 | Area | REST | MCP tool |
@@ -41,6 +57,7 @@ Built at Junction 2026 for Valio Aimo's challenge "Trusted Trade Agents".
 | Standing orders | `POST /standing-orders`, `GET /standing-orders[/{id}]`, `POST /standing-orders/{id}/renew`, `.../pause`, `.../resume` (human) | `create_standing_order`, `renew_standing_order`, `get_standing_order` |
 | Notifications | `GET /notifications`, `POST /notifications/test` (human) | |
 | Audit and trust | `GET /audit`, `GET /audit/verify`, `GET /.well-known/jwks.json`, `GET /health` | |
+| Judge sandbox | `POST /sandbox`, `GET /sandbox/{id}`, `DELETE /sandbox/{id}` (human); `?sandbox=<id>` on the list endpoints | |
 
 MCP also offers the resources `sous://allergens` and `sous://mandates/{id}`, and a `purchase` prompt. Full details, error codes and rule ids: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
