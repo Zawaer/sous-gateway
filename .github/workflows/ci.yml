@@ -229,3 +229,9 @@ jobs:
           uv sync --frozen
           uv run python -m scripts.fetch_data
           uv run python scripts/eval.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() && steps.pre.outputs.run == 'true' }}
+        with:
+          name: eval-results
+          path: evals/results.json
+          if-no-files-found: warn
