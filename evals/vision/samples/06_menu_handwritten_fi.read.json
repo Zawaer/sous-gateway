@@ -1,0 +1,38 @@
+{
+ "recorded": {
+  "model": "nvidia:nvidia/nemotron-3.5-super-vl-120b-a12b",
+  "variant": "v3+verify",
+  "ran_at": "2026-11-13T23:54:45Z",
+  "image": "images/06_menu_handwritten_fi.jpg",
+  "latency_ms": 1990,
+  "calls": 1,
+  "second_look": []
+ },
+ "read": {
+  "kind": "menu",
+  "items": [],
+  "dishes": [
+   {
+    "name": "Kasvissosekeitto",
+    "portions": 60,
+    "day": "la 21.11.",
+    "confidence": 0.95
+   },
+   {
+    "name": "Joulukinkku + sinappi",
+    "portions": 60,
+    "day": "la 21.11.",
+    "confidence": 0.95
+   },
+   {
+    "name": "Rosolli",
+    "portions": 60,
+    "day": "la 21.11.",
+    "confidence": 0.95
+   }
+  ],
+  "delivery_date": "2026-11-21",
+  "notes": "Pikkujoulut la 21.11. - 60 hlö",
+  "unreadable": []
+ }
+}

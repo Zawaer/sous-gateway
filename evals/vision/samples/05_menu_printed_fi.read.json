@@ -1,0 +1,38 @@
+{
+ "recorded": {
+  "model": "nvidia:nvidia/nemotron-3.5-super-vl-120b-a12b",
+  "variant": "v3+verify",
+  "ran_at": "2026-11-13T23:54:45Z",
+  "image": "images/05_menu_printed_fi.jpg",
+  "latency_ms": 2193,
+  "calls": 1,
+  "second_look": []
+ },
+ "read": {
+  "kind": "menu",
+  "items": [],
+  "dishes": [
+   {
+    "name": "Lohikeitto",
+    "portions": 80,
+    "day": "Ma 16.11.",
+    "confidence": 0.95
+   },
+   {
+    "name": "Lasagne",
+    "portions": 120,
+    "day": "Ti 17.11.",
+    "confidence": 0.95
+   },
+   {
+    "name": "Karjalanpaisti",
+    "portions": 100,
+    "day": "Ke 18.11.",
+    "confidence": 0.95
+   }
+  ],
+  "delivery_date": "2026-11-16",
+  "notes": "Henkilöstöravintola Kaarna · raaka-aineet toimitettava ma 16.11. Kaikki ruoat laktoosittomia. Lisäkkeet: salaatti, leipää.",
+  "unreadable": []
+ }
+}

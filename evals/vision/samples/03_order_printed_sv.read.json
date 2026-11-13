@@ -1,0 +1,70 @@
+{
+ "recorded": {
+  "model": "nvidia:nvidia/nemotron-3.5-super-vl-120b-a12b",
+  "variant": "v3+verify",
+  "ran_at": "2026-11-13T23:54:45Z",
+  "image": "images/03_order_printed_sv.jpg",
+  "latency_ms": 5620,
+  "calls": 1,
+  "second_look": []
+ },
+ "read": {
+  "kind": "order_list",
+  "items": [
+   {
+    "text_as_written": "Mjölk laktosfri | 30 l",
+    "name_fi": "maito laktoositon",
+    "name_en": "lactose-free milk",
+    "quantity": 30.0,
+    "unit": "l",
+    "delivered_quantity": null,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "Smör | 4 kg",
+    "name_fi": "voi",
+    "name_en": "butter",
+    "quantity": 4.0,
+    "unit": "kg",
+    "delivered_quantity": null,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "Vispgrädde | 5 l",
+    "name_fi": "kuohukerma",
+    "name_en": "whipping cream",
+    "quantity": 5.0,
+    "unit": "l",
+    "delivered_quantity": null,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "Ägg | 180 st",
+    "name_fi": "kananmuna",
+    "name_en": "egg",
+    "quantity": 180.0,
+    "unit": "kpl",
+    "delivered_quantity": null,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "Potatis, fast | 20 kg",
+    "name_fi": "peruna, kiinteä",
+    "name_en": "potato, firm",
+    "quantity": 20.0,
+    "unit": "kg",
+    "delivered_quantity": null,
+    "confidence": 0.95,
+    "note": null
+   }
+  ],
+  "dishes": [],
+  "delivery_date": "2026-11-17",
+  "notes": "Restaurant Sjöbräs order (Beställning). Leverans: tisdag 17.11.2026.",
+  "unreadable": []
+ }
+}

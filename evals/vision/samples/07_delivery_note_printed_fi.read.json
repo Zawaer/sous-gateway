@@ -1,8 +1,70 @@
-{"kind": "delivery_note", "delivery_date": "2026-11-13", "notes": "Puuttuvat tuotteet toimitetaan erikseen sovittaessa.", "unreadable": [],
- "items": [
-  {"text_as_written": "Maito laktoositon 1 l | 40 | 24 | l", "name_fi": "maito laktoositon", "name_en": "lactose-free milk", "quantity": 40, "unit": "l", "delivered_quantity": 24, "confidence": 0.97},
-  {"text_as_written": "Voi 500 g | 5 | 5 | kg", "name_fi": "voi", "name_en": "butter", "quantity": 5, "unit": "kg", "delivered_quantity": 5, "confidence": 0.97},
-  {"text_as_written": "Kuohukerma 1 l | 10 | 6 | l", "name_fi": "kuohukerma", "name_en": "whipping cream", "quantity": 10, "unit": "l", "delivered_quantity": 6, "confidence": 0.96},
-  {"text_as_written": "Kananmuna M | 360 | 360 | kpl", "name_fi": "kananmuna", "name_en": "eggs", "quantity": 360, "unit": "kpl", "delivered_quantity": 360, "confidence": 0.96},
-  {"text_as_written": "Peruna kiinteä | 25 | 0 | kg", "name_fi": "peruna", "name_en": "potato", "quantity": 25, "unit": "kg", "delivered_quantity": 0, "confidence": 0.95}],
- "dishes": []}
+{
+ "recorded": {
+  "model": "nvidia:nvidia/nemotron-3.5-super-vl-120b-a12b",
+  "variant": "v3+verify",
+  "ran_at": "2026-11-13T23:54:45Z",
+  "image": "images/07_delivery_note_printed_fi.jpg",
+  "latency_ms": 4020,
+  "calls": 1,
+  "second_look": []
+ },
+ "read": {
+  "kind": "delivery_note",
+  "items": [
+   {
+    "text_as_written": "Maito laktoositon 1 l | 40 | 24 | l",
+    "name_fi": "maito laktoositon",
+    "name_en": "lactose-free milk",
+    "quantity": 40.0,
+    "unit": "l",
+    "delivered_quantity": 24.0,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "Voi 500 g | 5 | 5 | kg",
+    "name_fi": "voi",
+    "name_en": "butter",
+    "quantity": 5.0,
+    "unit": "kg",
+    "delivered_quantity": 5.0,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "Kuohukerma 1 l | 10 | 6 | l",
+    "name_fi": "kuohukerma",
+    "name_en": "whipping cream",
+    "quantity": 10.0,
+    "unit": "l",
+    "delivered_quantity": 6.0,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "Kananmuna M | 360 | 360 | kpl",
+    "name_fi": "kananmuna",
+    "name_en": "egg",
+    "quantity": 360.0,
+    "unit": "kpl",
+    "delivered_quantity": 360.0,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "Peruna kiinteä | 25 | 0 | kg",
+    "name_fi": "peruna kiinteä",
+    "name_en": "firm potato",
+    "quantity": 25.0,
+    "unit": "kg",
+    "delivered_quantity": 0.0,
+    "confidence": 0.95,
+    "note": null
+   }
+  ],
+  "dishes": [],
+  "delivery_date": "2026-11-13",
+  "notes": "LÄHETE / FÖLJESEDEL. Tukku Oy · Asiakas: Hotel Aurora · Toimituspvm 13.11.2026 · Tilaus 88213. Puuttuvat tuotteet toimitetaan erikseen sovittaessa.",
+  "unreadable": []
+ }
+}

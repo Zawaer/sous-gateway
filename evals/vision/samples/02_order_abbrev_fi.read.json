@@ -1,0 +1,92 @@
+{
+ "recorded": {
+  "model": "nvidia:nvidia/nemotron-3.5-super-vl-120b-a12b",
+  "variant": "v3+verify",
+  "ran_at": "2026-11-13T23:54:45Z",
+  "image": "images/02_order_abbrev_fi.jpg",
+  "latency_ms": 7563,
+  "calls": 2,
+  "second_look": []
+ },
+ "read": {
+  "kind": "order_list",
+  "items": [
+   {
+    "text_as_written": "kevytmaito 6 ltk",
+    "name_fi": "kevytmaito",
+    "name_en": "low-fat milk",
+    "quantity": 6.0,
+    "unit": "ltk",
+    "delivered_quantity": null,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "appelsiinimehu 12 plo",
+    "name_fi": "appelsiinimehu",
+    "name_en": "orange juice",
+    "quantity": 12.0,
+    "unit": "plo",
+    "delivered_quantity": null,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "kahvi 8 pkt",
+    "name_fi": "kahvi",
+    "name_en": "coffee",
+    "quantity": 8.0,
+    "unit": "pkt",
+    "delivered_quantity": null,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "jogurtti 4 kg",
+    "name_fi": null,
+    "name_en": null,
+    "quantity": null,
+    "unit": null,
+    "delivered_quantity": null,
+    "confidence": 0.0,
+    "note": "crossed-out line, cancelled; check: no quantity read"
+   },
+   {
+    "text_as_written": "ruokakerma 2,5 l",
+    "name_fi": "ruokakerma",
+    "name_en": "cooking cream",
+    "quantity": 2.5,
+    "unit": "l",
+    "delivered_quantity": null,
+    "confidence": 0.9,
+    "note": null
+   },
+   {
+    "text_as_written": "ruisleipä 20 kpl",
+    "name_fi": "ruisleipä",
+    "name_en": "rye bread",
+    "quantity": 20.0,
+    "unit": "kpl",
+    "delivered_quantity": null,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "sipuli 10 kg",
+    "name_fi": "sipuli",
+    "name_en": "onion",
+    "quantity": 10.0,
+    "unit": "kg",
+    "delivered_quantity": null,
+    "confidence": 0.95,
+    "note": null
+   }
+  ],
+  "dishes": [],
+  "delivery_date": null,
+  "notes": "Heading: Kylmiö / tilattavat. Line 'jogurtti 4 kg' is crossed out (struck through) and was cancelled. A smudged, unreadable line appears between 'ruisleipä 20 kpl' and 'sipuli 10 kg'.",
+  "unreadable": [
+   "line between 'ruisleipä 20 kpl' and 'sipuli 10 kg': smudged, unreadable"
+  ]
+ }
+}

@@ -973,8 +973,12 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     if a.from_json:
         raw = json.loads(Path(a.from_json).read_text(encoding="utf-8"))
-        vr = VisionRead(read=ImageRead.model_validate(raw.get("read", raw)), prompt_version="replay",
-                        model=f"replay:{Path(a.from_json).name}")
+        rec = raw.get("recorded") or {}  # evals/vision/samples/: real Nemotron readings recorded in the CI eval
+        vr = VisionRead(read=ImageRead.model_validate(raw.get("read", raw)),
+                        prompt_version=f"replay of {rec['variant']}" if rec else "replay",
+                        model=f"{rec['model']}, recorded {rec['ran_at'][:16]}" if rec else
+                        f"replay:{Path(a.from_json).name}", calls=rec.get("calls", 0),
+                        latency_ms=rec.get("latency_ms", 0), rechecked=rec.get("second_look", []))
         for i, it in enumerate(vr.read.items):
             if why := cross_check(it, vr.read.kind):
                 it.confidence = min(it.confidence, 0.5)

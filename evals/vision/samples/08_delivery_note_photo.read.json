@@ -1,0 +1,60 @@
+{
+ "recorded": {
+  "model": "nvidia:nvidia/nemotron-3.5-super-vl-120b-a12b",
+  "variant": "v3+verify",
+  "ran_at": "2026-11-13T23:54:45Z",
+  "image": "images/08_delivery_note_photo.jpg",
+  "latency_ms": 2983,
+  "calls": 1,
+  "second_look": []
+ },
+ "read": {
+  "kind": "delivery_note",
+  "items": [
+   {
+    "text_as_written": "Jauheliha naudan 2 kg | 12 | 8 | kg",
+    "name_fi": "jauheliha naudan",
+    "name_en": "beef mince",
+    "quantity": 12.0,
+    "unit": "kg",
+    "delivered_quantity": 8.0,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "Tomaattimurska | 6 | 6 | kg",
+    "name_fi": "tomaattimurska",
+    "name_en": "tomato puree",
+    "quantity": 6.0,
+    "unit": "kg",
+    "delivered_quantity": 6.0,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "Sipuli kuorittu | 10 | 10 | kg",
+    "name_fi": "sipuli kuorittu",
+    "name_en": "peeled onion",
+    "quantity": 10.0,
+    "unit": "kg",
+    "delivered_quantity": 10.0,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "Ruokakerma 1 l | 5 | 5 | l | puuttuu 3 l!",
+    "name_fi": "ruokakerma",
+    "name_en": "cooking cream",
+    "quantity": 5.0,
+    "unit": "l",
+    "delivered_quantity": 2.0,
+    "confidence": 0.9,
+    "note": "handwritten correction 'puuttuu 3 l!' means 3 l missing, so delivered = 5 - 3 = 2 l"
+   }
+  ],
+  "dishes": [],
+  "delivery_date": "2026-11-16",
+  "notes": "LÄHETE, Tukku Oy · Ravintola Kaarna · 16.11.2026. Column headers: Tuote, Tilattu, Toimitettu, Yks.",
+  "unreadable": []
+ }
+}

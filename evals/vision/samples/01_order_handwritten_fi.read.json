@@ -1,10 +1,90 @@
-{"kind": "order_list", "delivery_date": "2026-11-16", "notes": "signed: Ville", "unreadable": [],
- "items": [
-  {"text_as_written": "maito laktoositon 40 l", "name_fi": "maito laktoositon", "name_en": "lactose-free milk", "quantity": 40, "unit": "l", "confidence": 0.95},
-  {"text_as_written": "voi 5 kg", "name_fi": "voi", "name_en": "butter", "quantity": 5, "unit": "kg", "confidence": 0.93},
-  {"text_as_written": "kerma 10 l", "name_fi": "kerma", "name_en": "cream", "quantity": 10, "unit": "l", "confidence": 0.9},
-  {"text_as_written": "kananmunat 360 kpl", "name_fi": "kananmuna", "name_en": "eggs", "quantity": 360, "unit": "kpl", "confidence": 0.94},
-  {"text_as_written": "perunat 25 kg", "name_fi": "peruna", "name_en": "potatoes", "quantity": 25, "unit": "kg", "confidence": 0.9},
-  {"text_as_written": "jauheliha 12 kg", "name_fi": "jauheliha", "name_en": "minced meat", "quantity": 12, "unit": "kg", "confidence": 0.55, "note": "first digit could be 1 or 7"},
-  {"text_as_written": "tomaattimurska 6 kg", "name_fi": "tomaattimurska", "name_en": "crushed tomatoes", "quantity": 6, "unit": "kg", "confidence": 0.92}],
- "dishes": []}
+{
+ "recorded": {
+  "model": "nvidia:nvidia/nemotron-3.5-super-vl-120b-a12b",
+  "variant": "v3+verify",
+  "ran_at": "2026-11-13T23:54:45Z",
+  "image": "images/01_order_handwritten_fi.jpg",
+  "latency_ms": 4507,
+  "calls": 1,
+  "second_look": []
+ },
+ "read": {
+  "kind": "order_list",
+  "items": [
+   {
+    "text_as_written": "maito laktoositon 40 l",
+    "name_fi": "maito laktoositon",
+    "name_en": "lactose-free milk",
+    "quantity": 40.0,
+    "unit": "l",
+    "delivered_quantity": null,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "voi 5 kg",
+    "name_fi": "voi",
+    "name_en": "butter",
+    "quantity": 5.0,
+    "unit": "kg",
+    "delivered_quantity": null,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "kerma 10 l",
+    "name_fi": "kerma",
+    "name_en": "cream",
+    "quantity": 10.0,
+    "unit": "l",
+    "delivered_quantity": null,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "kananmunat 360 kpl",
+    "name_fi": "kananmuna",
+    "name_en": "egg",
+    "quantity": 360.0,
+    "unit": "kpl",
+    "delivered_quantity": null,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "perunat 25 kg",
+    "name_fi": "peruna",
+    "name_en": "potato",
+    "quantity": 25.0,
+    "unit": "kg",
+    "delivered_quantity": null,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "jauheliha 12 kg",
+    "name_fi": "jauheliha",
+    "name_en": "minced meat",
+    "quantity": 12.0,
+    "unit": "kg",
+    "delivered_quantity": null,
+    "confidence": 0.95,
+    "note": null
+   },
+   {
+    "text_as_written": "tomaattimurska 6 kg",
+    "name_fi": "tomaattimurska",
+    "name_en": "tomato puree",
+    "quantity": 6.0,
+    "unit": "kg",
+    "delivered_quantity": null,
+    "confidence": 0.95,
+    "note": null
+   }
+  ],
+  "dishes": [],
+  "delivery_date": "2026-11-16",
+  "notes": "Heading: 'Tilaus - toimitus ma 16.11.'; signature '- Ville'",
+  "unreadable": []
+ }
+}

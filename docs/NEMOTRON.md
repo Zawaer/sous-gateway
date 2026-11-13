@@ -63,48 +63,89 @@ failure that matters. Sous treats Nemotron's reading as evidence, not as a decis
 
 ## How we improved its outputs
 
+We measured first and then fixed what Nemotron actually got wrong, across five CI runs with the real model
+(`evals/vision/history/`). Each step below came from a specific failure in those runs.
+
 1. **Strict schema + validation + one repair retry.** The answer must parse as one JSON object and pass a
    pydantic schema. Units are normalized ("litraa" → l, "st" → kpl), decimal commas and percentage confidences
    are accepted, and `<think>` blocks and markdown fences are stripped. If it still fails, the validation
-   error goes back to the model once ("That was not valid: … return only the corrected JSON").
-2. **Prompt engineering (v1 → v2).** v1 is the obvious baseline ("extract the order as JSON"). v2 tells the
-   model its role (transcribe, never fix or merge) and today's date with the coming weekdays (so "ma 16.11."
-   becomes a date). It gives the Finnish/Swedish/English vocabulary and the unit abbreviation table, the
-   decimal-comma rule, and to skip crossed-out lines. It explains delivery-note columns and the "puuttuu"
-   shortfall rule. It defines confidence ("a digit that could be another digit: below 0.6, say why") and
-   says why that matters: a low-confidence line is checked by a human, a wrong confident line is ordered.
-3. **A feedback loop that is cheap and targeted (`+verify`).** Code compares each line's quantity and unit
-   with the text the model itself transcribed for that line. Example: `text_as_written: "voi 5 kg"` but
-   `quantity: 4`. Lines that disagree, or that came back below the threshold, get ONE second call with the
-   image that names only those lines ("read line 3 again, character by character"). A mismatch that survives
-   the second look is capped at 0.5 confidence, so it goes to a human. Pages that read cleanly cost one call.
-4. **An eval set with traps, scored on safety and on accuracy.** 8 pages we rendered ourselves
+   error goes back to the model once. In practice Nemotron returned valid JSON on 239 of 240 page reads, and
+   the repair retry fixed the one that wasn't.
+2. **Prompt v1 → v2 (domain).** v1 is the obvious baseline ("extract the order as JSON"). v2 tells the model
+   its role (transcribe, never fix or merge) and today's date with the coming weekdays, so "ma 16.11." becomes
+   a date. It adds the Finnish/Swedish/English vocabulary, the unit abbreviation table, the decimal-comma rule,
+   delivery-note columns and the "puuttuu" shortfall rule. It also defines confidence ("a digit that could be
+   another digit: below 0.6, say why") and says why it matters. Result: silent errors went from 16 to 0, both
+   traps were handled, and qty+unit went from 83 % to 100 %.
+3. **Prompt v2 → v3 (from run-1 outputs).** The real outputs showed four more failure types.
+   - **Headings and signatures read as lines** ("Tilaus - toimitus ma 16.11.", "- Ville", "Tuote"): v3 lists
+     what is not an item.
+   - **Table rows transcribed as only the product cell** ("Maito laktoositon 1 l"): the pack size in the
+     name looked like the quantity, so code flagged correct rows. v3 asks for whole rows,
+     `"Maito laktoositon 1 l | 40 | 24 | l"`.
+   - **A red-pen "puuttuu 3 l!" listed as its own line**: v3 says a correction belongs to its row.
+   - **Menus**: "60 hlö" written once in the heading must apply to every dish, and "raaka-aineet toimitettava
+     ma 16.11." is the delivery date.
+
+   Result: portions went from 50 % to 100 %, date from 88 % to 100 %, and auto-correct from 84 % to 87–100 %.
+4. **Code checks the model, deterministically.**
+   - **Cross-check:** each line's quantity and unit must appear in the text the model itself transcribed for
+     that line. `"voi 5 kg"` with `quantity: 4` is a mismatch.
+   - **Non-product lines are dropped visibly:** a line with no name, no quantity and no "number + unit" is
+     shown as ignored, not ordered.
+   - **Page-level shortfall check** (from run 2, where the same photo was read correctly in one run and not in
+     the next): if the page says "puuttuu 3 l" but no row shows it, every row that looks delivered in full is
+     suspect. A printed "Puuttuvat tuotteet toimitetaan erikseen" footer has no amount and doesn't count:
+     that false alarm came from run 3.
+5. **A targeted feedback loop (`+verify`).** Only lines code finds suspicious, or that came back below 0.75,
+   get ONE second call with the image ("read index 3 again, character by character"). For a loose shortfall
+   the call also says what the note says and asks which row it belongs to. A fix only counts if the row now
+   shows the note: a row changed without it is treated as a guess. Anything unresolved is capped at 0.5
+   confidence and goes to a human. In run 5 the second look fixed the red-pen correction every time it was
+   needed. Clean pages cost one call.
+6. **An eval set with traps, scored on safety and on accuracy.** We rendered 8 pages ourselves
    (`scripts/vision_make_images.py`, open handwriting fonts, rotation, noise, blur, uneven light, perspective):
-   handwritten Finnish order lists, a printed Swedish order, an English note, a printed and a handwritten
-   menu, a printed delivery note and a photographed one with a red-pen correction. Traps: a crossed-out line
-   (must not be ordered), a smudged line (must be flagged, not guessed), "2,5 l", *ltk/plo/pkt*. The scorer
-   reports item recall and precision, exact quantity+unit, delivered quantities, dishes and portions, page
-   type, date, and the safety metric: **silent errors**, lines that would be ordered automatically but are
-   wrong.
+   - handwritten Finnish order lists, a printed Swedish order and an English note;
+   - a printed menu and a handwritten one;
+   - a printed delivery note and a photographed one with a red-pen correction.
+
+   The traps are a crossed-out line (must not be ordered), a smudged line (must be flagged, not guessed),
+   "2,5 l" and *ltk/plo/pkt*. The scorer reports item recall and precision, exact quantity+unit, delivered
+   quantities, dishes and portions, page type and date. The safety metric is **silent errors**: lines that
+   would be ordered automatically but are wrong. Pages are read several times (`--repeat`), because the
+   model is not deterministic and a single lucky run proves little.
 
 ## Results
 
-`scripts/vision_eval.py`, 8 pages / 31 truth lines + 6 dishes. Full per-page problems:
-[`evals/vision/results.md`](../evals/vision/results.md).
+NVIDIA Nemotron 3.5 Super VL, `scripts/vision_eval.py` in CI (`vision_only`): 8 pages, 31 truth lines and
+6 dishes, each page read 3–4 times. Reading only, no Valio calls. Full table and per-page problems:
+[`evals/vision/results.md`](../evals/vision/results.md); every run: `evals/vision/history/`.
 
-> **Pending:** the run with Nemotron 3.5 Super VL needs the `NVIDIA_API_KEY` GitHub secret (asked on the agent
-> board). It runs with `gh workflow run ci.yml -R Zawaer/sous --ref main -f vision_only=true` and lands in the
-> `llm-eval-results` artifact. The table below is filled from that run.
+| variant | pages read | qty+unit exact | delivered exact | portions | page type | date | auto-correct | silent errors | traps | calls | s/page |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| v1 baseline prompt | 24 | 83 % | 44 % | 50 % | 62 % | 75 % | 76 % | **16** | 0/6 | 24 | 5.5 |
+| v2 domain prompt | 24 | 100 % | 100 % | 50 % | 100 % | 88 % | 84 % | 0 | 6/6 | 24 | 3.3 |
+| v3 prompt from real errors | 24 | 100 % | 100 % | 100 % | 100 % | 100 % | 100 % | 0 | 6/6 | 24 | 4.9 |
+| **v3 + code checks + second look** (default) | 32 | 100 % | 100 % | 100 % | 100 % | 100 % | **100 %** | **0** | 8/8 | 37 | 4.3 |
+| v3 + second look + reasoning on | 8 | 100 % | 100 % | 100 % | 100 % | 100 % | 100 % | 0 | 2/2 | 8 | 20.7 |
 
-| variant | item recall | qty+unit exact | delivered exact | portions | silent errors | traps | calls | s/page |
-|---|---|---|---|---|---|---|---|---|
-| v1 (baseline prompt) | | | | | | | | |
-| v2 (engineered prompt) | | | | | | | | |
-| v2 + verify (second look) | | | | | | | | |
+Item recall was 100 % in every variant. *auto-correct* is the share of truth lines that would be ordered
+automatically and correctly. The rest go to a human, never to the basket wrongly.
 
-The scorer and pipeline are checked offline with an oracle "model" that answers with the truth
-(`--provider oracle`: 100 % on every metric, 0 silent errors, traps 2/2), and by 11 offline tests with a
-scripted model and gateway.
+Run to run, v3 alone was not perfect. In run 3 it applied the red-pen correction on the photographed
+delivery note in only 1 of 3 reads (auto-correct 87 %, delivered 93 %). The code checks caught the other two,
+so they went to a human instead of becoming silent errors. With the page check and the targeted second look
+(run 5, 4 reads per page), all 32 pages were right and only 3 needed a second call. Reasoning mode reaches
+the same accuracy at ~5x the latency (20.7 s vs 4.3 s per page), so it stays off. Default variant cost per
+page: ~3,300 prompt + ~470 completion tokens, 1.16 calls; free on build.nvidia.com.
+
+Real readings are recorded in `evals/vision/samples/`. `--from-json` replays them through the live gateway
+without a key, e.g. the photographed delivery note: "Ruokakerma 1 l | 5 | 5 | l | puuttuu 3 l!" → delivered
+2 → shortfall 3 L + 4 kg of mince → one quote, mandate preview *ask* (the cream is above the hotel's €2.50/L
+cap).
+
+The scorer and the pipeline are also checked offline: an oracle "model" answering with the truth scores 100 %
+(`--provider oracle`), and 16 offline tests use a scripted model and gateway.
 
 ## Engineering notes
 
