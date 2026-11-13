@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sign a mandate · Sous</title>
+<style>
+  :root { color-scheme: light dark; --paper:#f8f8f3; --ink:#111; --dim:rgba(0,0,0,.55); --rule:rgba(0,0,0,.12);
+          --ok:#2e6b3c; --bad:#a8321f; --panel:rgba(0,0,0,.035); }
+  @media (prefers-color-scheme: dark) { :root { --paper:#141412; --ink:#eee; --dim:rgba(255,255,255,.55);
+          --rule:rgba(255,255,255,.14); --ok:#7cc58c; --bad:#f08a76; --panel:rgba(255,255,255,.05); } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 24px 18px 60px; }
+  h1 { font-size: 24px; font-weight: 500; margin: 0 0 4px; }
+  h2 { font-size: 16px; font-weight: 600; margin: 28px 0 8px; }
+  p.lead, .dim { color: var(--dim); }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; word-break: break-all; }
+  .box { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; }
+  label { display: block; margin: 10px 0 2px; font-size: 13px; color: var(--dim); }
+  input[type=text], input[type=number] { width: 100%; padding: 8px 10px; font: inherit; color: inherit;
+          background: transparent; border: 1px solid var(--rule); border-radius: 8px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  .checks label { display: inline-flex; gap: 6px; margin-right: 14px; color: var(--ink); font-size: 14px; }
+  button { font: inherit; padding: 9px 16px; border-radius: 999px; border: 1px solid var(--rule); cursor: pointer;
+           background: var(--ink); color: var(--paper); margin-top: 16px; }
+  button.ghost { background: transparent; color: var(--ink); }
+  button:disabled { opacity: .5; cursor: default; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  ul.checks-out { list-style: none; padding: 0; margin: 8px 0 0; }
+  ul.checks-out li { margin: 4px 0; }
+  details { margin-top: 10px; } summary { cursor: pointer; color: var(--dim); font-size: 13px; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Sign a mandate with your own key</h1>
+  <p class="lead">You, the buyer's human, sign the mandate (valtakirja) for your purchasing agent. Your browser makes a
+    P-256 key that cannot be exported and never leaves this device; the gateway only sees your public key, as a
+    <span class="mono">did:key</span>. The signed mandate is a W3C Verifiable Credential (<span class="mono">vc+jwt</span>, ES256).
+    The gateway checks your signature and countersigns. <a href="/ui/">Back to Sous</a></p>
+
+  <h2>1. Your key</h2>
+  <div class="box">
+    <div class="dim" style="font-size:13px">Your identifier (did:key)</div>
+    <div id="did" class="mono">…</div>
+  </div>
+  <button id="newkey" class="ghost" type="button">Make a new key</button>
+
+  <h2>2. The mandate</h2>
+  <form id="f">
+    <div class="row">
+      <div><label for="buyer">Organisation (buyer)</label><input id="buyer" type="text" required></div>
+      <div><label for="issued_by">Your name</label><input id="issued_by" type="text" value="Aino (owner)" required></div>
+      <div><label for="id">Mandate id</label><input id="id" type="text" required></div>
+      <div><label for="agent_id">Agent id</label><input id="agent_id" type="text" value="kitchen-agent" required></div>
+      <div><label for="auto">Agent may spend alone up to (€, ex VAT)</label><input id="auto" type="number" min="0" step="1" value="150"></div>
+      <div><label for="hard">Never above (€, ex VAT)</label><input id="hard" type="number" min="0" step="1" value="800"></div>
+      <div><label for="days">Valid for (days)</label><input id="days" type="number" min="1" max="366" value="30"></div>
+    </div>
+    <label>Never buy products containing</label>
+    <div class="checks">
+      <label><input type="checkbox" value="AM" checked> milk</label>
+      <label><input type="checkbox" value="AW"> gluten</label>
+      <label><input type="checkbox" value="AN"> nuts</label>
+      <label><input type="checkbox" value="AE"> egg</label>
+      <label><input type="checkbox" value="AP"> peanuts</label>
+    </div>
+    <div class="checks" style="margin-top:8px">
+      <label><input id="auth" type="checkbox"> Agent must authenticate (bearer token, shown once)</label>
+    </div>
+    <button id="sign" type="submit">Sign and send</button>
+  </form>
+
+  <section id="result" hidden>
+    <h2>3. Result</h2>
+    <div class="box">
+      <div id="headline"></div>
+      <ul id="checks" class="checks-out"></ul>
+      <div id="token" class="mono" style="margin-top:8px"></div>
+      <details><summary>The signed credential (vc+jwt)</summary><pre id="vc" class="mono" style="white-space:pre-wrap"></pre></details>
+    </div>
+    <button id="revoke" class="ghost" type="button">Revoke this mandate (signed by you)</button>
+  </section>
+</main>
+<script>
+"use strict";
+const API = new URLSearchParams(location.search).get("api") || "";
+const $ = (id) => document.getElementById(id);
+const enc = new TextEncoder();
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+function b58(bytes) {
+  let n = 0n;
+  for (const b of bytes) n = n * 256n + BigInt(b);
+  let s = "";
+  while (n > 0n) { s = B58[Number(n % 58n)] + s; n /= 58n; }
+  for (const b of bytes) { if (b !== 0) break; s = "1" + s; }
+  return s;
+}
+function b64u(bytes) {
+  let s = "";
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+const b64json = (o) => b64u(enc.encode(JSON.stringify(o)));
+async function sha256hex(s) {
+  const d = new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(s)));
+  return [...d].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// The key pair lives in IndexedDB; the private key is non-extractable, so not even this page can read it out.
+function idb() {
+  return new Promise((ok, err) => {
+    const r = indexedDB.open("sous-buyer-keys", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("keys");
+    r.onsuccess = () => ok(r.result);
+    r.onerror = () => err(r.error);
+  });
+}
+async function idbDo(mode, fn) {
+  const db = await idb();
+  return new Promise((ok, err) => {
+    const tx = db.transaction("keys", mode);
+    const req = fn(tx.objectStore("keys"));
+    tx.oncomplete = () => ok(req && req.result);
+    tx.onerror = () => err(tx.error);
+  });
+}
+async function makeKey() {
+  const kp = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, ["sign", "verify"]);
+  await idbDo("readwrite", (s) => s.put(kp, "buyer"));
+  return kp;
+}
+async function getKey() {
+  return (await idbDo("readonly", (s) => s.get("buyer"))) || makeKey();
+}
+async function didKey(publicKey) {
+  const raw = new Uint8Array(await crypto.subtle.exportKey("raw", publicKey)); // 0x04 || x || y
+  const compressed = new Uint8Array(33);
+  compressed[0] = (raw[64] & 1) ? 3 : 2;
+  compressed.set(raw.slice(1, 33), 1);
+  return "did:key:z" + b58(new Uint8Array([0x80, 0x24, ...compressed])); // multicodec p256-pub
+}
+async function jws(payload, typ, extra) {
+  const kp = await getKey();
+  const did = await didKey(kp.publicKey);
+  const header = { alg: "ES256", typ, kid: `${did}#${did.slice(8)}`, ...(extra || {}) };
+  const input = `${b64json(header)}.${b64json(payload)}`;
+  // WebCrypto ECDSA returns r||s (IEEE P1363), which is exactly the JWS ES256 format.
+  const sig = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, kp.privateKey, enc.encode(input)));
+  return `${input}.${b64u(sig)}`;
+}
+const isoSec = (d) => {  // local time with offset, seconds precision
+  const p = (n) => String(n).padStart(2, "0"), o = -d.getTimezoneOffset();
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}` +
+    `${o >= 0 ? "+" : "-"}${p(Math.floor(Math.abs(o) / 60))}:${p(Math.abs(o) % 60)}`;
+};
+
+let current = null; // {id, credential}
+
+async function showKey() {
+  const did = await didKey((await getKey()).publicKey);
+  $("did").textContent = did;
+  const tag = did.slice(-4);
+  if (!$("buyer").value) $("buyer").value = `Demo kitchen ${tag}`;  // a buyer name of your own: its first key gets pinned
+  if (!$("id").value) $("id").value = `M-DEMO-${tag.toUpperCase()}`;
+  return did;
+}
+
+$("newkey").onclick = async () => {
+  if (!confirm("Make a new key? Mandates signed with the old key stay valid, but this browser can no longer revoke them.")) return;
+  await makeKey();
+  $("buyer").value = ""; $("id").value = "";
+  await showKey();
+};
+
+$("f").onsubmit = async (e) => {
+  e.preventDefault();
+  $("sign").disabled = true;
+  try {
+    const did = await showKey();
+    const now = new Date(); now.setMilliseconds(0);
+    const until = new Date(now.getTime() + Number($("days").value || 30) * 86400e3);
+    const mandate = {
+      id: $("id").value.trim(), buyer: $("buyer").value.trim(), agent_id: $("agent_id").value.trim(),
+      issued_by: $("issued_by").value.trim(),
+      auto_approve_limit_eur: Number($("auto").value), hard_limit_eur: Number($("hard").value),
+      avoid_allergens: [...document.querySelectorAll(".checks input[value]:checked")].map((x) => x.value),
+      require_agent_auth: $("auth").checked,
+    };
+    const vc = {
+      "@context": ["https://www.w3.org/ns/credentials/v2"],
+      id: `urn:sous:mandate:${mandate.id}`,
+      type: ["VerifiableCredential", "SousMandateCredential"],
+      issuer: { id: did, name: mandate.buyer },
+      validFrom: isoSec(now), validUntil: isoSec(until),
+      credentialSubject: { id: `urn:sous:agent:${mandate.agent_id}`, mandate },
+    };
+    const credential = await jws(vc, "vc+jwt", { cty: "vc" });
+    const r = await fetch(API + "/mandates/credential", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ credential }) });
+    const body = await r.json();
+    $("result").hidden = false;
+    $("vc").textContent = credential;
+    $("token").textContent = body.agent_credential ? `Agent credential (shown once): ${body.agent_credential.header}` : "";
+    if (!r.ok) {
+      $("headline").innerHTML = "";
+      $("headline").append(Object.assign(document.createElement("strong"), { className: "bad", textContent: "Refused: " }),
+        `${body.error}: ${body.message}`);
+      $("checks").replaceChildren();
+      return;
+    }
+    current = { id: body.mandate.id, credential };
+    await showVerify();
+  } catch (err) {
+    alert(err.message || err);
+  } finally {
+    $("sign").disabled = false;
+  }
+};
+
+async function showVerify() {
+  const v = await (await fetch(API + `/mandates/${encodeURIComponent(current.id)}/verify`)).json();
+  const me = $("did").textContent;
+  const head = $("headline");
+  head.replaceChildren();
+  const strong = document.createElement("strong");
+  strong.className = v.verdict === "valid" ? "ok" : "bad";
+  strong.textContent = `Mandate ${v.mandate_id}: ${v.verdict}`;
+  head.append(strong, document.createElement("br"),
+    `Signed by ${v.issuer.did}${v.issuer.did === me ? " (you)" : ""}, countersigned by the gateway ${v.gateway_signature.did}.`);
+  const li = (ok, text) => Object.assign(document.createElement("li"), { textContent: `${ok ? "✓" : "✗"} ${text}`, className: ok ? "ok" : "bad" });
+  const bs = v.buyer_signature || {};
+  const vu = v.validity.valid_until ? new Date(v.validity.valid_until).toLocaleString() : "no end";
+  $("checks").replaceChildren(
+    li(bs.ok, `Your signature (${bs.alg || "?"}, vc+jwt) verifies with your did:key`),
+    li(v.gateway_signature.ok, "Gateway countersignature (EdDSA, sous-mandate+jws) verifies against /.well-known/jwks.json"),
+    li(v.issuer_authorised && v.issuer_authorised.ok, `Your key may sign for ${bs.ok ? v.issuer_authorised.buyer : "this buyer"} (${(v.issuer_authorised || {}).how || "not registered"})`),
+    li(v.validity.in_window, `Valid ${new Date(v.validity.valid_from).toLocaleString()} to ${vu}`),
+    li(!v.revoked, v.revoked ? "Revoked by a signed statement" : "Not revoked"),
+  );
+  const a = Object.assign(document.createElement("a"), { href: API + `/mandates/${encodeURIComponent(v.mandate_id)}/verify`, textContent: "Full verification report (JSON)" });
+  const more = document.createElement("li");
+  more.append(a);
+  $("checks").append(more);
+  $("revoke").disabled = v.revoked;
+}
+
+$("revoke").onclick = async () => {
+  if (!current || !confirm(`Revoke ${current.id}? The agent can no longer order under it.`)) return;
+  const statement = await jws({ type: "SousMandateRevocation", mandate_id: current.id,
+    credential_sha256: await sha256hex(current.credential), iat: Math.floor(Date.now() / 1000) }, "sous-revocation+jws");
+  const r = await fetch(API + `/mandates/${encodeURIComponent(current.id)}/revoke-credential`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ revocation: statement }) });
+  if (!r.ok) { const b = await r.json(); alert(`${b.error}: ${b.message}`); return; }
+  await showVerify();
+};
+
+if (!window.isSecureContext || !crypto.subtle) {
+  $("did").textContent = "WebCrypto needs https (or localhost).";
+  $("sign").disabled = true;
+} else {
+  showKey().catch((e) => { $("did").textContent = String(e); });
+}
+</script>
+</body>
+</html>

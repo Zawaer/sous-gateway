@@ -347,6 +347,73 @@ def revoke_mandate(mandate_id: str, d: Decision):
     return S.revoke_mandate(mandate_id, d.by)
 
 
+# --- buyer-signed mandates (W3C Verifiable Credentials) ---------------------
+
+class CredentialIn(BaseModel):
+    credential: str  # compact JWS, typ vc+jwt
+
+
+class RevocationIn(BaseModel):
+    revocation: str  # compact JWS, typ sous-revocation+jws
+
+
+class BuyerKeyIn(BaseModel):
+    did: str
+    by: str
+
+
+@app.post("/mandates/credential", tags=["mandates"])
+def issue_credential_mandate(c: CredentialIn, mint_agent_credential: bool | None = None):
+    """The buyer's human signs the mandate as a W3C Verifiable Credential (vc+jwt, ES256 or EdDSA, issuer a
+    did:key); the gateway verifies it, checks the key may speak for the buyer and countersigns it.
+
+    The buyer's key is the authorisation here, so no approver code: the first credential for a buyer with no
+    registered keys pins its key (trust on first use). See docs/PROTOCOL.md "Buyer-signed mandates"."""
+    return S.issue_credential_mandate(c.credential, mint_agent_credential)
+
+
+@app.get("/mandates/{mandate_id}/verify", tags=["mandates", "trust"])
+def verify_mandate(mandate_id: str):
+    """Who authorised this mandate, and does it still hold: the buyer's VC signature (if buyer-signed), the gateway's
+    countersignature, whether the issuer key may speak for the buyer, the validity window and revocation."""
+    return S.verify_mandate(mandate_id)
+
+
+@app.post("/mandates/{mandate_id}/revoke-credential", tags=["mandates"])
+def revoke_credential_mandate(mandate_id: str, r: RevocationIn):
+    """The buyer revokes their own mandate with a statement signed by the same key that issued it."""
+    return S.revoke_by_credential(mandate_id, r.revocation)
+
+
+@app.get("/buyers/{buyer}/keys", tags=["mandates", "trust"])
+def buyer_keys(buyer: str):
+    """The did:keys that may sign mandates for this buyer (pinned on first use or registered by an approver)."""
+    from . import credentials
+    return {"buyer": buyer, "keys": credentials.buyer_keys(buyer), "trust_on_first_use": config.BUYER_KEY_TOFU}
+
+
+@app.post("/buyers/{buyer}/keys", tags=["mandates", "trust"], dependencies=[Depends(require_approver)])
+def add_buyer_key(buyer: str, k: BuyerKeyIn):
+    """Human-only: register a did:key that may sign mandates for this buyer (turns off trust on first use for it)."""
+    from . import credentials
+    try:
+        row = credentials.add_buyer_key(buyer, k.did, "approver", k.by)
+    except credentials.CredentialError as e:
+        raise S.GatewayError(e.code, e.message, e.status) from None
+    store.audit("buyer.key_registered", k.by, "human", buyer, buyer, {"did": row["did"]})
+    return {"buyer": buyer, "keys": credentials.buyer_keys(buyer)}
+
+
+@app.delete("/buyers/{buyer}/keys/{did}", tags=["mandates", "trust"], dependencies=[Depends(require_approver)])
+def remove_buyer_key(buyer: str, did: str, by: str):
+    """Human-only: remove a key. Mandates it signed stop verifying (they can't be used for quotes or orders)."""
+    from . import credentials
+    if not credentials.remove_buyer_key(buyer, did):
+        raise HTTPException(404, f"{did} is not a key of buyer {buyer}.")
+    store.audit("buyer.key_removed", by, "human", buyer, buyer, {"did": did})
+    return {"buyer": buyer, "keys": credentials.buyer_keys(buyer)}
+
+
 # --- standing orders --------------------------------------------------------
 
 class RenewRequest(BaseModel):

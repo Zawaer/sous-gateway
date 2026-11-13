@@ -41,7 +41,10 @@ APPROVER_CODE = env("APPROVER_CODE", "")
 # When "1", every mandate needs agent authentication (Authorization: Bearer) for quotes, orders and renewals,
 # not only those with require_agent_auth=true. See sous/agent_auth.py.
 REQUIRE_AGENT_AUTH = env("REQUIRE_AGENT_AUTH", "") in ("1", "true", "yes")
-RATE_LIMIT_PER_MIN = int(env("RATE_LIMIT_PER_MIN", "60"))  # POST requests per client IP
+# Buyer-signed mandates (POST /mandates/credential): the first credential for a buyer with no registered keys
+# pins its key (trust on first use). "0" = only keys an approver registered (POST /buyers/{id}/keys).
+BUYER_KEY_TOFU = env("BUYER_KEY_TOFU", "1") in ("1", "true", "yes")
+RATE_LIMIT_PER_MIN =int(env("RATE_LIMIT_PER_MIN", "60"))  # POST requests per client IP
 AIMO_CALLS_PER_MIN = int(env("AIMO_CALLS_PER_MIN", "60"))  # protects our Valio API key
 MAX_CANDIDATES_PER_QUOTE = 200
 # MariaDB (system-versioned state): mysql://user:pass@host:port/db. Empty = local SQLite file.

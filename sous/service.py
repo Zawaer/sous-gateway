@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import agent_auth, aimo, catalog, config, notify, quote as Q, signing, store, substitutes
+from . import agent_auth, aimo, catalog, config, credentials, notify, quote as Q, signing, store, substitutes
 from .mandate import Mandate, evaluate
 
 
@@ -38,14 +38,48 @@ def _now() -> datetime:
 _order_lock = threading.RLock()
 
 
-def _mandate(mandate_id: str) -> Mandate:
+def _signed_mandate(mandate_id: str) -> dict:
+    """The gateway-signed mandate payload; for a buyer-signed mandate the buyer's VC is re-verified too."""
     m = store.get_mandate(mandate_id)
     if not m:
         raise GatewayError("mandate_not_found", f"No mandate {mandate_id}.", 404)
     payload = signing.verify(m.pop("_jws", None) or "", "sous-mandate+jws")
     if payload is None or payload.get("id") != mandate_id:
         raise GatewayError("mandate_signature", f"Mandate {mandate_id}'s signature does not verify.", 409)
-    return Mandate(**payload)  # the signed mandate, not the stored copy
+    if payload.get("credential_sha256"):
+        try:
+            _check_credential(payload)
+        except credentials.CredentialError as e:
+            raise GatewayError("mandate_signature", f"Mandate {mandate_id}'s buyer credential: {e.message}", 409)
+    return payload
+
+
+def _mandate(mandate_id: str) -> Mandate:
+    return Mandate(**_signed_mandate(mandate_id))  # the signed mandate, not the stored copy
+
+
+_BUYER_SIGNED = ("issuer", "credential_sha256")  # extra keys the gateway countersigns for a buyer-signed mandate
+
+
+def _check_credential(payload: dict) -> dict:
+    """The stored VC is the one the gateway countersigned, its signature verifies, its key may still speak for
+    the buyer, and it says what the countersigned mandate says. Returns the parsed credential."""
+    row = credentials.get(payload["id"])
+    if not row or credentials.sha256(row["vc_jwt"]) != payload["credential_sha256"]:
+        raise credentials.CredentialError("credential_missing", "the countersigned credential is missing or changed.")
+    c = credentials.parse_vc(row["vc_jwt"])
+    if c["issuer"] != (payload.get("issuer") or {}).get("did"):
+        raise credentials.CredentialError("credential_issuer", "the issuer differs from the countersigned one.")
+    if not credentials.key_status(c["mandate"].buyer, c["issuer"]):
+        raise credentials.CredentialError("issuer_not_authorised",
+                                          f"{c['issuer']} is no longer registered for buyer {c['mandate'].buyer}.")
+    if _comparable(c["mandate"]) != _comparable(Mandate(**payload)):
+        raise credentials.CredentialError("credential_mismatch", "the mandate differs from what the buyer signed.")
+    return c
+
+
+def _comparable(m: Mandate) -> dict:
+    return m.model_dump(mode="json", exclude={"revoked"})
 
 
 # --- mandates ---------------------------------------------------------------
@@ -96,17 +130,165 @@ def get_mandate(mandate_id: str) -> dict:
     if not m:
         raise GatewayError("mandate_not_found", f"No mandate {mandate_id}.", 404)
     jws = m.pop("_jws")
-    return {"mandate": m, "jws": jws}
+    cred = credentials.get(mandate_id) if m.get("credential_sha256") else None
+    return {"mandate": m, "jws": jws, "issuer": m.get("issuer") or {"did": credentials.gateway_did(), "kind": "gateway"},
+            "credential": cred["vc_jwt"] if cred else None,
+            "revocation": cred["revocation_jws"] if cred else None}
+
+
+def _revoke(payload: dict) -> dict:
+    """Re-sign the mandate as revoked, keeping the buyer-signed fields."""
+    data = {**Mandate(**{**payload, "revoked": True}).model_dump(mode="json"),
+            **{k: payload[k] for k in _BUYER_SIGNED if k in payload}}
+    store.put_mandate(data, signing.sign(data, "sous-mandate+jws"))
+    return data
 
 
 def revoke_mandate(mandate_id: str, by: str) -> dict:
     with _order_lock:  # an order being placed or approved right now sees the mandate before or after, not both
-        m = _mandate(mandate_id)
-        m.revoked = True
-        data = m.model_dump(mode="json")
-        store.put_mandate(data, signing.sign(data, "sous-mandate+jws"))
-    store.audit("mandate.revoked", by, "human", m.id, m.buyer, {})
+        data = _revoke(_signed_mandate(mandate_id))
+    store.audit("mandate.revoked", by, "human", mandate_id, data["buyer"], {})
     return data
+
+
+# --- buyer-signed mandates (W3C Verifiable Credentials, see credentials.py) --
+
+def _cred_error(e: credentials.CredentialError) -> GatewayError:
+    return GatewayError(e.code, e.message, e.status)
+
+
+def issue_credential_mandate(token: str, mint_agent_credential: bool | None = None) -> dict:
+    """Accept a mandate the buyer signed as a VC (vc+jwt): verify it, check its key may speak for the buyer
+    (registered by an approver, or pinned on first use), store it with the VC and countersign it."""
+    with _order_lock:
+        try:
+            c = credentials.parse_vc(token)
+            credentials.check_window(c, _now())
+        except credentials.CredentialError as e:
+            raise _cred_error(e) from None
+        m, did = c["mandate"], c["issuer"]
+        keys = credentials.buyer_keys(m.buyer)
+        pin = not keys
+        if keys and not any(k["did"] == did for k in keys):
+            raise GatewayError("issuer_not_authorised", f"{did} is not a registered key for buyer {m.buyer!r}; "
+                               "an approver can add it at POST /buyers/{buyer}/keys.", 403)
+        if pin and not config.BUYER_KEY_TOFU:
+            raise GatewayError("issuer_not_authorised",
+                               f"Buyer {m.buyer!r} has no registered keys and trust on first use is off.", 403)
+        if pin and any(x["buyer"] == m.buyer for x in store.list_mandates()):
+            raise GatewayError("issuer_not_authorised",
+                               f"Buyer {m.buyer!r} already has gateway-issued mandates, so its first key isn't "
+                               "pinned automatically; an approver must register it (POST /buyers/{buyer}/keys).", 403)
+        prev = credentials.get(m.id)
+        if store.get_mandate(m.id):
+            if prev and prev["vc_sha256"] == c["sha256"]:  # the same credential again: idempotent, mints nothing
+                return {**get_mandate(m.id), "countersigned_by": credentials.gateway_did(), "unchanged": True}
+            if not prev or prev["buyer"] != m.buyer:
+                raise GatewayError("mandate_exists",
+                                   f"Mandate {m.id} exists and wasn't signed for this buyer; use another id.", 409)
+            if c["valid_from"] <= datetime.fromisoformat(prev["valid_from"]):  # no rolling back to an older one
+                raise GatewayError("credential_stale", f"Mandate {m.id} already has a credential valid from "
+                                   f"{prev['valid_from']}; a replacement needs a later validFrom.", 409)
+        if pin:
+            credentials.add_buyer_key(m.buyer, did, "tofu", did)
+            store.audit("buyer.key_pinned", did, "human", m.buyer, m.buyer, {"did": did, "source": "tofu"})
+        data = {**m.model_dump(mode="json"), "issuer": {"did": did, "kind": "buyer"}, "credential_sha256": c["sha256"]}
+        jws = signing.sign(data, "sous-mandate+jws")
+        credentials.put(m.id, {**c, "token": token})
+        store.put_mandate(data, jws)
+    store.audit("mandate.issued", m.issued_by, "human", m.id, m.buyer,
+                {"mandate": data, "issuer": did, "credential_sha256": c["sha256"], "alg": c["header"]["alg"]})
+    out = {"mandate": data, "jws": jws, "issuer": data["issuer"], "credential": token, "revocation": None,
+           "countersigned_by": credentials.gateway_did()}
+    if mint_agent_credential if mint_agent_credential is not None else agent_auth.required(m):
+        out["agent_credential"] = agent_auth.mint(m, m.issued_by)
+    return out
+
+
+def revoke_by_credential(mandate_id: str, revocation: str) -> dict:
+    """The buyer revokes their own mandate with a revocation statement signed by the mandate's issuer key."""
+    with _order_lock:
+        payload = _signed_mandate(mandate_id)
+        row = credentials.get(mandate_id) if payload.get("credential_sha256") else None
+        if not row:
+            raise GatewayError("not_buyer_signed", f"Mandate {mandate_id} was issued by the gateway; "
+                               "revoke it at POST /mandates/{id}/revoke.", 409)
+        try:
+            p = credentials.parse_revocation(revocation, row["issuer"], mandate_id, row["vc_sha256"])
+        except credentials.CredentialError as e:
+            raise _cred_error(e) from None
+        already = bool(payload.get("revoked"))
+        data = payload if already else _revoke(payload)
+        if not row["revocation_jws"]:
+            credentials.set_revocation(mandate_id, revocation)
+    if not already:
+        store.audit("mandate.revoked", row["issuer"], "human", mandate_id, data["buyer"],
+                    {"by": "buyer credential", "issuer": row["issuer"], "reason": p.get("reason")})
+    return {"mandate": data, "revocation": revocation, "already_revoked": already}
+
+
+def verify_mandate(mandate_id: str) -> dict:
+    """Both signature checks, the issuer and the validity window, as a report (for auditors and judges)."""
+    m = store.get_mandate(mandate_id)
+    if not m:
+        raise GatewayError("mandate_not_found", f"No mandate {mandate_id}.", 404)
+    jws = m.pop("_jws")
+    now = _now()
+    payload = signing.verify(jws, "sous-mandate+jws")
+    gw_ok = payload is not None and payload.get("id") == mandate_id
+    p = payload if gw_ok else m
+    out: dict = {
+        "mandate_id": mandate_id,
+        "issuer": p.get("issuer") or {"did": credentials.gateway_did(), "kind": "gateway"},
+        "gateway_signature": {"ok": gw_ok, "typ": "sous-mandate+jws", "alg": "EdDSA", "kid": signing.kid(),
+                              "did": credentials.gateway_did(), "jwks": "/.well-known/jwks.json"},
+    }
+    valid_from, valid_until = None, p.get("valid_until")
+    if p.get("credential_sha256"):
+        row = credentials.get(mandate_id)
+        bs: dict = {"ok": False, "typ": credentials.VC_TYP, "countersigned_sha256": p["credential_sha256"]}
+        try:
+            if not row:
+                raise credentials.CredentialError("credential_missing", "The credential is not stored.")
+            c = credentials.parse_vc(row["vc_jwt"])
+            bs.update(alg=c["header"]["alg"], kid=c["header"]["kid"], issuer=c["issuer"], sha256=c["sha256"],
+                      matches_countersignature=c["sha256"] == p["credential_sha256"],
+                      mandate_matches_credential=gw_ok and _comparable(c["mandate"]) == _comparable(Mandate(**p)))
+            bs["ok"] = bs["matches_countersignature"] and bs["mandate_matches_credential"]
+            valid_from = c["valid_from"].isoformat()
+            valid_until = c["mandate"].valid_until.isoformat() if c["mandate"].valid_until else None
+            key = credentials.key_status(c["mandate"].buyer, c["issuer"])
+            out["issuer_authorised"] = {
+                "ok": key is not None, "buyer": c["mandate"].buyer, "since": key["created_at"] if key else None,
+                "how": None if key is None else
+                {"tofu": "pinned on first use", "approver": "registered by an approver"}.get(key["source"])}
+        except credentials.CredentialError as e:
+            bs["error"] = e.message
+        out["buyer_signature"] = bs
+        out["credential"] = row["vc_jwt"] if row else None
+        if row and row["revocation_jws"]:
+            try:
+                rp = credentials.parse_revocation(row["revocation_jws"], row["issuer"], mandate_id, row["vc_sha256"])
+                out["revocation"] = {"ok": True, "statement": row["revocation_jws"], "iat": rp.get("iat"),
+                                     "reason": rp.get("reason")}
+            except credentials.CredentialError as e:
+                out["revocation"] = {"ok": False, "statement": row["revocation_jws"], "error": e.message}
+    else:
+        out["buyer_signature"] = None
+        out["note"] = ("Issued through the gateway by an approver: the gateway signed on the buyer's behalf. "
+                       "Buyer-signed mandates: POST /mandates/credential.")
+    vf = datetime.fromisoformat(valid_from) if valid_from else None
+    vu = datetime.fromisoformat(valid_until) if valid_until else None
+    if vu is not None and vu.tzinfo is None:
+        vu = vu.replace(tzinfo=config.TZ)
+    out["validity"] = {"valid_from": valid_from, "valid_until": valid_until, "now": now.isoformat(timespec="seconds"),
+                       "in_window": (vf is None or now + credentials.CLOCK_SKEW >= vf) and (vu is None or now <= vu)}
+    out["revoked"] = bool(p.get("revoked"))
+    sigs_ok = gw_ok and (out["buyer_signature"] is None
+                         or (out["buyer_signature"]["ok"] and out.get("issuer_authorised", {}).get("ok", False)))
+    out["verdict"] = ("invalid" if not sigs_ok else "revoked" if out["revoked"]
+                      else "valid" if out["validity"]["in_window"] else "outside_validity")
+    return out
 
 
 # --- search -----------------------------------------------------------------
