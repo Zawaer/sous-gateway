@@ -1,6 +1,6 @@
 # What Sous spent
 
-_Generated from [evals/costs.yaml](../evals/costs.yaml) by `scripts/costs.py`, prorated to Sat 14.11 01:38 (Helsinki)._ Every paid model or API run and every running service is in the ledger; "unknown" means the price still has to be read from that provider's console.
+_Generated from [evals/costs.yaml](../evals/costs.yaml) by `scripts/costs.py`, prorated to Sat 14.11 01:39 (Helsinki)._ Every paid model or API run and every running service is in the ledger; "unknown" means the price still has to be read from that provider's console.
 
 ## Totals per provider (model usage)
 
@@ -16,7 +16,7 @@ _Generated from [evals/costs.yaml](../evals/costs.yaml) by `scripts/costs.py`, p
 
 | Provider | What | Since | Running | Cost so far | Note |
 |---|---|---|---|---|---|
-| aiven | Valkey, Developer plan (shared Valio budget) | 2026-11-13 22:30 | 3.1 h | $0.06 | paid from Aiven's $50 trial credits |
+| aiven | Valkey, Developer plan (shared Valio budget) | 2026-11-13 22:30 | 3.2 h | $0.06 | paid from Aiven's $50 trial credits |
 | verda | CPU instance CPU.4V.16G, prod (FIN-01) | 2026-11-13 21:15 | 4.4 h | $0.21 | Verda on-demand price from the instance record |
 | verda | CPU instance CPU.4V.16G, staging (FIN-01) | 2026-11-13 21:40 | 4.0 h | $0.19 | Verda on-demand price from the instance record |
 | craci | CI runners (test, docker, smoke, eval, llm-eval) | 2026-11-13 21:40 | 4.0 h | unknown | paid from CRACI's per-team compute credits; see the CRACI dashboard |
