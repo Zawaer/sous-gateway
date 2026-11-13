@@ -22,6 +22,7 @@ Pitch line: *"AI purchasing agents carry a signed mandate from their human, and 
 - Approvals: approve/reject with a note; late approvals expire if the cut-off has passed.
 - Audit log: append-only, hash-chained, `/audit/verify`.
 - REST (`/docs`) and MCP (`/mcp`) expose the same operations.
+- Reference buyer (`/buyer/`): fill an editable purchase request, review product matches and ranked substitutes, verify the signed quote against JWKS, submit under a mandate, and check the signed receipt or follow a human approval. Runs in a browser without a model API key. See [buyer setup](../buyer/README.md).
 - Good / better / best substitutes (same category, claims and allergen rules kept; compromises listed).
 - MariaDB storage with system-versioned `mandate`, `purchase_order` and `audit_event`: `/orders/{id}/history` shows every version of an order and the mandate AS OF each decision; `/audit/verify` checks the hash chain and MariaDB's history (any edit or delete of an audit row shows up). SQLite remains the fallback when `VALTAKIRJA_DB_URL` is unset.
 - Hardening: approver code for human actions, per-IP rate limit, global cap on Valio API calls.
@@ -29,7 +30,6 @@ Pitch line: *"AI purchasing agents carry a signed mandate from their human, and 
 
 ## In progress
 - Web UI in `web/` (Rene's agent): approval inbox, orders, audit view, mandate viewer.
-- Demo buyer agent (chat where the chef types the request) — needs an LLM API key in `.env`.
 
 ## Next
 - Public deployment for judges.
