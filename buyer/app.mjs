@@ -15,7 +15,8 @@ const statuses = {
   refused: 'Refused by the gateway', rejected: 'Rejected by the approver', expired: 'Order expired',
 };
 
-$('gateway').value = new URLSearchParams(location.search).get('gateway') || location.origin;
+const pageParams = new URLSearchParams(location.search);
+$('gateway').value = pageParams.get('gateway') || location.origin;
 $('delivery').min = helsinkiDate();
 
 function element(tag, text, className) {
@@ -221,6 +222,11 @@ async function renderOrder(gateway, order, quote) {
   $('approvals').hidden = order.status !== 'pending_approval';
 }
 
+function showOrder(gateway, order, quote) {
+  state.order = { gateway, id: order.id, quote };
+  return renderOrder(gateway, order, quote);
+}
+
 $('interpret').addEventListener('click', fillRequest);
 $('intent').addEventListener('keydown', (event) => {
   if (event.key !== 'Enter') return;
@@ -296,9 +302,13 @@ $('submit-order').addEventListener('click', () => {
       $('submit-order').textContent = 'Retry order status';
       throw new Error('The gateway returned an unexpected order. Retry this same submission to recover its status.');
     }
-    state.order = { gateway, id: order.id, quote };
+    const url = new URL(location.href);
+    url.searchParams.set('order', order.id);
+    if (gateway.base === location.origin) url.searchParams.delete('gateway');
+    else url.searchParams.set('gateway', gateway.base);
+    history.replaceState(null, '', url);
     clearQuote();
-    await renderOrder(gateway, order, quote);
+    await showOrder(gateway, order, quote);
     $('order-panel').scrollIntoView({ block: 'start' });
   });
 });
@@ -306,7 +316,19 @@ $('submit-order').addEventListener('click', () => {
 $('refresh').addEventListener('click', () => {
   run(async () => {
     const { gateway, id, quote } = state.order;
-    const order = await gateway.request(`/orders/${encodeURIComponent(id)}`);
+    const order = await gateway.getOrder(id);
     await renderOrder(gateway, order, quote);
   });
 });
+
+const linkedOrder = pageParams.get('order');
+if (linkedOrder) {
+  run(async () => {
+    const gateway = new Gateway($('gateway').value);
+    const order = await gateway.getOrder(linkedOrder);
+    const quote = await gateway.getQuote(order.quote_id);
+    await showOrder(gateway, order, quote);
+    $('api-link').href = `${gateway.base}/docs`;
+    $('order-panel').scrollIntoView({ block: 'start' });
+  });
+}

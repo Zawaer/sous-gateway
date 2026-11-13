@@ -137,3 +137,21 @@ test('requires the current status, approval details and update time to match a n
   const pendingToken = token({ ...payload, status: 'pending_approval', approval: null }, 'order');
   await assert.rejects(client.receipt({ ...order, receipt_jws: pendingToken }, quote));
 });
+
+test('reopens an order using its original signed quote and rejects mismatched IDs', async () => {
+  const order = { id: 'PO-1', quote_id: quote.id };
+  const responses = {
+    '/orders/PO-1': order, '/orders/PO-2': order,
+    '/quotes/Q-1': { quote, jws: token(quote, 'quote') },
+    '/quotes/Q-2': { quote, jws: token(quote, 'quote') },
+    '/.well-known/jwks.json': jwks,
+  };
+  const client = new Gateway('https://example.test', async (url, init) => {
+    assert.equal(init.method, 'GET');
+    return Response.json(responses[new URL(url).pathname]);
+  });
+  const reopened = await client.getOrder(order.id);
+  assert.deepEqual(await client.getQuote(reopened.quote_id), quote);
+  await assert.rejects(client.getOrder('PO-2'), /different order/);
+  await assert.rejects(client.getQuote('Q-2'), /different signed quote/);
+});

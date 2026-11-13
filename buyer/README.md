@@ -14,4 +14,6 @@ The optional English input fills fields for a single need in the form `quantity 
 
 The browser verifies mandate and quote JWS payloads against the gateway's JWKS. Use a trusted gateway URL to establish whose public keys you are using. The browser shows the signed quote and submits only after the buyer clicks the order or approval button. The gateway computes the authoritative order outcome. Submissions use one idempotency key per quote and can be retried after an uncertain response while the page is open. When approval changes the current status, the buyer identifies a receipt that signs the original decision.
 
+After a submission, the buyer URL keeps the order ID in the `order` query parameter. Reopen that URL to check the status and verify the receipt against the original signed quote. **Refresh status** checks the same order again.
+
 Run the isolated tests with `node --test buyer/buyer.test.mjs` on Node 22 or newer.

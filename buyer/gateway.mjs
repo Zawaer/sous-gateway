@@ -117,6 +117,19 @@ export class Gateway {
     });
   }
 
+  async getOrder(id) {
+    const order = await this.request(`/orders/${encodeURIComponent(id)}`);
+    if (order.id !== id || !order.quote_id) throw new Error('The gateway returned a different order.');
+    return order;
+  }
+
+  async getQuote(id) {
+    const envelope = await this.request(`/quotes/${encodeURIComponent(id)}`);
+    const quote = await this.signed(envelope, 'quote');
+    if (quote.id !== id) throw new Error('The gateway returned a different signed quote.');
+    return quote;
+  }
+
   async receipt(order, quote) {
     const signed = await verifyJws(order.receipt_jws, await this.request('/.well-known/jwks.json'), 'valtakirja-order+jws');
     const hasDecisionSnapshot = Object.hasOwn(signed, 'approval') || Object.hasOwn(signed, 'updated_at');
