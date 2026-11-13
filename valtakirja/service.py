@@ -185,7 +185,7 @@ def _request_quote(req: QuoteRequest) -> dict:
     return {"quote": body, "jws": jws}
 
 
-def _evaluate(mandate: Mandate, agent_id: str, q: dict, now: datetime, extra_findings=None):
+def _evaluate(mandate: Mandate, agent_id: str, q: dict, now: datetime):
     uncovered: dict[str, float] = {}  # per unit: litres and kilos don't add up
     for g in q["uncovered"]:
         u = g.get("unit") or (g.get("item") or {}).get("unit") or "SALES_UNIT"
@@ -193,8 +193,7 @@ def _evaluate(mandate: Mandate, agent_id: str, q: dict, now: datetime, extra_fin
     subs = {l["product_id"]: l["substitute_for"] for l in q["lines"] if l.get("substitute_for")}
     return evaluate(mandate, agent_id, q["lines"], requested_date=date.fromisoformat(q["requested_delivery_date"]),
                     substitute_for=subs, uncovered=uncovered,
-                    spent_today_eur=store.spent_today(mandate.id, now.date().isoformat()), now=now,
-                    extra_findings=extra_findings)
+                    spent_today_eur=store.spent_today(mandate.id, now.date().isoformat()), now=now)
 
 
 def _refresh_cutoffs(q: dict, now: datetime) -> None:
@@ -209,18 +208,16 @@ def _refresh_cutoffs(q: dict, now: datetime) -> None:
 
 # --- orders -----------------------------------------------------------------
 
-def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: str | None = None,
-                extra_findings=None) -> dict:
-    """`extra_findings` (list of mandate.Finding) join the mandate's own; standing.py passes drift findings."""
+def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: str | None = None) -> dict:
     with _order_lock:
-        order, mandate = _place_order(agent_id, mandate_id, quote_id, idempotency_key, extra_findings)
+        order, mandate = _place_order(agent_id, mandate_id, quote_id, idempotency_key)
     if mandate is not None and order["decision"]["outcome"] in ("notify", "ask"):
         notify.send(f"order.{order['decision']['outcome']}", order, mandate)  # FYI / approval request; never blocks
     return order
 
 
 def _place_order(agent_id: str, mandate_id: str, quote_id: str,
-                 idempotency_key: str | None, extra_findings=None) -> tuple[dict, Mandate | None]:
+                 idempotency_key: str | None) -> tuple[dict, Mandate | None]:
     if idempotency_key and (prev := store.order_by_idempotency_key(idempotency_key)):
         if prev["agent_id"] != agent_id or prev["mandate_id"] != mandate_id or prev["quote_id"] != quote_id:
             raise GatewayError("idempotency_key_reused",
@@ -247,7 +244,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str,
         raise GatewayError("quote_expired", f"Quote {quote_id} expired at {q['expires_at']}; ask for a new one.", 409)
 
     _refresh_cutoffs(q, now)
-    outcome, findings = _evaluate(mandate, agent_id, q, now, extra_findings)
+    outcome, findings = _evaluate(mandate, agent_id, q, now)
     status = {"silent": "ordered", "notify": "ordered", "ask": "pending_approval", "block": "refused"}[outcome]
     oid = _id("PO")
     order = {

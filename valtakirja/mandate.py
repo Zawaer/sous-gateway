@@ -73,9 +73,7 @@ def evaluate(
     need_unit: str | None = None,
     spent_today_eur: float = 0.0,
     now: datetime,
-    extra_findings: list[Finding] | None = None,
 ) -> tuple[Tier, list[Finding]]:
-    """`extra_findings` are checks made outside the mandate (e.g. standing-order drift); they count like any rule."""
     f: list[Finding] = []
 
     def add(rule, outcome, message, pid=None):
@@ -174,7 +172,6 @@ def evaluate(
             add("price.comparison_cap", "ask",
                 f"{name} costs €{cp['ex_vat']:.2f}/{cp['per']}, above the €{cap:.2f} cap.", pid)
 
-    f.extend(extra_findings or [])
     outcome: Tier = max((x.outcome for x in f), key=_RANK.__getitem__, default="silent")
     if outcome in ("silent", "notify"):
         add("mandate.ok", outcome, f"Within mandate {mandate.id}: €{total:,.2f} ex VAT, all checks passed.")
