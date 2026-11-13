@@ -265,9 +265,16 @@ def verify_prompt(lines: list[tuple[int, ReadItem, str]]) -> str:
     rows = "\n".join(f'- index {i}: "{it.text_as_written}" read as quantity={it.quantity} unit={it.unit}'
                      + (f" delivered={it.delivered_quantity}" if it.delivered_quantity is not None else "")
                      + f" (confidence {it.confidence:.2f}; why re-check: {why})" for i, it, why in lines)
+    loose = next((why for _, _, why in lines if why.startswith("the page says")), None)
+    pen = "" if not loose else f"""
+A handwritten correction on the page ({loose.split("'")[1]}) is not applied to any row yet. Find where it is
+written: next to which row, in which column, and whether a printed number there is struck through. Apply it to
+THAT row only (delivered_quantity = ordered - missing) and add it to that row's text_as_written after " | ".
+Leave the other rows as they are. If you cannot tell which row it belongs to, set confidence below 0.6.
+"""
     return f"""Look at the same image again. These lines need a careful second reading:
 {rows}
-
+{pen}
 For each one, read the line on the image again, character by character: the digits, the decimal comma, the
 unit. Return ONLY one JSON object: {{"lines": [{{"index": int, "text_as_written": str, "quantity": number|null,
 "unit": str|null, "delivered_quantity": number|null, "confidence": number, "note": str|null}}]}}
@@ -515,8 +522,16 @@ def read_order_image(src: str | Path | bytes, kind_hint: str | None = None, llm=
             vr.rechecked.append({"index": i, "why": why, "before": before,
                                  "after": new.model_dump(include=set(before))})
     # the page's loose shortfall counts as applied once the second look moved it onto a row
-    applied = any(c["after"].get("delivered_quantity") != c["before"].get("delivered_quantity") for c in vr.rechecked)
+    # (the changed row must also say where it saw the note, so a guess at a row is not taken for a fix)
+    applied = any(c["after"].get("delivered_quantity") != c["before"].get("delivered_quantity")
+                  and _SHORTFALL.search(c["after"].get("text_as_written") or "") for c in vr.rechecked)
+    had_loose = bool(page)
     page = {} if applied else page_check(rd, vr.ignored)
+    if had_loose and not applied:
+        # a row the second look changed for the loose note without showing the note on it is a guess
+        for c in vr.rechecked:
+            if c["after"].get("delivered_quantity") != c["before"].get("delivered_quantity"):
+                page[c["index"]] = "delivered changed for a loose page note without showing it on the row"
     for i, it in enumerate(rd.items):
         why = cross_check(it, rd.kind) or page.get(i)
         if why:

@@ -1,0 +1,4214 @@
+{
+ "nvidia:nvidia/nemotron-3.5-super-vl-120b-a12b v3": {
+  "variant": "v3",
+  "model": "nvidia:nvidia/nemotron-3.5-super-vl-120b-a12b",
+  "summary": {
+   "pages": 24,
+   "kind_acc": 1.0,
+   "date_acc": 1.0,
+   "item_recall": 1.0,
+   "item_precision": 0.969,
+   "qty_unit_exact": 1.0,
+   "delivered_exact": 1.0,
+   "dish_recall": 1.0,
+   "portions_exact": 1.0,
+   "auto_correct": 1.0,
+   "silent_errors": 0,
+   "traps_ok": "6/6",
+   "invalid_json_pages": 0,
+   "json_repairs": 0,
+   "second_looks": 0,
+   "calls": 24,
+   "latency_ms_mean": 4936,
+   "latency_ms_max": 23455,
+   "prompt_tokens": 67260,
+   "completion_tokens": 9970
+  },
+  "cases": [
+   {
+    "file": "images/01_order_handwritten_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 7,
+    "items_found": 7,
+    "items_read": 7,
+    "items_real": 7,
+    "qty_unit_ok": 7,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 7,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 5414,
+    "calls": 1,
+    "prompt_tokens": 2883,
+    "completion_tokens": 559,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "maito laktoositon 40 l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 40.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "voi 5 kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 5.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "kerma 10 l",
+       "name_fi": "kerma",
+       "name_en": "cream",
+       "quantity": 10.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "kananmunat 360 kpl",
+       "name_fi": "kananmuna",
+       "name_en": "egg",
+       "quantity": 360.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "perunat 25 kg",
+       "name_fi": "peruna",
+       "name_en": "potato",
+       "quantity": 25.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "jauheliha 12 kg",
+       "name_fi": "jauheliha",
+       "name_en": "minced meat",
+       "quantity": 12.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "tomaattimurska 6 kg",
+       "name_fi": "tomaattimurska",
+       "name_en": "tomato puree",
+       "quantity": 6.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-16",
+     "notes": "Heading: 'Tilaus - toimitus ma 16.11.'; signature: '- Ville'",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/02_order_abbrev_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 6,
+    "items_found": 6,
+    "items_read": 7,
+    "items_real": 6,
+    "qty_unit_ok": 6,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 6,
+    "silent_errors": 0,
+    "traps": 2,
+    "traps_ok": 2,
+    "problems": [],
+    "error": null,
+    "latency_ms": 6093,
+    "calls": 1,
+    "prompt_tokens": 2999,
+    "completion_tokens": 616,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "kevytmaito 6 ltk",
+       "name_fi": "kevytmaito",
+       "name_en": "low-fat milk",
+       "quantity": 6.0,
+       "unit": "ltk",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "appelsiinimehu 12 plo",
+       "name_fi": "appelsiinimehu",
+       "name_en": "orange juice",
+       "quantity": 12.0,
+       "unit": "plo",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "kahvi 8 pkt",
+       "name_fi": "kahvi",
+       "name_en": "coffee",
+       "quantity": 8.0,
+       "unit": "pkt",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "jogurtti 4 kg",
+       "name_fi": null,
+       "name_en": null,
+       "quantity": null,
+       "unit": null,
+       "delivered_quantity": null,
+       "confidence": 0.0,
+       "note": "crossed-out line, cancelled; check: no quantity read"
+      },
+      {
+       "text_as_written": "ruokakerma 2,5 l",
+       "name_fi": "ruokakerma",
+       "name_en": "cooking cream",
+       "quantity": 2.5,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.9,
+       "note": null
+      },
+      {
+       "text_as_written": "ruisleipä 20 kpl",
+       "name_fi": "ruisleipä",
+       "name_en": "rye bread",
+       "quantity": 20.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.9,
+       "note": null
+      },
+      {
+       "text_as_written": "sipuli 10 kg",
+       "name_fi": "sipuli",
+       "name_en": "onion",
+       "quantity": 10.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.9,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": null,
+     "notes": "Heading: Kylmiö / tilattavat. Line 'jogurtti 4 kg' is crossed out and cancelled. One line between 'ruisleipä 20 kpl' and 'sipuli 10 kg' is obscured by grey smudges and unreadable.",
+     "unreadable": [
+      "line between 'ruisleipä 20 kpl' and 'sipuli 10 kg': obscured by grey smudges, unreadable"
+     ]
+    },
+    "second_look": [],
+    "flags": [
+     {
+      "index": 3,
+      "text_as_written": "jogurtti 4 kg",
+      "why": "no quantity read"
+     }
+    ]
+   },
+   {
+    "file": "images/03_order_printed_sv.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 5,
+    "items_found": 5,
+    "items_read": 5,
+    "items_real": 5,
+    "qty_unit_ok": 5,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 5,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 3902,
+    "calls": 1,
+    "prompt_tokens": 2759,
+    "completion_tokens": 434,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "Mjölk laktosfri | 30 l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 30.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Smör | 4 kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 4.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Vispgrädde | 5 l",
+       "name_fi": "kuohukerma",
+       "name_en": "whipping cream",
+       "quantity": 5.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Ägg | 180 st",
+       "name_fi": "kananmuna",
+       "name_en": "egg",
+       "quantity": 180.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Potatis, fast | 20 kg",
+       "name_fi": "peruna, kiinteä",
+       "name_en": "potato, firm",
+       "quantity": 20.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-17",
+     "notes": "Restaurant Sjöbris — Beställning; Leverans: tisdag 17.11.2026",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/04_order_handwritten_en.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 4,
+    "items_found": 4,
+    "items_read": 4,
+    "items_real": 4,
+    "qty_unit_ok": 4,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 4,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 2508,
+    "calls": 1,
+    "prompt_tokens": 2552,
+    "completion_tokens": 334,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "lactose-free milk 1000 l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 1000.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.9,
+       "note": null
+      },
+      {
+       "text_as_written": "butter 2.5 kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 2.5,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.9,
+       "note": null
+      },
+      {
+       "text_as_written": "eggs 90 pcs",
+       "name_fi": "kananmuna",
+       "name_en": "eggs",
+       "quantity": 90.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.9,
+       "note": null
+      },
+      {
+       "text_as_written": "whipping cream 6 l",
+       "name_fi": "kuohukerma",
+       "name_en": "whipping cream",
+       "quantity": 6.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.9,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-16",
+     "notes": "Order for Monday (Hotel Aurora)",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/05_menu_printed_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 0,
+    "items_found": 0,
+    "items_read": 0,
+    "items_real": 0,
+    "qty_unit_ok": 0,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 3,
+    "dishes_found": 3,
+    "portions_ok": 3,
+    "auto_correct": 0,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 3016,
+    "calls": 1,
+    "prompt_tokens": 2844,
+    "completion_tokens": 220,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "menu",
+     "items": [],
+     "dishes": [
+      {
+       "name": "Lohikeitto",
+       "portions": 80,
+       "day": "Ma 16.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Lasagne",
+       "portions": 120,
+       "day": "Ti 17.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Karjalanpaisti",
+       "portions": 100,
+       "day": "Ke 18.11.",
+       "confidence": 0.95
+      }
+     ],
+     "delivery_date": "2026-11-16",
+     "notes": "Ruokalista viikko 47. Henkilöstöravintola Kaarna · raaka-aineet toimitettava ma 16.11. Kaikki ruoat laktoosittomia. Lisäkkeet: salaatti, leipä.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/06_menu_handwritten_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 0,
+    "items_found": 0,
+    "items_read": 0,
+    "items_real": 0,
+    "qty_unit_ok": 0,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 3,
+    "dishes_found": 3,
+    "portions_ok": 3,
+    "auto_correct": 0,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 2244,
+    "calls": 1,
+    "prompt_tokens": 2631,
+    "completion_tokens": 189,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "menu",
+     "items": [],
+     "dishes": [
+      {
+       "name": "Kasvissosekeitto",
+       "portions": 60,
+       "day": "la 21.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Joulukinkku + sinappi",
+       "portions": 60,
+       "day": "la 21.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Rosolli",
+       "portions": 60,
+       "day": "la 21.11.",
+       "confidence": 0.95
+      }
+     ],
+     "delivery_date": "2026-11-21",
+     "notes": "Pikkujoulut la 21.11. - 60 hlö",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/07_delivery_note_printed_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 5,
+    "items_found": 5,
+    "items_read": 5,
+    "items_real": 5,
+    "qty_unit_ok": 5,
+    "delivered_truth": 5,
+    "delivered_ok": 5,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 5,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 3674,
+    "calls": 1,
+    "prompt_tokens": 2879,
+    "completion_tokens": 520,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "delivery_note",
+     "items": [
+      {
+       "text_as_written": "Maito laktoositon 1 l | 40 | 24 | l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 40.0,
+       "unit": "l",
+       "delivered_quantity": 24.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Voi 500 g | 5 | 5 | kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 5.0,
+       "unit": "kg",
+       "delivered_quantity": 5.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Kuohukerma 1 l | 10 | 6 | l",
+       "name_fi": "kuohukerma",
+       "name_en": "whipping cream",
+       "quantity": 10.0,
+       "unit": "l",
+       "delivered_quantity": 6.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Kananmuna M | 360 | 360 | kpl",
+       "name_fi": "kananmuna",
+       "name_en": "egg",
+       "quantity": 360.0,
+       "unit": "kpl",
+       "delivered_quantity": 360.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Peruna kiinteä | 25 | 0 | kg",
+       "name_fi": "peruna kiinteä",
+       "name_en": "firm potato",
+       "quantity": 25.0,
+       "unit": "kg",
+       "delivered_quantity": 0.0,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-13",
+     "notes": "LÄHETE / FÖLJESEDEL. Tukku Oy · Asiakas: Hotel Aurora · Toimituspvm 13.11.2026 · Tilaus 88213. Puuttuvat tuotteet toimitetaan erikseen sovittaessa.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/08_delivery_note_photo.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 4,
+    "items_found": 4,
+    "items_read": 4,
+    "items_real": 4,
+    "qty_unit_ok": 4,
+    "delivered_truth": 4,
+    "delivered_ok": 4,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 4,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 3566,
+    "calls": 1,
+    "prompt_tokens": 2873,
+    "completion_tokens": 453,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "delivery_note",
+     "items": [
+      {
+       "text_as_written": "Jauheliha naudan 2 kg | 12 | 8 | kg",
+       "name_fi": "jauheliha naudan",
+       "name_en": "beef mince",
+       "quantity": 12.0,
+       "unit": "kg",
+       "delivered_quantity": 8.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Tomaattimurska | 6 | 6 | kg",
+       "name_fi": "tomaattimurska",
+       "name_en": "tomato puree",
+       "quantity": 6.0,
+       "unit": "kg",
+       "delivered_quantity": 6.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Sipuli kuorittu | 10 | 10 | kg",
+       "name_fi": "sipuli kuorittu",
+       "name_en": "peeled onion",
+       "quantity": 10.0,
+       "unit": "kg",
+       "delivered_quantity": 10.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Ruokakerma 1 l | 5 | 5 | l | puuttuu 3 l!",
+       "name_fi": "ruokakerma",
+       "name_en": "cooking cream",
+       "quantity": 5.0,
+       "unit": "l",
+       "delivered_quantity": 2.0,
+       "confidence": 0.9,
+       "note": "handwritten correction 'puuttuu 3 l!' means 3 l missing, so delivered = 5 - 3 = 2 l"
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-16",
+     "notes": "LÄHETE, Tukku Oy · Ravintola Kaarna · 16.11.2026. Columns: Tuote, Tilattu, Toimitettu, Yks.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/01_order_handwritten_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 7,
+    "items_found": 7,
+    "items_read": 7,
+    "items_real": 7,
+    "qty_unit_ok": 7,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 7,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 4691,
+    "calls": 1,
+    "prompt_tokens": 2883,
+    "completion_tokens": 553,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "maito laktoositon 40 l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 40.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "voi 5 kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 5.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "kerma 10 l",
+       "name_fi": "kerma",
+       "name_en": "cream",
+       "quantity": 10.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "kananmunat 360 kpl",
+       "name_fi": "kananmuna",
+       "name_en": "egg",
+       "quantity": 360.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "perunat 25 kg",
+       "name_fi": "peruna",
+       "name_en": "potato",
+       "quantity": 25.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "jauheliha 12 kg",
+       "name_fi": "jauheliha",
+       "name_en": "minced meat",
+       "quantity": 12.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "tomaattimurska 6 kg",
+       "name_fi": "tomaattimurska",
+       "name_en": "tomato puree",
+       "quantity": 6.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-16",
+     "notes": "Tilaus - toimitus ma 16.11.; - Ville",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/02_order_abbrev_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 6,
+    "items_found": 6,
+    "items_read": 7,
+    "items_real": 6,
+    "qty_unit_ok": 6,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 6,
+    "silent_errors": 0,
+    "traps": 2,
+    "traps_ok": 2,
+    "problems": [],
+    "error": null,
+    "latency_ms": 5340,
+    "calls": 1,
+    "prompt_tokens": 2999,
+    "completion_tokens": 613,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "kevytmaito 6 ltk",
+       "name_fi": "kevytmaito",
+       "name_en": "low-fat milk",
+       "quantity": 6.0,
+       "unit": "ltk",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "appelsiinimehu 12 plo",
+       "name_fi": "appelsiinimehu",
+       "name_en": "orange juice",
+       "quantity": 12.0,
+       "unit": "plo",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "kahvi 8 pkt",
+       "name_fi": "kahvi",
+       "name_en": "coffee",
+       "quantity": 8.0,
+       "unit": "pkt",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "jogurtti 4 kg",
+       "name_fi": null,
+       "name_en": null,
+       "quantity": null,
+       "unit": null,
+       "delivered_quantity": null,
+       "confidence": 0.0,
+       "note": "crossed-out line, cancelled; check: no quantity read"
+      },
+      {
+       "text_as_written": "ruokakerma 2,5 l",
+       "name_fi": "ruokakerma",
+       "name_en": "cooking cream",
+       "quantity": 2.5,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "ruisleipä 20 kpl",
+       "name_fi": "ruisleipä",
+       "name_en": "rye bread",
+       "quantity": 20.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "sipuli 10 kg",
+       "name_fi": "sipuli",
+       "name_en": "onion",
+       "quantity": 10.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": null,
+     "notes": "Heading: Kylmiö / tilattavat. Line 'jogurtti 4 kg' is crossed out (cancelled). One line between 'ruisleipä 20 kpl' and 'sipuli 10 kg' is smudged/unreadable.",
+     "unreadable": [
+      "line between 'ruisleipä 20 kpl' and 'sipuli 10 kg': smudged, unreadable"
+     ]
+    },
+    "second_look": [],
+    "flags": [
+     {
+      "index": 3,
+      "text_as_written": "jogurtti 4 kg",
+      "why": "no quantity read"
+     }
+    ]
+   },
+   {
+    "file": "images/03_order_printed_sv.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 5,
+    "items_found": 5,
+    "items_read": 5,
+    "items_real": 5,
+    "qty_unit_ok": 5,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 5,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 3254,
+    "calls": 1,
+    "prompt_tokens": 2759,
+    "completion_tokens": 434,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "Mjölk laktosfri | 30 l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 30.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Smör | 4 kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 4.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Vispgrädde | 5 l",
+       "name_fi": "kuohukerma",
+       "name_en": "whipping cream",
+       "quantity": 5.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Ägg | 180 st",
+       "name_fi": "kananmuna",
+       "name_en": "egg",
+       "quantity": 180.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Potatis, fast | 20 kg",
+       "name_fi": "peruna, kiinteä",
+       "name_en": "potato, firm",
+       "quantity": 20.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-17",
+     "notes": "Restaurant Sjöbris — Beställning. Leverans: tisdag 17.11.2026.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/04_order_handwritten_en.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 4,
+    "items_found": 4,
+    "items_read": 4,
+    "items_real": 4,
+    "qty_unit_ok": 4,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 4,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 2993,
+    "calls": 1,
+    "prompt_tokens": 2552,
+    "completion_tokens": 338,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "lactose-free milk 1000 l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 1000.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "butter 2.5 kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 2.5,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "eggs 90 pcs",
+       "name_fi": "kananmuna",
+       "name_en": "eggs",
+       "quantity": 90.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "whipping cream 6 l",
+       "name_fi": "kuohukerma",
+       "name_en": "whipping cream",
+       "quantity": 6.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-16",
+     "notes": "Order for Monday (Hotel Aurora)",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/05_menu_printed_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 0,
+    "items_found": 0,
+    "items_read": 0,
+    "items_real": 0,
+    "qty_unit_ok": 0,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 3,
+    "dishes_found": 3,
+    "portions_ok": 3,
+    "auto_correct": 0,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 2568,
+    "calls": 1,
+    "prompt_tokens": 2844,
+    "completion_tokens": 211,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "menu",
+     "items": [],
+     "dishes": [
+      {
+       "name": "Lohikeitto",
+       "portions": 80,
+       "day": "Ma 16.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Lasagne",
+       "portions": 120,
+       "day": "Ti 17.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Karjalanpaisti",
+       "portions": 100,
+       "day": "Ke 18.11.",
+       "confidence": 0.95
+      }
+     ],
+     "delivery_date": "2026-11-16",
+     "notes": "Henkilöstöravintola Kaarna · raaka-aineet toimitettava ma 16.11. Kaikki ruoat laktoosittomia. Lisäkkeet: salaatti, leipä.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/06_menu_handwritten_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 0,
+    "items_found": 0,
+    "items_read": 0,
+    "items_real": 0,
+    "qty_unit_ok": 0,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 3,
+    "dishes_found": 3,
+    "portions_ok": 3,
+    "auto_correct": 0,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 1667,
+    "calls": 1,
+    "prompt_tokens": 2631,
+    "completion_tokens": 189,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "menu",
+     "items": [],
+     "dishes": [
+      {
+       "name": "Kasvissosekeitto",
+       "portions": 60,
+       "day": "la 21.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Joulukinkku + sinappi",
+       "portions": 60,
+       "day": "la 21.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Rosolli",
+       "portions": 60,
+       "day": "la 21.11.",
+       "confidence": 0.95
+      }
+     ],
+     "delivery_date": "2026-11-21",
+     "notes": "Pikkujoulut la 21.11. - 60 hlö",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/07_delivery_note_printed_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 5,
+    "items_found": 5,
+    "items_read": 5,
+    "items_real": 5,
+    "qty_unit_ok": 5,
+    "delivered_truth": 5,
+    "delivered_ok": 5,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 5,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 3751,
+    "calls": 1,
+    "prompt_tokens": 2879,
+    "completion_tokens": 520,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "delivery_note",
+     "items": [
+      {
+       "text_as_written": "Maito laktoositon 1 l | 40 | 24 | l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 40.0,
+       "unit": "l",
+       "delivered_quantity": 24.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Voi 500 g | 5 | 5 | kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 5.0,
+       "unit": "kg",
+       "delivered_quantity": 5.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Kuohukerma 1 l | 10 | 6 | l",
+       "name_fi": "kuohukerma",
+       "name_en": "whipping cream",
+       "quantity": 10.0,
+       "unit": "l",
+       "delivered_quantity": 6.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Kananmuna M | 360 | 360 | kpl",
+       "name_fi": "kananmuna",
+       "name_en": "egg",
+       "quantity": 360.0,
+       "unit": "kpl",
+       "delivered_quantity": 360.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Peruna kiinteä | 25 | 0 | kg",
+       "name_fi": "peruna kiinteä",
+       "name_en": "firm potato",
+       "quantity": 25.0,
+       "unit": "kg",
+       "delivered_quantity": 0.0,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-13",
+     "notes": "LÄHETE / FÖLJESEDEL. Tukku Oy · Asiakas: Hotel Aurora · Toimituspvm 13.11.2026 · Tilaus 88213. Puuttuvat tuotteet toimitetaan erikseen sovittaessa.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/08_delivery_note_photo.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 4,
+    "items_found": 4,
+    "items_read": 4,
+    "items_real": 4,
+    "qty_unit_ok": 4,
+    "delivered_truth": 4,
+    "delivered_ok": 4,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 4,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 3241,
+    "calls": 1,
+    "prompt_tokens": 2873,
+    "completion_tokens": 453,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "delivery_note",
+     "items": [
+      {
+       "text_as_written": "Jauheliha naudan 2 kg | 12 | 8 | kg",
+       "name_fi": "jauheliha naudan",
+       "name_en": "beef mince",
+       "quantity": 12.0,
+       "unit": "kg",
+       "delivered_quantity": 8.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Tomaattimurska | 6 | 6 | kg",
+       "name_fi": "tomaattimurska",
+       "name_en": "tomato puree",
+       "quantity": 6.0,
+       "unit": "kg",
+       "delivered_quantity": 6.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Sipuli kuorittu | 10 | 10 | kg",
+       "name_fi": "sipuli kuorittu",
+       "name_en": "peeled onion",
+       "quantity": 10.0,
+       "unit": "kg",
+       "delivered_quantity": 10.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Ruokakerma 1 l | 5 | 5 | l | puuttuu 3 l!",
+       "name_fi": "ruokakerma",
+       "name_en": "cooking cream",
+       "quantity": 5.0,
+       "unit": "l",
+       "delivered_quantity": 2.0,
+       "confidence": 0.9,
+       "note": "handwritten correction 'puuttuu 3 l!' means 3 l missing, so delivered = 5 - 3 = 2 l"
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-16",
+     "notes": "LÄHETE, Tukku Oy · Ravintola Kaarna · 16.11.2026. Columns: Tuote, Tilattu, Toimitettu, Yks.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/01_order_handwritten_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 7,
+    "items_found": 7,
+    "items_read": 7,
+    "items_real": 7,
+    "qty_unit_ok": 7,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 7,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 23455,
+    "calls": 1,
+    "prompt_tokens": 2883,
+    "completion_tokens": 558,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "maito laktoositon 40 l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 40.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "voi 5 kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 5.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "kerma 10 l",
+       "name_fi": "kerma",
+       "name_en": "cream",
+       "quantity": 10.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "kananmunat 360 kpl",
+       "name_fi": "kananmuna",
+       "name_en": "egg",
+       "quantity": 360.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "perunat 25 kg",
+       "name_fi": "peruna",
+       "name_en": "potato",
+       "quantity": 25.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "jauheliha 12 kg",
+       "name_fi": "jauheliha",
+       "name_en": "minced meat",
+       "quantity": 12.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "tomaattimurska 6 kg",
+       "name_fi": "tomaattimurska",
+       "name_en": "tomato puree",
+       "quantity": 6.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-16",
+     "notes": "Heading: 'Tilaus - toimitus ma 16.11.'; signature '- Ville'",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/02_order_abbrev_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 6,
+    "items_found": 6,
+    "items_read": 7,
+    "items_real": 6,
+    "qty_unit_ok": 6,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 6,
+    "silent_errors": 0,
+    "traps": 2,
+    "traps_ok": 2,
+    "problems": [],
+    "error": null,
+    "latency_ms": 4981,
+    "calls": 1,
+    "prompt_tokens": 2999,
+    "completion_tokens": 619,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "kevytmaito 6 ltk",
+       "name_fi": "kevytmaito",
+       "name_en": "low-fat milk",
+       "quantity": 6.0,
+       "unit": "ltk",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "appelsiiniimehu 12 plo",
+       "name_fi": "appelsiinimehu",
+       "name_en": "orange juice",
+       "quantity": 12.0,
+       "unit": "plo",
+       "delivered_quantity": null,
+       "confidence": 0.9,
+       "note": null
+      },
+      {
+       "text_as_written": "kahvi 8 pkt",
+       "name_fi": "kahvi",
+       "name_en": "coffee",
+       "quantity": 8.0,
+       "unit": "pkt",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "jogurtti 4 kg",
+       "name_fi": null,
+       "name_en": null,
+       "quantity": null,
+       "unit": null,
+       "delivered_quantity": null,
+       "confidence": 0.0,
+       "note": "crossed-out line, cancelled; check: no quantity read"
+      },
+      {
+       "text_as_written": "ruokakerma 2,5 l",
+       "name_fi": "ruokakerma",
+       "name_en": "cooking cream",
+       "quantity": 2.5,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "ruisleipä 20 kpl",
+       "name_fi": "ruisleipä",
+       "name_en": "rye bread",
+       "quantity": 20.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "sipuli 10 kg",
+       "name_fi": "sipuli",
+       "name_en": "onion",
+       "quantity": 10.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": null,
+     "notes": "Heading: Kylmiö / tilattavat. Line 'jogurtti 4 kg' is crossed out and cancelled. One line between 'ruisleipä 20 kpl' and 'sipuli 10 kg' is obscured by grey smudges and unreadable.",
+     "unreadable": [
+      "line between 'ruisleipä 20 kpl' and 'sipuli 10 kg': obscured by grey smudges, unreadable"
+     ]
+    },
+    "second_look": [],
+    "flags": [
+     {
+      "index": 3,
+      "text_as_written": "jogurtti 4 kg",
+      "why": "no quantity read"
+     }
+    ]
+   },
+   {
+    "file": "images/03_order_printed_sv.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 5,
+    "items_found": 5,
+    "items_read": 5,
+    "items_real": 5,
+    "qty_unit_ok": 5,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 5,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 3023,
+    "calls": 1,
+    "prompt_tokens": 2759,
+    "completion_tokens": 436,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "Mjölk laktosfri | 30 l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 30.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Smör | 4 kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 4.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Vispgrädde | 5 l",
+       "name_fi": "kuohukerma",
+       "name_en": "whipping cream",
+       "quantity": 5.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Ägg | 180 st",
+       "name_fi": "kananmuna",
+       "name_en": "egg",
+       "quantity": 180.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Potatis, fast | 20 kg",
+       "name_fi": "peruna, kiinteä",
+       "name_en": "potato, firm",
+       "quantity": 20.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-17",
+     "notes": "Restaurant Sjöbräs order (Beställning). Leverans: tisdag 17.11.2026.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/04_order_handwritten_en.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 4,
+    "items_found": 4,
+    "items_read": 4,
+    "items_real": 4,
+    "qty_unit_ok": 4,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 4,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 3065,
+    "calls": 1,
+    "prompt_tokens": 2552,
+    "completion_tokens": 338,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "lactose-free milk 1000 l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 1000.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "butter 2.5 kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 2.5,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "eggs 90 pcs",
+       "name_fi": "kananmuna",
+       "name_en": "eggs",
+       "quantity": 90.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "whipping cream 6 l",
+       "name_fi": "kuohukerma",
+       "name_en": "whipping cream",
+       "quantity": 6.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-16",
+     "notes": "Order for Monday (Hotel Aurora)",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/05_menu_printed_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 0,
+    "items_found": 0,
+    "items_read": 0,
+    "items_real": 0,
+    "qty_unit_ok": 0,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 3,
+    "dishes_found": 3,
+    "portions_ok": 3,
+    "auto_correct": 0,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 3623,
+    "calls": 1,
+    "prompt_tokens": 2844,
+    "completion_tokens": 220,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "menu",
+     "items": [],
+     "dishes": [
+      {
+       "name": "Lohikeitto",
+       "portions": 80,
+       "day": "Ma 16.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Lasagne",
+       "portions": 120,
+       "day": "Ti 17.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Karjalanpaisti",
+       "portions": 100,
+       "day": "Ke 18.11.",
+       "confidence": 0.95
+      }
+     ],
+     "delivery_date": "2026-11-16",
+     "notes": "Ruokalista viikko 47. Henkilöstöravintola Kaarna · raaka-aineet toimitettava ma 16.11. Kaikki ruoat laktoosittomia. Lisäkkeet: salaatti, leipä.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/06_menu_handwritten_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 0,
+    "items_found": 0,
+    "items_read": 0,
+    "items_real": 0,
+    "qty_unit_ok": 0,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 3,
+    "dishes_found": 3,
+    "portions_ok": 3,
+    "auto_correct": 0,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 15545,
+    "calls": 1,
+    "prompt_tokens": 2631,
+    "completion_tokens": 189,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "menu",
+     "items": [],
+     "dishes": [
+      {
+       "name": "Kasvissosekeitto",
+       "portions": 60,
+       "day": "la 21.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Joulukinkku + sinappi",
+       "portions": 60,
+       "day": "la 21.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Rosolli",
+       "portions": 60,
+       "day": "la 21.11.",
+       "confidence": 0.95
+      }
+     ],
+     "delivery_date": "2026-11-21",
+     "notes": "Pikkujoulut la 21.11. - 60 hlö",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/07_delivery_note_printed_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 5,
+    "items_found": 5,
+    "items_read": 5,
+    "items_real": 5,
+    "qty_unit_ok": 5,
+    "delivered_truth": 5,
+    "delivered_ok": 5,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 5,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 3409,
+    "calls": 1,
+    "prompt_tokens": 2879,
+    "completion_tokens": 520,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "delivery_note",
+     "items": [
+      {
+       "text_as_written": "Maito laktoositon 1 l | 40 | 24 | l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 40.0,
+       "unit": "l",
+       "delivered_quantity": 24.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Voi 500 g | 5 | 5 | kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 5.0,
+       "unit": "kg",
+       "delivered_quantity": 5.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Kuohukerma 1 l | 10 | 6 | l",
+       "name_fi": "kuohukerma",
+       "name_en": "whipping cream",
+       "quantity": 10.0,
+       "unit": "l",
+       "delivered_quantity": 6.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Kananmuna M | 360 | 360 | kpl",
+       "name_fi": "kananmuna",
+       "name_en": "egg",
+       "quantity": 360.0,
+       "unit": "kpl",
+       "delivered_quantity": 360.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Peruna kiinteä | 25 | 0 | kg",
+       "name_fi": "peruna kiinteä",
+       "name_en": "firm potato",
+       "quantity": 25.0,
+       "unit": "kg",
+       "delivered_quantity": 0.0,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-13",
+     "notes": "LÄHETE / FÖLJESEDEL. Tukku Oy · Asiakas: Hotel Aurora · Toimituspvm 13.11.2026 · Tilaus 88213. Puuttuvat tuotteet toimitetaan erikseen sovittaessa.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/08_delivery_note_photo.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 4,
+    "items_found": 4,
+    "items_read": 4,
+    "items_real": 4,
+    "qty_unit_ok": 4,
+    "delivered_truth": 4,
+    "delivered_ok": 4,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 4,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 3448,
+    "calls": 1,
+    "prompt_tokens": 2873,
+    "completion_tokens": 454,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "delivery_note",
+     "items": [
+      {
+       "text_as_written": "Jauheliha naudan 2 kg | 12 | 8 | kg",
+       "name_fi": "jauheliha naudan",
+       "name_en": "beef mince",
+       "quantity": 12.0,
+       "unit": "kg",
+       "delivered_quantity": 8.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Tomaattimurska | 6 | 6 | kg",
+       "name_fi": "tomaattimurska",
+       "name_en": "tomato puree",
+       "quantity": 6.0,
+       "unit": "kg",
+       "delivered_quantity": 6.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Sipuli kuorittu | 10 | 10 | kg",
+       "name_fi": "sipuli kuorittu",
+       "name_en": "peeled onion",
+       "quantity": 10.0,
+       "unit": "kg",
+       "delivered_quantity": 10.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Ruokakerma 1 l | 5 | 5 | l | puuttuu 3 l!",
+       "name_fi": "ruokakerma",
+       "name_en": "cooking cream",
+       "quantity": 5.0,
+       "unit": "l",
+       "delivered_quantity": 2.0,
+       "confidence": 0.9,
+       "note": "Handwritten correction 'puuttuu 3 l!' means 3 l missing; delivered = 5 - 3 = 2 l."
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-16",
+     "notes": "LÄHETE, Tukku Oy · Ravintola Kaarna · 16.11.2026. Column headers: Tuote, Tilattu, Toimitettu, Yks.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   }
+  ],
+  "ran_at": "2026-11-13T23:47:49Z"
+ },
+ "nvidia:nvidia/nemotron-3.5-super-vl-120b-a12b v3+verify": {
+  "variant": "v3+verify",
+  "model": "nvidia:nvidia/nemotron-3.5-super-vl-120b-a12b",
+  "summary": {
+   "pages": 24,
+   "kind_acc": 1.0,
+   "date_acc": 1.0,
+   "item_recall": 1.0,
+   "item_precision": 0.969,
+   "qty_unit_exact": 1.0,
+   "delivered_exact": 0.926,
+   "dish_recall": 1.0,
+   "portions_exact": 1.0,
+   "auto_correct": 0.935,
+   "silent_errors": 0,
+   "traps_ok": "6/6",
+   "invalid_json_pages": 0,
+   "json_repairs": 0,
+   "second_looks": 6,
+   "calls": 29,
+   "latency_ms_mean": 4296,
+   "latency_ms_max": 11901,
+   "prompt_tokens": 83147,
+   "completion_tokens": 12370
+  },
+  "cases": [
+   {
+    "file": "images/01_order_handwritten_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 7,
+    "items_found": 7,
+    "items_read": 7,
+    "items_real": 7,
+    "qty_unit_ok": 7,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 7,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 4509,
+    "calls": 1,
+    "prompt_tokens": 2883,
+    "completion_tokens": 558,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "maito laktoositon 40 l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 40.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "voi 5 kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 5.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "kerma 10 l",
+       "name_fi": "kerma",
+       "name_en": "cream",
+       "quantity": 10.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "kananmunat 360 kpl",
+       "name_fi": "kananmuna",
+       "name_en": "egg",
+       "quantity": 360.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "perunat 25 kg",
+       "name_fi": "peruna",
+       "name_en": "potato",
+       "quantity": 25.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "jauheliha 12 kg",
+       "name_fi": "jauheliha",
+       "name_en": "minced meat",
+       "quantity": 12.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "tomaattimurska 6 kg",
+       "name_fi": "tomaattimurska",
+       "name_en": "tomato puree",
+       "quantity": 6.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-16",
+     "notes": "Heading: 'Tilaus - toimitus ma 16.11.'; signature '- Ville'",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/02_order_abbrev_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 6,
+    "items_found": 6,
+    "items_read": 7,
+    "items_real": 6,
+    "qty_unit_ok": 6,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 6,
+    "silent_errors": 0,
+    "traps": 2,
+    "traps_ok": 2,
+    "problems": [],
+    "error": null,
+    "latency_ms": 10079,
+    "calls": 2,
+    "prompt_tokens": 6154,
+    "completion_tokens": 1251,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "kevytmaito 6 ltk",
+       "name_fi": "kevytmaito",
+       "name_en": "low-fat milk",
+       "quantity": 6.0,
+       "unit": "ltk",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "appelsiiniimehu 12 plo",
+       "name_fi": "appelsiinimehu",
+       "name_en": "orange juice",
+       "quantity": 12.0,
+       "unit": "plo",
+       "delivered_quantity": null,
+       "confidence": 0.9,
+       "note": "spelling as written: appelsiiniimehu"
+      },
+      {
+       "text_as_written": "kahvi 8 pkt",
+       "name_fi": "kahvi",
+       "name_en": "coffee",
+       "quantity": 8.0,
+       "unit": "pkt",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "jogurtti 4 kg",
+       "name_fi": null,
+       "name_en": null,
+       "quantity": null,
+       "unit": null,
+       "delivered_quantity": null,
+       "confidence": 0.0,
+       "note": "crossed-out line, cancelled; check: no quantity read"
+      },
+      {
+       "text_as_written": "ruokakerma 2,5 l",
+       "name_fi": "ruokakerma",
+       "name_en": "cooking cream",
+       "quantity": 2.5,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "ruisleipä 20 kpl",
+       "name_fi": "ruisleipä",
+       "name_en": "rye bread",
+       "quantity": 20.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "sipuli 10 kg",
+       "name_fi": "sipuli",
+       "name_en": "onion",
+       "quantity": 10.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": null,
+     "notes": "Heading: Kylmiö / tilattavat. Line between ruisleipä and sipuli is smudged/unreadable. Crossed-out line: jogurtti 4 kg.",
+     "unreadable": [
+      "line between ruisleipä 20 kpl and sipuli 10 kg: smudged, unreadable"
+     ]
+    },
+    "second_look": [],
+    "flags": [
+     {
+      "index": 3,
+      "text_as_written": "jogurtti 4 kg",
+      "why": "no quantity read"
+     }
+    ]
+   },
+   {
+    "file": "images/03_order_printed_sv.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 5,
+    "items_found": 5,
+    "items_read": 5,
+    "items_real": 5,
+    "qty_unit_ok": 5,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 5,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 4616,
+    "calls": 1,
+    "prompt_tokens": 2759,
+    "completion_tokens": 434,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "Mjölk laktosfri | 30 l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 30.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Smör | 4 kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 4.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Vispgrädde | 5 l",
+       "name_fi": "kuohukerma",
+       "name_en": "whipping cream",
+       "quantity": 5.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Ägg | 180 st",
+       "name_fi": "kananmuna",
+       "name_en": "egg",
+       "quantity": 180.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Potatis, fast | 20 kg",
+       "name_fi": "peruna, kiinteä",
+       "name_en": "potato, firm",
+       "quantity": 20.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-17",
+     "notes": "Restaurant Sjöbris — Beställning; Leverans: tisdag 17.11.2026",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/04_order_handwritten_en.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 4,
+    "items_found": 4,
+    "items_read": 4,
+    "items_real": 4,
+    "qty_unit_ok": 4,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 4,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 2592,
+    "calls": 1,
+    "prompt_tokens": 2552,
+    "completion_tokens": 338,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "lactose-free milk 1000 l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 1000.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "butter 2.5 kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 2.5,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "eggs 90 pcs",
+       "name_fi": "kananmuna",
+       "name_en": "eggs",
+       "quantity": 90.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "whipping cream 6 l",
+       "name_fi": "kuohukerma",
+       "name_en": "whipping cream",
+       "quantity": 6.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-16",
+     "notes": "Order for Monday (Hotel Aurora)",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/05_menu_printed_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 0,
+    "items_found": 0,
+    "items_read": 0,
+    "items_real": 0,
+    "qty_unit_ok": 0,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 3,
+    "dishes_found": 3,
+    "portions_ok": 3,
+    "auto_correct": 0,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 2762,
+    "calls": 1,
+    "prompt_tokens": 2844,
+    "completion_tokens": 220,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "menu",
+     "items": [],
+     "dishes": [
+      {
+       "name": "Lohikeitto",
+       "portions": 80,
+       "day": "Ma 16.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Lasagne",
+       "portions": 120,
+       "day": "Ti 17.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Karjalanpaisti",
+       "portions": 100,
+       "day": "Ke 18.11.",
+       "confidence": 0.95
+      }
+     ],
+     "delivery_date": "2026-11-16",
+     "notes": "Ruokalista viikko 47. Henkilöstöravintola Kaarna · raaka-aineet toimitettava ma 16.11. Kaikki ruoat laktoosittomia. Lisäkkeet: salaatti, leipä.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/06_menu_handwritten_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 0,
+    "items_found": 0,
+    "items_read": 0,
+    "items_real": 0,
+    "qty_unit_ok": 0,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 3,
+    "dishes_found": 3,
+    "portions_ok": 3,
+    "auto_correct": 0,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 1979,
+    "calls": 1,
+    "prompt_tokens": 2631,
+    "completion_tokens": 189,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "menu",
+     "items": [],
+     "dishes": [
+      {
+       "name": "Kasvissosekeitto",
+       "portions": 60,
+       "day": "la 21.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Joulukinkku + sinappi",
+       "portions": 60,
+       "day": "la 21.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Rosolli",
+       "portions": 60,
+       "day": "la 21.11.",
+       "confidence": 0.95
+      }
+     ],
+     "delivery_date": "2026-11-21",
+     "notes": "Pikkujoulut la 21.11. - 60 hlö",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/07_delivery_note_printed_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 5,
+    "items_found": 5,
+    "items_read": 5,
+    "items_real": 5,
+    "qty_unit_ok": 5,
+    "delivered_truth": 5,
+    "delivered_ok": 5,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 5,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 3654,
+    "calls": 1,
+    "prompt_tokens": 2879,
+    "completion_tokens": 539,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "delivery_note",
+     "items": [
+      {
+       "text_as_written": "Maito laktoositon 1 l | 40 | 24 | l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 40.0,
+       "unit": "l",
+       "delivered_quantity": 24.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Voi 500 g | 5 | 5 | kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 5.0,
+       "unit": "kg",
+       "delivered_quantity": 5.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Kuohukerma 1 l | 10 | 6 | l",
+       "name_fi": "kuohukerma",
+       "name_en": "whipping cream",
+       "quantity": 10.0,
+       "unit": "l",
+       "delivered_quantity": 6.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Kananmuna M | 360 | 360 | kpl",
+       "name_fi": "kananmuna",
+       "name_en": "egg",
+       "quantity": 360.0,
+       "unit": "kpl",
+       "delivered_quantity": 360.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Peruna kiinteä | 25 | 0 | kg",
+       "name_fi": "peruna kiinteä",
+       "name_en": "firm potato",
+       "quantity": 25.0,
+       "unit": "kg",
+       "delivered_quantity": 0.0,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-13",
+     "notes": "LÄHETE / FÖLJESEDEL. Tukku Oy · Asiakas: Hotel Aurora · Toimituspvm 13.11.2026 · Tilaus 88213. Column headers: Tuote, Tilattu, Toimitettu, Yks. Footer remark: Puuttuvat tuotteet toimitetaan erikseen sovittaessa.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/08_delivery_note_photo.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 4,
+    "items_found": 4,
+    "items_read": 4,
+    "items_real": 4,
+    "qty_unit_ok": 4,
+    "delivered_truth": 4,
+    "delivered_ok": 4,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 4,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 3281,
+    "calls": 1,
+    "prompt_tokens": 2873,
+    "completion_tokens": 454,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "delivery_note",
+     "items": [
+      {
+       "text_as_written": "Jauheliha naudan 2 kg | 12 | 8 | kg",
+       "name_fi": "jauheliha naudan",
+       "name_en": "beef mince",
+       "quantity": 12.0,
+       "unit": "kg",
+       "delivered_quantity": 8.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Tomaattimurska | 6 | 6 | kg",
+       "name_fi": "tomaattimurska",
+       "name_en": "tomato puree",
+       "quantity": 6.0,
+       "unit": "kg",
+       "delivered_quantity": 6.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Sipuli kuorittu | 10 | 10 | kg",
+       "name_fi": "sipuli kuorittu",
+       "name_en": "peeled onion",
+       "quantity": 10.0,
+       "unit": "kg",
+       "delivered_quantity": 10.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Ruokakerma 1 l | 5 | 5 | l | puuttuu 3 l!",
+       "name_fi": "ruokakerma",
+       "name_en": "cooking cream",
+       "quantity": 5.0,
+       "unit": "l",
+       "delivered_quantity": 2.0,
+       "confidence": 0.9,
+       "note": "handwritten correction 'puuttuu 3 l!' means 3 l missing, so delivered = 5 - 3 = 2 l"
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-16",
+     "notes": "LÄHETE, Tukku Oy · Ravintola Kaarna · 16.11.2026. Column headers: Tuote, Tilattu, Toimitettu, Yks.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/01_order_handwritten_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 7,
+    "items_found": 7,
+    "items_read": 7,
+    "items_real": 7,
+    "qty_unit_ok": 7,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 7,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 5249,
+    "calls": 1,
+    "prompt_tokens": 2883,
+    "completion_tokens": 559,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "maito laktoositon 40 l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 40.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "voi 5 kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 5.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "kerma 10 l",
+       "name_fi": "kerma",
+       "name_en": "cream",
+       "quantity": 10.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "kananmunat 360 kpl",
+       "name_fi": "kananmuna",
+       "name_en": "egg",
+       "quantity": 360.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "perunat 25 kg",
+       "name_fi": "peruna",
+       "name_en": "potato",
+       "quantity": 25.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "jauheliha 12 kg",
+       "name_fi": "jauheliha",
+       "name_en": "minced meat",
+       "quantity": 12.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "tomaattimurska 6 kg",
+       "name_fi": "tomaattimurska",
+       "name_en": "tomato puree",
+       "quantity": 6.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-16",
+     "notes": "Heading: 'Tilaus - toimitus ma 16.11.'; signature: '- Ville'",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/02_order_abbrev_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 6,
+    "items_found": 6,
+    "items_read": 7,
+    "items_real": 6,
+    "qty_unit_ok": 6,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 6,
+    "silent_errors": 0,
+    "traps": 2,
+    "traps_ok": 2,
+    "problems": [],
+    "error": null,
+    "latency_ms": 11901,
+    "calls": 2,
+    "prompt_tokens": 6154,
+    "completion_tokens": 1320,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "kevytmaito 6 ltk",
+       "name_fi": "kevytmaito",
+       "name_en": "low-fat milk",
+       "quantity": 6.0,
+       "unit": "ltk",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "appelsiinimehu 12 plo",
+       "name_fi": "appelsiinimehu",
+       "name_en": "orange juice",
+       "quantity": 12.0,
+       "unit": "plo",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "kahvi 8 pkt",
+       "name_fi": "kahvi",
+       "name_en": "coffee",
+       "quantity": 8.0,
+       "unit": "pkt",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "jogurtti 4 kg",
+       "name_fi": null,
+       "name_en": null,
+       "quantity": null,
+       "unit": null,
+       "delivered_quantity": null,
+       "confidence": 0.0,
+       "note": "crossed-out line, cancelled; check: no quantity read"
+      },
+      {
+       "text_as_written": "ruokakerma 2,5 l",
+       "name_fi": "ruokakerma",
+       "name_en": "cooking cream",
+       "quantity": 2.5,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "ruisleipä 20 kpl",
+       "name_fi": "ruisleipä",
+       "name_en": "rye bread",
+       "quantity": 20.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "sipuli 10 kg",
+       "name_fi": "sipuli",
+       "name_en": "onion",
+       "quantity": 10.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": null,
+     "notes": "Heading: Kylmiö / tilattavat. Line 'jogurtti 4 kg' is crossed out (cancelled). One line between 'ruisleipä 20 kpl' and 'sipuli 10 kg' is obscured by grey smudges and unreadable.",
+     "unreadable": [
+      "line between 'ruisleipä 20 kpl' and 'sipuli 10 kg': obscured by grey smudges, unreadable"
+     ]
+    },
+    "second_look": [],
+    "flags": [
+     {
+      "index": 3,
+      "text_as_written": "jogurtti 4 kg",
+      "why": "no quantity read"
+     }
+    ]
+   },
+   {
+    "file": "images/03_order_printed_sv.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 5,
+    "items_found": 5,
+    "items_read": 5,
+    "items_real": 5,
+    "qty_unit_ok": 5,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 5,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 3075,
+    "calls": 1,
+    "prompt_tokens": 2759,
+    "completion_tokens": 445,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "Mjölk laktosfri | 30 l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 30.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Smör | 4 kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 4.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Vispgrädde | 5 l",
+       "name_fi": "kuohukerma",
+       "name_en": "whipping cream",
+       "quantity": 5.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Ägg | 180 st",
+       "name_fi": "kananmuna",
+       "name_en": "egg",
+       "quantity": 180.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Potatis, fast | 20 kg",
+       "name_fi": "peruna, kiinteä",
+       "name_en": "potato, firm",
+       "quantity": 20.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-17",
+     "notes": "Restaurant Sjöbris — Beställning. Leverans: tisdag 17.11.2026. Column headings: Vara, Mängd.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/04_order_handwritten_en.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 4,
+    "items_found": 4,
+    "items_read": 4,
+    "items_real": 4,
+    "qty_unit_ok": 4,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 4,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 2594,
+    "calls": 1,
+    "prompt_tokens": 2552,
+    "completion_tokens": 337,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "lactose-free milk 1000 l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 1000.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.9,
+       "note": null
+      },
+      {
+       "text_as_written": "butter 2.5 kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 2.5,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "eggs 90 pcs",
+       "name_fi": "kananmuna",
+       "name_en": "eggs",
+       "quantity": 90.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "whipping cream 6 l",
+       "name_fi": "kuohukerma",
+       "name_en": "whipping cream",
+       "quantity": 6.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-16",
+     "notes": "Order for Monday (Hotel Aurora)",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/05_menu_printed_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 0,
+    "items_found": 0,
+    "items_read": 0,
+    "items_real": 0,
+    "qty_unit_ok": 0,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 3,
+    "dishes_found": 3,
+    "portions_ok": 3,
+    "auto_correct": 0,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 2509,
+    "calls": 1,
+    "prompt_tokens": 2844,
+    "completion_tokens": 220,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "menu",
+     "items": [],
+     "dishes": [
+      {
+       "name": "Lohikeitto",
+       "portions": 80,
+       "day": "Ma 16.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Lasagne",
+       "portions": 120,
+       "day": "Ti 17.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Karjalanpaisti",
+       "portions": 100,
+       "day": "Ke 18.11.",
+       "confidence": 0.95
+      }
+     ],
+     "delivery_date": "2026-11-16",
+     "notes": "Ruokalista viikko 47. Henkilöstöravintola Kaarna · raaka-aineet toimitettava ma 16.11. Kaikki ruoat laktoosittomia. Lisäkkeet: salaatti, leipä.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/06_menu_handwritten_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 0,
+    "items_found": 0,
+    "items_read": 0,
+    "items_real": 0,
+    "qty_unit_ok": 0,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 3,
+    "dishes_found": 3,
+    "portions_ok": 3,
+    "auto_correct": 0,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 2175,
+    "calls": 1,
+    "prompt_tokens": 2631,
+    "completion_tokens": 189,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "menu",
+     "items": [],
+     "dishes": [
+      {
+       "name": "Kasvissosekeitto",
+       "portions": 60,
+       "day": "la 21.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Joulukinkku + sinappi",
+       "portions": 60,
+       "day": "la 21.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Rosolli",
+       "portions": 60,
+       "day": "la 21.11.",
+       "confidence": 0.95
+      }
+     ],
+     "delivery_date": "2026-11-21",
+     "notes": "Pikkujoulut la 21.11. - 60 hlö",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/07_delivery_note_printed_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 5,
+    "items_found": 5,
+    "items_read": 5,
+    "items_real": 5,
+    "qty_unit_ok": 5,
+    "delivered_truth": 5,
+    "delivered_ok": 5,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 5,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 3303,
+    "calls": 1,
+    "prompt_tokens": 2879,
+    "completion_tokens": 520,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "delivery_note",
+     "items": [
+      {
+       "text_as_written": "Maito laktoositon 1 l | 40 | 24 | l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 40.0,
+       "unit": "l",
+       "delivered_quantity": 24.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Voi 500 g | 5 | 5 | kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 5.0,
+       "unit": "kg",
+       "delivered_quantity": 5.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Kuohukerma 1 l | 10 | 6 | l",
+       "name_fi": "kuohukerma",
+       "name_en": "whipping cream",
+       "quantity": 10.0,
+       "unit": "l",
+       "delivered_quantity": 6.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Kananmuna M | 360 | 360 | kpl",
+       "name_fi": "kananmuna",
+       "name_en": "egg",
+       "quantity": 360.0,
+       "unit": "kpl",
+       "delivered_quantity": 360.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Peruna kiinteä | 25 | 0 | kg",
+       "name_fi": "peruna kiinteä",
+       "name_en": "firm potato",
+       "quantity": 25.0,
+       "unit": "kg",
+       "delivered_quantity": 0.0,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-13",
+     "notes": "LÄHETE / FÖLJESEDEL. Tukku Oy · Asiakas: Hotel Aurora · Toimituspvm 13.11.2026 · Tilaus 88213. Puuttuvat tuotteet toimitetaan erikseen sovittaessa.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/08_delivery_note_photo.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 4,
+    "items_found": 4,
+    "items_read": 4,
+    "items_real": 4,
+    "qty_unit_ok": 4,
+    "delivered_truth": 4,
+    "delivered_ok": 3,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 1,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [
+     "ruokakerma: delivered 5.0, truth 2 (conf 0.5)"
+    ],
+    "error": null,
+    "latency_ms": 5102,
+    "calls": 2,
+    "prompt_tokens": 6084,
+    "completion_tokens": 640,
+    "repaired": false,
+    "rechecked": 3,
+    "read": {
+     "kind": "delivery_note",
+     "items": [
+      {
+       "text_as_written": "Jauheliha naudan 2 kg | 12 | 8 | kg",
+       "name_fi": "naudan jauheliha",
+       "name_en": "beef mince",
+       "quantity": 12.0,
+       "unit": "kg",
+       "delivered_quantity": 8.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Tomaattimurska | 6 | 6 | kg",
+       "name_fi": "tomaattimurska",
+       "name_en": "tomato puree",
+       "quantity": 6.0,
+       "unit": "kg",
+       "delivered_quantity": 6.0,
+       "confidence": 0.5,
+       "note": "check: the page says 'puuttuu 3 l' but no row shows it: which row is short?"
+      },
+      {
+       "text_as_written": "Sipuli kuorittu | 10 | 10 | kg",
+       "name_fi": "sipuli kuorittu",
+       "name_en": "peeled onion",
+       "quantity": 10.0,
+       "unit": "kg",
+       "delivered_quantity": 10.0,
+       "confidence": 0.5,
+       "note": "check: the page says 'puuttuu 3 l' but no row shows it: which row is short?"
+      },
+      {
+       "text_as_written": "Ruokakerma 1 l | 5 | 5 | l",
+       "name_fi": "ruokakerma",
+       "name_en": "cooking cream",
+       "quantity": 5.0,
+       "unit": "l",
+       "delivered_quantity": 5.0,
+       "confidence": 0.5,
+       "note": "check: the page says 'puuttuu 3 l' but no row shows it: which row is short?"
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-16",
+     "notes": "LÄHETE, Tukku Oy · Ravintola Kaarna · 16.11.2026. Handwritten red correction on Ruokakerma row: 'puuttuu 3 l!' (3 l missing).",
+     "unreadable": []
+    },
+    "second_look": [
+     {
+      "index": 1,
+      "why": "the page says 'puuttuu 3 l' but no row shows it: which row is short?",
+      "before": {
+       "text_as_written": "Tomaattimurska | 6 | 6 | kg",
+       "quantity": 6.0,
+       "unit": "kg",
+       "delivered_quantity": 6.0,
+       "confidence": 0.95
+      },
+      "after": {
+       "text_as_written": "Tomaattimurska | 6 | 6 | kg",
+       "quantity": 6.0,
+       "unit": "kg",
+       "delivered_quantity": 6.0,
+       "confidence": 0.95
+      }
+     },
+     {
+      "index": 2,
+      "why": "the page says 'puuttuu 3 l' but no row shows it: which row is short?",
+      "before": {
+       "text_as_written": "Sipuli kuorittu | 10 | 10 | kg",
+       "quantity": 10.0,
+       "unit": "kg",
+       "delivered_quantity": 10.0,
+       "confidence": 0.95
+      },
+      "after": {
+       "text_as_written": "Sipuli kuorittu | 10 | 10 | kg",
+       "quantity": 10.0,
+       "unit": "kg",
+       "delivered_quantity": 10.0,
+       "confidence": 0.95
+      }
+     },
+     {
+      "index": 3,
+      "why": "the page says 'puuttuu 3 l' but no row shows it: which row is short?",
+      "before": {
+       "text_as_written": "Ruokakerma 1 l | 5 | 5 | l",
+       "quantity": 5.0,
+       "unit": "l",
+       "delivered_quantity": 5.0,
+       "confidence": 0.95
+      },
+      "after": {
+       "text_as_written": "Ruokakerma 1 l | 5 | 5 | l",
+       "quantity": 5.0,
+       "unit": "l",
+       "delivered_quantity": 5.0,
+       "confidence": 0.95
+      }
+     }
+    ],
+    "flags": [
+     {
+      "index": 1,
+      "text_as_written": "Tomaattimurska | 6 | 6 | kg",
+      "why": "the page says 'puuttuu 3 l' but no row shows it: which row is short?"
+     },
+     {
+      "index": 2,
+      "text_as_written": "Sipuli kuorittu | 10 | 10 | kg",
+      "why": "the page says 'puuttuu 3 l' but no row shows it: which row is short?"
+     },
+     {
+      "index": 3,
+      "text_as_written": "Ruokakerma 1 l | 5 | 5 | l",
+      "why": "the page says 'puuttuu 3 l' but no row shows it: which row is short?"
+     }
+    ]
+   },
+   {
+    "file": "images/01_order_handwritten_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 7,
+    "items_found": 7,
+    "items_read": 7,
+    "items_real": 7,
+    "qty_unit_ok": 7,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 7,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 4096,
+    "calls": 1,
+    "prompt_tokens": 2883,
+    "completion_tokens": 559,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "maito laktoositon 40 l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 40.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "voi 5 kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 5.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "kerma 10 l",
+       "name_fi": "kerma",
+       "name_en": "cream",
+       "quantity": 10.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "kananmunat 360 kpl",
+       "name_fi": "kananmuna",
+       "name_en": "egg",
+       "quantity": 360.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "perunat 25 kg",
+       "name_fi": "peruna",
+       "name_en": "potato",
+       "quantity": 25.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "jauheliha 12 kg",
+       "name_fi": "jauheliha",
+       "name_en": "minced meat",
+       "quantity": 12.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "tomaattimurska 6 kg",
+       "name_fi": "tomaattimurska",
+       "name_en": "tomato puree",
+       "quantity": 6.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-16",
+     "notes": "Heading: 'Tilaus - toimitus ma 16.11.'; signature: '- Ville'",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/02_order_abbrev_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 6,
+    "items_found": 6,
+    "items_read": 7,
+    "items_real": 6,
+    "qty_unit_ok": 6,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 6,
+    "silent_errors": 0,
+    "traps": 2,
+    "traps_ok": 2,
+    "problems": [],
+    "error": null,
+    "latency_ms": 11138,
+    "calls": 2,
+    "prompt_tokens": 6154,
+    "completion_tokens": 1269,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "kevytmaito 6 ltk",
+       "name_fi": "kevytmaito",
+       "name_en": "low-fat milk",
+       "quantity": 6.0,
+       "unit": "ltk",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "appelsiiniimehu 12 plo",
+       "name_fi": "appelsiinimehu",
+       "name_en": "orange juice",
+       "quantity": 12.0,
+       "unit": "plo",
+       "delivered_quantity": null,
+       "confidence": 0.9,
+       "note": null
+      },
+      {
+       "text_as_written": "kahvi 8 pkt",
+       "name_fi": "kahvi",
+       "name_en": "coffee",
+       "quantity": 8.0,
+       "unit": "pkt",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "jogurtti 4 kg",
+       "name_fi": null,
+       "name_en": null,
+       "quantity": null,
+       "unit": null,
+       "delivered_quantity": null,
+       "confidence": 0.0,
+       "note": "crossed-out line, cancelled; check: no quantity read"
+      },
+      {
+       "text_as_written": "ruokakerma 2,5 l",
+       "name_fi": "ruokakerma",
+       "name_en": "cooking cream",
+       "quantity": 2.5,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "ruisleipä 20 kpl",
+       "name_fi": "ruisleipä",
+       "name_en": "rye bread",
+       "quantity": 20.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "sipuli 10 kg",
+       "name_fi": "sipuli",
+       "name_en": "onion",
+       "quantity": 10.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": null,
+     "notes": "Heading: Kylmiö / tilattavat. Line 'jogurtti 4 kg' is crossed out (cancelled). One line between 'ruisleipä 20 kpl' and 'sipuli 10 kg' is obscured by grey smudges and unreadable.",
+     "unreadable": [
+      "line between 'ruisleipä 20 kpl' and 'sipuli 10 kg': obscured by grey smudges, unreadable"
+     ]
+    },
+    "second_look": [],
+    "flags": [
+     {
+      "index": 3,
+      "text_as_written": "jogurtti 4 kg",
+      "why": "no quantity read"
+     }
+    ]
+   },
+   {
+    "file": "images/03_order_printed_sv.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 5,
+    "items_found": 5,
+    "items_read": 5,
+    "items_real": 5,
+    "qty_unit_ok": 5,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 5,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 3008,
+    "calls": 1,
+    "prompt_tokens": 2759,
+    "completion_tokens": 436,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "Mjölk laktosfri | 30 l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 30.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Smör | 4 kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 4.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Vispgrädde | 5 l",
+       "name_fi": "kuohukerma",
+       "name_en": "whipping cream",
+       "quantity": 5.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Ägg | 180 st",
+       "name_fi": "kananmuna",
+       "name_en": "egg",
+       "quantity": 180.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Potatis, fast | 20 kg",
+       "name_fi": "peruna, kiinteä",
+       "name_en": "potato, firm",
+       "quantity": 20.0,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-17",
+     "notes": "Restaurant Sjöbräs order (Beställning). Leverans: tisdag 17.11.2026.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/04_order_handwritten_en.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 4,
+    "items_found": 4,
+    "items_read": 4,
+    "items_real": 4,
+    "qty_unit_ok": 4,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 4,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 2441,
+    "calls": 1,
+    "prompt_tokens": 2552,
+    "completion_tokens": 338,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "order_list",
+     "items": [
+      {
+       "text_as_written": "lactose-free milk 1000 l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 1000.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "butter 2.5 kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 2.5,
+       "unit": "kg",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "eggs 90 pcs",
+       "name_fi": "kananmuna",
+       "name_en": "eggs",
+       "quantity": 90.0,
+       "unit": "kpl",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "whipping cream 6 l",
+       "name_fi": "kuohukerma",
+       "name_en": "whipping cream",
+       "quantity": 6.0,
+       "unit": "l",
+       "delivered_quantity": null,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-16",
+     "notes": "Order for Monday (Hotel Aurora)",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/05_menu_printed_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 0,
+    "items_found": 0,
+    "items_read": 0,
+    "items_real": 0,
+    "qty_unit_ok": 0,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 3,
+    "dishes_found": 3,
+    "portions_ok": 3,
+    "auto_correct": 0,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 2176,
+    "calls": 1,
+    "prompt_tokens": 2844,
+    "completion_tokens": 211,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "menu",
+     "items": [],
+     "dishes": [
+      {
+       "name": "Lohikeitto",
+       "portions": 80,
+       "day": "Ma 16.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Lasagne",
+       "portions": 120,
+       "day": "Ti 17.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Karjalanpaisti",
+       "portions": 100,
+       "day": "Ke 18.11.",
+       "confidence": 0.95
+      }
+     ],
+     "delivery_date": "2026-11-16",
+     "notes": "Henkilöstöravintola Kaarna · raaka-aineet toimitettava ma 16.11. Kaikki ruoat laktoosittomia. Lisäkkeet: salaatti, leipää.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/06_menu_handwritten_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 0,
+    "items_found": 0,
+    "items_read": 0,
+    "items_real": 0,
+    "qty_unit_ok": 0,
+    "delivered_truth": 0,
+    "delivered_ok": 0,
+    "dishes_truth": 3,
+    "dishes_found": 3,
+    "portions_ok": 3,
+    "auto_correct": 0,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 2198,
+    "calls": 1,
+    "prompt_tokens": 2631,
+    "completion_tokens": 189,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "menu",
+     "items": [],
+     "dishes": [
+      {
+       "name": "Kasvissosekeitto",
+       "portions": 60,
+       "day": "la 21.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Joulukinkku + sinappi",
+       "portions": 60,
+       "day": "la 21.11.",
+       "confidence": 0.95
+      },
+      {
+       "name": "Rosolli",
+       "portions": 60,
+       "day": "la 21.11.",
+       "confidence": 0.95
+      }
+     ],
+     "delivery_date": "2026-11-21",
+     "notes": "Pikkujoulut la 21.11. - 60 hlö",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/07_delivery_note_printed_fi.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 5,
+    "items_found": 5,
+    "items_read": 5,
+    "items_real": 5,
+    "qty_unit_ok": 5,
+    "delivered_truth": 5,
+    "delivered_ok": 5,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 5,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [],
+    "error": null,
+    "latency_ms": 3377,
+    "calls": 1,
+    "prompt_tokens": 2879,
+    "completion_tokens": 520,
+    "repaired": false,
+    "rechecked": 0,
+    "read": {
+     "kind": "delivery_note",
+     "items": [
+      {
+       "text_as_written": "Maito laktoositon 1 l | 40 | 24 | l",
+       "name_fi": "maito laktoositon",
+       "name_en": "lactose-free milk",
+       "quantity": 40.0,
+       "unit": "l",
+       "delivered_quantity": 24.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Voi 500 g | 5 | 5 | kg",
+       "name_fi": "voi",
+       "name_en": "butter",
+       "quantity": 5.0,
+       "unit": "kg",
+       "delivered_quantity": 5.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Kuohukerma 1 l | 10 | 6 | l",
+       "name_fi": "kuohukerma",
+       "name_en": "whipping cream",
+       "quantity": 10.0,
+       "unit": "l",
+       "delivered_quantity": 6.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Kananmuna M | 360 | 360 | kpl",
+       "name_fi": "kananmuna",
+       "name_en": "egg",
+       "quantity": 360.0,
+       "unit": "kpl",
+       "delivered_quantity": 360.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Peruna kiinteä | 25 | 0 | kg",
+       "name_fi": "peruna kiinteä",
+       "name_en": "firm potato",
+       "quantity": 25.0,
+       "unit": "kg",
+       "delivered_quantity": 0.0,
+       "confidence": 0.95,
+       "note": null
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-13",
+     "notes": "LÄHETE / FÖLJESEDEL. Tukku Oy · Asiakas: Hotel Aurora · Toimituspvm 13.11.2026 · Tilaus 88213. Puuttuvat tuotteet toimitetaan erikseen sovittaessa.",
+     "unreadable": []
+    },
+    "second_look": [],
+    "flags": []
+   },
+   {
+    "file": "images/08_delivery_note_photo.jpg",
+    "kind_ok": true,
+    "date_ok": true,
+    "items_truth": 4,
+    "items_found": 4,
+    "items_read": 4,
+    "items_real": 4,
+    "qty_unit_ok": 4,
+    "delivered_truth": 4,
+    "delivered_ok": 3,
+    "dishes_truth": 0,
+    "dishes_found": 0,
+    "portions_ok": 0,
+    "auto_correct": 1,
+    "silent_errors": 0,
+    "traps": 0,
+    "traps_ok": 0,
+    "problems": [
+     "ruokakerma: delivered 5.0, truth 2 (conf 0.5)"
+    ],
+    "error": null,
+    "latency_ms": 5299,
+    "calls": 2,
+    "prompt_tokens": 6084,
+    "completion_tokens": 635,
+    "repaired": false,
+    "rechecked": 3,
+    "read": {
+     "kind": "delivery_note",
+     "items": [
+      {
+       "text_as_written": "Jauheliha naudan 2 kg | 12 | 8 | kg",
+       "name_fi": "jauheliha naudan",
+       "name_en": "beef mince",
+       "quantity": 12.0,
+       "unit": "kg",
+       "delivered_quantity": 8.0,
+       "confidence": 0.95,
+       "note": null
+      },
+      {
+       "text_as_written": "Tomaattimurska | 6 | 6 | kg",
+       "name_fi": "tomaattimurska",
+       "name_en": "tomato puree",
+       "quantity": 6.0,
+       "unit": "kg",
+       "delivered_quantity": 6.0,
+       "confidence": 0.5,
+       "note": "check: the page says 'puuttuu 3 l' but no row shows it: which row is short?"
+      },
+      {
+       "text_as_written": "Sipuli kuorittu | 10 | 10 | kg",
+       "name_fi": "sipuli kuorittu",
+       "name_en": "peeled onion",
+       "quantity": 10.0,
+       "unit": "kg",
+       "delivered_quantity": 10.0,
+       "confidence": 0.5,
+       "note": "check: the page says 'puuttuu 3 l' but no row shows it: which row is short?"
+      },
+      {
+       "text_as_written": "Ruokakerma 1 l | 5 | 5 | l",
+       "name_fi": "ruokakerma",
+       "name_en": "cooking cream",
+       "quantity": 5.0,
+       "unit": "l",
+       "delivered_quantity": 5.0,
+       "confidence": 0.5,
+       "note": "check: the page says 'puuttuu 3 l' but no row shows it: which row is short?"
+      }
+     ],
+     "dishes": [],
+     "delivery_date": "2026-11-16",
+     "notes": "LÄHETE, Tukku Oy · Ravintola Kaarna · 16.11.2026. Handwritten red note: 'puuttuu 3 l!' (3 l missing).",
+     "unreadable": []
+    },
+    "second_look": [
+     {
+      "index": 1,
+      "why": "the page says 'puuttuu 3 l' but no row shows it: which row is short?",
+      "before": {
+       "text_as_written": "Tomaattimurska | 6 | 6 | kg",
+       "quantity": 6.0,
+       "unit": "kg",
+       "delivered_quantity": 6.0,
+       "confidence": 0.95
+      },
+      "after": {
+       "text_as_written": "Tomaattimurska | 6 | 6 | kg",
+       "quantity": 6.0,
+       "unit": "kg",
+       "delivered_quantity": 6.0,
+       "confidence": 0.95
+      }
+     },
+     {
+      "index": 2,
+      "why": "the page says 'puuttuu 3 l' but no row shows it: which row is short?",
+      "before": {
+       "text_as_written": "Sipuli kuorittu | 10 | 10 | kg",
+       "quantity": 10.0,
+       "unit": "kg",
+       "delivered_quantity": 10.0,
+       "confidence": 0.95
+      },
+      "after": {
+       "text_as_written": "Sipuli kuorittu | 10 | 10 | kg",
+       "quantity": 10.0,
+       "unit": "kg",
+       "delivered_quantity": 10.0,
+       "confidence": 0.95
+      }
+     },
+     {
+      "index": 3,
+      "why": "the page says 'puuttuu 3 l' but no row shows it: which row is short?",
+      "before": {
+       "text_as_written": "Ruokakerma 1 l | 5 | 5 | l",
+       "quantity": 5.0,
+       "unit": "l",
+       "delivered_quantity": 5.0,
+       "confidence": 0.95
+      },
+      "after": {
+       "text_as_written": "Ruokakerma 1 l | 5 | 5 | l",
+       "quantity": 5.0,
+       "unit": "l",
+       "delivered_quantity": 5.0,
+       "confidence": 0.95
+      }
+     }
+    ],
+    "flags": [
+     {
+      "index": 1,
+      "text_as_written": "Tomaattimurska | 6 | 6 | kg",
+      "why": "the page says 'puuttuu 3 l' but no row shows it: which row is short?"
+     },
+     {
+      "index": 2,
+      "text_as_written": "Sipuli kuorittu | 10 | 10 | kg",
+      "why": "the page says 'puuttuu 3 l' but no row shows it: which row is short?"
+     },
+     {
+      "index": 3,
+      "text_as_written": "Ruokakerma 1 l | 5 | 5 | l",
+      "why": "the page says 'puuttuu 3 l' but no row shows it: which row is short?"
+     }
+    ]
+   }
+  ],
+  "ran_at": "2026-11-13T23:49:32Z"
+ }
+}

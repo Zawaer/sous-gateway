@@ -296,12 +296,17 @@ def test_a_loose_shortfall_note_on_a_delivery_note_is_not_lost():
                        item("Tomaattimurska | 6 | 6 | kg", "tomaattimurska", 6, "kg", delivered_quantity=6),
                        item("Ruokakerma 1 l | 5 | 5 | l", "ruokakerma", 5, "l", delivered_quantity=5)]}
     # the second look gets the full-looking rows and applies the correction to the right one
-    llm = FakeLLM([first, {"lines": [{"index": 2, "text_as_written": "Ruokakerma 1 l | 5 | 5 | l", "quantity": 5,
-                                      "unit": "l", "delivered_quantity": 2, "confidence": 0.9}]}])
+    fix = {"index": 2, "text_as_written": "Ruokakerma 1 l | 5 | 5 | l | puuttuu 3 l!", "quantity": 5,
+           "unit": "l", "delivered_quantity": 2, "confidence": 0.9}
+    llm = FakeLLM([first, {"lines": [fix]}])
     vr = V.read_order_image(png(), None, llm, today=TODAY)
     asked = llm.seen[1][-1]["content"][0]["text"]
-    assert "index 1" in asked and "index 2" in asked and "index 0" not in asked and "puuttuu" in asked
+    assert "index 1" in asked and "index 2" in asked and "index 0" not in asked and "Apply it to\nTHAT row" in asked
     assert vr.read.items[2].delivered_quantity == 2 and not vr.flags
+    # a changed row that doesn't say where it saw the note is a guess: the rows stay with a human
+    llm = FakeLLM([first, {"lines": [{**fix, "text_as_written": "Ruokakerma 1 l | 5 | 5 | l"}]}])
+    vr = V.read_order_image(png(), None, llm, today=TODAY)
+    assert {f["index"] for f in vr.flags} == {1, 2}
     # no second look (or it changes nothing): the full-looking rows go to a human instead of "delivered in full"
     llm = FakeLLM([first])
     vr = V.read_order_image(png(), None, llm, today=TODAY, verify=False)
