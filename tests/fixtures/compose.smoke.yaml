@@ -1,0 +1,16 @@
+# CI smoke override for compose.yaml: run the image CI just built, against the 20-product
+# fixture catalog instead of Valio Aimo's data files. No API key, no Valio traffic:
+# scripts/fetch_data.py sees the files already in /data and skips the download.
+#   SMOKE_DATA_DIR=/abs/path/to/writable/copy/of/tests/fixtures/catalog \
+#   docker compose -f compose.yaml -f tests/fixtures/compose.smoke.yaml up -d --no-build
+services:
+  valtakirja:
+    image: valtakirja:ci
+    pull_policy: never
+    restart: "no"
+    environment:
+      VALIO_AIMO_API_KEY: ci-offline-unused   # fetch_data requires one; never sent anywhere
+    volumes:
+      - ${SMOKE_DATA_DIR:?set SMOKE_DATA_DIR}:/data
+  mariadb:
+    restart: "no"

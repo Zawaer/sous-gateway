@@ -1,14 +1,35 @@
 name: CI
+# Runs on GitHub-hosted runners until the repo variable CI_RUNNER is set to `craci`
+# (Settings -> Secrets and variables -> Actions -> Variables). See docs/CI.md.
+#
+# CRACI notes (https://docs.craci.com/skills/craci/SKILL.md):
+# - `runs-on: craci` routes a job to CRACI; size/image/network go in cracicorp/setup@v1.
+# - CRACI reads the setup step's inputs when it schedules the job and ignores its `if:`.
+#   The `if:` only keeps the step from executing on GitHub-hosted runners.
+# - CRACI writes an SBOM for every job from the packages it sees the job download, and
+#   records every outbound connection in the job's network trace ("View trace").
+
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  UV_PYTHON_DOWNLOADS: never   # use the runner's Python 3.12; no python-build-standalone fetches
 
 jobs:
   test:
-    # CRACI runners once the team invite is active: set the repo variable CI_RUNNER=craci
-    # (Settings -> Secrets and variables -> Actions -> Variables). Until then, GitHub-hosted.
+    name: test (pytest + MariaDB)
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
     services:
       mariadb:
         image: mariadb:11.4
@@ -24,7 +45,185 @@ jobs:
     env:
       VALTAKIRJA_TEST_MARIADB_URL: mysql://vk:vkpass@127.0.0.1:3306/valtakirja
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: cracicorp/setup@5cbae507e2547dca6c402e413c645767fbae3534 # v1
+        if: ${{ vars.CI_RUNNER == 'craci' }}
+        with:
+          size: "4"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
       - run: uv sync --frozen
       - run: uv run pytest -q
+
+  docker:
+    name: docker (build, SBOM, vulnerability scan)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    steps:
+      - uses: cracicorp/setup@5cbae507e2547dca6c402e413c645767fbae3534 # v1
+        if: ${{ vars.CI_RUNNER == 'craci' }}
+        with:
+          size: "8"   # image build + syft + grype in parallel-friendly steps
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build image (layer cache in the Actions cache)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: valtakirja:ci
+          cache-from: type=gha,scope=valtakirja-image
+          cache-to: type=gha,scope=valtakirja-image,mode=max
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: SBOM (CycloneDX, syft)
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: valtakirja:ci
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+          upload-artifact: false
+
+      - name: Vulnerability scan (grype, full report)
+        id: scan
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          sbom: sbom.cdx.json
+          fail-build: false
+          output-format: json
+          output-file: grype.json
+
+      - name: Gate on critical vulnerabilities with a fix available
+        run: |
+          jq -r '.matches[] | [.vulnerability.severity, .vulnerability.id, .artifact.name, .artifact.version,
+                 (.vulnerability.fix.state // "unknown"), ((.vulnerability.fix.versions // []) | join(" "))] | @tsv' \
+            grype.json | sort -u > vulns.tsv
+          {
+            echo "## Image supply chain"
+            echo
+            echo "SBOM: $(jq '.components | length' sbom.cdx.json) components (CycloneDX, artifact \`sbom-and-vulns\`)."
+            echo
+            echo "| Severity | Total | Fix available |"
+            echo "|---|---|---|"
+            for s in Critical High Medium Low Negligible Unknown; do
+              t=$(awk -F'\t' -v s="$s" '$1==s' vulns.tsv | wc -l)
+              f=$(awk -F'\t' -v s="$s" '$1==s && $5=="fixed"' vulns.tsv | wc -l)
+              echo "| $s | $t | $f |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+          awk -F'\t' '$1=="Critical" && $5=="fixed"' vulns.tsv > blocking.tsv
+          if [ -s blocking.tsv ]; then
+            { echo; echo "### Blocking: critical with a fix"; echo '```'; cat blocking.tsv; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::$(wc -l < blocking.tsv) critical vulnerabilities with an available fix"
+            cat blocking.tsv
+            exit 1
+          fi
+          echo "No critical vulnerabilities with an available fix."
+
+      - name: Save image for the smoke job
+        if: ${{ !cancelled() }}
+        run: docker save valtakirja:ci | gzip -1 > valtakirja-image.tar.gz
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: sbom-and-vulns
+          path: |
+            sbom.cdx.json
+            grype.json
+            vulns.tsv
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image
+          path: valtakirja-image.tar.gz
+          retention-days: 3
+          compression-level: 0
+
+  smoke:
+    name: smoke (compose, offline fixtures)
+    needs: docker
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      # Deny-by-default egress: the gateway itself needs no network at all here. Only
+      # Docker Hub (the mariadb image) is allowed; GitHub job/artifact traffic is always allowed.
+      - uses: cracicorp/setup@5cbae507e2547dca6c402e413c645767fbae3534 # v1
+        if: ${{ vars.CI_RUNNER == 'craci' }}
+        with:
+          network: |
+            default: deny
+            presets: [dockerhub]
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: image
+      - run: gunzip -c valtakirja-image.tar.gz | docker load
+      - name: Start MariaDB + gateway with compose.yaml (fixture catalog, no Valio key)
+        run: |
+          printf 'MARIADB_PASSWORD=%s\n' "$(openssl rand -hex 16)" > .env
+          cp -r tests/fixtures/catalog "$RUNNER_TEMP/data"
+          echo "SMOKE_DATA_DIR=$RUNNER_TEMP/data" >> "$GITHUB_ENV"
+          SMOKE_DATA_DIR="$RUNNER_TEMP/data" docker compose -f compose.yaml -f tests/fixtures/compose.smoke.yaml up -d --no-build --wait-timeout 120 --wait mariadb
+          SMOKE_DATA_DIR="$RUNNER_TEMP/data" docker compose -f compose.yaml -f tests/fixtures/compose.smoke.yaml up -d --no-build valtakirja
+      - name: Smoke test
+        env:
+          EXPECT_STORAGE: mariadb
+        run: tests/fixtures/smoke.sh http://127.0.0.1:8000
+      - name: Logs
+        if: ${{ always() }}
+        run: docker compose -f compose.yaml -f tests/fixtures/compose.smoke.yaml logs --no-color
+      - if: ${{ always() }}
+        run: docker compose -f compose.yaml -f tests/fixtures/compose.smoke.yaml down -v
+
+  eval:
+    name: eval (live Valio API)
+    # Only on main or by hand: it spends real Valio Aimo API calls.
+    if: ${{ github.event_name != 'pull_request' }}
+    needs: test
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    env:
+      VALIO_AIMO_API_KEY: ${{ secrets.VALIO_AIMO_API_KEY }}
+    steps:
+      # The security property on show: this job can reach PyPI (uv + dependencies) and
+      # junction26.valioaimo.fi, nothing else. The network trace should list only those.
+      - uses: cracicorp/setup@5cbae507e2547dca6c402e413c645767fbae3534 # v1
+        if: ${{ vars.CI_RUNNER == 'craci' }}
+        with:
+          network: |
+            default: deny
+            presets: [pypi]
+            connections:
+              - tls:
+                  serverNamePatterns: [junction26.valioaimo.fi]
+                  ports: [443]
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check prerequisites
+        id: pre
+        run: |
+          run=true
+          if [ -z "$VALIO_AIMO_API_KEY" ]; then echo "::notice::VALIO_AIMO_API_KEY secret not set: skipping eval"; run=false; fi
+          if [ ! -f scripts/eval.py ]; then echo "::notice::scripts/eval.py not present yet: skipping eval"; run=false; fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+      # uv from PyPI (not a GitHub release download), so CRACI's PyPI preset observes it too.
+      - name: Install uv
+        if: ${{ steps.pre.outputs.run == 'true' }}
+        run: pipx install uv==0.13.6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: ${{ steps.pre.outputs.run == 'true' }}
+        with:
+          path: data
+          key: valio-data-${{ hashFiles('scripts/fetch_data.py', 'valtakirja/catalog.py') }}
+      - name: Fetch Valio data (cached) and run the eval
+        if: ${{ steps.pre.outputs.run == 'true' }}
+        run: |
+          uv sync --frozen
+          uv run python -m scripts.fetch_data
+          uv run python scripts/eval.py
