@@ -115,6 +115,7 @@ def search_products(
     temperature: str | None = None,
     limit: int = 15,
     agent_id: str = "anonymous-agent",
+    food_only: bool | None = None,
 ) -> dict:
     """Search Valio Aimo's catalog (17.5k products) by name, brand or ingredient in Finnish, Swedish or English.
 
@@ -124,10 +125,13 @@ def search_products(
       no allergen data are kept but marked 'unknown'. Full list: resource valtakirja://allergens.
     labels: e.g. GOODS_FROM_FINLAND_BLUE_SWAN, EU_ORGANIC_FARMING, MARINE_STEWARDSHIP_COUNCIL_LABEL.
     temperature: ambient, chilled or frozen.
+    food_only: default ranks food first (equipment first only when the query names it, e.g. "milk jug");
+      true drops non-food (tableware, cleaning, disposables); false = no preference.
+    Synonyms work across languages: "butter" also finds voi / smör.
     Returns product cards without price or stock; pass several of the ids to request_quote next.
     """
     return S.search(agent_id, query, claims=claims, avoid_allergens=avoid_allergens, labels=labels,
-                    temperature=temperature, limit=limit)
+                    temperature=temperature, limit=limit, food_only=food_only)
 
 
 @mcp.tool(title="Product details", annotations=READ_LOCAL)

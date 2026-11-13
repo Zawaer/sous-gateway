@@ -129,10 +129,14 @@ def search_products(
     category: str | None = None,
     limit: int = 15,
     agent_id: str = "anonymous-agent",
+    food_only: bool | None = None,
 ):
-    """Search the static catalog. No live price or stock: request a quote for that."""
+    """Search the static catalog (fi/sv/en with synonyms). No live price or stock: request a quote for that.
+
+    food_only: default ranks food first; true drops non-food; false = no preference."""
     return S.search(agent_id, q, claims=claims or None, avoid_allergens=avoid_allergens or None,
-                    labels=labels or None, temperature=temperature, category=category, limit=limit)
+                    labels=labels or None, temperature=temperature, category=category, limit=limit,
+                    food_only=food_only)
 
 
 @app.get("/products/{product_id}", tags=["catalog"])

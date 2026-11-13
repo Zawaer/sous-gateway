@@ -69,9 +69,10 @@ def revoke_mandate(mandate_id: str, by: str) -> dict:
 # --- search -----------------------------------------------------------------
 
 def search(agent_id: str, query: str, *, claims=None, avoid_allergens=None, labels=None,
-           temperature=None, category=None, limit: int = 15, buyer: str | None = None) -> dict:
+           temperature=None, category=None, limit: int = 15, buyer: str | None = None,
+           food_only: bool | None = None) -> dict:
     results = catalog.search(query, claims=claims, avoid_allergens=avoid_allergens, labels=labels,
-                             temperature=temperature, category=category, limit=min(limit, 50))
+                             temperature=temperature, category=category, limit=min(limit, 50), food_only=food_only)
     store.audit("catalog.search", agent_id, "agent", None, buyer,
                 {"query": query, "claims": claims, "avoid_allergens": avoid_allergens,
                  "results": [r["id"] for r in results], "valio_api_calls": 0})
