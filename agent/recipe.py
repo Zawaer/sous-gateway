@@ -259,7 +259,8 @@ leave out water. Merge duplicates within a dish.
 - portions: the number of portions/people/guests the chef gives. A dish's own portions only if the chef gives \
 a different number for it.
 - delivery_date: the date the chef names (a weekday means the next such date in the list above), else null.
-- stock_on_hand: what the chef says they already have. "plenty of X" or "enough X" -> plenty true, amount null."""
+- stock_on_hand: what the chef says they already have. "plenty of X" or "enough X" -> plenty true, amount null.
+- Optional values you don't know: null or leave the key out."""
 
 
 def _extract_json(s: str) -> dict:
@@ -278,14 +279,64 @@ class LLMUse:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     errors: list[str] = field(default_factory=list)
+    structured: bool = False       # the provider took the JSON schema (structured output)
+    schema_rejected: bool = False  # it answered HTTP 400 to response_format: plain JSON prompting instead
+
+
+_STR = {"type": "string"}
+# The plan's JSON schema for structured output (Gemini and other OpenAI-compatible servers): plain types and
+# enums only (no $ref / anyOf), optional fields simply not required. pydantic (MenuSpec) still validates.
+MENU_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "dishes": {"type": "array", "items": {"type": "object", "properties": {
+            "name": _STR,
+            "portions": {"type": "integer", "description": "only if this dish has its own number of portions"},
+            "ingredients": {"type": "array", "items": {"type": "object", "properties": {
+                "name_fi": _STR, "name_en": _STR,
+                "amount_per_portion": {"type": "number", "description": "raw amount for ONE portion"},
+                "unit": {"type": "string", "enum": ["g", "ml", "pcs"]},
+                "notes": {"type": "string", "description": "dietary need for this ingredient, e.g. lactose-free"}},
+                "required": ["name_fi", "name_en", "amount_per_portion", "unit"]}}},
+            "required": ["name", "ingredients"]}},
+        "portions": {"type": "integer"},
+        "delivery_date": {"type": "string", "description": "YYYY-MM-DD; omit if the chef names no day"},
+        "stock_on_hand": {"type": "array", "items": {"type": "object", "properties": {
+            "ingredient": _STR, "amount": {"type": "number"},
+            "unit": {"type": "string", "enum": ["g", "kg", "ml", "dl", "l", "pcs"]},
+            "plenty": {"type": "boolean"}}, "required": ["ingredient", "plenty"]}}},
+    "required": ["dishes", "portions", "stock_on_hand"],
+}
+RESPONSE_FORMAT = {"type": "json_schema", "json_schema": {"name": "menu_plan", "schema": MENU_SCHEMA}}
+
+
+def _chat(llm, messages: list[dict], use: LLMUse):
+    """One model call with structured output; if the server rejects response_format (HTTP 400), the same
+    call without it (the prompt still asks for the JSON). Provider errors become InterpretError."""
+    from .llm import LLMError
+    try:
+        if not use.schema_rejected:
+            try:
+                resp = llm.chat(messages, response_format=RESPONSE_FORMAT)
+                use.structured = True
+                return resp
+            except LLMError as e:
+                if "HTTP 400" not in str(e):
+                    raise
+                use.schema_rejected, use.structured = True, False
+                use.errors.append(f"structured output not accepted: {str(e)[:200]}")
+        return llm.chat(messages)
+    except LLMError as e:
+        raise InterpretError(f"model call failed: {e}") from None
 
 
 def interpret_llm(text: str, today: date, llm, use: LLMUse | None = None) -> MenuSpec:
-    """Ask the model for the strict JSON; validate; one retry with the validation error. Raises InterpretError."""
+    """Ask the model for the plan as JSON (schema-constrained where the provider supports it); validate with
+    pydantic; one retry with the validation error. Raises InterpretError."""
     use = use or LLMUse()
     messages = [{"role": "system", "content": llm_prompt(today)}, {"role": "user", "content": text}]
     for attempt in range(2):
-        resp = llm.chat(messages)
+        resp = _chat(llm, messages, use)
         use.calls += 1
         use.prompt_tokens += resp.usage.get("prompt_tokens", 0)
         use.completion_tokens += resp.usage.get("completion_tokens", 0)
@@ -891,9 +942,9 @@ def render(p: Plan) -> str:
         if n.status == "covered_by_stock":
             continue
         chosen = [l for i in n.items for l in lines_by_item.get(i, [])]
-        out.append(f"   {n.name_fi}: {len(n.candidates)} candidate(s)"
-                   + (f" -> {', '.join(f'{l['quantity']:g} {l['sales_unit']} {l['name']} (€{l['line_total_ex_vat'] or 0:,.2f})' for l in chosen)}"
-                      if chosen else ""))
+        picks = ", ".join("{:g} {} {} (€{:,.2f})".format(l["quantity"], l["sales_unit"], l["name"],
+                                                         l["line_total_ex_vat"] or 0) for l in chosen)
+        out.append(f"   {n.name_fi}: {len(n.candidates)} candidate(s)" + (f" -> {picks}" if picks else ""))
         if n.substitute:
             sub = n.substitute
             out.append(f"      substitute: {sub['name']} for {sub['for_name']} [{sub['tier']}]"
@@ -964,7 +1015,9 @@ def main(argv=None) -> int:
     ap.add_argument("--json", action="store_true", help="print the plan as JSON")
     a = ap.parse_args(argv)
     import os
-    provider = a.provider or os.environ.get("LLM_PROVIDER") or "table"
+    # Gemini is the default brain when its key is set; the curated table otherwise (offline demos, tests)
+    provider = a.provider or os.environ.get("LLM_PROVIDER") or ("gemini" if os.environ.get("GEMINI_API_KEY")
+                                                                else "table")
     llm = make_llm(provider, a.model)
     from .buyer import MCPGateway
     if a.gateway == "local":

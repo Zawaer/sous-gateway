@@ -137,10 +137,14 @@ class FakeLLM:
         self.answers = list(answers)
         self.cfg = LLMConfig(provider="fake", base_url="", model="scripted")
         self.seen = []
+        self.formats = []
 
-    def chat(self, messages, tools=None):
+    def chat(self, messages, tools=None, response_format=None):
         self.seen.append(messages)
+        self.formats.append(response_format)
         a = self.answers.pop(0)
+        if isinstance(a, Exception):
+            raise a
         return ChatResponse({"role": "assistant", "content": a if isinstance(a, str) else json.dumps(a)}, "stop",
                             {"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70}, 5, 0)
 
@@ -211,6 +215,24 @@ def test_llm_json_is_validated_and_retried_once():
     assert path.startswith("table (LLM fake:scripted answer invalid") and spec.portions == 50
     with pytest.raises(R.InterpretError):
         R.interpret("Creamy soup for 40", TODAY, FakeLLM([bad, bad]))
+
+
+def test_structured_output_schema_and_fallback_when_rejected():
+    from agent.llm import LLMError
+    llm = FakeLLM([SOUP])
+    use = R.LLMUse()
+    R.interpret_llm("Creamy soup for 40", TODAY, llm, use)
+    assert llm.formats[0]["type"] == "json_schema" and use.structured
+    schema = json.dumps(llm.formats[0])
+    assert "$ref" not in schema and "anyOf" not in schema  # Gemini-compatible subset
+    # a server that rejects response_format: the same request without it, noted
+    llm = FakeLLM([LLMError("x chat completion failed: HTTP 400: response_format unsupported"), SOUP])
+    use = R.LLMUse()
+    assert R.interpret_llm("Creamy soup for 40", TODAY, llm, use).portions == 40
+    assert llm.formats == [R.RESPONSE_FORMAT, None] and use.schema_rejected and not use.structured
+    # any other provider failure: the table takes over if it knows the dish
+    spec, path = R.interpret("Lasagne for 30", TODAY, FakeLLM([LLMError("HTTP 503: down")]))
+    assert path.startswith("table (LLM") and spec.portions == 30
 
 
 # --- the whole chain through the in-process gateway ----------------------------------------------

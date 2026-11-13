@@ -157,7 +157,7 @@ def run_provider(provider: str, cases: list[dict], state_dir: Path, interpret_on
             r = check(case, p, today, mandate, interpret_only)
             r.update({"id": case["id"], "request": case["request"], "interpretation": p.interpretation,
                       "passed": all(r["checks"].values()), "seconds": round(time.perf_counter() - t0, 1),
-                      "valio_api_calls": p.trace.valio_api_calls, "llm_calls": p.llm.calls,
+                      "valio_api_calls": p.trace.valio_api_calls, "llm_calls": p.llm.calls, "structured_output": p.llm.structured,
                       "tokens": {"prompt": p.llm.prompt_tokens, "completion": p.llm.completion_tokens},
                       "plan": p.to_dict()})
             results.append(r)

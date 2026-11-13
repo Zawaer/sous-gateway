@@ -142,12 +142,16 @@ class ChatClient:
         self._http = http or httpx.Client(timeout=cfg.timeout_s)
         self._sleep = sleep
 
-    def chat(self, messages: list[dict], tools: list[dict] | None = None) -> ChatResponse:
+    def chat(self, messages: list[dict], tools: list[dict] | None = None,
+             response_format: dict | None = None) -> ChatResponse:
+        """response_format: e.g. {"type": "json_schema", "json_schema": {...}} (structured output)."""
         c = self.cfg
         body: dict = {"model": c.model, "messages": messages}
         if tools:
             body["tools"] = tools
             body["tool_choice"] = "auto"
+        if response_format:
+            body["response_format"] = response_format
         if c.temperature is not None:
             body["temperature"] = c.temperature
         if c.max_tokens:
