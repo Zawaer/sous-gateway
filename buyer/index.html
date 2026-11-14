@@ -39,6 +39,8 @@
       <p id="intent-message" class="notice" role="status" hidden></p>
       <div class="fields">
         <label class="wide">Product search<input id="query" required maxlength="120" placeholder="Milk, oats, or a brand name"></label>
+        <label class="wide">Purpose (optional)<input id="purpose" maxlength="120" placeholder="Coffee, whipping cream for dessert, allergy menu"></label>
+        <label>Substitution<select id="substitution-policy"><option value="">Use purpose and mandate rules</option><option value="exact">Keep the exact product</option><option value="ask">Ask before substituting</option><option value="allowed">Allow within mandate rules</option></select></label>
         <label>Quantity<input id="amount" required type="number" min="0.001" step="any" inputmode="decimal"></label>
         <label>Unit<select id="unit"><option value="L">Litres</option><option value="KG">Kilograms</option><option value="SALES_UNIT">Sales units / packs</option></select></label>
         <label>Delivery date<input id="delivery" required type="date"></label>

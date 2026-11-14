@@ -160,13 +160,17 @@ test('keeps explicit request constraints when showing ranked substitutes', async
     assert.equal(parsed.pathname, '/products/sku-1/substitutes');
     assert.equal(parsed.searchParams.get('mandate_id'), mandate.id);
     assert.equal(parsed.searchParams.get('avoid_allergens'), 'AM');
+    assert.equal(parsed.searchParams.get('purpose'), 'dessert');
+    assert.equal(parsed.searchParams.get('substitution'), 'exact');
+    assert.equal(parsed.searchParams.get('use'), 'whipping');
     return Response.json({ original, constraints: { same_category: 'category-1' }, options: [
       option,
       { ...option, product_id: 'sku-3', offer: { ...option.offer, claims: [] } },
       { ...option, product_id: 'sku-4', allergen_check: { status: 'may_contain' } },
     ] });
   });
-  assert.deepEqual(await client.substitutes({ ...need, substituteFor: 'sku-1', temperature: 'chilled' }, mandate), {
+  assert.deepEqual(await client.substitutes({ ...need, substituteFor: 'sku-1', temperature: 'chilled',
+    purpose: 'dessert', substitution: 'exact', use: 'whipping' }, mandate), {
     original, options: [option],
   });
 });

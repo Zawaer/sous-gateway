@@ -65,6 +65,7 @@ function codes(value) {
 function readNeed(findSubstitutes) {
   const need = {
     query: $('query').value.trim(), amount: $('amount').valueAsNumber, unit: $('unit').value,
+    purpose: $('purpose').value.trim(), substitution: $('substitution-policy').value,
     deliveryDate: $('delivery').value, claims: codes($('claims').value), avoidAllergens: codes($('allergens').value),
     category: $('category').value.trim(), temperature: $('temperature').value, substituteFor: $('substitute').value.trim(),
   };
@@ -154,6 +155,8 @@ function startItem(entry = null, index = null) {
   state.editing = index;
   $('intent').value = '';
   $('query').value = entry?.need.query ?? '';
+  $('purpose').value = entry?.need.purpose ?? '';
+  $('substitution-policy').value = entry?.need.substitution ?? '';
   $('amount').value = entry?.need.amount ?? '';
   $('unit').value = entry?.need.unit ?? 'L';
   $('claims').value = entry?.need.claims.join(', ') ?? '';
@@ -191,7 +194,10 @@ function renderBasket() {
     remove.setAttribute('aria-label', `Remove ${entry.need.query}`);
     const actions = element('div', undefined, 'actions');
     actions.append(edit, remove);
-    row.append(element('span', title), actions);
+    const description = element('span', title);
+    if (entry.need.purpose) description.append(element('small', `Purpose: ${entry.need.purpose}`));
+    if (entry.need.substitution) description.append(element('small', `Substitution: ${entry.need.substitution}`));
+    row.append(description, actions);
     return row;
   }));
   updateControls();
@@ -261,6 +267,8 @@ function renderMandate(mandate) {
 function renderSearch(need, mandate, products, original) {
   renderMandate(mandate);
   const context = [`${mandate.buyer} · ${need.amount} ${units[need.unit]} of ${original?.name || need.query} · ${need.deliveryDate}`];
+  if (need.purpose) context.push(`Purpose: ${need.purpose}`);
+  if (need.substitution) context.push(`Substitution: ${need.substitution}`);
   if (need.claims.length) context.push(need.claims.map(claimLabel).join(', '));
   if (need.avoidAllergens.length) context.push(`Avoid ${need.avoidAllergens.join(', ')}`);
   if (original) context.push(...original.why_substitute);
@@ -341,6 +349,8 @@ function renderCoverage(content, quote, draft = [], findAlternatives) {
     const unit = units[item.unit];
     const li = element('li');
     li.append(element('strong', label));
+    if (item.purpose) li.append(element('small', `Purpose: ${item.purpose}`));
+    if (item.substitution) li.append(element('small', `Substitution: ${item.substitution}`));
     const amounts = element('dl');
     for (const [term, value] of [['Requested', item.amount], ['Quoted', quoted]]) {
       const pair = element('div');
@@ -384,6 +394,7 @@ function showOrderAlternatives(gateway, quote, row, container) {
     const need = {
       amount: row.missing, unit: row.item.unit, deliveryDate: quote.requested_delivery_date,
       substituteFor: row.referenceSku, claims: [], avoidAllergens: [],
+      purpose: row.item.purpose, substitution: row.item.substitution, use: row.item.use,
     };
     const { options } = await gateway.substitutes(need, mandate);
     container.querySelector('.alternative-results')?.remove();

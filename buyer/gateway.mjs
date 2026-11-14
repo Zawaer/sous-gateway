@@ -77,6 +77,9 @@ export class Gateway {
       agent_id: mandate.agent_id, mandate_id: mandate.id, amount: String(need.amount),
       unit: need.unit, delivery_date: need.deliveryDate,
     });
+    if (need.purpose) params.set('purpose', need.purpose);
+    if (need.substitution) params.set('substitution', need.substitution);
+    if (need.use) params.set('use', need.use);
     for (const allergen of need.avoidAllergens) params.append('avoid_allergens', allergen);
     const path = `/products/${encodeURIComponent(need.substituteFor)}/substitutes`;
     const { original, constraints, options } = await this.request(`${path}?${params}`);
