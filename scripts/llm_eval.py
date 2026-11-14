@@ -545,6 +545,9 @@ def write_report(results_dir: Path, out: Path) -> None:
           "export VALIO_AIMO_API_KEY=...            # live prices and stock (data/ fetched by scripts/fetch_data.py)",
           "GEMINI_API_KEY=... uv run python scripts/llm_eval.py --provider gemini",
           "VERDA_INFERENCE_API_KEY=... uv run python scripts/llm_eval.py --provider verda --model kimi-k3-1-pro",
+          "GEMINI_API_KEY=... uv run python scripts/llm_eval.py --provider gemma   # open-weight Gemma 4, paced",
+          "uv run python scripts/llm_eval.py --provider gemini --agent sous   # the purpose-built Sous agent",
+          "uv run python scripts/llm_eval.py --provider anthropic --model claude-haiku-5-5   # ANTHROPIC_API_KEY",
           "uv run python scripts/llm_eval.py --provider oracle   # no model: replays the scripted plan",
           "uv run python scripts/llm_eval.py --report           # rebuild this page",
           "```", "", "In CI: job `llm-eval` (workflow_dispatch, or a push to main that changes the agent), "

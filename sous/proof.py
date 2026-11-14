@@ -177,8 +177,11 @@ def llm_evals(evals: Path) -> dict:
                                    # cases where the model API failed (e.g. HTTP 429 quota) before an answer
                                    "provider_errors": (s.get("stop_reasons") or {}).get("llm_error", 0)},
                        "source": _source(path, doc, cases_file=doc.get("cases_file"), run_id=_run_id(doc, prov))})
-    # one row per run: generic agents first, then the purpose-built agent, each by pass rate
-    models.sort(key=lambda m: (m["agent"] != "generic", -(m["summary"].get("matched_without_correction_pct") or 0)))
+    # one row per run, a model's generic and purpose-built agent runs side by side; models by best pass rate
+    best: dict[str, float] = {}
+    for m in models:
+        best[m["model"]] = max(best.get(m["model"], 0), m["summary"].get("matched_without_correction_pct") or 0)
+    models.sort(key=lambda m: (-best[m["model"]], m["model"] or "", m["agent"] != "generic"))
     return {"available": bool(models), "models": models, "excluded": excluded,
             **({} if models else {"reason": "no evals/llm_results.*.json from a model"})}
 
