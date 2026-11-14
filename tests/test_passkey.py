@@ -72,7 +72,9 @@ def env(tmp_path, monkeypatch):
         S.issue_mandate(Mandate(id=mid, buyer=buyer, agent_id="a", issued_by="chef", notify_above_eur=None,
                                 auto_approve_limit_eur=50, hard_limit_eur=20000, min_delivery_reliability=None,
                                 approval_method=method))
+    api._hits.clear()  # these tests POST a lot: don't leave the per-IP rate limit used up for later tests
     yield
+    api._hits.clear()
     signing._key.cache_clear()
 
 
