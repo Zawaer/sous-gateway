@@ -23,7 +23,7 @@ sandbox's own quickstart, the next delivery Monday). Needs only `httpx` and `cry
    under the hotel mandate and one with no mandate and no credentials. The large amounts are computed from
    the small quote's price and the mandates' own limits (`GET /mandates/{id}`), so the kit adapts to live prices.
    Every quote is for the same product and day, so most are answered from the gateway's offer cache: on staging
-   the whole run used **0** of the sandbox's 15 live Valio Aimo lookups (the offers were already cached).
+   the whole run used **1** of the sandbox's 15 live Valio Aimo lookups.
    About 50 POSTs in all, under the gateway's per-IP write limit; a 429 is waited out once.
 3. The orders it places are sandbox orders (same engine, same signatures, same audit chain, kept out of the
    curated views). The held orders are decided at the end (one approved, one rejected), so nothing is left
@@ -61,52 +61,59 @@ as not passing, so the exit code is 1.
 
 ## Staging run
 
-Run on 2026-11-14 at about 07:10 Helsinki time against staging as deployed then; the sandbox, quote and order ids
-are from that run. No tokens appear in the output.
+Run on 2026-11-14 at 12:34 Helsinki time against staging at commit 7685e81 (the kit is client-side, so the new
+checks need no deploy); the sandbox, quote and order ids are from that run. No tokens appear in the output.
 
 ```text
 $ uv run python scripts/conformance.py --base https://staging.135-181-63-134.sslip.io
-Sous conformance: https://staging.135-181-63-134.sslip.io  (sandbox SBX-W3SP, product 464201, delivery 2026-11-16)
+Sous conformance: https://staging.135-181-63-134.sslip.io  (sandbox SBX-M3CE, product 464201, delivery 2026-11-16)
 
-PASS  discovery             JWKS, rule register, quote schema and OpenAPI are public
-                            -> jwks 200 (1 Ed25519 key); rules 200 (52 rules); quote schema 200; openapi 200 (47 paths)
-PASS  sandbox               POST /sandbox gives three mandates and two tokens
-                            -> SBX-W3SP: mandates hospital, hotel, school; agent + approver token issued; lookup budget 15; delivery date 2026-11-16
-PASS  quote_signature       A quote's JWS verifies against the JWKS and matches the response
-                            -> quote Q-D00863E4 total 15.6 EUR: EdDSA kid ede223ac7061458b verifies, typ sous-quote+jws; payload equals the response
-PASS  tamper                A forged total or altered quote id cannot be ordered
-                            -> JWS with a lowered total fails verification; order with altered quote id -> 404 quote_not_found; order with the forged JWS as quote -> 404 quote_not_found
-PASS  idempotency           Same key retry returns the same order; a quote orders once
-                            -> PO-5E64E10D ordered; retry with the same key -> same order PO-5E64E10D; same quote with a new key -> 409 quote_used
-PASS  cross_agent_key       Another agent with the same key never gets the first order
-                            -> hospital agent, same key + hotel's quote -> 409 quote_mismatch
-PASS  receipt_signature     The order receipt JWS verifies and matches the order
-                            -> receipt of PO-5E64E10D verifies (typ sous-order+jws); id, quote, mandate, status and total match the order
-PASS  private_reads         Sandbox data is unreadable without credentials, like unknown ids
-                            -> no credentials: order 404 order_not_found; quote 404 quote_not_found; mandate 404 mandate_not_found; ?sandbox= list 401 approver_code_required; with the agent token 200
-PASS  hard_limit            Over the hard limit is refused with a rule from /rules
-                            -> 1443 L = 2251.08 EUR vs hard limit 1500.0 EUR -> refused (spend.hard_limit); every rule id is in /rules
-PASS  prompt_injection      Injected rationale does not change the tier (both ask)
-                            -> 2004 L (3126.24 / 3126.24 EUR) -> plain pending_approval ['spend.auto_limit'], injected pending_approval ['spend.auto_limit']; injected text kept only as agent_rationale
-PASS  agent_cannot_approve  An agent token cannot approve (403 agent_cannot_approve)
-                            -> PO-EF2FD918: no credentials -> 401 unauthorized; agent token as Bearer -> 403 agent_cannot_approve; as X-Approver-Code -> 403 agent_cannot_approve; order still pending_approval
-PASS  approver_can_decide   The sandbox approver token approves and rejects
-                            -> sandbox approver token: approve PO-EF2FD918 -> ordered; reject PO-731BA47F -> rejected
-PASS  audit                 Hash chain verifies; the quote and order events are logged
-                            -> chain ok=True over 447 events; Q-D00863E4: quote.issued; PO-5E64E10D: order.ordered; PO-EF2FD918: agent.approval_attempt_refused, order.approved, order.pending_approval
-PASS  stock_buckets         Live quote lines carry stock_level, no exact stock
-                            -> 4 lines in 4 live quotes: stock_level ample, no exact amounts
-FAIL  stock_buckets_seeded  The seeded sandbox quote follows the same stock policy
-                            -> seeded quote Q-A6C68A61: 464201: stock_level=None; 464411: stock_level=None
+PASS  discovery               JWKS, rule register, quote schema and OpenAPI are public
+                              -> jwks 200 (1 Ed25519 key); rules 200 (70 rules); quote schema 200; openapi 200 (63 paths)
+PASS  sandbox                 POST /sandbox gives three mandates and two tokens
+                              -> SBX-M3CE: mandates hospital, hotel, school; agent + approver token issued; lookup budget 15; delivery date 2026-11-16
+PASS  quote_signature         A quote's JWS verifies against the JWKS and matches the response
+                              -> quote Q-F4F66003 total 15.6 EUR: EdDSA kid ede223ac7061458b verifies, typ sous-quote+jws; payload equals the response
+PASS  tamper                  A forged total or altered quote id cannot be ordered
+                              -> JWS with a lowered total fails verification; order with altered quote id -> 404 quote_not_found; order with the forged JWS as quote -> 404 quote_not_found
+PASS  idempotency             Same key retry returns the same order; a quote orders once
+                              -> PO-24882361 ordered; retry with the same key -> same order PO-24882361; same quote with a new key -> 409 quote_used
+PASS  cross_agent_key         Another agent with the same key never gets the first order
+                              -> hospital agent, same key + hotel's quote -> 409 quote_mismatch
+PASS  receipt_signature       The order receipt JWS verifies and matches the order
+                              -> receipt of PO-24882361 verifies (typ sous-order+jws); id, quote, mandate, status and total match the order
+PASS  private_reads           Sandbox data is unreadable without credentials, like unknown ids
+                              -> no credentials: order 404 order_not_found; quote 404 quote_not_found; mandate 404 mandate_not_found; ?sandbox= list 401 approver_code_required; with the agent token 200
+PASS  hard_limit              Over the hard limit is refused with a rule from /rules
+                              -> 1443 L = 2251.08 EUR vs hard limit 1500.0 EUR -> refused (spend.hard_limit); every rule id is in /rules
+PASS  prompt_injection        Injected rationale does not change the tier (both ask)
+                              -> 2004 L (3126.24 / 3126.24 EUR) -> plain pending_approval ['spend.auto_limit'], injected pending_approval ['spend.auto_limit']; injected text kept only as agent_rationale
+PASS  agent_cannot_approve    An agent token cannot approve (403 agent_cannot_approve)
+                              -> PO-90114547: no credentials -> 401 unauthorized; agent token as Bearer -> 403 agent_cannot_approve; as X-Approver-Code -> 403 agent_cannot_approve; order still pending_approval
+PASS  agent_visible_approval  Nothing the agent is handed (links, tokens, MCP) approves its held order
+                              -> PO-90114547: 2 links (GET /rules/spend.auto_limit -> 200/200; GET /ui/?sandbox=SBX-M3CE -> 200/200); 5 token-like values from quote response, order response, GET order, GET quote, MCP get_order (idempotency_key, jws, order_url?sandbox=, quote.agent_id, receipt_jws); MCP 11 tools, none that decides; get_order output read; approve/options with agent bearer -> 409 passkey_not_registered; 19 decision attempts -> all refused (400, 401, 403); order still pending_approval
+PASS  approver_can_decide     The sandbox approver token approves and rejects
+                              -> sandbox approver token: approve PO-90114547 -> ordered; reject PO-E7915085 -> rejected
+PASS  audit                   Hash chain verifies; the quote and order events are logged
+                              -> chain ok=True over 821 events; head from the start still in the chain; Q-F4F66003: quote.issued; PO-24882361: order.ordered; PO-90114547: agent.approval_attempt_refused, order.approved, order.pending_approval
+PASS  stock_buckets           Live quote lines carry stock_level, no exact stock
+                              -> 4 lines in 4 live quotes: stock_level ample, no exact amounts
+PASS  stock_buckets_seeded    The seeded sandbox quote follows the same stock policy
+                              -> seeded quote Q-48A75DDF: every line has a stock_level bucket
+PASS  stock_oracle            A 10^6-unit request reveals no exact stock outside a mandate
+                              -> mandate quote covers all 1e+06 L (no stock limit reported for this product, so no exact amount to find; a short-stocked --product exercises the split); anonymous quote Q-0D44C787: 1 orderable line(s) covering 1e+06 L, stock_level unknown; nothing exact in any field or message of either answer
 
-14 passed, 1 failed, 0 skipped; 4 quotes requested, sandbox live lookups used 1/15
+17 passed, 0 failed, 0 skipped; 6 quotes requested, sandbox live lookups used 1/15
 ```
 
-The one failure is real: the sandbox's seeded quote (priced from reference data, no Valio call) has lines with
-`stock: "plenty"` and no `stock_level`, unlike every live quote. It was reported on the agent board (issue #1)
-and fixed in 895b04e (seeded lines now say `stock_level: "unknown"`, since no availability was read); the
-offline test below passes all 15 checks on that code, and staging turns green once it is deployed, with no change
-to the kit.
+All 17 pass. `agent_visible_approval` made 19 decision attempts with only what the agent is handed (the
+`?sandbox=` parameter of its `order_url`/`approval_url`, the quote and receipt JWSs, its idempotency key, a forged
+passkey assertion, enrolling its own passkey): every one 400, 401 or 403, and the order stayed pending; none of the
+11 MCP tools decides. `stock_oracle`: Valio reports no stock limit for 464201 at 10^6 L (`stock_level unknown` on the
+anonymous quote, nothing to size under the mandate), so on staging it shows that no field or message carries an exact
+number; the split path (mandate quote sized to stock, anonymous quote not) runs offline against the mock's
+stock (below). An earlier run on 2026-11-14 (15 checks, before 895b04e was deployed) failed `stock_buckets_seeded`:
+seeded lines had no `stock_level`; fixed in 895b04e.
 
 ## In CI
 
@@ -115,9 +122,9 @@ HTTP semantics, no network), with the one-product catalog and mocked Valio Aimo 
 client runs the app's lifespan, so `/mcp` is up and `agent_visible_approval` reads the MCP output too. It asserts
 all 17 checks pass, that the run asks for exactly 6 quotes, that `agent_visible_approval` reached MCP and tried
 the approval link's `?sandbox=` parameter and both JWSs, that `stock_oracle` saw the mandate quote sized to the mock's
-99999 units while the anonymous one covered the full 10^6 with `STOCK_SIZING_WITHHELD`, and that no token appears in
+99999 units (less what the kit's own orders reserved) while the anonymous one covered the full 10^6 with `STOCK_SIZING_WITHHELD`, and that no token appears in
 the output. Planted regressions show the kit catches them: `SOUS_STOCK_EXPOSURE=exact` fails `stock_buckets` and
-`stock_oracle` (the anonymous line is capped at 99999); a gateway that accepts the approval link's sandbox id as an
+`stock_oracle` (the anonymous line is capped at what is left); a gateway that accepts the approval link's sandbox id as an
 approver code fails `agent_visible_approval` ("ACCEPTED: order_url?sandbox= as X-Approver-Code -> 200"). Unit tests
 cover the message scanner (stock numbers found; dates, percentages and the requested amount ignored) and the
 link/token collector. All run offline in about 15 seconds.

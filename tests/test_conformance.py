@@ -3,6 +3,7 @@ gateway, but through TestClient, with test_sandbox.py's one-product catalog and 
 The client runs the app's lifespan, so the MCP endpoint (/mcp) is up for agent_visible_approval."""
 
 import json
+import re
 
 from fastapi.testclient import TestClient
 
@@ -43,9 +44,10 @@ def test_kit_passes_against_the_reference_gateway(env, monkeypatch):  # noqa: F8
     avis = by["agent_visible_approval"]["detail"]
     assert "MCP" in avis and "get_order output read" in avis and "all refused" in avis
     assert "?sandbox=" in avis and "jws" in avis and "pending_approval" in avis
-    # stock_oracle: the mock has 99999 in stock; the mandate quote is sized to it, the anonymous one is not
+    # stock_oracle: the mock has 99999 in stock, less what the kit's own orders reserved (sous/reservations.py);
+    # the mandate quote is sized to what is left, the anonymous one is not
     oracle = by["stock_oracle"]["detail"]
-    assert "sized to stock: 99999" in oracle and "covering 1e+06 L" in oracle and "STOCK_SIZING_WITHHELD" in oracle
+    assert re.search(r"sized to stock: \d+ ", oracle) and "covering 1e+06 L" in oracle and "STOCK_SIZING_WITHHELD" in oracle
     text = conformance.table(report) + json.dumps(report)
     assert report["sandbox"] in text
     for secret in (kit.s["agent_token"], kit.s["approver_token"]):  # tokens never appear in the output
@@ -59,7 +61,7 @@ def test_kit_catches_exact_stock(env, monkeypatch):  # noqa: F811
     assert by["stock_buckets"]["status"] == "fail" and "available_amount" in by["stock_buckets"]["detail"]
     # exact mode sizes the anonymous quote to stock and shows available_amount: the oracle sees both
     assert by["stock_oracle"]["status"] == "fail"
-    assert "capped at 99999" in by["stock_oracle"]["detail"]
+    assert re.search(r"capped at \d+ L of 1000000", by["stock_oracle"]["detail"])
     assert report["ok"] is False
 
 
