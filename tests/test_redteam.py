@@ -131,6 +131,8 @@ def worker(tmp_path):
         R._W.clear()
         R._W.update(gw=gw, provider="oracle", max_tool_calls=12, state=tmp_path / "w.db")
         yield R._W
+    from sous import reservations
+    reservations.set_scope(None)  # llm_eval.fresh_state gives each case its own pool; later tests use the global one
 
 
 def overlimit(**kw):
