@@ -51,3 +51,10 @@ def test_everything_that_needs_the_agent_is_hidden_with_one_notice():
     # a 404 from /agent/status switches the page to the notice (and offers break.html only when it exists)
     assert re.search(r"e\.status === 404\) return agentOff\(\)", PAGE)
     assert 'fetch("break.html", {method: "HEAD"})' in PAGE
+
+
+def test_agent_link_opens_the_page_whether_or_not_the_agent_is_mounted():
+    c = TestClient(api.app)
+    for path in ("/agent", "/agent/"):
+        r = c.get(path, follow_redirects=False)
+        assert r.status_code in (302, 307) and r.headers["location"] == "/ui/agent.html"

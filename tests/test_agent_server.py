@@ -324,7 +324,7 @@ def test_ask_needs_a_model_key(c, sbx):
 @pytest.mark.parametrize("flag,mounted", [("1", True), ("", False)])
 def test_mounted_only_with_the_flag(flag, mounted):
     code = ("from sous import api; import sys; "
-            "sys.exit(0 if any(getattr(r, 'path', '') == '/agent' for r in api.app.routes) else 3)")
+            "sys.exit(0 if any(type(r).__name__ == 'Mount' and r.path == '/agent' for r in api.app.routes) else 3)")
     env = {**os.environ, "SOUS_BUYER_AGENT": flag}
     rc = subprocess.run([sys.executable, "-c", code], env=env, cwd=config.ROOT).returncode
     assert rc == (0 if mounted else 3)

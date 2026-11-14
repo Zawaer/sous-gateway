@@ -111,6 +111,16 @@ BUYER_DIR = config.ROOT / "buyer"
 if BUYER_DIR.is_dir():
     app.mount("/buyer", StaticFiles(directory=BUYER_DIR, html=True), name="buyer")
 
+
+
+# /agent and /agent/ always open the buyer-agent page, mounted or not (prod 404'd, staging 307'd to a 404).
+# Declared before the mount, so they win over it; the agent's API stays under /agent/<route>.
+@app.get("/agent", include_in_schema=False)
+@app.get("/agent/", include_in_schema=False)
+def agent_page():
+    return RedirectResponse("/ui/agent.html" if (WEB_DIR / "agent.html").is_file() else "/ui/")
+
+
 # The reference BUYER agent (agent/server.py) is not part of the gateway; mounted only for the demo page.
 if config.env("BUYER_AGENT") == "1":
     from agent.server import app as buyer_agent_app
