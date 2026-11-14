@@ -374,7 +374,7 @@ class Api:
 def problem(status, body) -> str:
     if isinstance(body, dict):
         return f"HTTP {status}: {body.get('title', '')} {body.get('detail', '')}".strip()
-    return f"HTTP {status}: {str(body)[:200]}"
+    return f"HTTP {status}: {str(body).strip()[:200]}"
 
 
 # ---------------------------------------------------------------- the bundle
