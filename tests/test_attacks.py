@@ -72,7 +72,7 @@ def test_slice_crossing_order_is_held_by_the_daily_limit(c, env):  # noqa: F811
     d = check_common(c, s, attack(c, s, "slice"), "slice", "held", "spend.daily_limit", env)
     statuses = [o["status"] for o in d["orders"]]
     assert statuses == ["ordered", "ordered", "ordered", "pending_approval"], statuses
-    assert all(o["total_ex_vat"] < 2500 for o in d["orders"])
+    assert all(o["total_ex_vat"] <= 500 for o in d["orders"])
     # again: today's spend is already high, so the first slice is held at once
     d2 = check_common(c, s, attack(c, s, "slice"), "slice", "held", "spend.daily_limit", env)
     assert [o["status"] for o in d2["orders"]] == ["pending_approval"]
@@ -80,9 +80,9 @@ def test_slice_crossing_order_is_held_by_the_daily_limit(c, env):  # noqa: F811
 
 def test_injection_changes_nothing_and_is_flagged(c, env):  # noqa: F811
     s = new(c)
-    d = check_common(c, s, attack(c, s, "injection"), "injection", "blocked", "mandate.ok", env)
+    d = check_common(c, s, attack(c, s, "injection"), "injection", "blocked", "spend.auto_limit", env)
     plain, inj = (store.get_order(o["id"]) for o in d["orders"])
-    assert plain["decision"]["outcome"] == inj["decision"]["outcome"] == "silent"
+    assert plain["decision"]["outcome"] == inj["decision"]["outcome"] == "ask"
     assert inj["agent_rationale"] == attacks.INJECTION and d["agent_claim"]["suspicious"]
     r = c.get(f"/orders/{inj['id']}", headers={"Authorization": f"Bearer {s['agent_token']}"})
     assert r.json()["agent_claim"]["suspicious"] is True
@@ -144,3 +144,27 @@ def test_access_and_rate_limit(c, env, monkeypatch):  # noqa: F811
 def test_quickstart_links_the_page(c):
     s = new(c)
     assert s["quickstart"]["break_ui"].endswith(f"/ui/break.html?sandbox={s['sandbox']['id']}")
+
+
+def test_attacks_leave_the_judges_mandates_spend_free(c, env):  # noqa: F811
+    """Orders that could go through run under the sandbox's attack-demo mandate, created on first use."""
+    from sous import service as S
+    s = new(c)
+    sid = s["sandbox"]["id"]
+    for name in attacks.ATTACKS:
+        assert attack(c, s, name).status_code == 200, name
+    day = S._now().date().isoformat()
+    for m in s["mandates"]:  # hotel, hospital, school: nothing ordered by a demo
+        assert store.spent_today(m["mandate_id"], day) == 0, m["scenario"]
+    demo = f"M-ATTACK-DEMO-{sid}"
+    dm = S._mandate(demo)
+    assert dm.sandbox == sid and dm.buyer == next(m["buyer"] for m in s["mandates"] if m["scenario"] == "hotel")
+    assert (dm.auto_approve_limit_eur, dm.daily_limit_eur) == (500, 1500)
+    assert store.spent_today(demo, day) > 0
+    assert sandbox.owner(demo) == sid
+    listed = c.get(f"/sandbox/{sid}").json()["mandates"]
+    assert [m["mandate_id"] for m in listed if m["scenario"] == attacks.DEMO] == [demo]
+    for tok in (s["agent_token"], s["approver_token"]):  # readable with either sandbox token
+        assert c.get(f"/mandates/{demo}", headers={"Authorization": f"Bearer {tok}"}).status_code == 200
+    assert c.get(f"/mandates/{demo}").status_code == 404
+    assert len([e for e in store.audit_events(sid) if e["event"] == "sandbox.attack_mandate_created"]) == 1
