@@ -147,3 +147,24 @@ def test_mandate_tier_overrides():
 def test_rule_is_registered():
     r = R.get("product.use_fit")
     assert r and r["tiers"] == ["silent", "notify", "ask", "block"] and r["text_fi"]
+
+
+def test_approve_with_changes_keeps_the_items_use(monkeypatch):
+    # review2: approve-with-changes re-quoted the held lines with only product, amount, unit and substitute_for, so
+    # the item's use / purpose / substitution were lost. A buyer who tightened use_fit to block after the order was
+    # held saw a plain approve refused, while approve-with-changes ordered coffee cream for whipping.
+    from sous import approve_changes as AC
+    monkeypatch.setattr(S.erp, "submit", lambda o: o)
+    mandate()
+    r = quote(["COFFEE"], use="whipping")
+    o = S.place_order("a", "M", r["quote"]["id"])
+    assert o["status"] == "pending_approval"
+    mandate(use_fit="block")
+    with pytest.raises(S.GatewayError) as e:
+        AC.approve_with_changes(o["id"], AC.ChangesIn(by="boss", changes=[{"line": 0, "quantity": 5}]), "code")
+    assert e.value.code == "changes_refused" and "Coffee cream for whipping" in str(e.value)
+    assert store.get_order(o["id"])["status"] == "pending_approval"
+    mandate(use_fit="ask")  # the changed order carries the use: the same finding, approved by the same human
+    out = AC.approve_with_changes(o["id"], AC.ChangesIn(by="boss", changes=[{"line": 0, "quantity": 5}]), "code")
+    assert out["order"]["status"] == "ordered"
+    assert any(f["rule"] == "product.use_fit" for f in out["order"]["decision"]["findings"])

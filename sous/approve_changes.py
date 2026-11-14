@@ -66,8 +66,24 @@ def approve_with_changes(order_id: str, req: ChangesIn, authority: str | None) -
                for i in sorted({c.line for c in req.changes}) if qty[i] != float(lines[i].get("quantity") or 0)]
     if not changed:
         raise S.GatewayError("invalid_request", "No quantity changed; use approve instead.", 422)
+    # what each line's item is for travels with it (use, purpose, substitution: sous/use_fit.py, use_sensitivity.py,
+    # purposes.py), read from the held order's signed quote (order lines are its lines, in order), so the changed
+    # order is checked against the same restrictions as the original: an edit never relaxes them
+    row = store.get_quote(o["quote_id"]) if o.get("quote_id") else None
+    signed = (S.signing.verify(row["_jws"], "sous-quote+jws") if row else None) or {}
+    q_lines, q_items = signed.get("lines") or [], signed.get("items") or []
+
+    def _for(i: int) -> dict:
+        ql = q_lines[i] if i < len(q_lines) and q_lines[i].get("product_id") == lines[i]["product_id"] else {}
+        k = ql.get("item_index")
+        it = q_items[k] if isinstance(k, int) and 0 <= k < len(q_items) else {}
+        out = {f: it.get(f) for f in ("purpose", "substitution") if it.get(f)}
+        if use := ql.get("use") or it.get("use"):
+            out["use"] = use
+        return out
+
     items = [S.QuoteItem(product_ids=[l["product_id"]], amount=qty[i], unit=l.get("sales_unit") or "SALES_UNIT",
-                         substitute_for=l.get("substitute_for"))
+                         substitute_for=l.get("substitute_for"), **_for(i))
              for i, l in enumerate(lines) if qty[i] > 0]
     if not items:
         raise S.GatewayError("invalid_request", "Every line would be removed; reject the order instead.", 422)
