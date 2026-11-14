@@ -98,3 +98,31 @@ def test_runner_probe_is_accepted_only_in_its_exact_shape():
     assert ce.check_egress(pol, _trace(probe))["verdict"] == "pass"
     upload = _http("https://pkg.github.com/upload")
     assert ce.check_egress(pol, _trace(probe, upload))["undeclared_allowed"] == ["pkg.github.com:443"]
+
+
+def _match(vid, purl, sev, state="fixed", versions=("2.0",)):
+    return {"vulnerability": {"id": vid, "severity": sev, "fix": {"state": state, "versions": list(versions)}},
+            "artifact": {"purl": purl, "name": purl.split("/")[-1].split("@")[0], "version": purl.split("@")[-1],
+                         "type": "python"}}
+
+
+def test_vulnerabilities_from_craci_sboms_cross_checked_and_gated():
+    jobs = {"test": {"components": [{"purl": "pkg:pypi/Hatchling@1.0?file_name=x.whl"},
+                                    {"purl": "pkg:pypi/requests@2.0"},
+                                    {"purl": "pkg:oci/python@sha256:" + "a" * 64}]},
+            "docker": {"components": [{"purl": "pkg:pypi/requests@2.0",
+                                       "properties": [{"name": "craci:source:restored", "value": "true"}]}]}}
+    sbom, where = ce.craci_scan_sbom(jobs)
+    assert sorted(c["purl"] for c in sbom["components"]) == ["pkg:pypi/Hatchling@1.0", "pkg:pypi/requests@2.0"]
+    assert where[("pypi", "requests", "2.0")] == {"jobs": ["docker", "test"], "restored_only": False}
+    craci = ce.grype_matches({"matches": [_match("GHSA-1", "pkg:pypi/hatchling@1.0", "Critical"),
+                                          _match("GHSA-2", "pkg:pypi/requests@2.0", "Medium")]})
+    image = ce.grype_matches({"matches": [_match("GHSA-2", "pkg:pypi/requests@2.0", "Medium"),
+                                          _match("CVE-3", "pkg:pypi/pip@25.0", "Critical", "not-fixed", ())]})
+    v = ce.cross_check_vulns(craci, image, where)
+    assert v["in_both"] == ["GHSA-2 requests@2.0"]
+    assert [f["id"] for f in v["only_in_craci_jobs"]] == ["GHSA-1"] and v["only_in_craci_jobs"][0]["jobs"] == ["test"]
+    assert v["image_pypi_not_downloaded_by_any_job"] == ["CVE-3 pip@25.0"]
+    # a Critical with no fix is reported, not blocking; a Critical with a fix blocks
+    assert [f["id"] for f in v["blocking_critical_with_fix"]] == ["GHSA-1"]
+    assert v["craci_sboms"]["by_severity"]["Critical"] == {"total": 1, "fix_available": 1}

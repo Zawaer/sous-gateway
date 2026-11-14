@@ -420,6 +420,102 @@ def check_against_lock(sbom: dict, lock_text: str) -> dict:
             "sha256_recorded_by_craci": hash_ok + len(hash_bad)}
 
 
+# ---------------------------------------------------------------- vulnerability management on CRACI's SBOMs
+
+# CRACI's public API (openapi.json, 14.11.2026) has SBOM, trace, provenance, logs and usage routes, but no
+# vulnerability, advisory, finding or AI-fix route. These are probed on every run (an unknown route answers 404, a
+# real one 401/200), so the bundle shows the day CRACI exposes one; until then grype matches CRACI's own SBOMs.
+CRACI_VULN_PROBES = ["/v1preview1/vulnerabilities", "/v1preview1/findings", "/v1preview1/advisories",
+                     "/v1preview1/vulnerability-report", "/v1experimental1/vulnerabilities"]
+SCANNABLE = ("pypi", "github")  # grype matches PyPI packages and GitHub Actions (GHSA); pkg:oci/ghacache are refs
+
+
+def craci_scan_sbom(job_sboms: dict) -> tuple[dict, dict]:
+    """One CycloneDX of every scannable component CRACI saw in any job, deduplicated by purl, and
+    {(type, name, version): {"jobs": [...], "restored_only": bool}} to attribute grype's matches back to jobs."""
+    comps, where = {}, {}
+    for job, sb in sorted(job_sboms.items()):
+        for c in _components(sb):
+            k = purl_key(c.get("purl", ""))
+            if not k or k[0] not in SCANNABLE or not k[2]:
+                continue
+            purl = c["purl"].split("?", 1)[0]
+            comps.setdefault(purl, {"type": "library", "bom-ref": purl, "name": c.get("name") or k[1],
+                                    "version": k[2], "purl": purl})
+            w = where.setdefault(k, {"jobs": set(), "observed": False})
+            w["jobs"].add(job)
+            w["observed"] |= not _restored(c)
+    sbom = {"bomFormat": "CycloneDX", "specVersion": "1.6", "version": 1,
+            "metadata": {"component": {"type": "application", "name": "craci-job-sboms"}},
+            "components": list(comps.values())}
+    return sbom, {k: {"jobs": sorted(v["jobs"]), "restored_only": not v["observed"]} for k, v in where.items()}
+
+
+def grype_matches(report: dict) -> dict:
+    """{(vuln id, (type, name, version)): finding} from a grype JSON report."""
+    out = {}
+    for m in (report or {}).get("matches") or []:
+        v, a = m.get("vulnerability") or {}, m.get("artifact") or {}
+        k = purl_key(a.get("purl", "")) or (a.get("type", ""), _norm_name("pypi" if a.get("type") == "python" else "",
+                                                                              a.get("name", "")), a.get("version", ""))
+        if k[0] == "python":
+            k = ("pypi", _norm_name("pypi", k[1]), k[2])
+        fix = v.get("fix") or {}
+        out[(v.get("id", ""), k)] = {
+            "id": v.get("id"), "severity": v.get("severity") or "Unknown", "package": f"{k[0]}/{k[1]}@{k[2]}",
+            "fix_state": fix.get("state") or "unknown", "fix_versions": fix.get("versions") or [],
+            "aliases": sorted({r.get("id") for r in m.get("relatedVulnerabilities") or [] if r.get("id")} - {v.get("id")}),
+            "epss": max((e.get("epss") or 0 for e in v.get("epss") or []), default=None)}
+    return out
+
+
+SEVERITIES = ["Critical", "High", "Medium", "Low", "Negligible", "Unknown"]
+
+
+def _sev_table(findings) -> dict:
+    t = {s: {"total": 0, "fix_available": 0} for s in SEVERITIES}
+    for f in findings:
+        s = t.setdefault(f["severity"], {"total": 0, "fix_available": 0})
+        s["total"] += 1
+        s["fix_available"] += f["fix_state"] == "fixed"
+    return t
+
+
+def cross_check_vulns(craci: dict, image: dict | None, where: dict) -> dict:
+    """CRACI-SBOM findings (what CI jobs actually downloaded) vs the image scan (grype on syft's SBOM).
+    Blocking: a Critical with a fix available, in either view."""
+    for (vid, k), f in craci.items():
+        f["jobs"] = where.get(k, {}).get("jobs", [])
+        f["restored_only"] = where.get(k, {}).get("restored_only", False)
+    img = image or {}
+    craci_pkgs = {k for _, k in craci}
+    both = sorted(f"{vid} {k[1]}@{k[2]}" for vid, k in craci if (vid, k) in img)
+    only_craci = [f for (vid, k), f in sorted(craci.items()) if (vid, k) not in img]
+    # image findings in ecosystems CRACI could have seen (PyPI) but on a package no job downloaded
+    image_pypi_unseen = sorted(f"{vid} {k[1]}@{k[2]}" for vid, k in img if k[0] == "pypi" and k not in craci_pkgs)
+    blocking = sorted({f["id"] + " " + f["package"]: f for f in list(craci.values()) + list(img.values())
+                       if f["severity"] == "Critical" and f["fix_state"] == "fixed"}.values(), key=lambda f: f["id"])
+    return {"craci_sboms": {"findings": len(craci), "packages_scanned": len(where),
+                            "by_severity": _sev_table(craci.values())},
+            "image": {"findings": len(img), "by_severity": _sev_table(img.values())} if image is not None else None,
+            "in_both": both, "only_in_craci_jobs": only_craci, "image_pypi_not_downloaded_by_any_job": image_pypi_unseen,
+            "blocking_critical_with_fix": blocking}
+
+
+def run_grype(cmd: str, sbom: dict, workdir: Path) -> tuple[dict | None, str | None]:
+    """grype on an SBOM file; (report, error)."""
+    workdir.mkdir(parents=True, exist_ok=True)
+    f = workdir / "craci-jobs.cdx.json"
+    f.write_text(json.dumps(sbom))
+    try:
+        r = subprocess.run([cmd, f"sbom:{f}", "-o", "json", "-q"], capture_output=True, text=True, timeout=600)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return None, f"grype failed: {e}"
+    if r.returncode != 0:
+        return None, f"grype exit {r.returncode}: {r.stderr.strip()[-300:]}"
+    return json.loads(r.stdout), None
+
+
 # ---------------------------------------------------------------- API clients (+ raw capture / replay)
 
 class Api:
@@ -562,6 +658,44 @@ def build(args) -> tuple[dict, int]:
     else:
         bundle["api_gaps"].append("no syft SBOM of the image (artifact sbom-and-vulns missing)")
 
+    # Vulnerability management. CRACI's API has no findings route (probed below, every run), so grype matches the
+    # packages CRACI itself saw each job download, and the result is cross-checked with the image scan.
+    vul = bundle["vulnerabilities"] = {"craci_api": {}}
+    for path in CRACI_VULN_PROBES:
+        st, body = api.craci(path, {"provider": "github", "repo": args.repo}, "vuln_probe_" + path.strip("/"))
+        vul["craci_api"][path] = st if st != 200 else body
+    if any(isinstance(v, (dict, list)) for v in vul["craci_api"].values()):
+        bundle["api_gaps"].append("CRACI now answers a vulnerability route: read it into the cross-check")
+    else:
+        vul["craci_api_note"] = ("no vulnerability, advisory, finding or AI-fix route in the CRACI API "
+                                 f"({len(CRACI_VULN_PROBES)} candidate routes answered "
+                                 f"{sorted({str(v) for v in vul['craci_api'].values()})})")
+    scan_sbom, where = craci_scan_sbom(job_sboms)
+    raw_grype = Path(args.replay or args.raw_dir or ".") / "grype_craci_jobs.json"
+    craci_report, err = None, None
+    if args.replay:
+        craci_report = json.loads(raw_grype.read_text()) if raw_grype.exists() else None
+        err = None if craci_report else "no recorded grype report in the replay dir"
+    elif args.grype and scan_sbom["components"]:
+        craci_report, err = run_grype(args.grype, scan_sbom, Path(args.out) / "vuln")
+        if craci_report and args.raw_dir:
+            Path(args.raw_dir).mkdir(parents=True, exist_ok=True)
+            raw_grype.write_text(json.dumps(craci_report))
+    else:
+        err = "grype not available (--grype)" if scan_sbom["components"] else "no CRACI SBOM to scan"
+    image_report = None
+    if args.image_grype and Path(args.image_grype).exists():
+        image_report = json.loads(Path(args.image_grype).read_text())
+    if craci_report is not None:
+        vul.update(cross_check_vulns(grype_matches(craci_report), grype_matches(image_report)
+                                     if image_report is not None else None, where))
+        d = craci_report.get("descriptor") or {}
+        vul["scanner"] = {"grype": d.get("version"), "db_built": ((d.get("db") or {}).get("status") or {}).get("built")}
+    else:
+        bundle["api_gaps"].append(f"CRACI SBOMs not scanned: {err}")
+    if image_report is None:
+        bundle["api_gaps"].append("no image grype report (artifact sbom-and-vulns missing)")
+
     # Provenance: the image, then the caches main's jobs can restore.
     digest = args.image_digest
     if not digest and syft:
@@ -648,10 +782,14 @@ def build(args) -> tuple[dict, int]:
             "undeclared_allowed", [])}),
         "hosts_contacted": sorted({f"{d['host']}:{d['port']}" for j in bundle["jobs"]
                                    for d in (j.get("egress") or {}).get("destinations", []) if d["allowed"]}),
+        # a Critical with a fix available, in what a CI job downloaded (CRACI SBOM) or in the image (syft SBOM)
+        "vuln_verdict": ("fail" if bundle["vulnerabilities"].get("blocking_critical_with_fix") else
+                         "pass" if "blocking_critical_with_fix" in bundle["vulnerabilities"] else "unavailable"),
     }
     bundle["api_calls"] = [{k: c[k] for k in ("path", "status")} | {"api": c["api"].split("//")[1]}
                            for c in api.calls]
-    return bundle, (1 if failed else 0)
+    vfail = bundle["summary"]["vuln_verdict"] == "fail" and not getattr(args, "no_vuln_fail", False)
+    return bundle, (1 if failed or vfail else 0)
 
 
 # ---------------------------------------------------------------- signing + summary
@@ -756,6 +894,32 @@ def markdown(bundle: dict, jwk: dict | None, key_note: str | None, digest: str |
         p = img["oci_manifest_provenance"]
         out += ["", f"Built image `{img['digest'][:19]}...` (loaded into the runner, never pushed): CRACI provenance "
                     f"{'recorded' if isinstance(p, dict) else p}"]
+    v = bundle.get("vulnerabilities") or {}
+    if v:
+        out += ["", f"### Vulnerabilities: {bundle['summary'].get('vuln_verdict', '-').upper()} "
+                    "(gate: Critical with a fix available)", ""]
+        if "craci_sboms" in v:
+            sc = v.get("scanner") or {}
+            out += [f"grype {sc.get('grype')} (DB built {sc.get('db_built')}) on the "
+                    f"{v['craci_sboms']['packages_scanned']} PyPI packages and GitHub Actions CRACI saw the jobs "
+                    "download, next to the docker job's grype scan of the image (syft SBOM).", "",
+                    "| Severity | CRACI job SBOMs (fix available) | Image (fix available) |", "|---|---|---|"]
+            im = (v.get("image") or {}).get("by_severity") or {}
+            for sev in SEVERITIES:
+                c, i = v["craci_sboms"]["by_severity"].get(sev, {}), im.get(sev, {})
+                out.append(f"| {sev} | {c.get('total', 0)} ({c.get('fix_available', 0)}) | "
+                           f"{i.get('total', '-')} ({i.get('fix_available', '-')}) |")
+            oc = v["only_in_craci_jobs"]
+            listed = ", ".join(f"{f['id']} {f['package']} ({f['severity']}; {', '.join(f['jobs'])})" for f in oc[:12])
+            out += ["", f"Same finding in both views: {len(v['in_both'])}. Only in what CI jobs downloaded (build/test "
+                        f"tools, Actions; not in the image): {len(oc)}{': ' + listed if oc else ''}. "
+                        f"Image PyPI findings on a package no job downloaded: "
+                        f"{len(v['image_pypi_not_downloaded_by_any_job'])}."]
+            for f in v["blocking_critical_with_fix"]:
+                where = f" (jobs: {', '.join(f['jobs'])})" if f.get("jobs") else " (image)"
+                out.append(f"- **Blocking** {f['id']} {f['package']} -> fix {', '.join(f['fix_versions']) or '?'}{where}")
+        if v.get("craci_api_note"):
+            out += ["", f"CRACI API: {v['craci_api_note']}; so no CRACI finding or AI-fix suggestion to show."]
     if bundle["api_gaps"]:
         out += ["", "Gaps: " + "; ".join(bundle["api_gaps"])]
     if digest:
@@ -798,6 +962,9 @@ def main() -> int:
     ap.add_argument("--workflow-file", help="judge against this file instead of ci.yml at the run's commit")
     ap.add_argument("--syft-sbom", default="sbom.cdx.json")
     ap.add_argument("--image-digest")
+    ap.add_argument("--grype", help="grype binary: scan the packages CRACI saw the jobs download")
+    ap.add_argument("--image-grype", default="grype.json", help="grype report of the image (docker job)")
+    ap.add_argument("--no-vuln-fail", action="store_true", help="report blocking vulnerabilities without failing")
     ap.add_argument("--max-caches", type=int, default=100)
     ap.add_argument("--out", default="craci-evidence")
     ap.add_argument("--raw-dir", help="save every raw API response here")
@@ -836,6 +1003,8 @@ def main() -> int:
         print("::warning::CRACI evidence incomplete: " + "; ".join(bundle["api_gaps"]))
     for h in bundle["summary"]["undeclared_hosts"]:
         print(f"::error::A deny-mode job reached {h}, which its declared network policy does not allow")
+    for f in (bundle.get("vulnerabilities") or {}).get("blocking_critical_with_fix") or []:
+        print(f"::error::Critical {f['id']} in {f['package']} has a fix: {', '.join(f['fix_versions'])}")
     return 0 if args.no_fail else code
 
 

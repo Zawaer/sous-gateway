@@ -576,9 +576,15 @@ jobs:
         if: ${{ vars.CI_RUNNER == 'craci' }}
         with:
           size: "32"
+          # Docker Hub now serves blobs from production.cloudfront.docker.com, which CRACI's dockerhub preset doesn't
+          # cover: run 43611050520 had 31 blocked fetches there and the MariaDB pull failed ("denied: Forbidden").
           network: |
             default: deny
             presets: [pypi, dockerhub]
+            connections:
+              - tls:
+                  serverNamePatterns: [production.cloudfront.docker.com]
+                  ports: [443]
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -627,7 +633,8 @@ jobs:
     # After everything else, whatever happened: reads each job's CRACI network trace and SBOM through the CRACI
     # API, checks every outbound connection against the `network:` that job declares above, diffs CRACI's SBOMs
     # with syft's and uv.lock, asks CRACI who created the image and the caches, and signs the result
-    # (scripts/craci_evidence.py, docs/CRACI.md). Fails only if a deny-mode job reached an undeclared host.
+    # (scripts/craci_evidence.py, docs/CRACI.md). Fails if a deny-mode job reached an undeclared
+    # host, or on a Critical vulnerability with a fix available (CRACI job SBOMs via grype, or the image scan).
     #
     # Runs on a GitHub-hosted runner, outside the platform it audits: from inside a CRACI VM, api.craci.com answers
     # "403 Access denied" even with `default: allow` (runs 43579559941, 43579657052; example.com was reachable).
@@ -650,10 +657,13 @@ jobs:
         with:
           network: |
             default: deny
-            presets: [pypi]
+            presets: [pypi, github]   # github: the grype release download
             connections:
               - tls:
                   serverNamePatterns: [api.craci.com, api.github.com]
+                  ports: [443]
+              - tls:   # grype's vulnerability database
+                  serverNamePatterns: [grype.anchore.io, toolbox-data.anchore.io]
                   ports: [443]
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -668,12 +678,19 @@ jobs:
         run: |
           PIPX_HOME="$HOME/.pipx" PIPX_BIN_DIR="$HOME/.local/bin" pipx install uv==0.13.6
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      # Vulnerability management: CRACI's API has no findings/advisory/AI-fix route (probed every run), so grype
+      # (same action and version as the docker job) scans the packages CRACI saw the jobs download.
+      - uses: anchore/scan-action/download-grype@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        id: grype
       - name: Build, check and sign the evidence bundle
+        env:
+          GRYPE_CMD: ${{ steps.grype.outputs.cmd }}
         run: |
           uv sync --frozen --no-dev
           # No gateway key in CI: sous.signing makes an ephemeral one here (its public JWK ships with the bundle).
           SOUS_DATA_DIR="$RUNNER_TEMP/evidence-key" uv run --no-sync python scripts/craci_evidence.py \
-            --run-id "$EVIDENCE_RUN_ID" --raw-dir craci-evidence/raw --out craci-evidence
+            --run-id "$EVIDENCE_RUN_ID" --raw-dir craci-evidence/raw --out craci-evidence \
+            --grype "$GRYPE_CMD" --image-grype grype.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:
