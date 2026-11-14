@@ -8,6 +8,8 @@ by sous/api.py only when SOUS_BUYER_AGENT=1, so judges can watch the models work
     POST /agent/read-photo  photo      -> Nemotron VL (agent/vision.py) -> lines -> ONE basket quote + preview
     POST /agent/ask         a sentence -> the LLM buyer agent (agent/buyer.py) with the gateway's tools (sandbox only)
     POST /agent/order       quote_id   -> place_order at the gateway (idempotency key from the quote)
+    POST /agent/draft-mandate rules text -> a PROPOSED mandate change (agent/draft.py): diff, open questions,
+                                         sources; the human checks it and signs it on web/sign-mandate.html
     GET  /agent/usage                  -> model calls, tokens and cost per provider (today and all time)
 
 Guardrails, because these calls cost money and the gateway's Valio key is shared:
@@ -40,7 +42,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from sous import agent_auth, config, sandbox, service as S, store
 
-from . import recipe as R, vision as V
+from . import draft as DR, recipe as R, vision as V
 
 BANNER = "Reference buyer agent (runs on the buyer's side; shown here for the demo)"
 PER_IP_HOUR = int(config.env("AGENT_PER_IP_HOUR", "10"))
@@ -503,6 +505,45 @@ def ask(req: AskIn, request: Request, token: str | None = Depends(_token)):
             "valio_api_calls": run.valio_api_calls, "tool_calls": run.tool_calls}
 
 
+class DraftIn(BaseModel):
+    text: str = Field(..., min_length=3, max_length=1500,
+                      examples=["max 2000 € per order, yli 500 € kysy minulta, ei pähkinöitä"])
+    mandate_id: str = Field(..., description="The mandate in force; the draft is a diff against it")
+    agent_id: str
+    provider: Literal["auto", "gemini", "rules"] = Field(
+        "auto", description="gemini (Gemini 4 Hydrogen, JSON schema), rules (offline parser, no model) or auto "
+                            "(Gemini if this server has a key, else rules)")
+
+
+@app.post("/draft-mandate", tags=["buyer agent"])
+def draft_mandate(req: DraftIn, request: Request, token: str | None = Depends(_token),
+                  x_approver_code: str | None = Header(default=None)):
+    """Plain-language rules -> a PROPOSED mandate: the fields, a field-by-field diff against the mandate in force,
+    the words each field came from, open questions (vague limits, conflicts) and what a mandate can't express.
+    The model (if any) only drafts; a deterministic validator checks every field (types, ranges, allergen codes,
+    claims and categories that exist, numbers literally in the text, no loosening from injection attempts).
+    Nothing is changed: the human edits and signs the result on the signing page."""
+    m = authorize(req.mandate_id, req.agent_id, token, x_approver_code, "agent.draft_mandate")
+    llm = make_llm("gemini") if req.provider in ("auto", "gemini") else None
+    meter = Meter(llm) if llm else None
+    rid = _reserve(_client_ip(request), "draft-mandate", llm.cfg.provider, llm.cfg.model, req.mandate_id) \
+        if llm else None
+    status = "error"
+    try:
+        d = DR.draft_mandate(req.text, m, provider="gemini" if meter else "rules", llm=meter)
+        status = "ok" if d["parser"] != "rules" or not meter else "fallback"
+    finally:
+        if rid is not None:
+            _finish(rid, meter, status)
+    used = d["parser"] != "rules"
+    note = None
+    if req.provider == "gemini" and llm is None:
+        note = "No Gemini key on this server: the offline rule-based drafter read the text instead."
+    return {"banner": BANNER, "request": req.text, "mandate_id": req.mandate_id, "agent_id": req.agent_id,
+            "by": _display(d["parser"]) if used else "Offline rule-based drafter (no model)",
+            "used_model": used, "note": note, "model": meter.info() if meter else None, **d}
+
+
 class OrderIn(BaseModel):
     quote_id: str
     mandate_id: str
@@ -545,6 +586,8 @@ def status():
         "ask": {"provider": "gemini" if _preset_env("gemini") else "verda",
                 "display": DISPLAY["gemini-4-hydrogen"] if _preset_env("gemini") else DISPLAY["kimi-k3-1-pro"],
                 "available": bool(_preset_env("gemini") or _preset_env("verda")), "sandbox_only": True},
+        "draft": {"provider": "gemini", "display": DISPLAY["gemini-4-hydrogen"],
+                  "available": bool(_preset_env("gemini")), "fallback": "offline rule-based drafter"},
         "photo": {"provider": "nvidia", "display": DISPLAY["nvidia/nemotron-3.5-super-vl-120b-a12b"],
                   "available": bool(_preset_env("nvidia"))}},
         "today": {"spent_usd": round(spent_today(), 4), "budget_usd": DAILY_USD},

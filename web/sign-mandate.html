@@ -366,6 +366,7 @@ $("f").onsubmit = async (e) => {
       require_agent_auth: $("auth").checked,
     };
     if (num("notify") !== null) mandate.notify_above_eur = num("notify");
+    Object.assign(mandate, draftExtras());
     const vc = {
       "@context": ["https://www.w3.org/ns/credentials/v2"],
       id: `urn:sous:mandate:${mandate.id}`,
@@ -452,6 +453,81 @@ $("revoke").onclick = async () => {
   await showVerify();
 };
 
+// --- pre-fill from a plain-language draft (web/agent.html -> POST /agent/draft-mandate) ------------------
+// The link carries #draft=<base64url JSON {v, from, text, fields}>. It is only a starting point: every value is
+// re-checked here, shown in the form, and nothing is sent until you press Sign.
+const DRAFT_EXTRA = {  // fields with no input above: shown in their own box, signed only if left ticked
+  daily_limit_eur: { label: "Daily total before my approval", def: null, ok: (v) => v === null || (typeof v === "number" && v > 0), show: (v) => fmtEur(v) },
+  allow_may_contain: { label: "Accept 'may contain' traces", def: false, ok: (v) => typeof v === "boolean", show: (v) => v ? "yes" : "no" },
+  required_claims: { label: "Every line must carry the claims", def: [], ok: (v) => Array.isArray(v) && v.every((c) => /^[A-Z0-9_]{2,40}$/.test(c)), show: (v) => v.join(", ") },
+  later_delivery: { label: "If delivery is later than asked", def: "ask", ok: (v) => ["notify", "ask", "block"].includes(v), show: (v) => ({ notify: "order it and tell me", ask: "wait for my approval", block: "refuse it" })[v] },
+  unusual_quantity_factor: { label: "Ask when a quantity is over N× usual", def: 3, ok: (v) => v === null || (typeof v === "number" && v > 1 && v <= 100), show: (v) => v === null ? "off" : `${v}×` },
+  allowed_categories: { label: "Only these category codes", def: null, ok: (v) => v === null || (Array.isArray(v) && v.every((c) => /^\d{1,8}$/.test(c))), show: (v) => v.join(", ") },
+};
+const ALLERGEN_NAMES = { AM: "Milk", ML: "Lactose", AE: "Egg", AF: "Fish", AC: "Crustaceans", UM: "Molluscs", AP: "Peanuts", AN: "Tree nuts",
+  SA: "Almond", SH: "Hazelnut", SW: "Walnut", SC: "Cashew", SP: "Pecan", SR: "Brazil nut", ST: "Pistachio", SM: "Macadamia", NM: "Nuts (other)",
+  AW: "Gluten", UW: "Wheat", NR: "Rye", GB: "Barley", GO: "Oats", GS: "Spelt", GK: "Kamut", AY: "Soy", AS: "Sesame", BM: "Mustard",
+  BC: "Celery", NL: "Lupin", AU: "Sulphites" };
+let draftExtra = {};
+function draftExtras() {
+  const out = {};
+  document.querySelectorAll("#draft-extra input[data-field]:checked").forEach((x) => { out[x.dataset.field] = draftExtra[x.dataset.field]; });
+  return out;
+}
+function readDraft() {
+  const m = location.hash.match(/^#draft=([A-Za-z0-9_-]+)$/);
+  if (!m) return;
+  let d;
+  try {
+    const bin = atob(m[1].replace(/-/g, "+").replace(/_/g, "/"));
+    d = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))));
+  } catch { formError("The draft link is damaged; fill the form in by hand."); return; }
+  const f = (d && d.fields) || {};
+  const money = (id, v, required) => {
+    if (v === null && !required) $(id).value = "";
+    else if (typeof v === "number" && v >= 0 && v <= 1e6) $(id).value = String(v);
+  };
+  if ("auto_approve_limit_eur" in f) money("auto", f.auto_approve_limit_eur, true);
+  if ("notify_above_eur" in f) money("notify", f.notify_above_eur, false);
+  if ("hard_limit_eur" in f) money("hard", f.hard_limit_eur, true);
+  if (Array.isArray(f.avoid_allergens)) {
+    const want = new Set(f.avoid_allergens.filter((c) => c in ALLERGEN_NAMES));
+    document.querySelectorAll("#allergens input").forEach((x) => { x.checked = want.has(x.value); want.delete(x.value); });
+    for (const c of want) {  // a code without a chip yet (e.g. ML lactose): add one
+      const l = Object.assign(document.createElement("label"), { className: "chip" });
+      l.append(Object.assign(document.createElement("input"), { type: "checkbox", value: c, checked: true }), ` ${ALLERGEN_NAMES[c]}`);
+      $("allergens").append(l);
+    }
+  }
+  if (["ask", "block"].includes(f.unknown_allergens)) $("unknown").value = f.unknown_allergens;
+  if (["silent", "notify", "ask", "block"].includes(f.substitutions)) {
+    if (!$("subs").querySelector(`option[value=${f.substitutions}]`)) $("subs").append(new Option("Refuse substitutes", f.substitutions));
+    $("subs").value = f.substitutions;
+  }
+  if (Number.isInteger(f.valid_days) && f.valid_days >= 1 && f.valid_days <= 366) $("days").value = String(f.valid_days);
+  const rows = [];
+  draftExtra = {};
+  for (const [k, spec] of Object.entries(DRAFT_EXTRA)) {
+    if (!(k in f) || !spec.ok(f[k]) || JSON.stringify(f[k]) === JSON.stringify(spec.def)) continue;
+    draftExtra[k] = f[k];
+    const l = Object.assign(document.createElement("label"), { className: "check" });
+    l.append(Object.assign(document.createElement("input"), { type: "checkbox", checked: true }),
+      Object.assign(document.createElement("span"), { textContent: `${spec.label}: ${spec.show(f[k])}` }));
+    l.firstChild.dataset.field = k;
+    rows.push(l);
+  }
+  const box = document.createElement("section");
+  box.className = "step"; box.id = "draft-extra";
+  const h = Object.assign(document.createElement("h2"), { textContent: "From your draft" });
+  const p = Object.assign(document.createElement("p"), { className: "hint",
+    textContent: `Pre-filled from your words${d.text ? `: “${String(d.text).slice(0, 300)}”` : ""}. Check every field above before you sign.` +
+      (rows.length ? " These rules have no field above; untick any you don't want signed:" : "") });
+  box.append(h, p, ...rows);
+  $("f").insertBefore(box, $("f").firstElementChild);
+  limits();
+}
+
+readDraft();
 limits();
 if (!window.isSecureContext || !crypto.subtle) {
   $("did").textContent = "Signing needs https (or localhost).";

@@ -112,6 +112,36 @@ fallback and not the default: it knows six dishes, Gemini knows the menu.
 
 The earlier run [43539740484](https://github.com/Zawaer/sous/actions/runs/43539740484) (a4644a0) gave the same scores case for case; before H20 and the O/A07/A08 cases existed, run [43533142451](https://github.com/Zawaer/sous/actions/runs/43533142451) (768efee, 43 sentences) scored 43/43 with both models. Gemini's misses: **H03** was live data (only 8 of 40 kg quotable, so the gateway held it for a human), **H12** picked a lactose-free milk drink instead of milk (the later delivery date was still held for a human), and **H20**, which both models miss and which is not a real miss: the case assumes only coffee milk can be found, but a live agent finds real lactose-free milk (464201) and orders it, as the buyer asked. H20 is now scripted-only (skipped by `scripts/llm_eval.py`); excluding it, Kimi 48/48, Gemini 46/48. With every model the gateway auto-ordered nothing the mandate forbids. The cases are written by the team, not a held-out set.
 
+## Mandate drafting (plain language -> a proposed mandate)
+
+A kitchen manager can write their rules in their own words (*"max 2000 € per order, yli 500 € kysy minulta, ei
+pähkinöitä, laktoositon"*) on the buyer agent page and get a **draft** mandate back (`agent/draft.py`,
+`POST /agent/draft-mandate`). Gemini is only the drafter here, for the same reason as everywhere else in Sous: a
+mandate is the human's authority, and the gateway never trusts model output. The draft is a diff the human reads,
+edits on the signing page (`web/sign-mandate.html`, pre-filled through a `#draft=` link) and signs with their own
+key; the gateway only ever sees that signed credential.
+
+- **Structured output.** Gemini answers in a JSON schema: a list of `{field, number | text | codes, quote}`, plus
+  `open_questions` and `unsupported`. Only 13 rule fields can be named (limits, allergens, claims, tiers for
+  substitutes / later delivery / unknown allergen data, unusual-quantity factor, categories, validity); identity,
+  agent auth and revocation are not in the schema.
+- **A deterministic validator decides.** Every proposed field is checked in code: the type and range, allergen codes
+  from the catalog's GS1 list (the same as `GET /allergens`), claims and category codes that exist in the catalog,
+  **every number literally written in the text** (an invented number is dropped and becomes an open question),
+  the model's quote really in the text, limits that agree with each other and with the mandate in force
+  (refuse-over above alone-up-to, FYI below it), allergen and claim lists that only grow, and the result validated
+  by the `Mandate` model itself. A clause that tries to switch the checks off ("approve everything automatically",
+  "ignore the previous rules") is caught by a fixed pattern list on every path, and nothing that loosens the mandate
+  survives from its sentence. Rejected items are shown with the reason.
+- **Asks instead of guessing.** "Don't buy expensive stuff" gets a question asking for a euro amount; "organic when
+  possible" is listed as something a mandate can't do (organic is a package label, and a preference can't be a
+  pass / hold / refuse rule); weekly budgets, origin and brands likewise.
+- **Works offline.** Without a key (or if the call fails) a small rule-based parser handles common Finnish and
+  English phrasings, so the page and the tests need no model. `evals/draft_cases.yaml` has 19 sentences, including
+  vague limits, unsupported asks, conflicts and injection attempts; `scripts/draft_eval.py` scores the rule parser
+  (19/19, run in `tests/test_draft.py`) and, with `--provider gemini`, the Gemini path through the same validator
+  (not run yet; it prints its tokens for `evals/costs.yaml`).
+
 ## Run it
 
 ```sh

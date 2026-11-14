@@ -110,6 +110,15 @@ Source: `sous/mandate.py`, class `Mandate`. All money is EUR excluding VAT.
 
 Issuing (`POST /mandates`) re-signs and stores the mandate and writes `mandate.issued` to the audit log. Re-issuing with the same id replaces it; with MariaDB the old version stays queryable (section 12).
 
+**Drafting a mandate from plain language (buyer side, not part of the protocol).** The reference buyer agent can turn
+a human's own words into a *proposed* mandate (`POST /agent/draft-mandate`, `agent/draft.py`): the proposed fields,
+a field-by-field diff against the mandate in force with the exact words each came from, open questions for anything
+vague or conflicting, and what a mandate can't express. Gemini (if configured) only drafts; a deterministic
+validator checks every field (types, ranges, GS1 allergen codes, catalog claims and categories, numbers literally in
+the text, no loosening from a sentence that tries to switch the checks off), and an offline rule-based parser covers
+common Finnish and English phrasings. The gateway trusts none of it: the human edits the draft on the signing page
+and signs it (section 17), and only that signed credential is accepted.
+
 ## 5. The quote
 
 `POST /quotes` with:
