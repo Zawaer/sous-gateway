@@ -164,7 +164,8 @@ key; the gateway only ever sees that signed credential.
     'nuts'; also avoid peanuts?"). The eval now accepts that extra AP only together with the question
     (`stricter_if_asked` in D01/D18). Adding it silently still fails.
 
-  `tests/test_draft.py` replays Gemini's recorded answers from run 43562850006 through the new validator offline:
+  `tests/test_draft.py` replays Gemini's recorded answers from run 43562850006 (frozen in
+  `tests/fixtures/draft_results.gemini.run43562850006.json`) through the new validator offline:
   19/19. Then [run 43563950578](https://github.com/Zawaer/sous/actions/runs/43563950578) (5c44284) scored
   **Gemini 4 Hydrogen 19/19** (19 calls, 32,694 tokens in, 2,327 out, about $0.07; the longer prompt costs ~6k
   tokens per run). With the tighter prompt Gemini now gets these right on its own. It avoids gluten (AW), asks

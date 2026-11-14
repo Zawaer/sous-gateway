@@ -182,9 +182,9 @@ def test_signing_page_reads_the_draft_fragment():
     assert json.loads(json.dumps(DR.DRAFT_SCHEMA))["required"] == ["fields", "open_questions", "unsupported"]
 
 
-# --- closing the eval loop: Gemini's recorded drafts (evals/draft_results.gemini.json, run 43562850006) ---------
+# --- closing the eval loop: Gemini's recorded drafts from run 43562850006 (15/19), frozen as a fixture ----------
 
-GEMINI_RUN = json.loads((Path(__file__).resolve().parents[1] / "evals" / "draft_results.gemini.json")
+GEMINI_RUN = json.loads((Path(__file__).resolve().parent / "fixtures" / "draft_results.gemini.run43562850006.json")
                         .read_text(encoding="utf-8"))
 FIELD_CUES = {"avoid_allergens": r"free|ton\b|pähkin|peanut|nuts", "required_claims": r"free|ton\b",
               "later_delivery": r"late", "substitutions": r"substitut|korvaav", "unknown_allergens": r"allergen",
