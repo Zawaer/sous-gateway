@@ -139,9 +139,16 @@ const STATUS_LABEL = {
   ordered: "Ordered", pending_approval: "Needs approval", refused: "Refused",
   rejected: "Rejected", expired: "Expired",
 };
-const TIER_LABEL = { silent: "Auto", notify: "Auto + FYI", ask: "Ask human", block: "Blocked",
+// One tier vocabulary everywhere (UI review S3): Auto · Auto + FYI · Needs approval · Refused.
+// Badges differ in icon and fill, not only colour (S2, styles after web/tokens.css).
+const TIER_LABEL = { silent: "Auto", notify: "Auto + FYI", ask: "Needs approval", block: "Refused",
   best: "Best", better: "Better", good: "Good" };
-const tier = (t) => `<span class="tier t-${esc(t)}">${esc(TIER_LABEL[t] || STATUS_LABEL[t] || t)}</span>`;
+const TIER_STYLE = { silent: "silent", notify: "notify", ask: "ask", block: "block",
+  ordered: "silent", pending_approval: "ask", refused: "block", rejected: "block", expired: "block" };
+const RANKS = new Set(["best", "better", "good"]);
+const tier = (t) => RANKS.has(t)
+  ? `<span class="rank r-${esc(t)}">${esc(TIER_LABEL[t])}</span>`
+  : `<span class="tier tier-${TIER_STYLE[t] || "silent"}">${esc(TIER_LABEL[t] || STATUS_LABEL[t] || t)}</span>`;
 
 function toast(msg, ms = 3500) {
   const t = $("#toast");
@@ -204,11 +211,11 @@ function sigButton(token, label = "Verify signature") {
 
 // --- shared order pieces ---------------------------------------------------------
 
-function findingsList(findings, { only } = {}) {
+function findingsList(findings, { only, plain } = {}) {
   const fs = (findings || []).filter((f) => !only || only.includes(f.outcome));
   if (!fs.length) return "";
-  return `<ul class="findings">${fs.map((f) => `
-    <li>${tier(f.outcome)}<div>${esc(f.message)}<div class="rule">${esc(f.rule)}${f.product_id ? " · " + esc(f.product_id) : ""}</div></div></li>`).join("")}
+  return `<ul class="findings${plain ? " plain" : ""}">${fs.map((f) => `
+    <li>${plain ? "" : tier(f.outcome)}<div>${esc(f.message)}<div class="rule">${esc(f.rule)}${f.product_id ? " · " + esc(f.product_id) : ""}</div></div></li>`).join("")}
   </ul>`;
 }
 
@@ -223,6 +230,16 @@ function linesTable(lines) {
       <td class="num">${eur(l.line_total_ex_vat)}</td>
       <td class="hide-s">${dateOnly(l.delivery_date)}</td>
     </tr>`).join("")}</tbody></table>`;
+}
+
+// "Decide by Sun 15.11 15:00 (38 h left)": plain text; only a near or passed cut-off turns red.
+function decideBy(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const day = d.toLocaleDateString("en-GB", { weekday: "short", timeZone: "Europe/Helsinki" });
+  const dm = d.toLocaleDateString("fi-FI", { day: "numeric", month: "numeric", timeZone: "Europe/Helsinki" });
+  const hm = d.toLocaleTimeString("fi-FI", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Helsinki" }).replace(".", ":");
+  return `Decide by ${day} ${dm} ${hm} (<span class="deadline" data-until="${esc(iso)}"></span>)`;
 }
 
 function earliestCutoff(order) {
@@ -246,7 +263,7 @@ views.inbox = {
     if (key === this.key && view.dataset.view === "inbox") { tickDeadlines(); return; }
     // Keep notes the human is typing when a new order arrives and the list re-renders.
     const notes = {};
-    view.querySelectorAll("[data-order]").forEach((c) => { notes[c.dataset.order] = c.querySelector("textarea")?.value; });
+    view.querySelectorAll("[data-order]").forEach((c) => { notes[c.dataset.order] = c.querySelector("[data-note]")?.value; });
     const firstRender = view.dataset.view !== "inbox";
     const seen = this.seen || new Set();
     this.key = key;
@@ -264,7 +281,7 @@ views.inbox = {
     renderFeed();
     tickDeadlines();
     for (const card of view.querySelectorAll("[data-order]")) {
-      if (notes[card.dataset.order]) card.querySelector("textarea").value = notes[card.dataset.order];
+      if (notes[card.dataset.order]) card.querySelector("[data-note]").value = notes[card.dataset.order];
       wireDecision(card);
     }
   },
@@ -310,22 +327,22 @@ function inboxCard(o, isNew = false) {
   const asks = (o.decision?.findings || []).filter((f) => f.outcome === "ask");
   return `<article class="card ask ${isNew ? "fresh" : ""}" data-order="${esc(o.id)}">
     <div class="row">
-      <div><div class="muted small">${esc(o.buyer)}</div><div class="big">${eur(o.total_ex_vat)} <span class="muted small">ex VAT</span></div></div>
-      <div style="text-align:right">${tier("ask")}
-        ${cut ? `<div class="small">Decide within <span class="deadline" data-until="${esc(cut)}"></span></div>` : ""}</div>
+      <div><div class="muted small">${esc(o.buyer)}</div><div class="big">${eur(o.total_ex_vat)} <span class="muted small">ex VAT</span></div>
+        ${cut ? `<div class="small" style="margin-top:4px">${decideBy(cut)}</div>` : ""}</div>
+      <div>${tier("ask")}</div>
     </div>
     <h3>Why it needs you</h3>
-    ${findingsList(asks)}
+    ${findingsList(asks, { plain: true })}
     ${linesTable(o.lines)}
     <dl class="kv small">
       <dt>Agent</dt><dd class="mono">${esc(o.agent_id)}</dd>
       <dt>Mandate</dt><dd class="mono">${esc(o.mandate_id)}</dd>
       <dt>Order</dt><dd><a href="#" data-open="${esc(o.id)}" class="mono">${esc(o.id)}</a> · ${eur(o.total_inc_vat)} incl. VAT · delivery ${dateOnly(o.delivery_date)}</dd>
     </dl>
-    <textarea rows="2" placeholder="Note for the agent and the log (optional)"></textarea>
+    <textarea data-note rows="2" placeholder="Note for the agent and the log (optional)"></textarea>
     <div class="actions">
       <button class="btn no" data-act="reject">Reject</button>
-      <button class="btn yes" data-act="approve">Approve order</button>
+      <button class="btn yes" data-act="approve">Approve ${eur(o.total_ex_vat)}</button>
     </div>
   </article>`;
 }
@@ -345,7 +362,7 @@ function wireDecision(card, onDone) {
       card.querySelectorAll("button").forEach((x) => (x.disabled = true));
       try {
         const o = await api(`/orders/${encodeURIComponent(id)}/${act}`, {
-          method: "POST", body: { by, note: card.querySelector("textarea").value.trim() || null },
+          method: "POST", body: { by, note: card.querySelector("[data-note]")?.value.trim() || null },
         });
         const msg = o.status === "ordered" ? `${id} approved and ordered.`
           : o.status === "rejected" ? `${id} rejected. The agent has been told.`
@@ -367,7 +384,7 @@ function tickDeadlines() {
   for (const el of document.querySelectorAll("[data-until]")) {
     const u = untilText(el.dataset.until);
     if (!u) continue;
-    el.textContent = u.text;
+    el.textContent = u.late && u.text === "cut-off passed" ? u.text : u.text + " left";
     el.classList.toggle("late", u.late);
     el.title = "Order cut-off " + when(el.dataset.until);
   }
@@ -416,6 +433,9 @@ async function openOrder(id) {
     <div class="muted small">${esc(o.buyer)}</div>
     <h2>${esc(o.id)} ${tier(o.status)}</h2>
     <div class="big">${eur(o.total_ex_vat)} <span class="muted small">ex VAT · ${eur(o.total_inc_vat)} incl.</span></div>
+    ${o.status === "pending_approval" ? `<div class="ask-summary">
+      <p>${esc(((d.findings || []).find((f) => f.outcome === "ask") || {}).message || "Held by the mandate for a human decision.")}</p>
+      ${earliestCutoff(o) ? `<p class="small">${decideBy(earliestCutoff(o))}</p>` : ""}</div>` : ""}
     <dl class="kv small">
       <dt>Agent</dt><dd class="mono">${esc(o.agent_id)}</dd>
       <dt>Mandate</dt><dd class="mono">${esc(o.mandate_id)}</dd>
@@ -428,13 +448,6 @@ async function openOrder(id) {
     <h3>Mandate decision ${tier(d.outcome)}</h3>
     <div class="muted small">By ${esc(d.by)} at ${when(d.at)}. Deterministic rules; no AI in this step.</div>
     ${findingsList(d.findings)}
-    ${o.status === "pending_approval" ? `<div data-order="${esc(o.id)}">
-      ${earliestCutoff(o) ? `<p class="small">Decide within <span class="deadline" data-until="${esc(earliestCutoff(o))}"></span>, before the order cut-off.</p>` : ""}
-      <textarea rows="2" placeholder="Note for the agent and the log (optional)"></textarea>
-      <div class="actions">
-        <button class="btn no" data-act="reject">Reject</button>
-        <button class="btn yes" data-act="approve">Approve order</button>
-      </div></div>` : ""}
     ${a ? `<h3>Human decision</h3>
       <p>${a.approved ? "Approved" : "Rejected"} by <b>${esc(a.by)}</b> at ${when(a.at)}${a.note ? `: “${esc(a.note)}”` : ""}</p>
       ${a.result_reason && a.result_reason !== a.note ? `<p class="muted">${esc(a.result_reason)}</p>` : ""}` : ""}
@@ -459,6 +472,12 @@ async function openOrder(id) {
     <details><summary>Raw JWS</summary><pre>${esc(o.receipt_jws)}</pre></details>
     <h3>History</h3>
     <div id="order-audit" class="list"><div class="empty">Loading…</div></div>
+    ${o.status === "pending_approval" ? `<div class="actionbar decide" data-order="${esc(o.id)}">
+      <input data-note type="text" placeholder="Note for the agent and the log (optional)" aria-label="Note">
+      <div class="actionbar-buttons">
+        <button class="btn no" data-act="reject">Reject</button>
+        <button class="btn yes" data-act="approve">Approve ${eur(o.total_ex_vat)}</button>
+      </div></div>` : ""}
   `);
   const box = $("#sheet-body [data-order]");
   if (box) { tickDeadlines(); wireDecision(box, () => openOrder(id)); }
@@ -856,16 +875,16 @@ function sugCard(s) {
 function mandateCard(m) {
   const a = m.auto_approve_limit_eur, n = m.notify_above_eur, h = m.hard_limit_eur;
   const ladder = [
-    `<div class="l-silent">Alone ≤ ${eur(n != null && n < a ? n : a)}</div>`,
-    n != null && n < a ? `<div class="l-notify">FYI ≤ ${eur(a)}</div>` : "",
-    `<div class="l-ask">Ask ${h != null ? "≤ " + eur(h) : "above"}</div>`,
-    h != null ? `<div class="l-block">Refuse &gt; ${eur(h)}</div>` : "",
+    `<div class="l-silent">Auto ≤ ${eur(n != null && n < a ? n : a)}</div>`,
+    n != null && n < a ? `<div class="l-notify">Auto + FYI ≤ ${eur(a)}</div>` : "",
+    `<div class="l-ask">Needs approval ${h != null ? "≤ " + eur(h) : "above"}</div>`,
+    h != null ? `<div class="l-block">Refused &gt; ${eur(h)}</div>` : "",
   ].join("");
   const allergens = (m.avoid_allergens || []).map((c) => (allergenNames?.[c] || c)).join(", ");
   const rule = (k, v) => `<div><span class="muted">${k}</span><span>${v}</span></div>`;
   return `<article class="card ${m.revoked ? "revoked" : ""}">
     <div class="row"><div><div class="muted small mono">${esc(m.id)}</div><h2>${esc(m.buyer)}</h2></div>
-      <div style="text-align:right">${m.revoked ? `<span class="tier t-block">Revoked</span>` : `<span class="tier t-silent">Active</span>`}
+      <div style="text-align:right">${m.revoked ? `<span class="state off">Revoked</span>` : `<span class="state">Active</span>`}
         <div class="small" style="margin-top:4px">${m.issuer?.kind === "buyer"
           ? `<span class="match m-same" title="${esc(m.issuer.did || "")}">buyer-signed</span>`
           : `<span class="match">signed by the gateway</span>`}</div></div></div>
@@ -882,7 +901,7 @@ function mandateCard(m) {
       ${(m.required_claims || []).length ? rule("Required claims", esc(m.required_claims.join(", "))) : ""}
       ${Object.entries(m.max_comparison_price_eur || {}).map(([u, v]) => rule("Price cap", `${eur(v)} / ${esc(u)}`)).join("")}
       ${m.allowed_categories ? rule("Categories", esc(m.allowed_categories.join(", "))) : ""}
-      ${rule("Agent must authenticate", authRequired(m) ? `<span class="tier t-silent">Bearer token${!m.require_agent_auth ? " (gateway-wide)" : ""}</span>` : `<span class="muted">no (agent id only)</span>`)}
+      ${rule("Agent must authenticate", authRequired(m) ? `<span>Bearer token${!m.require_agent_auth ? " (gateway-wide)" : ""}</span>` : `<span class="muted">no (agent id only)</span>`)}
     </div>
     <div class="actions">
       <button class="btn plain" data-sig="${esc(m.id)}">🔏 Verify signature</button>
@@ -926,7 +945,7 @@ function standingRow(d) {
       <div class="muted small">${esc(so.buyer)} · every ${DAY[so.cadence?.weekday] || esc(so.cadence?.weekday)} ·
         ${so.items.map((i) => `${esc(i.amount)} ${esc(i.unit)} ${esc(i.label || "")}`).join(", ")}</div>
       ${r ? `<div class="small" style="margin-top:4px">${tier(r.status)} ${esc(r.summary || "")}</div>` : `<div class="small muted">Not renewed yet · next ${dateOnly(d.next_delivery_date)}</div>`}</div>
-    <div style="text-align:right">${so.active ? `<span class="tier t-silent">Active</span>` : `<span class="tier t-block">Paused</span>`}
+    <div style="text-align:right">${so.active ? `<span class="state">Active</span>` : `<span class="state off">Paused</span>`}
       ${spark(totals, r && r.drift?.length ? totals.length - 1 : -1, "Weekly total")}</div>
   </button>`;
 }
@@ -948,7 +967,7 @@ async function openStanding(id) {
   const flaggedLabels = new Set((live?.drift || []).map((f) => (f.message || "").split(":")[0]));
   openSheet(`
     <div class="muted small">${esc(so.buyer)} · standing order</div>
-    <h2>${esc(so.name)} ${so.active ? `<span class="tier t-silent">Active</span>` : `<span class="tier t-block">Paused</span>`}</h2>
+    <h2>${esc(so.name)} ${so.active ? `<span class="state">Active</span>` : `<span class="state off">Paused</span>`}</h2>
     <dl class="kv small">
       <dt>Delivery</dt><dd>Every ${DAY[so.cadence?.weekday] || esc(so.cadence?.weekday)} · next ${dateOnly(d.next_delivery_date)}</dd>
       <dt>Agent</dt><dd class="mono">${esc(so.agent_id)}</dd>
@@ -1090,7 +1109,6 @@ views.today = {
 // Everything is computed from /orders and the audit log, so it's the same record anyone can check.
 const CATALOG_SIZE = 17546;
 const NAIVE_CALLS = Math.ceil(CATALOG_SIZE / 1000) * 2; // price + availability, 1000 ids per call
-const TIER_ICON = { silent: "✓", notify: "✉", ask: "?", block: "✕" };
 const RULE_GROUP = {
   allergen: "Allergen safety", spend: "Spend limits", availability: "Stock and cut-offs", supply: "Supply risk",
   delivery: "Delivery date", price: "Price", product: "Product requirements", substitution: "Substitutes",
@@ -1160,7 +1178,7 @@ views.stats = {
     const bar = (label, value, max, text, title, cls = "") => `
       <div class="bar-row" title="${esc(title || "")}">
         <div class="bar-label">${label}</div>
-        <div class="bar-track"><div class="bar ${cls}" style="width:${max ? Math.max(2, (value / max) * 100) : 0}%"></div></div>
+        <div class="bar-track"><div class="bar ${cls}" style="width:${max && value ? Math.max(2, (value / max) * 100) : 0}%"></div></div>
         <div class="bar-val">${text}</div>
       </div>`;
     const tierMax = Math.max(...Object.values(byTier), 1);
@@ -1183,7 +1201,7 @@ views.stats = {
         <h3 style="margin-top:0">Mandate outcomes</h3>
         <div class="muted small">What the rules engine decided for each order. Deterministic code, no AI.</div>
         ${["silent", "notify", "ask", "block"].map((t) => bar(
-          `<span class="tier t-${t}">${TIER_ICON[t]} ${TIER_LABEL[t]}</span>`, byTier[t], tierMax,
+          tier(t), byTier[t], tierMax,
           `${byTier[t]} <span class="muted">${pct(byTier[t], n)}</span>`, `${byTier[t]} orders: ${TIER_LABEL[t]}`, "b-" + t)).join("")}
       </div>
 
@@ -1295,7 +1313,7 @@ async function renderSandboxBanner() {
     const s = await api("/sandbox/" + encodeURIComponent(SANDBOX));
     const live = s.status === "active";
     el.classList.toggle("off", !live);
-    el.innerHTML = `<b>Sandbox ${esc(s.id)}</b> <span class="tier t-${live ? "silent" : "block"}">${esc(s.status)}</span>
+    el.innerHTML = `<b>Sandbox ${esc(s.id)}</b> <span class="state${live ? "" : " off"}">${esc(s.status)}</span>
       <span>Only this sandbox's mandates, orders and audit events are shown · ${esc(s.quotes_left)} of ${esc(s.quotes_limit)}
       live lookups left · expires ${when(s.expires_at)} · ${esc(s.orders?.total ?? 0)} order(s)</span>
       <a href="${location.pathname}${location.hash}">Leave sandbox</a>`;

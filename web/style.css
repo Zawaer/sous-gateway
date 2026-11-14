@@ -125,16 +125,34 @@ main { max-width: 1080px; margin: 0 auto; padding: 48px 24px 72px; }
 .empty { text-align: center; padding: 64px 16px; color: var(--ink-55); }
 .empty .big { color: var(--ink); margin-bottom: 8px; }
 
-/* tiers and statuses: square bullet + mono label */
-.tier {
-  display: inline-flex; align-items: center; gap: 6px; font: .74rem/1.6 var(--mono); white-space: nowrap;
-  padding: 1px 8px 1px 6px; border-radius: 3px; vertical-align: middle;
+/* Tier badges (UI review S2, after web/tokens.css): each tier differs in icon and fill, so it reads
+   without colour. Own variable names so they don't clash with this file's text colours. */
+:root {
+  --tb-silent: #2e6b3c; --tb-silent-bg: transparent; --tb-silent-line: rgba(46, 107, 60, .55);
+  --tb-notify: #1f5a96; --tb-notify-bg: #e3edf7;     --tb-notify-line: #e3edf7;
+  --tb-ask: #23282d;    --tb-ask-bg: #fddb32;        --tb-ask-line: #e9c400;
+  --tb-block: #ffffff;  --tb-block-bg: #a8321f;      --tb-block-line: #a8321f;
 }
-.tier::before { content: ""; width: 6px; height: 10px; border-radius: 1px; background: currentColor; }
-.t-silent, .t-ordered, .t-best { color: var(--silent); background: var(--silent-bg); }
-.t-notify, .t-better { color: var(--notify); background: var(--notify-bg); }
-.t-ask, .t-pending_approval, .t-good { color: var(--ask); background: var(--ask-bg); }
-.t-block, .t-refused, .t-rejected, .t-expired { color: var(--block); background: var(--block-bg); }
+@media (prefers-color-scheme: dark) {
+  :root { --tb-silent: #7cc68e; --tb-silent-line: rgba(124, 198, 142, .55);
+    --tb-notify: #a9cdf2; --tb-notify-bg: rgba(138, 184, 236, .16); --tb-notify-line: transparent; }
+}
+.tier {
+  display: inline-flex; align-items: center; gap: .35em; font: 500 .78rem/1 var(--sans); letter-spacing: .01em;
+  white-space: nowrap; padding: .32em .6em .32em .5em; border-radius: 999px; border: 1px solid transparent; vertical-align: middle;
+}
+.tier::before { font: 700 .95em/1 var(--sans); }
+.tier-silent { color: var(--tb-silent); background: var(--tb-silent-bg); border-color: var(--tb-silent-line); }
+.tier-silent::before { content: "\2713"; }
+.tier-notify { color: var(--tb-notify); background: var(--tb-notify-bg); border-color: var(--tb-notify-line); }
+.tier-notify::before { content: "i"; font-style: italic; font-family: var(--serif); }
+.tier-ask { color: var(--tb-ask); background: var(--tb-ask-bg); border-color: var(--tb-ask-line); }
+.tier-ask::before { content: "\2016"; }
+.tier-block { color: var(--tb-block); background: var(--tb-block-bg); border-color: var(--tb-block-line); }
+.tier-block::before { content: "\2715"; }
+/* substitute ranks (not mandate tiers): plain mono labels */
+.rank { display: inline-block; font: .74rem/1.6 var(--mono); padding: 1px 8px; border-radius: 3px; background: var(--pill); }
+.r-best { color: var(--silent); } .r-better { color: var(--notify); } .r-good { color: var(--ask); }
 
 .findings { list-style: none; padding: 0; margin: 10px 0; border-top: 1px solid var(--rule); }
 .findings li { display: grid; grid-template-columns: 112px 1fr; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--rule); }
@@ -354,3 +372,22 @@ pre {
 
 /* the agent's stated reason in the order timeline */
 .rationale { display: block; font: italic 400 1rem/1.4 var(--serif); color: var(--ink); margin: 2px 0 4px; }
+
+/* plain state labels (Active / Revoked / Paused): not tiers */
+.state { font: 500 .78rem var(--sans); color: var(--ink-80); }
+.state::before { content: "● "; color: var(--silent); }
+.state.off::before { color: var(--ink-40); }
+.state.off { color: var(--ink-55); }
+
+/* UI review S1/S8: held orders lead with the decision; the countdown is plain text */
+.deadline { font: inherit; color: inherit; }
+.deadline.late { color: var(--block); font-weight: 500; }
+.ask-summary { margin: 12px 0 4px; padding: 12px 14px; border-left: 3px solid #e9c400; background: var(--panel); border-radius: 0 6px 6px 0; }
+.ask-summary p { margin: 0 0 4px; }
+.findings.plain li { grid-template-columns: 1fr; }
+.actionbar.decide { position: sticky; bottom: -48px; z-index: 5; margin: 24px -28px -48px; padding: 12px 28px calc(14px + env(safe-area-inset-bottom));
+  background: var(--paper); border-top: 1px solid var(--rule); display: grid; gap: 8px; }
+.actionbar.decide input { width: 100%; border: 1px solid var(--rule); border-radius: 6px; padding: 9px 12px; background: transparent; }
+.actionbar-buttons { display: flex; gap: 8px; }
+.actionbar-buttons .btn { min-height: 44px; }
+@media (max-width: 560px) { .actionbar.decide { margin: 24px -16px -40px; padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); bottom: -40px; } }
