@@ -607,6 +607,9 @@ if (linkedOrder) {
       if (error.status === 404) {
         throw new Error('This order is unavailable. Check the order link and gateway, or ask the person who shared the link for access.');
       }
+      if (error.status >= 500 || error instanceof TypeError || error.name === 'TimeoutError') {
+        throw new Error('Could not load this order from the gateway. Check your connection and reload this page to retry.');
+      }
       throw error;
     }
     await showOrder(gateway, order, quote);
