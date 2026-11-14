@@ -63,6 +63,10 @@ on:
         description: "Held-out: run every case N times"
         type: string
         default: "1"
+      heldout_set:
+        description: "Held-out: which frozen set, heldout (evals/heldout/) or heldout2 (evals/heldout2/)"
+        type: string
+        default: "heldout"
       redteam_scale:
         description: "Only the 32-vCPU red team (4,000 scripted, Valio replayed) + capacity scaling job, then craci-evidence"
         type: boolean
@@ -450,6 +454,7 @@ jobs:
         env:
           HELDOUT: ${{ inputs.heldout }}
           HELDOUT_REPEAT: ${{ inputs.heldout_repeat || '1' }}
+          HELDOUT_SET: ${{ inputs.heldout_set || 'heldout' }}
         run: |
           status=0
           for pm in $LLM_EVAL_MODELS; do
@@ -463,7 +468,7 @@ jobs:
             if [ -z "$key" ]; then echo "::notice::No key for $provider: skipping $model"; continue; fi
             echo "::group::$provider $model"
             if [ "$HELDOUT" = true ]; then
-              uv run python scripts/heldout_eval.py --agent sous --repeat "$HELDOUT_REPEAT" --provider "$provider" --model "$model" || status=1
+              uv run python scripts/heldout_eval.py --set "$HELDOUT_SET" --agent sous --repeat "$HELDOUT_REPEAT" --provider "$provider" --model "$model" || status=1
             else
               uv run python scripts/llm_eval.py --provider "$provider" --model "$model" || status=1
             fi
@@ -501,6 +506,7 @@ jobs:
           path: |
             evals/llm_results.*.json
             evals/heldout/results.*.json
+            evals/heldout2/results.*.json
             docs/LLM_EVAL.md
             evals/recipe_results.json
             evals/recipe_results.md

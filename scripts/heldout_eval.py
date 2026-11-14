@@ -1,12 +1,16 @@
-"""Held-out evaluation: 15 buyer requests written blind (evals/heldout/cases.yaml), scored by evals/heldout/rubric.yaml.
+"""Held-out evaluation: buyer requests written blind, scored by a rubric written before the run.
+
+Two frozen sets (--set): heldout (15 cases, evals/heldout/cases.yaml + rubric.yaml, run before the Sous agent's
+fixes) and heldout2 (20 cases, evals/heldout2/cases.yaml, frozen at d58069a; its own schema, mapped onto the same
+scorer by adapt_set2 with evals/heldout2/rubric.yaml).
 
 The cases were written from the challenge brief alone, before reading Sous's code, evals or docs, and are frozen:
 nothing in Sous may be tuned on them. Run through the LLM eval harness:
 
-    uv run python scripts/heldout_eval.py --provider gemini --agent sous --repeat 3
+    uv run python scripts/heldout_eval.py --provider gemini --agent sous --repeat 3 [--set heldout2]
     uv run python scripts/heldout_eval.py --report     # print the docs/LLM_EVAL.md section from the results
 
-(In CI: workflow_dispatch with llm_only + heldout, see the llm-eval job.) It reuses scripts/llm_eval.py's agent
+(In CI: workflow_dispatch with llm_only + heldout [+ heldout_set=heldout2], see the llm-eval job.) It reuses scripts/llm_eval.py's agent
 runner (run_case), so the agent, its tools and the gateway are exactly those of the main LLM eval.
 
 Per case run it records what the agent quoted and ordered and what the gateway decided, and scores:
@@ -22,7 +26,7 @@ Per case run it records what the agent quoted and ordered and what the gateway d
   how many false auto-approvals the raw agent would have produced.
 - cookable (menu cases): every required ingredient of the dish is in the quote at >= the low end of its range.
 
-Writes evals/heldout/results.<model>[.sous-agent].json; docs/LLM_EVAL.md gets a "Held-out" section from them.
+Writes evals/<set>/results.<model>[.sous-agent].json; docs/LLM_EVAL.md gets a "Held-out" section per set.
 """
 
 from __future__ import annotations
@@ -42,18 +46,90 @@ sys.path.insert(0, str(ROOT))
 HELDOUT = ROOT / "evals" / "heldout"
 CASES = HELDOUT / "cases.yaml"
 RUBRIC = HELDOUT / "rubric.yaml"
+HELDOUT2 = ROOT / "evals" / "heldout2"
 AGENT_ID = "heldout-agent"
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 LKG = {"L": 1.0, "KG": 1.0, "DL": 0.1, "CL": 0.01, "ML": 0.001, "G": 0.001, "GRM": 0.001, "LTR": 1.0, "KGM": 1.0}
 PCE = {"ST", "KPL", "PCE", "PC", "PCS", "EA", "H87"}
 
 
-def load() -> tuple[list[dict], dict]:
+SETS = ("heldout", "heldout2")
+# set 2's constraints.avoid_allergens -> GS1 codes on the mandate (sous/catalog.py ALLERGENS)
+ALLERGEN_CODES = {"nuts": "AN", "tree nuts": "AN", "peanuts": "AP", "peanut": "AP", "milk": "AM", "lactose": "ML",
+                  "gluten": "AW", "wheat": "UW", "egg": "AE", "eggs": "AE", "fish": "AF", "crustaceans": "AC"}
+SET2_UNITS = {"l": "L", "kg": "KG", "pcs": "PCE"}
+
+
+def set_dir(name: str = "heldout") -> Path:
+    if name not in SETS:
+        raise SystemExit(f"Unknown held-out set {name!r}: one of {', '.join(SETS)}")
+    return ROOT / "evals" / name
+
+
+def results_dir(name: str = "heldout") -> Path:
+    """Where a set's results.*.json go (module globals, so tests can point them elsewhere)."""
+    set_dir(name)
+    return HELDOUT if name == "heldout" else HELDOUT2
+
+
+def load(name: str = "heldout") -> tuple[list[dict], dict]:
+    """(cases, rubric) in set 1's shape: cases [{id, buyer, request, expect: {outcome}}], rubric {template, cases}."""
     import yaml
 
-    cases = yaml.safe_load(CASES.read_text())["cases"]
-    rubric = yaml.safe_load(RUBRIC.read_text())
+    d = set_dir(name)
+    cases = yaml.safe_load((d / "cases.yaml").read_text())["cases"]
+    rubric = yaml.safe_load((d / "rubric.yaml").read_text())
+    if name == "heldout2":
+        return adapt_set2(cases, rubric)
     return cases, rubric
+
+
+def _range(qty: float, tol_pct: float) -> list[float]:
+    return [round(max(0.0, qty * (1 - tol_pct / 100)), 4), round(qty * (1 + tol_pct / 100), 4)]
+
+
+def adapt_set2(raw: list[dict], rub: dict) -> tuple[list[dict], dict]:
+    """Set 2's schema {id, text, lang, buyer, constraints, expect: {decision, items[{kind, qty, unit, tolerance_pct}],
+    notes}} -> set 1's (cases, rubric). Mechanical: quantity ranges from qty +- tolerance_pct, budget_eur as the
+    auto-approve limit, avoid_allergens as GS1 codes, decision as the expected outcome. From the rubric file: one name
+    pattern per item (by position), the date, dish, forbidden lines, and per_piece_kg (a pcs item also counted by
+    weight)."""
+    cases, out = [], {}
+    for c in raw:
+        cid, exp, con = c["id"], c["expect"], c.get("constraints") or {}
+        r = (rub.get("cases") or {}).get(cid) or {}
+        cases.append({"id": cid, "buyer": c["buyer"], "request": c["text"], "lang": c.get("lang"),
+                      "context": con, "expect": {"outcome": exp["decision"], "why": exp.get("notes")}})
+        mandate: dict = {}
+        if con.get("budget_eur") is not None:
+            mandate["budget_eur"] = float(con["budget_eur"])
+        codes = list(dict.fromkeys(ALLERGEN_CODES[a.lower()] for a in con.get("avoid_allergens") or []))
+        if codes:
+            mandate["avoid_allergens"] = codes
+        items = []
+        if exp["decision"] == "ok":  # held/refused: nothing should go through, so the items are not scored
+            pats = r.get("items") or []
+            if len(pats) != len(exp.get("items") or []):
+                raise ValueError(f"{cid}: {len(exp.get('items') or [])} expected items, {len(pats)} rubric patterns")
+            for e, pat in zip(exp["items"], pats):
+                unit = SET2_UNITS[str(e["unit"]).lower()]
+                lo, hi = _range(float(e["qty"]), float(e.get("tolerance_pct") or 0))
+                qty = {unit: [lo, hi]}
+                if unit == "PCE" and pat.get("per_piece_kg"):
+                    qty["KG"] = [round(lo * pat["per_piece_kg"], 4), round(hi * pat["per_piece_kg"], 4)]
+                it = {k: v for k, v in pat.items() if k not in ("per_piece_kg", "alt", "qty")}
+                it.update(name=e["kind"], qty=pat.get("qty") or qty)
+                if pat.get("alt"):
+                    it["alt"] = [{**a, "qty": a.get("qty") or qty} for a in pat["alt"]]
+                items.append(it)
+        out[cid] = {"mandate": mandate, "date": r.get("date"), "dish": r.get("dish"),
+                    "budget_eur": con.get("budget_eur"), "items": items, "forbid": r.get("forbid") or []}
+    return cases, {"template": rub["template"], "cases": out}
+
+
+def resolve_dates(spec, today: date) -> list[date]:
+    """Acceptable delivery days: one spec or a list of them (set 2: a Saturday buffet may arrive Friday or Saturday)."""
+    return [d for s in (spec if isinstance(spec, list) else [spec]) if (d := resolve_date(s, today))]
 
 
 def resolve_date(spec: str | None, today: date) -> date | None:
@@ -206,13 +282,13 @@ def score_quote(rub: dict, quote: dict | None, today: date) -> dict:
     matched_ids = {pid for i in items for pid in i["lines"]}
     extra = [l["product_id"] for l, _ in lines if l["product_id"] not in matched_ids
              and l["product_id"] not in {f["product_id"] for f in forb}]
-    want = resolve_date(rub.get("date"), today)
+    want = resolve_dates(rub.get("date"), today)
     budget = rub.get("budget_eur")
     total = float(quote.get("total_ex_vat") or 0)
     return {"quote": quote.get("id"), "total_ex_vat": total, "items": items, "forbidden": forb, "extra_lines": extra,
-            "date_expected": want.isoformat() if want else None,
+            "date_expected": " or ".join(d.isoformat() for d in want) or None,
             "date_quoted": quote.get("requested_delivery_date"),
-            "date_ok": want is None or quote.get("requested_delivery_date") == want.isoformat(),
+            "date_ok": not want or quote.get("requested_delivery_date") in {d.isoformat() for d in want},
             "over_budget": budget is not None and total > budget + 1e-6,
             "unsafe": any(f["unsafe"] for f in forb)}
 
@@ -303,13 +379,14 @@ def run(a, provider: str, cfg, client, state_dir: Path) -> int:
 
     if provider == "oracle":
         raise SystemExit("--heldout has no scripted plan: pass a model provider")
-    cases, rubric = load()
+    hset = getattr(a, "set", "heldout")
+    cases, rubric = load(hset)
     if a.cases:
         cases = [c for c in cases if c["id"] in a.cases]
     today = helsinki_today()
     default = next_delivery_day(today)
     runs = []
-    print(f"Held-out eval: {cfg.label} ({a.agent} agent); {len(cases)} cases x {a.repeat}; today {today}\n", flush=True)
+    print(f"Held-out eval ({hset}): {cfg.label} ({a.agent} agent); {len(cases)} cases x {a.repeat}; today {today}\n", flush=True)
     with MCPGateway(mcp) as gw:
         for rep in range(1, a.repeat + 1):
             for case in cases:
@@ -353,12 +430,12 @@ def run(a, provider: str, cfg, client, state_dir: Path) -> int:
     reservations.set_scope(None)
     summary = summarize(runs, cfg)
     suffix = ".sous-agent" if a.agent == "sous" else ""
-    out = HELDOUT / f"results.{slug(cfg.model)}{suffix}.json"
+    out = results_dir(hset) / f"results.{slug(cfg.model)}{suffix}.json"
     doc = {"generated_at": datetime.now(config.TZ).isoformat(timespec="seconds"), "provenance": run_provenance(),
            "provider": cfg.provider, "model": cfg.model,
            "model_label": cfg.label + (" + sous-agent" if a.agent == "sous" else ""),
            "agent": "sous-agent" if a.agent == "sous" else "generic", "repeats": a.repeat, "run_day": today.isoformat(),
-           "summary": summary, "runs": runs}
+           "set": hset, "summary": summary, "runs": runs}
     out.write_text(json.dumps(doc, ensure_ascii=False, indent=1, default=str) + "\n")
     print("\n" + json.dumps(summary, indent=1))
     print(f"\nWrote {out.relative_to(ROOT) if out.is_relative_to(ROOT) else out}")
@@ -408,22 +485,75 @@ def summarize(runs: list[dict], cfg) -> dict:
 
 # --- docs/LLM_EVAL.md section -----------------------------------------------------------------------
 
-def report_section() -> list[str]:
-    files = sorted(HELDOUT.glob("results.*.json"))
+INTRO = {
+    "heldout": ["## Held-out", "",
+                "15 buyer requests in [`evals/heldout/cases.yaml`](../evals/heldout/cases.yaml) were written **blind**, "
+                "from the challenge brief alone, before their author read Sous's code, evals or docs, and committed "
+                "frozen (`d12e3d2`). Nothing in Sous was tuned on them. The scoring rubric "
+                "([`evals/heldout/rubric.yaml`](../evals/heldout/rubric.yaml)) was written after reading the harness "
+                "and before the first run; it turns each plain-language expectation into name patterns and quantity "
+                "ranges. Every case runs under a neutral mandate (auto-approve up to 2,000 EUR, no first-time-product "
+                "rule) plus only what the case's context states (a budget becomes the auto-approve limit, forbidden "
+                "allergens become avoid_allergens). Code: [`scripts/heldout_eval.py`](../scripts/heldout_eval.py)."],
+    "heldout2": ["## Held-out set 2", "",
+                 "20 new buyer requests in [`evals/heldout2/cases.yaml`](../evals/heldout2/cases.yaml) were written "
+                 "**blind** by an author who never read the repo (only: Valio Aimo is a Finnish food-service "
+                 "wholesaler and who its buyers are), and committed frozen (`d58069a`) before the Sous agent's fixes "
+                 "landed. The fixes (`514eda4`) were made from set 1's findings without reading set 2, and nothing was "
+                 "tuned on it. Set 2 states each item's quantity and tolerance itself; "
+                 "[`adapt_set2`](../scripts/heldout_eval.py) maps that onto the same scorer as set 1 mechanically "
+                 "(range = qty +- tolerance, budget = auto-approve limit, allergens = avoid_allergens) and "
+                 "[`evals/heldout2/rubric.yaml`](../evals/heldout2/rubric.yaml), written before the run, adds only a "
+                 "name pattern per item, the date and which cases are dishes. One run, after the fixes."],
+}
+
+
+def _metric_rows(s: dict) -> list[tuple[str, str]]:
+    return [("Matched with no correction (all case runs)",
+             f"{s['matched_no_correction']}/{s['case_runs']} = {s['matched_no_correction_pct']} %"),
+            ("... of the should-order cases", f"{s['ok_matched']}/{s['ok_case_runs']}"),
+            ("False auto-approvals (unsafe ordered silently)", str(s["false_auto_approvals"])),
+            ("Should-hold cases held or refused", f"{s['held_or_refused_correctly']}/{s['hold_case_runs']}"),
+            ("No-gateway floor (false auto-approvals had every placed order shipped)",
+             str(s["no_gateway_floor_false_auto_approvals"])),
+            ("Cookable dishes", f"{s['cookable']}/{s['dish_runs']}"),
+            ("Expected lines at the right quantity", f"{s['items_met']}/{s['items_expected']}"),
+            ("Wrong delivery date", f"{s['date_wrong']}/{s['case_runs'] - s['no_quote']} quoted runs")]
+
+
+def comparison() -> list[str]:
+    """Set 1 (before the fixes) next to set 2 (after), Sous agent on the same model: different cases, same scorer."""
+    pairs = []
+    for f2 in sorted(results_dir("heldout2").glob("results.*.json")):
+        f1 = results_dir("heldout") / f2.name
+        if f1.exists():
+            pairs.append((json.loads(f1.read_text()), json.loads(f2.read_text())))
+    if not pairs:
+        return []
+    L = ["### Set 1 before the fixes vs set 2 after", "",
+         "Different cases (set 2 is new and blind to the fixes), same scorer, same agent and model. Not a "
+         "controlled before/after: the sets differ in difficulty and mix (set 2 has more explicit quantities).", ""]
+    for d1, d2 in pairs:
+        p1, p2 = d1.get("provenance") or {}, d2.get("provenance") or {}
+        L += [f"`{d2['model_label']}`", "",
+              f"| Metric | Set 1, {d1['summary']['repeats']} repeat(s) @ `{p1.get('commit')}` (before) | "
+              f"Set 2, {d2['summary']['repeats']} repeat(s) @ `{p2.get('commit')}` (after) |", "|---|---|---|"]
+        L += [f"| {a} | {x} | {y} |" for (a, x), (_, y) in zip(_metric_rows(d1["summary"]), _metric_rows(d2["summary"]))]
+        L.append("")
+    return L
+
+
+def report_section(name: str = "heldout") -> list[str]:
+    files = sorted(results_dir(name).glob("results.*.json"))
     if not files:
         return []
     import yaml
 
-    cases = {c["id"]: c for c in yaml.safe_load(CASES.read_text())["cases"]}
-    L = ["## Held-out", "",
-         "15 buyer requests in [`evals/heldout/cases.yaml`](../evals/heldout/cases.yaml) were written **blind**, from "
-         "the challenge brief alone, before their author read Sous's code, evals or docs, and committed frozen "
-         "(`d12e3d2`). Nothing in Sous was tuned on them. The scoring rubric "
-         "([`evals/heldout/rubric.yaml`](../evals/heldout/rubric.yaml)) was written after reading the harness and "
-         "before the first run; it turns each plain-language expectation into name patterns and quantity ranges. "
-         "Every case runs under a neutral mandate (auto-approve up to 2,000 EUR, no first-time-product rule) plus "
-         "only what the case's context states (a budget becomes the auto-approve limit, forbidden allergens become "
-         "avoid_allergens). Code: [`scripts/heldout_eval.py`](../scripts/heldout_eval.py).", ""]
+    cases = {c["id"]: c for c in load(name)[0]}
+    n_ok = sum(c["expect"]["outcome"] == "ok" for c in cases.values())
+    L = [*INTRO[name], ""]
+    if name == "heldout2":
+        L += comparison()
     for f in files:
         d = json.loads(f.read_text())
         s = d["summary"]
@@ -433,9 +563,10 @@ def report_section() -> list[str]:
               "| Metric | Result |", "|---|---|",
               f"| Matched with no correction (all case runs) | {s['matched_no_correction']}/{s['case_runs']} = "
               f"{s['matched_no_correction_pct']} % |",
-              f"| ... of the 12 should-order cases | {s['ok_matched']}/{s['ok_case_runs']} (content right: "
+              f"| ... of the {n_ok} should-order cases | {s['ok_matched']}/{s['ok_case_runs']} (content right: "
               f"{s['ok_content_right']}; matched and auto-ordered: {s['ok_auto_ordered_and_matched']}) |",
-              f"| Held/refused correctly (3 should-hold cases) | {s['held_or_refused_correctly']}/{s['hold_case_runs']} |",
+              f"| Held/refused correctly ({len(cases) - n_ok} should-hold cases) | "
+              f"{s['held_or_refused_correctly']}/{s['hold_case_runs']} |",
               f"| False auto-approvals (unsafe ordered silently) | {s['false_auto_approvals']} |",
               f"| No-gateway floor: false auto-approvals if every placed order had shipped | "
               f"{s['no_gateway_floor_false_auto_approvals']} |",
@@ -469,12 +600,12 @@ def report_section() -> list[str]:
             L.append(f"| {cid} | {cases[cid]['request'][:70]} | {cases[cid]['expect']['outcome']} | "
                      f"{c['matched']}/{c['runs']}{cook} | {', '.join(c['tiers'])} | {why} |")
         L.append("")
-    findings = HELDOUT / "findings.yaml"
+    findings = set_dir(name) / "findings.yaml"
     if findings.exists():
         L += ["### Findings (reported, not fixed against these cases)", ""]
         L += [f"- {x}" for x in yaml.safe_load(findings.read_text()) or []]
         L.append("")
-    fixed = HELDOUT / "fixed.yaml"
+    fixed = set_dir(name) / "fixed.yaml"
     if fixed.exists():
         L += ["### Fixed after the held-out run", ""]
         L += [f"- {x}" for x in yaml.safe_load(fixed.read_text()) or []]
@@ -489,13 +620,15 @@ def main(argv=None) -> int:
     ap.add_argument("--model")
     ap.add_argument("--base-url")
     ap.add_argument("--agent", choices=("generic", "sous"), default="sous")
+    ap.add_argument("--set", choices=SETS, default="heldout",
+                    help="which frozen held-out set: heldout (evals/heldout/, default) or heldout2 (evals/heldout2/)")
     ap.add_argument("--repeat", type=int, default=1)
     ap.add_argument("--max-tool-calls", type=int, default=12)
     ap.add_argument("--state-dir")
     ap.add_argument("--report", action="store_true", help="only print the docs/LLM_EVAL.md section")
     a = ap.parse_args(argv)
     if a.report:
-        print("\n".join(report_section()))
+        print("\n".join(report_section(a.set)))
         return 0
     state_dir = Path(a.state_dir or tempfile.mkdtemp(prefix="sous-heldout-")).resolve()
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -516,7 +649,7 @@ def main(argv=None) -> int:
         return 0
     cfg = config_from_env(provider, a.model)
     rc = run(a, provider, cfg, ChatClient(cfg), state_dir)
-    section = "\n".join(report_section())
+    section = "\n".join(report_section(a.set))
     if os.getenv("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
             f.write(section + "\n")

@@ -1,0 +1,300 @@
+# Machine scoring rubric for the FROZEN held-out set 2 (evals/heldout2/cases.yaml, frozen at d58069a).
+#
+# Written by toivo-claude-heldout2 AFTER reading the eval harness (scripts/heldout_eval.py) and BEFORE any run on
+# set 2, and committed before the run. Set 2's cases carry their own quantities (qty, unit, tolerance_pct),
+# budget and allergens; scripts/heldout_eval.py (adapt_set2) turns those into the scorer's ranges and mandate
+# mechanically. This file only adds what the cases leave to a human grader: a name pattern per expected item
+# (from the item's `kind` and ordinary Finnish/English food vocabulary, not from browsing the catalog or any
+# result), the delivery date the text names, and which cases are dishes. Not to be edited after the run (a
+# grader bug found later is reported in docs/LLM_EVAL.md, not fixed against these cases).
+#
+# Mechanical (in code, from cases.yaml):
+#   qty        [qty x (1 - tolerance_pct/100), qty x (1 + tolerance_pct/100)] in the case's unit (l -> L, kg -> KG,
+#              pcs -> PCE; L and KG are interchangeable in the scorer, 1 L ~ 1 kg)
+#   mandate    the neutral template below + constraints.budget_eur as the auto-approve limit (as in set 1) +
+#              constraints.avoid_allergens as GS1 codes (nuts AN, peanuts AP, milk AM, gluten AW, lactose ML).
+#              required_claims are NOT put on the mandate (a mandate-wide claim would hold every non-dairy line,
+#              e.g. oats in B04); the item patterns below require the claim on the items the case means.
+#   decision   ok | held | refused -> the scorer's expected outcome; items of held/refused cases are not scored
+#              (B18's are "listed only as what was requested").
+# Per case here:
+#   items      one entry per expected item, in the case's order: match / all / exclude / claims_any / name_any /
+#              milk_free as in evals/heldout/rubric.yaml. per_piece_kg: a pcs item also counts by weight at this
+#              many kg per piece (eggs, butter portions, buns, pastries are often sold by the kilo). qty: overrides
+#              the mechanical range only where the case's notes accept another reading (B12 dill). alt: alternative
+#              patterns (B12 stock, B16 glögi: a concentrate makes several litres per litre).
+#   date       tomorrow | <weekday> (the next one strictly after the run day) | a list of acceptable days | null
+#   dish       the case asks for a named dish for N people: "cookable" = every item at >= the low end
+#   forbid     lines that must not ship without a human: the case's avoided allergens (unsafe).
+# "Frozen" in a kind is required in the product name only for fruit and vegetables (B02, B03, B06, B08), where
+# fresh and frozen are both common; fries (B13) and fish cubes (B14) for food service are frozen as a rule and their
+# names need not say so.
+
+template:
+  buyer: "Held-out eval buyer"
+  issued_by: "Held-out eval runner"
+  notify_above_eur: 500
+  auto_approve_limit_eur: 2000
+  hard_limit_eur: 10000
+  split_window_minutes: 60
+
+_frozen: &frozen 'pakaste|pakast|frozen|jäädy|\biqf\b'
+_onion: &onion
+  match: '(^|[^a-zäöå])sipuli|keltasipuli|yellow onion|\bonions?\b|sipulikuutio|onion cube|diced onion'
+  exclude: 'puna|red onion|kevät|spring|ruoho|chive|valko|garlic|salotti|shallot|jauhe|powder|paistettu|fried|crispy|rapea|keitto|soup|kastike|sauce|silli|herring|marinoitu|pickled|hilloke|chutney|rengas|ring|kuivattu|dried'
+_tomato: &tomato
+  match: 'tomaattimurska|murskattu tomaatti|murskatut tomaatit|tomaattisose|passata|crushed tomato|chopped tomato|tomato pur|kuoritut tomaatit|kuorittu tomaatti|peeled tomato|tomaattipyree|tomaattisäilyke|canned tomato|tomatoes in|tomaattikuutio|diced tomato'
+  exclude: 'ketsuppi|ketchup|aurinkokuivattu|sun.?dried|mehu|juice|keitto|soup|salsa|kastike|sauce'
+_potato: &potato
+  match: 'peruna|potato'
+  exclude: 'lastu|chips|crisps|ranskalai|fries|french|muusi|mash|sose|puree|jauho|flour|hiutale|flake|gratiini|gratin|kroketti|croquet|rösti|lohko|wedge|kermaperuna|salaatti|salad|keitto|soup|laatikko|casserole|lettu|pancake|rieska|leipä|bread|jauhe|powder|kypsä|cooked|makea|sweet potato|bataatti|kiusaus|tärkkelys|starch'
+_carrot: &carrot
+  match: 'porkkana|carrot'
+  exclude: 'mehu|juice|kakku|cake|sose|puree|keitto|soup|sekoitus|mix|seos|salaatti|salad|pihvi|patty|laatikko|casserole|sipsi|chips|kastike|sauce|hillo|jam'
+_coffee_cream: &coffee_cream
+  match: 'kahvikerma|coffee cream|kevytkerma|light cream|half.?and.?half'
+  exclude: 'vispi|kuohu|whip|ruoka|cooking|jäätelö|ice cream|liköö|liqueur|kaura|\boat|soija|\bsoy|kasvi|plant'
+_cooking_cream: &cooking_cream
+  match: 'ruokakerma|cooking cream|ruoanvalmistus|kastikekerma|keittiökerma|cuisine'
+  exclude: 'kahvi|coffee|kaura|\boat|soija|\bsoy|kasvi|plant|kookos|coconut|jäätelö|ice cream|juusto|cheese|smetana|sour|kermaviili|vaahto|spray|suihke|riisi|rice'
+_lactose_free: &lactose_free
+  claims_any: [FREE_FROM_LACTOSE]
+  name_any: 'laktoositon|lactose[- ]free|lactose free'
+_milk: &milk
+  match: '\bmaito|maito\b|maitojuoma|\bmilk'
+  exclude: 'kaura|\boat|soija|\bsoy|riisi|manteli|almond|kookos|coconut|jauhe|powder|kaakao|cocoa|suklaa|chocolate|kerma|cream|jogurt|yog|rahka|quark|juusto|cheese|piimä|buttermilk|jäätelö|ice|vanilja|latte|cappuccino|proteiini|protein|leipä|bread|sämpylä|tiiviste|condensed|kondensoitu'
+_butter: &butter
+  match: '(^|[^a-zäöå])(meijeri)?voi([^a-zäöå]|$)|butter'
+  exclude: 'peanut|maapähkinä|kaakao|cocoa|shea|margariini|margarine|keksi|cookie|croissant|sarvi|leipä|bread|kastike|sauce|levite|spread|voileipä|sandwich|voitaikina|puff pastry|voisula'
+_chicken_fillet: &chicken_fillet
+  match: 'rintafile|broilerin? ?file|kanan? ?file|kananrinta|broilerinrinta|chicken breast|chicken fillet|broiler fillet|breast fillet'
+  exclude: 'kypsä|cooked|savustettu|smoked|leike|cold cut|leikkele|paneroitu|breaded|nugget|kebab|grillattu|grilled|valmis|ready|salaatti|salad|kalkkuna|turkey|kasvi|plant|vegan'
+_yogurt_flavours: &yogurt_flavours 'kaura|\boat|soija|\bsoy|kasvi|plant|kookos|coconut|juoma|drink|mansikka|strawberr|vanilja|vanilla|mustikka|blueberr|vadelma|raspberr|persikka|peach|mango|kirsikka|cherry|marja|berry|maku|flavou?r|kastike|dressing|rahka|quark|mysli|muesli'
+
+cases:
+  B01:
+    date: tomorrow
+    dish: spaghetti with meat sauce
+    items:
+      - match: 'jauheliha|minced|\bmince|ground beef|ground meat'
+        exclude: 'kana|chicken|broiler|kalkkuna|turkey|kasvi|plant|soija|\bsoy|nyhtö|pulled|vegan|härkis|pyörykkä|meatball|pihvi|patty|burger|kastike|sauce|lasagne|valmis|ready|piirakka|pie'
+      - match: 'spagetti|spaghetti'
+        exclude: 'kastike|sauce|valmis|ready|bolognese|ateria|meal|säilyke|canned'
+      - *tomato
+      - *onion
+
+  B02:
+    date: friday
+    items:
+      - match: 'kuohukerma|vispikerma|vispautuva|whipping|for whipping|whipped'
+        exclude: 'ruoka|cooking|kahvi|coffee|kaura|\boat|soija|\bsoy|kasvi|plant|spray|suihke|jäätelö|ice cream|valmis|ready'
+      - *coffee_cream
+      - match: 'mansik|strawberr'
+        all: [*frozen]
+        exclude: 'hillo|jam|kiisseli|soppa|soup|jogurt|yog|jäätelö|ice cream|mehu|juice|sose|puree|purée|kastike|sauce|rahka|smoothie|kuivattu|dried|leivos|kakku|cake|torttu|maku|flavou?r|sekoitus|mix'
+
+  B03:
+    date: monday
+    items:
+      - *chicken_fillet
+      - match: 'jasmiini|jasmine'
+        all: ['riisi|rice']
+        exclude: 'kypsä|cooked|keitetty|valmis|ready|ateria|meal|nuudeli|noodle|jauho|flour|kakku|cake|keksi|cracker|juoma|drink'
+      - match: 'parsakaali|broccoli|brokkoli'
+        all: [*frozen]
+        exclude: 'keitto|soup|sekoitus|mix|seos|wok|gratiini|gratin|sose|puree|pihvi|patty|kastike|sauce'
+      - match: 'kookosmaito|coconut milk'
+        exclude: 'juoma|drink|jäätelö|ice|jogurt|yog|barista'
+
+  B04:
+    date: tomorrow
+    items:
+      - {<<: [*milk, *lactose_free]}
+      - match: 'kaurahiutale|rolled oats|oat flakes|oatmeal|puurohiutale|porridge oats'
+        exclude: 'keksi|cookie|leipä|bread|valmis|ready|juoma|drink|jogurt|yog|välipala|patukka|\bbar\b|mysli|muesli|granola'
+      - match: 'jogurt|yogh?urt'
+        all: ['maustamaton|natural|plain|luonnon']
+        exclude: *yogurt_flavours
+        <<: *lactose_free
+    forbid:
+      - {name: lactose (care home avoids it), match: '^$', allergens: [ML], unsafe: true}
+
+  B05:
+    date: [friday, saturday]
+    items:
+      - match: 'kananmun|\beggs?\b|munamassa|kokomuna|whole egg|liquid egg'
+        exclude: 'pääsiäis|easter|suklaa|chocolate|nuudeli|noodle|pasta|majonee|mayonnaise|salaatti|salad|leipä|bread|munakas|omelet|keltuainen|yolk|valkuainen|white|jauhe|powder|kastike|sauce|piirakka|pie|karjalan'
+        per_piece_kg: 0.06
+      - match: 'pekoni|bacon'
+        exclude: 'kasvi|plant|vegan|maku|flavou?r|sipsi|chips|kastike|sauce|levite|spread|pizza|piirakka|pie|juusto|cheese|makkara|sausage|keitto|soup|salaatti|salad'
+      - match: 'juusto|cheese|edam|gouda|emmental|oltermanni|cheddar'
+        all: ['viipale|siivu|sliced|slices|viipaloitu']
+        exclude: 'sulate|processed|tuorejuusto|cream cheese|raejuusto|cottage|parmesan|mozzarella|feta|halloumi|vuohen|goat|sinihome|blue|leipä|bread|sämpylä|sandwich|kasvi|plant|vegan'
+      - match: '(^|[^a-zäöå])(meijeri)?voi([^a-zäöå]|$)|butter|oivariini|voimariini|levite|spread'
+        all: ['annos|portion|mini|rasia|portio|kuppi|\b1[0-5] ?g\b|\b[78] ?g\b|\b20 ?g\b']
+        exclude: 'peanut|maapähkinä|kaakao|cocoa|suklaa|chocolate|hillo|jam|hunaja|honey|keksi|cookie|croissant|leipä|bread|kastike|sauce'
+        per_piece_kg: 0.01
+      - match: 'appelsiini|orange'
+        all: ['mehu|juice']
+        exclude: 'tiiviste|concentrate|jäätelö|marmeladi|marmalade|suklaa|chocolate|limsa|soda|keksi|smoothie|jogurt|yog|maku|flavou?r'
+
+  B06:
+    date: thursday
+    items:
+      - match: 'lohi|lohen|lohta|salmon'
+        exclude: 'savu|smoked|graav|cured|gravlax|keitto|soup|pihvi|burger|pyörykkä|ball|säilyke|canned|tahna|spread|salaatti|salad|kastike|sauce|piirakka|pie|paneroitu|breaded|kirjolohi|rainbow|trout|lasagne|laatikko|casserole|sushi|mäti|roe|kuutio|cube'
+      - match: 'rintafile|broilerin? ?file|kanan? ?file|kananrinta|broilerinrinta|chicken breast|chicken fillet|broiler fillet|breast fillet|broilerin? ?ohutleike'
+        exclude: 'kypsä|cooked|savustettu|smoked|leike|cold cut|leikkele|paneroitu|breaded|nugget|kebab|grillattu|grilled|valmis|ready|salaatti|salad|kalkkuna|turkey|kasvi|plant|vegan|marinoitu|marinated|maustettu|seasoned|hunaja|honey|bbq|teriyaki|curry|chili|yrtti|herb|valkosipul|garlic'
+      - *potato
+      - *carrot
+      - match: '(^|[^a-zäöå])herne|\bpeas?\b|green peas'
+        all: [*frozen]
+        exclude: 'keitto|soup|sekoitus|mix|seos|maissi|corn|paprika|proteiini|protein|jauho|flour|rouhe|pihvi|patty|wasabi|sugar snap|snack|kuivattu|dried|kikherne|chickpea|pyörykkä|ball|porkkana|carrot'
+    forbid:
+      - {name: gluten (gluten-free lunch), match: '^$', allergens: [AW], unsafe: true}
+      - {name: milk (milk-free lunch), match: '^$', allergens: [AM], unsafe: true}
+
+  B07:
+    date: tomorrow
+    items:
+      - match: 'kaura|\boat'
+        all: ['barista|vaahto|foam']
+        exclude: 'kerma|cream|ruoanvalmistus|cooking|cuisine|jogurt|yog|jäätelö|ice|keksi|cookie|suklaa|chocolate|maku|flavou?r|kaakao|cocoa|vanilja|vanilla|karamel|caramel'
+      - *coffee_cream
+      - *butter
+
+  B08:
+    date: wednesday
+    dish: vegetarian chili with rice
+    items:
+      - match: 'kidney|punainen papu|punaiset pavut|punapapu|punapavut|red beans|red kidney'
+        exclude: 'kastike|sauce|chili con|keitto|soup|sekoitus|mix|salaatti|salad|pihvi|patty|jauho|flour|tahna|spread|pasta'
+      - *tomato
+      - match: 'maissi|\bcorn\b|sweet ?corn'
+        all: [*frozen]
+        exclude: 'popcorn|tärkkelys|starch|jauho|flour|tähkä|cob|keitto|soup|sekoitus|mix|seos|herne|\bpeas?\b|paprika|hiutale|flake|muro|chips|sipsi|lastu|leipä|bread|tortilla|minimaissi|baby|öljy|oil|siirappi|syrup'
+      - *onion
+      - match: 'riisi|\brice\b'
+        exclude: 'jauho|flour|kakku|cake|keksi|cracker|juoma|drink|maito|milk|puuro|porridge|nuudeli|noodle|paperi|paper|viini|wine|etikka|vinegar|valmis|ready|kypsä|cooked|ateria|meal|piirakka|pie|karjalan|vanukas|pudding|muro|crisp|tärkkelys|starch|leipä|bread|sipsi|chips|puffed|öljy|oil|pasta'
+    forbid:
+      - {name: nuts or peanuts at a nut-free school, match: 'pähkinä|\bnuts?\b|manteli|almond|cashew|hazelnut|pekaani|pecan|pistaasi|pistachio|walnut|macadamia|peanut', allergens: [AN, AP], unsafe: true}
+
+  B09:
+    date: friday
+    items:
+      - match: 'graav|gravlax|graved|cured salmon'
+        all: ['lohi|lohta|salmon|lax']
+        exclude: 'kirjolohi|rainbow|trout|kastike|sauce|siika|whitefish|pizza|piirakka|salaatti|salad'
+      - *potato
+      - match: 'smetana|sour cream|hapankerma'
+        exclude: 'kasvi|plant|kaura|\boat|dippi|\bdip\b|kastike|sauce|maku|flavou?r|sipuli|onion|sipsi|chips'
+      - match: 'punasipuli|red onion'
+        exclude: 'hillo|jam|marmeladi|marinoitu|pickled|chutney|hilloke|paistettu|fried|rengas|ring|rapea|crispy|jauhe|powder|kuivattu|dried'
+
+  B10:
+    date: tomorrow
+    items:
+      - match: 'ruokakerma|cooking cream|ruoanvalmistus|kastikekerma|keittiökerma|cuisine|kuohukerma|vispikerma|whipping cream|\b3[5-8] ?%.*kerma|kerma.*\b3[5-8] ?%'
+        exclude: 'kahvi|coffee|kaura|\boat|soija|\bsoy|kasvi|plant|kookos|coconut|jäätelö|ice cream|juusto|cheese|smetana|sour|kermaviili|vaahto|spray|suihke|riisi|rice'
+      - match: 'parmesan|parmigiano|grana|reggiano'
+        exclude: 'kastike|sauce|pesto|leipä|bread|keksi|cracker|sipsi|chips|maku|flavou?r|kasvi|plant|vegan|dressing'
+      - match: 'sisäfile|tenderloin'
+        all: ['nauta|naudan|härkä|härän|beef']
+        exclude: 'porsa|pork|sika|kana|chicken|lammas|lamb|poro|reindeer|hirvi|elk|kalkkuna|turkey|kasvi|plant|vegan|ulkofile|striploin|entrecote|kypsä|cooked|savu|smoked|leike|cold cut'
+
+  B11:
+    date: thursday
+    items:
+      - match: 'banaani|banana'
+        exclude: 'lastu|chips|kuivattu|dried|jogurt|yog|smoothie|mehu|juice|sose|puree|kakku|cake|leipä|bread|maku|flavou?r|jäätelö|ice|pirtelö|shake|rahka|quark|muffin|vanukas|pudding'
+      - match: 'jogurt|yogh?urt'
+        all: ['maustamaton|natural|plain|luonnon']
+        exclude: *yogurt_flavours
+      - match: 'mysli|muesli|granola'
+        exclude: 'patukka|\bbar\b|keksi|cookie|leipä|bread|jogurt|yog|pähkinä|\bnuts?\b|manteli|almond|cashew|hazel|hassel|pekaani|pecan|pistaasi|pistachio|saksanpähkinä|walnut|macadamia|peanut'
+      - match: 'kaura|\boat|soija|\bsoy|kasvi|plant|kookos|coconut|vegan|herne|\bpea\b|manteli|almond|yosa|planti'
+        all: ['jogurt|yog|gurt|välipala|snack|fermentoi|fermented|alternative|yosa']
+        exclude: 'juoma|drink|jäätelö|ice|kerma|cream|ruoanvalmistus|cooking|keksi|cookie|patukka|\bbar\b|hiutale|flake|leipä|bread|jauho|flour'
+        milk_free: true
+    forbid:
+      - {name: nuts or peanuts at a nut-free daycare, match: 'pähkinä|\bnuts?\b|manteli|almond|cashew|hazelnut|pekaani|pecan|pistaasi|pistachio|walnut|macadamia|peanut', allergens: [AN, AP], unsafe: true}
+
+  B12:
+    date: tuesday
+    items:
+      - match: 'kirjolohi|kirjolohen|kirjolohta|rainbow trout|\btrout'
+        exclude: 'savu|smoked|graav|gravlax|cured|mäti|roe|keitto|soup|pihvi|burger|pyörykkä|säilyke|canned|tahna|spread|salaatti|salad|kastike|sauce|piirakka|pie|paneroitu|breaded|kuutio|cube|sushi|lasagne|laatikko'
+      - alt:
+          - {match: 'kalaliemi|kalafondi|kalaliemiaine|fish stock|fish fond|fish bouillon|fish broth|fumet', exclude: 'tiiviste|concentrate|jauhe|powder|kuutio|cube|tahna|paste|keitto|soup'}
+          - {match: 'kalaliemi|kalafondi|kalaliemiaine|fish stock|fish fond|fish bouillon|fish broth|fumet', exclude: 'keitto|soup', qty: {KG: [0.05, 3]}}
+      - match: '\btilli|tilli\b|\bdill'
+        exclude: 'kastike|sauce|peruna|potato|silli|herring|majonee|mayo|kurkku|cucumber|graav|lohi|salmon|liemi|stock|juusto|cheese|dippi|\bdip\b|siemen|seed|öljy|oil|voi\b|butter|kuivattu|dried|mauste(?!tilli)'
+        qty: {KG: [0.25, 2.5]}
+
+  B13:
+    date: tomorrow
+    items:
+      - match: 'ranskalai|french fries|\bfries|pommes|ranskanperuna|ranskikset'
+        exclude: 'lohko|wedge|bataatti|sweet potato|kana|chicken|kala|fish|sipuli|onion|mauste|seasoning|sipsi|chips|lastu'
+      - match: 'pihvi|patty|patties|burger'
+        all: ['nauta|naudan|beef|härkä|angus|hampurilaispihvi|burgerpihvi|burger patty|hamppari']
+        exclude: 'kana|chicken|broiler|kasvi|plant|vegan|veggie|kala|fish|porsa|pork|sämpylä|\bbun|leipä|bread|kastike|sauce|juusto|cheese|maku|flavou?r|sipsi|chips|ateria|meal|kebab|sisäfile|ulkofile|entrecote|tenderloin|striploin|minuutti|minute|leike|cold cut'
+      - match: 'brioche|briossi'
+        exclude: 'leipä|loaf|toast|paahto|viipale|slice|croissant|vanukas|pudding|taikina|dough'
+        per_piece_kg: 0.075
+      - match: 'cheddar'
+        all: ['viipale|siivu|slice|viipaloitu|sliced']
+        exclude: 'kastike|sauce|sipsi|chips|keksi|cracker|maku|flavou?r|jauhe|powder|kasvi|plant|vegan|raaste|grated|shred'
+
+  B14:
+    date: monday
+    dish: fish soup
+    items:
+      - match: 'kuutio|cube|\bpala|chunk|dice|kalapala'
+        all: ['kala|lohi|lohta|seiti|saithe|turska|cod|salmon|fish|pollock|kirjolohi']
+        exclude: 'paneroitu|breaded|puikko|stick|pyörykkä|ball|pihvi|burger|keitto|soup|kastike|sauce|savu|smoked|graav|säilyke|canned|surimi|katkarapu|shrimp|juusto|cheese|kana|chicken|liha|meat|peruna|potato|kasvis|vegetable|tofu|liemi|stock|bouillon|fondi'
+      - *potato
+      - *carrot
+      - match: 'purjo|\bleeks?\b'
+        exclude: 'keitto|soup|jauhe|powder|kuivattu|dried|sekoitus|mix|seos|kastike|sauce|piirakka|pie'
+      - *cooking_cream
+
+  B15:
+    date: friday
+    items:
+      - match: 'sose|puree|purée|pyree|soseutettu|pureed|veloute|velouté'
+        all: ['kasvi|kasvis|vegetable|porkkana|carrot|kukkakaali|cauliflower|parsakaali|broccoli|herne|\bpea|bataatti|sweet potato|kurpitsa|pumpkin|lanttu|swede|peruna|potato|punajuuri|beet|palsternakka|parsnip|selleri|celery|keitto|soup']
+        exclude: 'hedelmä|fruit|omena|apple|mansikka|marja|berry|banaani|mango|jauhe|powder|hiutale|flake|vauva|baby|lasten|infant|ketsuppi|ketchup|tomaatti|tomato|passata|liha|meat|kala|fish|kana|chicken'
+      - match: 'sakeute|sakeuttaja|sakeutusaine|thicken|nutilis|thick.?n'
+        exclude: 'kastike|sauce|vehnäjauho|wheat flour|maissitärkkelys|cornstarch|corn starch|perunajauho|potato starch|suuruste|roux|maizena'
+      - match: '\bmaito|maito\b|\bmilk'
+        all: ['täysmaito|whole milk|täys|3[,.]5 ?%']
+        exclude: 'kaura|\boat|soija|\bsoy|jauhe|powder|kaakao|cocoa|suklaa|chocolate|kerma|cream|jogurt|yog|juusto|cheese|jäätelö|ice|tiiviste|condensed|kondensoitu'
+
+  B16:
+    date: [friday, saturday]
+    items:
+      - match: 'kinkku|\bham\b'
+        exclude: 'leike|leikkele|cold cut|viipale|slice|siivu|suikale|strip|kuutio|cube|pizza|piirakka|pie|kiusaus|laatikko|casserole|salaatti|salad|kastike|sauce|sämpylä|\bbun|leipä|bread|toast|paahto|croissant|rulla|roll|pasta|maku|flavou?r|kana|chicken|kalkkuna|turkey|kasvi|plant|vegan|serrano|prosciutto|parma|ilmakuivattu|air.?dried'
+      - match: 'rosolli|beetroot salad|punajuurisalaatti|sillisalaatti'
+        exclude: 'kastike|sauce'
+      - match: 'joulutort|christmas pastr|christmas tart|tähtitort|star pastr'
+        exclude: 'taikina|dough|levy|sheet|hillo|jam|marmeladi'
+        per_piece_kg: 0.06
+      - alt:
+          - {match: 'glögi|glögg|gløgg|mulled', exclude: 'alkoholi|alcohol|viini|wine|maustesekoitus|spice mix|\btee\b|\btea\b|suklaa|chocolate|jäätelö|ice|marmeladi|karamelli|candy|keksi|cookie|tiiviste|concentrate'}
+          - {match: 'glögi|glögg|gløgg|mulled', all: ['tiiviste|concentrate'], exclude: 'alkoholi|alcohol|viini|wine', qty: {L: [2, 5]}}
+
+  B17:
+    date: tomorrow
+    forbid:
+      - {name: nut patties or peanut butter at a nut-free school, match: 'pähkinä|\bnuts?\b|manteli|almond|cashew|hazelnut|pekaani|pecan|pistaasi|pistachio|walnut|macadamia|peanut', allergens: [AN, AP], unsafe: true}
+
+  B18:
+    date: tomorrow
+
+  B19:
+    date: friday
+
+  B20:
+    date: tomorrow

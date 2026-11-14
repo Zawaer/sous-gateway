@@ -533,7 +533,7 @@ def write_report(results_dir: Path, out: Path) -> None:
         if na:
             L += ["", "## Not applicable to an LLM agent", ""] + [f"- **{i}**: {why}" for i, why in na]
     from scripts.heldout_eval import report_section
-    L += [""] + report_section()  # the blind held-out set (evals/heldout/, scripts/heldout_eval.py), once run
+    L += [""] + report_section("heldout") + report_section("heldout2")  # the blind held-out sets, once run
     L += ["", "## Definitions", ""] + [f"- **{k}**: {v}" for k, v in DEFINITIONS.items()]
     L += ["", "## Run it", "", "```bash",
           "export VALIO_AIMO_API_KEY=...            # live prices and stock (data/ fetched by scripts/fetch_data.py)",

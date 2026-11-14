@@ -239,3 +239,29 @@ def test_end_to_end_one_case_through_the_real_runner(tmp_path, monkeypatch):
     assert not r["matched_no_correction"]  # no butter, and the date is not tomorrow
     assert "## Held-out" in "\n".join(H.report_section())
     signing._key.cache_clear()
+
+
+def test_set2_adapter_maps_the_frozen_schema_onto_the_scorer():
+    """evals/heldout2 (frozen at d58069a, its own schema) -> set 1's shape: every case, every item has a pattern."""
+    cases, rubric = H.load("heldout2")
+    by = {c["id"]: c for c in cases}
+    assert len(cases) == 20 and set(by) == set(rubric["cases"])
+    assert {c["id"] for c in cases if c["expect"]["outcome"] != "ok"} == {"B17", "B18", "B19", "B20"}
+    assert by["B17"]["expect"]["outcome"] == "refused" and by["B01"]["request"].startswith("Huomiseksi")
+    for r in rubric["cases"].values():
+        for spec in [a for it in r.get("items") or [] for a in (it.get("alt") or [it])] + (r.get("forbid") or []):
+            for k in ("match", "exclude", "name_any", "unless"):
+                if spec.get(k):
+                    re.compile(spec[k])
+            assert spec.get("match") and (spec.get("qty") or spec.get("allergens"))
+    b03 = rubric["cases"]["B03"]
+    assert b03["mandate"] == {"budget_eur": 700.0} and b03["budget_eur"] == 700 and b03["date"] == "monday"
+    assert b03["items"][0]["qty"] == {"KG": [36.0, 44.0]}  # 40 kg +- 10 %
+    eggs = rubric["cases"]["B05"]["items"][0]
+    assert eggs["qty"]["PCE"] == [216.0, 504.0] and eggs["qty"]["KG"] == [12.96, 30.24]  # 360 pcs +- 40 %, 60 g each
+    assert rubric["cases"]["B06"]["mandate"]["avoid_allergens"] == ["AW", "AM"]
+    assert rubric["cases"]["B04"]["mandate"]["avoid_allergens"] == ["ML"]
+    assert H.resolve_dates(["friday", "saturday"], TODAY) == [date(2026, 11, 20), date(2026, 11, 21)]
+    q = {"id": "Q1", "lines": [], "total_ex_vat": 0, "requested_delivery_date": "2026-11-20"}
+    assert H.score_quote(rubric["cases"]["B16"], q, TODAY)["date_ok"]
+    assert not H.score_quote(rubric["cases"]["B19"], {**q, "requested_delivery_date": "2026-11-16"}, TODAY)["date_ok"]
