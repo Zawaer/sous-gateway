@@ -243,13 +243,20 @@ async def http_error(_: Request, e: StarletteHTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_error(_: Request, e: RequestValidationError):
-    problems = []
+    problems, dates = [], False
     for err in e.errors():
         where = ".".join(str(x) for x in err.get("loc", ()) if x not in ("body", "query", "path"))
-        problems.append(f"{where}: {err.get('msg')}" if where else str(err.get("msg")))
+        kind = err.get("type") or ""
+        msg = ("unknown field (not part of this request; check the spelling)" if kind == "extra_forbidden" else
+               "required field is missing" if kind == "missing" else err.get("msg"))
+        problems.append(f"{where}: {msg}" if where else str(msg))
+        dates = dates or kind.startswith(("date", "datetime")) or "date" in where.rsplit(".", 1)[-1]
+    # The date hint only when a date field is what failed: otherwise it hides the real problem.
     return JSONResponse(status_code=422, content={
         "error": "invalid_request",
-        "message": "; ".join(problems) + ". Dates are YYYY-MM-DD (e.g. delivery_date=2026-11-16).",
+        "message": "; ".join(problems) + (". Dates are YYYY-MM-DD (e.g. delivery_date=2026-11-16)." if dates else "."),
+        "fields": sorted({".".join(str(x) for x in err.get("loc", ()) if x not in ("body", "query", "path"))
+                          for err in e.errors()} - {""}),
         "details": jsonable_encoder(e.errors())})
 
 

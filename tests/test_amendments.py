@@ -284,6 +284,29 @@ def test_invalid_amendments_are_refused():
     assert e.value.code == "amendment_pending"
 
 
+def test_wrong_or_unknown_fields_are_named_not_a_date_hint(monkeypatch):
+    from sous import api
+    monkeypatch.setattr(config, "APPROVER_CODE", "secret-code")
+    issue()
+    o = order()
+    c = TestClient(api.app)
+    h = {"X-Approver-Code": "secret-code"}
+    url = f"/orders/{o['id']}/amendments"
+    r = c.post(url, json={"kind": "short_pick", "line": 0, "quantity": 7, "reason": "short"}, headers=h)
+    assert r.status_code == 400 and "doesn't take quantity" in r.json()["message"]
+    assert "delivered_quantity" in r.json()["message"] and "YYYY" not in r.json()["message"]
+    r = c.post(url, json={"kind": "short_pick", "line": 0, "quantity": 0, "reason": "short"}, headers=h)
+    assert r.status_code == 422 and r.json()["fields"] == ["quantity"] and "YYYY" not in r.json()["message"]
+    r = c.post(url, json={"kind": "short_pick", "line": 0, "delivered_qty": 7, "reason": "short"}, headers=h)
+    assert r.status_code == 422 and "delivered_qty: unknown field" in r.json()["message"]
+    r = c.post(url, json={"kind": "short_pick", "line": 0, "delivered_quantity": 7}, headers=h)
+    assert r.status_code == 422 and "reason: required field is missing" in r.json()["message"]
+    r = c.post(url, json={"kind": "delay", "new_delivery_date": "19.11.2026", "reason": "truck"}, headers=h)
+    assert r.status_code == 422 and "Dates are YYYY-MM-DD" in r.json()["message"]  # the hint where it helps
+    r = c.post(url, json={"kind": "short_pick", "line": 0, "reason": "short"}, headers=h)
+    assert r.status_code == 400 and "needs delivered_quantity (missing)" in r.json()["message"]
+
+
 def test_erp_change_message_is_idempotent_and_orderchg_shaped():
     issue()
     o = report(order(10)["id"], kind="short_pick", line=0, delivered_quantity=8)

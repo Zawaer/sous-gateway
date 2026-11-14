@@ -33,7 +33,7 @@ import hashlib
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from . import catalog, erp, notify, signing, store
 from . import service as S
@@ -45,6 +45,8 @@ _RANK = {"silent": 0, "notify": 1, "ask": 2, "block": 3}
 
 
 class AmendmentIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # a misspelt field is named in the error, never silently ignored
+
     kind: Literal["short_pick", "delay", "substitution_at_pick", "cancel_line"]
     line: int | None = Field(None, ge=0, description="0-based index into order.lines (delay: None = whole order)")
     delivered_quantity: float | None = Field(None, ge=0, description="short_pick: quantity actually picked")
@@ -55,6 +57,12 @@ class AmendmentIn(BaseModel):
         None, ge=0, description="substitution_at_pick: price charged per unit; default the original line's")
     reason: str = Field(min_length=1, max_length=300)
     by: str = Field("Valio Aimo", max_length=80, description="Who at Valio reports it")
+
+
+# The fields each kind takes, besides kind, reason and by.
+FIELDS = {"short_pick": ("line", "delivered_quantity"), "cancel_line": ("line",),
+          "delay": ("line", "new_delivery_date"),
+          "substitution_at_pick": ("line", "product_id", "quantity", "unit_price_ex_vat")}
 
 
 class Resolution(BaseModel):
@@ -281,8 +289,13 @@ def report(order_id: str, req: AmendmentIn, authority: str) -> dict:
         n = len(o["lines"])
         need = {"short_pick": ("line", "delivered_quantity"), "cancel_line": ("line",),
                 "delay": ("new_delivery_date",), "substitution_at_pick": ("line", "product_id", "quantity")}
+        if wrong := sorted(k for k in a if a[k] is not None and k not in FIELDS[req.kind] + ("kind", "reason", "by")):
+            hint = ("; for short_pick the picked amount is delivered_quantity (quantity is the substitute's, "
+                    "substitution_at_pick)" if req.kind == "short_pick" and "quantity" in wrong else "")
+            raise _err("invalid_argument", f"{req.kind} doesn't take {', '.join(wrong)}: its fields are "
+                       f"{', '.join(FIELDS[req.kind])}{hint}.", 400)
         if missing := [k for k in need[req.kind] if a.get(k) is None]:
-            raise _err("invalid_argument", f"{req.kind} needs {', '.join(missing)}.", 400)
+            raise _err("invalid_argument", f"{req.kind} needs {', '.join(missing)} (missing).", 400)
         if a.get("line") is not None:
             if a["line"] >= n:
                 raise _err("invalid_argument", f"Order {order_id} has lines 0..{n - 1}; no line {a['line']}.", 400)
