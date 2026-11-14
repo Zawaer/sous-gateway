@@ -137,6 +137,15 @@ def scripted_eval(path: Path) -> dict:
 
 # --- LLM buyer agent ------------------------------------------------------------
 
+def _run_id(doc: dict, prov: dict) -> str | None:
+    """A CI run's id, else what identifies a local run: when it ran and at which commit."""
+    if prov.get("ci_run_id"):
+        return str(prov["ci_run_id"])
+    if doc.get("generated_at") and prov.get("commit"):
+        return f"local-{re.sub(r'[^0-9T]', '', doc['generated_at'][:16])}-{prov['commit']}"
+    return None
+
+
 def llm_evals(evals: Path) -> dict:
     models, excluded = [], []
     for path in sorted(evals.glob("llm_results.*.json")):
@@ -157,12 +166,19 @@ def llm_evals(evals: Path) -> dict:
                 "unsafe_blocked_or_escalated_pct", "unsafe_not_handled", "mandate_violations_auto_ordered",
                 "failed_cases", "tool_calls_per_request_avg", "tool_errors_total", "llm_calls_per_request_avg",
                 "valio_api_calls_per_request_avg", "tokens_per_request_avg", "latency_ms_p50", "latency_ms_mean",
-                "cost_usd_per_request", "cost_usd_total")
+                "cost_usd_per_request", "cost_usd_total", "need_understood", "need_corrections_by_parser",
+                "self_check_refusals")
+        prov = doc.get("provenance") if isinstance(doc.get("provenance"), dict) else {}
         models.append({"model_label": doc.get("model_label"), "provider": doc.get("provider"),
                        "model": doc.get("model"), "where": doc.get("where"),
+                       "agent": doc.get("agent") or "generic",
                        "reasoning_effort": doc.get("reasoning_effort"),
-                       "summary": {k: s.get(k) for k in keep if k in s},
-                       "source": _source(path, doc, cases_file=doc.get("cases_file"))})
+                       "summary": {**{k: s.get(k) for k in keep if k in s},
+                                   # cases where the model API failed (e.g. HTTP 429 quota) before an answer
+                                   "provider_errors": (s.get("stop_reasons") or {}).get("llm_error", 0)},
+                       "source": _source(path, doc, cases_file=doc.get("cases_file"), run_id=_run_id(doc, prov))})
+    # one row per run: generic agents first, then the purpose-built agent, each by pass rate
+    models.sort(key=lambda m: (m["agent"] != "generic", -(m["summary"].get("matched_without_correction_pct") or 0)))
     return {"available": bool(models), "models": models, "excluded": excluded,
             **({} if models else {"reason": "no evals/llm_results.*.json from a model"})}
 
@@ -413,7 +429,8 @@ def collect() -> dict:
     headline = {
         "scripted_cases": _pair(scripted, "cases_passed", "cases_total"),
         "unsafe_blocked_or_escalated": _pair(scripted, "unsafe_blocked_or_escalated", "unsafe_requests"),
-        "llm_models": [{"model_label": m["model_label"], "passed": m["summary"].get("cases_passed"),
+        "llm_models": [{"model_label": m["model_label"], "agent": m["agent"],
+                        "passed": m["summary"].get("cases_passed"),
                         "run": m["summary"].get("cases_run"),
                         "mandate_violations_auto_ordered": m["summary"].get("mandate_violations_auto_ordered")}
                        for m in llm.get("models", [])],

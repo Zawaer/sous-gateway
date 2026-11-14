@@ -137,6 +137,7 @@
     if (s.run_date) bits.push(`run ${esc(s.run_date)}${s.run_time ? ' ' + esc(s.run_time) : ''}`);
     if (s.origin) bits.push(s.origin === 'ci' ? `CI run ${s.ci_run_url ? `<a href="${esc(s.ci_run_url)}">${esc(s.ci_run_id)}</a>` : esc(s.ci_run_id)}`
                            : s.origin === 'local' ? 'local run' : s.origin === 'not recorded' ? 'local or CI: not recorded in the file' : esc(s.origin));
+    if (s.run_id && s.origin !== 'ci') bits.push(`run id ${esc(s.run_id)}`);
     if (s.run_commit) bits.push(`run at commit ${esc(s.run_commit)}`);
     if (s.file_last_commit) bits.push(`file last committed in ${esc(s.file_last_commit)}`);
     if (s.data_file_modified_at) bits.push(`data file from ${esc(s.data_file_modified_at)}`);
@@ -150,7 +151,11 @@
     const h = d.headline, a = d.allergen_audit, out = [];
     out.push(stat(h.scripted_cases ? frac(h.scripted_cases.passed, h.scripted_cases.total) : NA, 'scripted eval cases passed', h.scripted_cases?.source));
     out.push(stat(h.unsafe_blocked_or_escalated ? frac(h.unsafe_blocked_or_escalated.passed, h.unsafe_blocked_or_escalated.total) : NA, 'unsafe requests blocked or held for a human', h.unsafe_blocked_or_escalated?.source));
-    for (const m of h.llm_models) out.push(stat(frac(m.passed, m.run), `${esc(m.model_label)}: buyer sentences handled · ${num(m.mandate_violations_auto_ordered)} mandate violations auto-ordered`, 'evals/llm_results.*.json'));
+    if (h.llm_models.length) {
+      const ms = h.llm_models, viol = ms.reduce((a, m) => a + (m.mandate_violations_auto_ordered || 0), 0);
+      const best = ms.reduce((b, m) => (m.passed / m.run > b.passed / b.run ? m : b));
+      out.push(stat(num(viol), `mandate violations auto-ordered in ${ms.length} LLM agent runs (${new Set(ms.map(m => m.model_label.split(' + ')[0])).size} models); best ${esc(best.model_label)} ${frac(best.passed, best.run)}`, 'evals/llm_results.*.json'));
+    }
     out.push(stat(num(h.rules), 'rules in the register', 'sous/rules.py, live'));
     out.push(stat(a.available ? pct(a.food.no_declaration_pct) : NA, 'of food products have no allergen declaration', a.available ? 'live catalog' : 'no catalog loaded'));
     $('headline').innerHTML = out.join('');
@@ -195,19 +200,21 @@
     const e = d.llm_agents;
     if (!e.available) { $('llm').innerHTML = missing(e); return; }
     const f = (m, k) => m.summary[k];
-    const rows = [
-      ['Where it ran', m => esc(m.where)],
-      ['Cases run (one sentence each)', m => `${num(f(m, 'cases_run'))} of ${num(f(m, 'cases_total'))} (${num(f(m, 'cases_n_a'))} protocol cases n/a)`],
-      ['Handled as expected', m => `${frac(f(m, 'cases_passed'), f(m, 'cases_run'))} (${pct(f(m, 'matched_without_correction_pct'))})`],
-      ['Unsafe blocked or held', m => frac(f(m, 'unsafe_blocked_or_escalated'), f(m, 'unsafe_requests'))],
-      ['Mandate violations auto-ordered', m => num(f(m, 'mandate_violations_auto_ordered'))],
-      ['Missed cases', m => esc((f(m, 'failed_cases') || []).join(', ') || 'none')],
-      ['Tool calls per request (avg)', m => num(f(m, 'tool_calls_per_request_avg'))],
-      ['Latency p50', m => num(f(m, 'latency_ms_p50'), ' ms')],
-      ['Cost per request', m => f(m, 'cost_usd_per_request') == null ? NA : '$' + esc(f(m, 'cost_usd_per_request'))],
-    ];
-    let h = table([['']].concat(e.models.map(m => [esc(m.model_label)])), rows.map(r => `<tr><td>${r[0]}</td>${e.models.map(m => `<td>${r[1](m)}</td>`).join('')}</tr>`));
-    h += e.models.map(m => `<div class="src"><b>${esc(m.model_label)}</b></div>` + src(m.source)).join('');
+    const AG = {generic: 'generic', 'sous-agent': 'Sous agent'};
+    const cols = [
+      ['Model'], ['Agent'], ['Handled as expected', 'n'], ['Need understood', 'n hide-sm'], ['Unsafe blocked or held', 'n'],
+      ['Violations auto-ordered', 'n'], ['Tool calls / request', 'n'], ['Latency p50', 'n hide-sm'], ['Cost / request', 'n hide-sm'], ['Run id', 'hide-sm']];
+    const rows = e.models.map(m => `<tr><td>${esc(m.model.replace(/^.*\//, ''))}<div class="fine">${esc(m.where)}</div></td><td>${esc(AG[m.agent] || m.agent)}</td>` +
+      `<td class="n">${frac(f(m, 'cases_passed'), f(m, 'cases_run'))}${f(m, 'provider_errors') ? `<div class="fine">${num(f(m, 'provider_errors'))} model API errors</div>` : ''}</td><td class="n hide-sm">${frac(f(m, 'need_understood'), f(m, 'cases_run'))}</td>` +
+      `<td class="n">${frac(f(m, 'unsafe_blocked_or_escalated'), f(m, 'unsafe_requests'))}</td>` +
+      `<td class="n ${f(m, 'mandate_violations_auto_ordered') ? 'bad' : 'ok'}">${num(f(m, 'mandate_violations_auto_ordered'))}</td>` +
+      `<td class="n">${num(f(m, 'tool_calls_per_request_avg'))}</td><td class="n hide-sm">${num(f(m, 'latency_ms_p50'), ' ms')}</td>` +
+      `<td class="n hide-sm">${f(m, 'cost_usd_per_request') == null ? NA : '$' + esc(f(m, 'cost_usd_per_request'))}</td>` +
+      `<td class="id hide-sm">${m.source.ci_run_url ? `<a href="${esc(m.source.ci_run_url)}">${esc(m.source.run_id)}</a>` : esc(m.source.run_id || '-')}</td></tr>`);
+    let h = table(cols, rows);
+    h += `<p class="fine">Generic: the reference agent with the gateway's own instructions and seven MCP tools. Sous agent: built for this gateway (four tools, a short prompt, amount/unit/date parsed by code, a self-check of the quote before ordering). Same cases, same checks, a fresh state database per case. A model API error (for example the provider's rate limit) counts as a miss.</p>`;
+    h += `<details><summary>Missed cases and sources per run</summary>` + e.models.map(m => `<div class="src"><b>${esc(m.model_label)}</b>: missed ${esc((f(m, 'failed_cases') || []).join(', ') || 'none')}` +
+      (m.agent === 'sous-agent' ? ` · parser corrected the model ${num(f(m, 'need_corrections_by_parser'))} times · self-check stopped ${num(f(m, 'self_check_refusals'))} orders` : '') + `</div>` + src(m.source)).join('') + '</details>';
     if (e.excluded.length) h += `<p class="fine">Not shown as a model score: ${e.excluded.map(x => `${esc(x.path)} (${esc(x.reason)})`).join('; ')}.</p>`;
     $('llm').innerHTML = h;
   }

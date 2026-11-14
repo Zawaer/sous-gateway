@@ -396,6 +396,45 @@ def print_summary(s: dict, label: str) -> None:
 
 # --- docs/LLM_EVAL.md ----------------------------------------------------------------------------
 
+def _run_label(doc: dict) -> str:
+    p = doc.get("provenance") if isinstance(doc.get("provenance"), dict) else {}
+    if p.get("ci_run_id"):
+        return f"CI {p['ci_run_id']} @ `{p.get('commit') or '?'}`"
+    if p.get("origin"):
+        return f"{p['origin']} @ `{p.get('commit') or '?'}`"
+    return "–"
+
+
+def _agent_comparison(real: list[dict]) -> list[str]:
+    """Generic vs purpose-built Sous agent, per model that has both runs."""
+    gen = {x["model_label"]: x for x in real if (x.get("agent") or "generic") == "generic"}
+    pairs = [(gen[x["model_label"].removesuffix(" + sous-agent")], x) for x in real
+             if x.get("agent") == "sous-agent" and x["model_label"].removesuffix(" + sous-agent") in gen]
+    if not pairs:
+        return []
+    L = ["## Generic agent vs purpose-built Sous agent", "",
+         "The Sous agent ([`agent/sous_agent.py`](../agent/sous_agent.py)) keeps the same model and gateway but "
+         "(1) parses amount, unit, delivery date, named product ids and \"substitute\" from the sentence in code "
+         "and holds every quote to them, (2) offers only four tools (search, substitutes, quote, order) with a "
+         "short prompt, and (3) re-reads the latest quote's mandate preview before ordering (right quote, right "
+         "date, named product present). It still places orders the preview marks ask or block, so the gateway "
+         "holds or refuses them on the record; it never chooses the tier.", "",
+         "| Model | Agent | Matched | Need understood | Unsafe handled | Violations | Tool calls avg | Tokens / request "
+         "| Parser corrections | Self-check stops | Missed |", "|---|---|---|---|---|---|---|---|---|---|---|"]
+    for g, s in pairs:
+        for name, x in (("generic", g), ("Sous agent", s)):
+            m = x["summary"]
+            L.append(f"| `{g['model_label']}` | {name} | {m['cases_passed']}/{m['cases_run']} | "
+                     f"{m['need_understood']}/{m['cases_run']} | {m['unsafe_blocked_or_escalated']}/{m['unsafe_requests']} | "
+                     f"{m['mandate_violations_auto_ordered']} | {m['tool_calls_per_request_avg']} | "
+                     f"{m['tokens_per_request_avg']} | {m.get('need_corrections_by_parser', '–')} | "
+                     f"{m.get('self_check_refusals', '–')} | {', '.join(m.get('failed_cases') or []) or 'none'} |")
+    L += ["", "Caveats: the parser was written with these cases in view (there is no held-out set), so its "
+          "\"need understood\" score is optimistic; `tests/test_sous_agent.py` adds sentences that are not in the "
+          "cases. A model API error (e.g. the provider's HTTP 429 quota) counts as a miss for either agent.", ""]
+    return L
+
+
 def write_report(results_dir: Path, out: Path) -> None:
     files = sorted(results_dir.glob("llm_results.*.json"))
     runs = [json.loads(f.read_text()) for f in files]
@@ -452,7 +491,9 @@ def write_report(results_dir: Path, out: Path) -> None:
         row("Cost per request / whole run",
             lambda s: "–" if s["cost_usd_per_request"] is None else
             f"${s['cost_usd_per_request']:.4f} / ${s['cost_usd_total']:.2f}", "$0")
+        row("Model API errors (count as misses)", lambda s: str((s.get("stop_reasons") or {}).get("llm_error", 0)), "–")
         row("Cases n/a for an LLM", lambda s: str(s["cases_n_a"]), "–")
+        L.append("| Run | " + " | ".join(_run_label(x) for x in runs) + (" | – |" if base else " |"))
         if any(x.get("provider") == "oracle" for x in runs):
             L += ["", "`oracle:scripted-plan` is not a model: it replays the scripted eval's plan for each case "
                   "through the same agent runtime and checks, so it validates the harness and is the ceiling a "
@@ -460,6 +501,7 @@ def write_report(results_dir: Path, out: Path) -> None:
                   f"(all {base['cases_total'] if base else len(runs[0]['cases'])} cases, `evals/results.json`)."]
         L += ["", "Run dates: " + "; ".join(f"`{x['model_label']}` {x['generated_at']}" for x in runs), ""]
 
+        L += _agent_comparison(real)
         ids = [c["id"] for c in runs[0]["cases"]]
         L += ["## Per case", "", "| Case | Request | " + " | ".join(f"`{c}`" for c in cols) + " |",
               "|---|---|" + "---|" * len(cols)]

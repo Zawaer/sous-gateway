@@ -83,6 +83,9 @@ def test_llm_models_match_files_and_oracle_is_not_a_model(no_catalog, client):
         f = files[m["source"]["path"].split("/")[-1]]
         assert m["model_label"] == f["model_label"] and m["source"]["generated_at"] == f["generated_at"]
         for k, v in m["summary"].items():
+            if k == "provider_errors":  # derived: the run's llm_error stops
+                assert v == f["summary"].get("stop_reasons", {}).get("llm_error", 0)
+                continue
             assert f["summary"][k] == v, k
     assert all(m["provider"] != "oracle" for m in d["models"])
     if any(f.get("provider") == "oracle" for f in files.values()):
