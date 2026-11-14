@@ -13,8 +13,10 @@ Checkpoints close that:
   hash; the chain must still reach it), and `?checkpoint=<jws>` checks one a buyer or Valio saved: its signature
   and that the chain still contains it. A tail cut below any saved checkpoint or receipt fails.
 
-The gateway signs these, so an outsider who saved one can prove what the chain was at that time; anchoring the
-heads somewhere outside the gateway (a transparency log, a timestamping service) is the production next step.
+Stored checkpoints are checked by their signed payload (the row's columns must match it). Someone with database
+access could still delete stored checkpoints together with the tail; what they can't do is make a checkpoint or
+receipt that a buyer or Valio saved stop failing. Anchoring heads outside the gateway (a transparency log, a
+timestamping service) is the production next step.
 """
 
 from __future__ import annotations
@@ -97,10 +99,15 @@ def check(hashes: dict[int, str], saved: str | None = None) -> dict:
     problems = []
     rows = store._exec("SELECT seq, head, jws FROM audit_checkpoint ORDER BY seq")[0]
     for r in rows:
-        if hashes.get(int(r["seq"])) != r["head"]:
-            problems.append({"seq": int(r["seq"]), "why": "the chain no longer has this checkpoint's event"})
-        elif signing.verify(r["jws"], TYP) is None:
+        # The signed payload is the checkpoint; the row's seq/head columns are only an index and must match it
+        # (otherwise a database writer could point a validly signed checkpoint at an earlier head).
+        body = signing.verify(r["jws"], TYP)
+        if body is None:
             problems.append({"seq": int(r["seq"]), "why": "checkpoint signature does not verify"})
+        elif int(body.get("seq", -1)) != int(r["seq"]) or body.get("head") != r["head"]:
+            problems.append({"seq": int(r["seq"]), "why": "the stored row doesn't match what the checkpoint signs"})
+        elif hashes.get(int(body["seq"])) != body["head"]:
+            problems.append({"seq": int(body["seq"]), "why": "the chain no longer has this checkpoint's event"})
     out: dict = {"stored": len(rows), "ok": not problems, "problems": problems,
                  "latest_seq": int(rows[-1]["seq"]) if rows else None}
     if saved:

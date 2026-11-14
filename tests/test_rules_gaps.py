@@ -608,3 +608,17 @@ def test_role_routed_approval(monkeypatch):
     assert S.decide(o["id"], " maria  lehto ", True)["status"] == "ordered"
     o2 = order(60)
     assert S.decide(o2["id"], "chef", False)["status"] == "rejected"  # anyone may still reject
+
+
+
+def test_a_stored_checkpoint_row_must_match_what_it_signs():
+    """QA 22:02Z: repointing a stored checkpoint row at an earlier head (signature untouched) must fail."""
+    from sous import checkpoints
+    issue()
+    order(10)
+    cp = checkpoints.make(force=True)
+    earlier = store._exec("SELECT seq, hash FROM audit_event WHERE seq < ? ORDER BY seq DESC LIMIT 1", (cp["seq"],))[0][0]
+    store._exec("UPDATE audit_checkpoint SET seq = ?, head = ? WHERE seq = ?", (earlier["seq"], earlier["hash"], cp["seq"]))
+    store._exec("DELETE FROM audit_event WHERE seq >= ?", (cp["seq"],))
+    v = store.verify_chain()
+    assert not v["ok"] and "doesn't match" in v["checkpoints"]["problems"][0]["why"]
