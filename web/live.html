@@ -29,8 +29,14 @@
     header > * { pointer-events: auto; }
     .brand { font: 400 1.6rem/1 var(--serif); letter-spacing: -.01em; display: flex; gap: 10px; align-items: center; }
     .brand svg { width: 20px; height: 20px; }
-    .tag { color: var(--ink-60); max-width: 30rem; margin-top: 8px; font-size: .95rem; }
-    .cta { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .hero { max-width: 27rem; }
+    .hero h1 { font: 400 clamp(1.45rem, 2.6vw, 2rem)/1.14 var(--serif); letter-spacing: -.01em; margin: 18px 0 8px; text-wrap: balance; }
+    .hero .brand { font-size: 1.25rem; }
+    .tag { color: var(--ink-60); font-size: .95rem; }
+    .cta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+    .more { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+    .btn.quiet { border-color: transparent; background: none; color: var(--ink-60); padding: 9px 12px; }
+    .btn.quiet:hover { color: var(--ink); }
     .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 999px; text-decoration: none;
       border: 1px solid var(--ink-12); background: rgba(255, 255, 255, .04); font-weight: 500; font-size: .9rem; white-space: nowrap; }
     .btn.solid { background: var(--ink); color: var(--bg); border-color: var(--ink); }
@@ -80,8 +86,8 @@
 
     button.btn { color: inherit; font-family: inherit; cursor: pointer; }
     body.rush .node:not(.hub):not(.valio) { opacity: .12; pointer-events: none; }
-    body.rush .stats, body.rush .ticker, body.rush .legend, body.rush .tag, body.rush .mode { opacity: 0; }
-    .tag, .mode { transition: opacity .4s; }
+    body.rush .stats, body.rush .ticker, body.rush .legend, body.rush .tag, body.rush .mode, body.rush .hero h1, body.rush .cta { opacity: 0; pointer-events: none; }
+    .tag, .mode, .hero h1, .cta { transition: opacity .4s; }
     .stats, .ticker, .legend, .node { transition: opacity .4s; }
     .rush-head { position: fixed; top: 22px; left: 50%; transform: translateX(-50%); z-index: 3; text-align: center;
       width: min(560px, 60vw); display: none; }
@@ -102,15 +108,16 @@
       .rush-head { top: auto; bottom: 40%; width: 92vw; }
       .rush-end .nums { grid-template-columns: repeat(2, 1fr); }
       header { padding: 16px; flex-direction: column; }
-      .cta { justify-content: flex-start; }
+      .more { justify-content: flex-start; margin-left: -12px; }
       .stats { left: 16px; bottom: 16px; gap: 16px; }
       .legend, .ticker { display: none; }
       .node .lbl { font-size: .72rem; max-width: 6.5rem; }
       .node .lbl span { display: none; }
       .dot { width: 38px; height: 38px; }
       .tag { font-size: .85rem; } .mode { display: none; } .btn { padding: 7px 12px; font-size: .82rem; }
-      header { gap: 10px; } .cta { flex-wrap: nowrap; }
-      .trace-link { display: none; }  /* the header row is already full on phones */
+      header { gap: 4px; } .hero h1 { margin-top: 12px; }
+      .more { flex-wrap: nowrap; } #rush-btn { display: none; }  /* the rush is a wide-screen show */
+      .node:not(.hub):not(.valio) .lbl { display: none; }       /* seven names overlap on a phone; tap a dot for its panel */
     }
     @media (prefers-reduced-motion: reduce) { .ticker span { animation: none; } }
   </style>
@@ -118,18 +125,21 @@
 <body>
   <canvas id="bg" aria-hidden="true"></canvas>
   <header>
-    <div>
+    <div class="hero">
       <div class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h4l5 11 5-11h4l-7.5 16h-3z" fill="currentColor"/></svg>Sous</div>
-      <div class="tag">Purchasing agents ordering from Valio Aimo. Each one works under a mandate its buyer signed: what it may buy alone, what needs a human, what is refused.</div>
+      <h1>AI agents order from Valio Aimo. A human's signed mandate sets the limits.</h1>
+      <div class="tag">Inside the mandate the agent buys alone. Outside it, a human decides or the order is refused. Both sides can check every step.</div>
+      <div class="cta">
+        <a class="btn solid" href="/ui/try.html"><span class="ms">play_arrow</span>Try it in 5 minutes</a>
+        <a class="btn" href="/ui/trace.html"><span class="ms">verified_user</span>See the proof</a>
+      </div>
       <div class="mode" id="mode">connecting…</div>
     </div>
-    <div class="cta">
-      <a class="btn" href="/ui/">Seller view</a>
-      <a class="btn" href="/buyer/">Buyer view</a>
-      <a class="btn trace-link" href="/ui/trace.html"><span class="ms">route</span>Trust board</a>
-      <button class="btn" id="rush-btn" type="button"><span class="ms">bolt</span>Monday rush</button>
-      <a class="btn solid" href="/ui/break.html"><span class="ms">play_arrow</span>Try it yourself</a>
-    </div>
+    <nav class="more" aria-label="More views">
+      <button class="btn quiet" id="rush-btn" type="button"><span class="ms">bolt</span>Monday rush</button>
+      <a class="btn quiet" href="/ui/">Valio Aimo's view</a>
+      <a class="btn quiet" href="/ui/buyer.html">Buyer's view</a>
+    </nav>
   </header>
   <div id="nodes"></div>
   <div class="ticker" id="ticker" aria-live="polite"></div>

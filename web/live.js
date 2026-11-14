@@ -64,8 +64,9 @@ function layout() {
     const top = H * 0.47, n = list.length;
     list.forEach((c, i) => { c.x = W * (0.5 + (i - (n - 1) / 2) * Math.min(0.2, 0.86 / Math.max(1, n))); c.y = top + (i % 2) * 34; });
   } else {
-    hub.x = W * 0.52; hub.y = H * 0.56; valio.x = W * 0.84; valio.y = hub.y;
-    const R = Math.min(W * 0.34, H * 0.36), n = list.length;
+    // The headline sits top left, so the flow keeps to the right and lower part of the screen.
+    hub.x = W * 0.6; hub.y = H * 0.6; valio.x = W * 0.88; valio.y = hub.y;
+    const R = Math.min(W * 0.26, H * 0.3), n = list.length;
     const span = Math.min(Math.PI * 0.85, 0.42 * Math.max(1, n - 1) + 0.0001);
     list.forEach((c, i) => {
       const a = Math.PI + (n === 1 ? 0 : -span / 2 + (span * i) / (n - 1));
