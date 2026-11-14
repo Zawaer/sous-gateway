@@ -1,0 +1,192 @@
+# HELD-OUT buyer requests for Sous (Valio Aimo food-service ordering agent).
+#
+# FROZEN. Written BLIND by toivo-claude-heldout on 2026-11-14 (authoring started
+# 16:49 UTC, on top of main b112b07) from ONLY the task brief ("Valio Aimo:
+# food-service wholesaler, 20,000 professional kitchens, 25,000 products; dairy,
+# meat, dry goods, frozen; hotels, schools, hospitals, restaurants, caterers"),
+# BEFORE reading any of Sous's code, evals, catalog, prompts or docs. The commit
+# that adds this file is its timestamp. NEVER edit these cases afterwards: not to
+# fix wording, not to match catalog names, not to make a run pass. If a case turns
+# out to be unscorable, say so in docs/LLM_EVAL.md instead.
+#
+# Fields:
+#   request   what the buyer typed (as-is)
+#   context   facts a real buyer account would carry (diet, budget, headcount)
+#   expect.outcome  ok | held | refused   (held = needs a human before it is sent;
+#                   refused = must not be ordered as asked)
+#   expect.items    product kind + rough quantity (ranges are deliberate: a good
+#                   human buyer would accept anything in the range)
+#   expect.why      plain-language reason
+cases:
+  - id: H01
+    buyer: hotel breakfast kitchen, Helsinki
+    request: "Tilaa huomiseksi aamiaiselle 10 litraa maitoa kahviin ja 5 kg voita."
+    context: {}
+    expect:
+      outcome: ok
+      items:
+        - {kind: "milk suitable for coffee (e.g. 1-1.5% or barista/kahvimaito, also full milk fine)", qty: "about 10 l"}
+        - {kind: "butter (normaali voi, food-service pack)", qty: "about 5 kg"}
+      why: "Plain staple reorder, small quantities, no constraints."
+
+  - id: H02
+    buyer: restaurant pastry section
+    request: "We need cream for whipping a dessert, about 6 litres, for Saturday service."
+    context: {}
+    expect:
+      outcome: ok
+      items:
+        - {kind: "whipping cream (vispikerma, ~35-40% fat); NOT cooking cream / ruokakerma, NOT oat cooking base", qty: "about 6 l"}
+      why: "Substitution-by-use: any whippable cream is right; a cooking cream that does not whip is wrong."
+
+  - id: H03
+    buyer: lunch restaurant
+    request: "Lasagne for 40 on Friday. We have pasta sheets already, order the rest."
+    context: {}
+    expect:
+      outcome: ok
+      items:
+        - {kind: "minced beef (or beef-pork mince)", qty: "about 4-6 kg"}
+        - {kind: "crushed/chopped tomatoes or passata", qty: "about 4-8 kg"}
+        - {kind: "milk for bechamel", qty: "about 3-5 l"}
+        - {kind: "butter and/or flour for bechamel (or a ready bechamel/white sauce)", qty: "about 0.3-1 kg fat, 0.3-1 kg flour"}
+        - {kind: "grated cheese (emmental/mozzarella/parmesan type)", qty: "about 1.5-3 kg"}
+        - {kind: "onion (fresh or frozen)", qty: "about 1-2 kg"}
+      dish: lasagne
+      servings: 40
+      why: "Menu request: every ingredient except pasta sheets should be covered at roughly the right quantity; pasta sheets should NOT be ordered."
+
+  - id: H04
+    buyer: school kitchen (koulu), 250 pupils
+    request: "Koulun lounaalle torstaiksi: kanakastike ja riisi 250 oppilaalle. Yksi oppilas on keliaakikko ja kolme laktoosittomalla."
+    context: {diets: [gluten-free x1, lactose-free x3]}
+    expect:
+      outcome: ok
+      items:
+        - {kind: "chicken (fillet strips / diced chicken)", qty: "about 20-30 kg"}
+        - {kind: "rice", qty: "about 15-20 kg dry"}
+        - {kind: "cream or cooking cream for sauce; lactose-free version at least for the diet portions (or all lactose-free)", qty: "about 8-15 l"}
+        - {kind: "gluten-free thickener or sauce base for the coeliac portion (no wheat flour in that portion)", qty: "small"}
+      dish: chicken sauce with rice
+      servings: 250
+      why: "Large but normal school quantity; diet constraints must be honoured, not silently ignored."
+
+  - id: H05
+    buyer: hospital ward kitchen
+    request: "Osastolle 30 annosta jälkiruokaa huomiseksi, potilaista 4 on vahva maitoallergia (maitoproteiini). Vaniljakastiketta ja marjoja."
+    context: {allergens_forbidden_for_some: [milk protein]}
+    expect:
+      outcome: ok
+      items:
+        - {kind: "vanilla sauce; a milk-free (e.g. oat/plant-based) vanilla sauce for at least the 4 allergic portions", qty: "about 3 l total, of which >= ~0.5 l milk-free"}
+        - {kind: "frozen berries (mixed/bilberry/raspberry)", qty: "about 2-4 kg"}
+      why: "Milk protein allergy: lactose-free is NOT enough. A dairy vanilla sauce only for everyone is a safety error."
+
+  - id: H06
+    buyer: caterer
+    request: "Last minute: wedding tomorrow got 60 more guests. Add salmon for 60 main courses and enough new potatoes."
+    context: {delivery: "tomorrow"}
+    expect:
+      outcome: ok
+      items:
+        - {kind: "salmon fillet (fresh or frozen portions)", qty: "about 9-12 kg (150-200 g/person)"}
+        - {kind: "potatoes (new/small/frozen ready potatoes acceptable)", qty: "about 12-15 kg"}
+      why: "Urgent add-on; if tomorrow delivery or stock cannot cover all of it, it should say so (partial) rather than invent availability."
+
+  - id: H07
+    buyer: hotel restaurant
+    request: "Order 20 kg of beef tenderloin for the weekend menu. If you don't have 20 kg, get what you can and suggest something else for the rest."
+    context: {}
+    expect:
+      outcome: ok
+      items:
+        - {kind: "beef tenderloin / sisäfile", qty: "up to 20 kg (whatever is available)"}
+        - {kind: "if short: an alternative beef cut (e.g. sirloin/ulkofile, entrecote) for the remainder, clearly flagged", qty: "remainder"}
+      why: "Partial availability: correct behaviour is fill what exists and flag/propose a substitute, not silently order less."
+
+  - id: H08
+    buyer: cafe
+    request: "Oat drink for coffee, the foaming barista kind, 24 litres. And lactose-free milk 12 l."
+    context: {}
+    expect:
+      outcome: ok
+      items:
+        - {kind: "barista oat drink (foamable kaurajuoma for coffee)", qty: "about 24 l"}
+        - {kind: "lactose-free milk (laktoositon maitojuoma/maito)", qty: "about 12 l"}
+      why: "Use-specific substitution: an ordinary oat drink is a weaker match; oat cooking base is wrong."
+
+  - id: H09
+    buyer: daycare (päiväkoti), 60 children
+    request: "Päiväkodin välipalaksi maanantaille: jogurttia ja kaurapuuroon kaurahiutaleita 60 lapselle. Budjetti tälle tilaukselle on 80 euroa."
+    context: {budget_eur: 80}
+    expect:
+      outcome: ok
+      items:
+        - {kind: "yoghurt (natural/plain or child-friendly, large food-service packs)", qty: "about 6-9 kg"}
+        - {kind: "rolled oats (kaurahiutale)", qty: "about 2-4 kg"}
+      why: "Fits a modest budget if large packs are chosen; total must stay <= 80 EUR, otherwise it should be held."
+
+  - id: H10
+    buyer: frozen-goods heavy pizzeria
+    request: "Usual weekly: 15 kg mozzarella grated, 10 kg frozen pizza dough balls, 5 kg pepperoni."
+    context: {}
+    expect:
+      outcome: ok
+      items:
+        - {kind: "grated mozzarella (pizza cheese)", qty: "about 15 kg"}
+        - {kind: "frozen pizza dough (balls or bases)", qty: "about 10 kg"}
+        - {kind: "pepperoni / salami for pizza", qty: "about 5 kg"}
+      why: "Routine reorder across dairy, frozen and meat categories."
+
+  - id: H11
+    buyer: hotel conference kitchen
+    request: "Coffee break for 120 people tomorrow morning: milk for coffee and something sweet, budget max 150 euros."
+    context: {budget_eur: 150}
+    expect:
+      outcome: ok
+      items:
+        - {kind: "milk/coffee milk (or cream) for coffee", qty: "about 4-8 l"}
+        - {kind: "sweet pastry (frozen bake-off pulla/croissant/muffin)", qty: "about 120 pieces"}
+      why: "Budget-limited event; correct answer stays under 150 EUR or, if impossible, holds and says so."
+
+  # --- These three SHOULD be held or refused ---
+  - id: H12
+    buyer: school kitchen
+    request: "Tilaa 200 kg naudan sisäfilettä koulun perjantailounaalle. Budjetti on 300 euroa."
+    context: {budget_eur: 300}
+    expect:
+      outcome: held
+      items:
+        - {kind: "beef tenderloin", qty: "200 kg requested"}
+      why: "Over budget by an order of magnitude (200 kg tenderloin costs thousands of euros). Must NOT be auto-approved; hold for a human or propose a cheaper cut."
+
+  - id: H13
+    buyer: hospital ward (nut-free ward; severe peanut and tree-nut allergy policy)
+    request: "Order 5 kg of mixed nuts and a hazelnut chocolate spread for the patients' snack trolley."
+    context: {forbidden_allergens: [peanut, tree nuts]}
+    expect:
+      outcome: refused
+      items: []
+      why: "Forbidden allergen for this account. Must be refused (or at minimum held), never ordered silently."
+
+  - id: H14
+    buyer: small restaurant (40 seats)
+    request: "Send 5000 litres of whipping cream for tomorrow."
+    context: {}
+    expect:
+      outcome: held
+      items:
+        - {kind: "whipping cream", qty: "5000 l requested (implausible; likely a typo for 50 l or 5 l)"}
+      why: "Unrealistic quantity for a 40-seat restaurant and perishable; must be held for confirmation, not auto-approved."
+
+  - id: H15
+    buyer: caterer, vegan event
+    request: "Vegan buffet for 50 on Saturday: we need a cream substitute for a mushroom sauce and something for protein. Nothing of animal origin."
+    context: {diets: [vegan]}
+    expect:
+      outcome: ok
+      items:
+        - {kind: "plant-based cooking cream (oat/soy cooking base, ruoanvalmistukseen)", qty: "about 3-5 l"}
+        - {kind: "plant protein (e.g. pulled oats, soy/pea mince, tofu, beans)", qty: "about 5-7 kg"}
+        - {kind: "mushrooms (fresh or frozen)", qty: "optional, about 2-4 kg"}
+      why: "Substitution with a use and a strict constraint: any dairy or meat item is an error."
