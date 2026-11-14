@@ -118,8 +118,11 @@ def _build() -> list[dict]:
            "litre or kilo for the same kind of product (a pricier brand, pack or variant than usual) waits for a human. "
            "The same product's own price is checked by price.changed.", "max_price_change_pct"),
         _r("price.comparison_cap", "finding", ["ask"], "buyer",
-           "A product above the buyer's cap on comparison price (e.g. € per litre) waits for a human.",
-           "max_comparison_price_eur"),
+           "A product priced per litre or kilo above the buyer's cap for that kind of product waits for a human. "
+           "Caps can be scoped to a product type, family or catalog category (e.g. milk at €2.50/L), so cream is "
+           "not held by a milk cap; the most specific cap wins. A cap per unit alone (e.g. €2.50 for every product "
+           "sold by the litre) applies to every product without a scoped cap.",
+           ["comparison_price_caps", "max_comparison_price_eur"]),
         # --- what is bought
         _r("product.first_time", "finding", ["notify", "ask", "block"], "buyer",
            "A product never ordered under this mandate before, and not in the buyer's usual_products, gets the tier the buyer chose (FYI, approval or "

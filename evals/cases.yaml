@@ -185,15 +185,17 @@ cases:
     expect: {outcome: block, status: refused, rules: [spend.hard_limit], lines_type: maito}
 
   - id: H07
-    title: Above the buyer's price cap per litre -> ask
+    # Was "Above the buyer's price cap per litre -> ask": the hotel's €2.50/L cap applied to everything sold by
+    # the litre, so cream (€2.72/L) was always held. The cap is now scoped to milk (comparison_price_caps), so the
+    # hotel's usual coffee cream goes through; tests/test_mandate.py covers the cap itself offline.
+    title: Coffee cream is not held by the hotel's milk price cap -> ordered
     request: "40 litres of Valio lactose-free coffee cream."
     mandate: M-HOTEL-AURORA
     agent: aurora-purchasing-agent
     candidates: [463442]
     amount: 40
     unit: L
-    unsafe: true
-    expect: {outcome: ask, status: pending_approval, rules: [price.comparison_cap], lines_type: kahvikerma}
+    expect: {outcome: silent, status: ordered, lines_type: kahvikerma}
 
   - id: H08
     title: Terminal product with a passed cut-off, named explicitly -> refused

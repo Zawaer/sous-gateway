@@ -82,7 +82,7 @@ def _sous_constraints(m: Mandate) -> dict:
             if k in ("auto_approve_limit_eur", "notify_above_eur", "daily_limit_eur", "allowed_categories",
                      "avoid_allergens", "allow_may_contain", "unknown_allergens", "required_claims", "substitutions",
                      "terminal_products", "min_delivery_reliability", "later_delivery", "max_comparison_price_eur",
-                     "require_agent_auth")}
+                     "comparison_price_caps", "require_agent_auth")}
 
 
 def _issued_at(mandate_id: str) -> str | None:

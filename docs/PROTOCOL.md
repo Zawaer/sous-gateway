@@ -110,7 +110,8 @@ Source: `sous/mandate.py`, class `Mandate`. All money is EUR excluding VAT.
 | `terminal_products` | tier | `silent` | Tier for products shipped from the supplier's warehouse (stock unknown). |
 | `min_delivery_reliability` | number or null | 0.9 | Lines with historical full-delivery rate below this are held. |
 | `later_delivery` | `notify`, `ask` or `block` | `ask` | Tier when the earliest delivery is after the requested date. |
-| `max_comparison_price_eur` | map | {} | Cap per comparison unit, e.g. `{"L": 2.5}`. Above it, held. |
+| `max_comparison_price_eur` | map | {} | Cap per comparison unit for every product sold by that unit, e.g. `{"L": 2.5}`, unless `comparison_price_caps` covers the product. Above it, held. |
+| `comparison_price_caps` | map | {} | Caps on price per L or KG (EUR ex VAT, in the product's own comparison unit) scoped to one kind of product, keyed by product type (`kahvikerma`), product family (`milk`, `cream`, `coffee milk`; see `sous/substitutes.py`) or catalog category code, e.g. `{"milk": 2.5}`. The most specific match wins (type, then family, then category) and replaces `max_comparison_price_eur` for that product. The demo hotels cap milk only, so cream is not held by the milk cap. |
 | `unusual_quantity_factor` | number > 1 or null | 3 | Hold an order whose amount of a product family (milk, cream, coffee...; same unit) is more than this many times the median of the buyer's last orders of it (`quantity.unusual`; needs 3 past orders). Null turns it off. |
 
 Issuing (`POST /mandates`) re-signs and stores the mandate and writes `mandate.issued` to the audit log. Re-issuing with the same id replaces it; with MariaDB the old version stays queryable (section 12).
@@ -282,7 +283,7 @@ If the tier is `silent` or `notify`, a final `mandate.ok` finding is added with 
 | `substitution` | mandate's `substitutions` | Line is marked `substitute_for`. |
 | `supply.terminal` | mandate's `terminal_products` | Terminal product (only emitted when that setting isn't `silent`). |
 | `supply.reliability` | ask | `delivery_reliability` < `min_delivery_reliability`. |
-| `price.comparison_cap` | ask | Comparison price above `max_comparison_price_eur[per]`. |
+| `price.comparison_cap` | ask | Comparison price above the product's cap: `comparison_price_caps[type, family or category]` if one matches, else `max_comparison_price_eur[per]`. The message names the cap and what it covers ("above the mandate's €2.50/L cap for milk"). |
 | `quantity.unusual` | ask | A product family's amount (in the need's unit, or packs) is more than `unusual_quantity_factor` × the median of the buyer's last ordered amounts of it (orders with status `ordered` under this mandate, standing renewals included, last 90 days, at least 3). The message says e.g. "8× your usual 120 L". |
 | `mandate.ok` | silent or notify | All checks passed. |
 

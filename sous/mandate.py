@@ -58,13 +58,27 @@ class Mandate(BaseModel):
     terminal_products: Tier = "silent"
     min_delivery_reliability: float | None = 0.9
     later_delivery: Literal["notify", "ask", "block"] = "ask"
-    max_comparison_price_eur: dict[str, float] = Field(default_factory=dict, description="e.g. {'L': 2.5}")
+    max_comparison_price_eur: dict[str, float] = Field(
+        default_factory=dict, description="Cap on price per comparison unit (EUR ex VAT) for every product sold by "
+        "that unit, e.g. {'L': 2.5}, unless comparison_price_caps has a cap for the product's kind; above it, held")
+    comparison_price_caps: dict[str, float] = Field(
+        default_factory=dict, description="Caps on price per L or KG (EUR ex VAT, in the product's own comparison "
+        "unit) for one kind of product, keyed by product type ('kahvikerma'), product family ('milk', 'cream', "
+        "'coffee milk'; sous/substitutes.py) or catalog category code, e.g. {'milk': 2.5}; the most specific match "
+        "wins and replaces max_comparison_price_eur for that product; above it, held")
     demo_public: bool = Field(False, description="Curated demo data: readable without credentials (see sous/access.py). "
                               "Real buyers' mandates leave this off.")
     unusual_quantity_factor: float | None = Field(
         3.0, gt=1, description="Ask when a product family's quantity is more than this many times the median of the "
         "buyer's past orders of it (at least 3 past orders); None = off")
     sandbox: str | None = Field(None, description="Judge sandbox id (e.g. SBX-7Q2K) for a visitor's copy; see sous/sandbox.py")
+
+    @field_validator("max_comparison_price_eur", "comparison_price_caps")
+    @classmethod
+    def _positive_caps(cls, v: dict[str, float]) -> dict[str, float]:
+        if any(x <= 0 for x in v.values()):
+            raise ValueError("price caps must be above 0")
+        return v
 
     @field_validator("valid_until")
     @classmethod
@@ -107,6 +121,26 @@ def _over_pct(now: float, was: float, pct: float) -> bool:
     """|now - was| / was > pct %, decided in exact decimals (a change of exactly the limit passes)."""
     n, w = Decimal(str(now)), Decimal(str(was))
     return abs(n - w) * 100 > w * Decimal(str(pct))
+
+
+def comparison_cap(mandate: Mandate, pid: str, per: str | None) -> tuple[float, str] | None:
+    """(cap in EUR per `per`, what it covers) for one product: comparison_price_caps by product type, then family,
+    then catalog category (the most specific wins), else max_comparison_price_eur[per] (every product in that
+    unit). None when no cap applies."""
+    p = catalog.get(pid) or {}
+    if mandate.comparison_price_caps and p:
+        try:
+            from .substitutes import product_type  # lazy: substitutes imports mandate
+            t = product_type(p) or {}
+        except Exception:  # an unreadable name never breaks an order: fall back to the category
+            t = {}
+        for key, what in ((t.get("key"), t.get("label")), (t.get("family"), t.get("family")),
+                          (p.get("category"), f"category {p.get('category')}")):
+            if key and key in mandate.comparison_price_caps:
+                return mandate.comparison_price_caps[key], str(what or key)
+    if per and per in mandate.max_comparison_price_eur:
+        return mandate.max_comparison_price_eur[per], f"everything priced per {per}"
+    return None
 
 
 def readable_name(name: str) -> str:
@@ -320,10 +354,11 @@ def evaluate(
                 f"(mandate minimum {mandate.min_delivery_reliability:.0%}).", pid)
 
         cp = l.get("comparison_price") or {}
-        cap = mandate.max_comparison_price_eur.get(cp.get("per") or "")
-        if cap is not None and cp.get("ex_vat") is not None and cp["ex_vat"] > cap:
+        capped = comparison_cap(mandate, pid, cp.get("per")) if cp.get("ex_vat") is not None else None
+        if capped and _cents(cp["ex_vat"]) > _cents(capped[0]):
             add("price.comparison_cap", "ask",
-                f"{name} costs €{cp['ex_vat']:.2f}/{cp['per']}, above the €{cap:.2f} cap.", pid)
+                f"{name} costs €{cp['ex_vat']:.2f}/{cp['per']}, above the mandate's €{capped[0]:.2f}/{cp['per']} "
+                f"cap for {capped[1]}.", pid)
 
     f.extend(extra_findings or [])
     outcome: Tier = max((x.outcome for x in f), key=_RANK.__getitem__, default="silent")

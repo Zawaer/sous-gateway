@@ -61,7 +61,7 @@ MANDATES = [
         terminal_products="silent",
         min_delivery_reliability=0.9,
         later_delivery="ask",
-        max_comparison_price_eur={"L": 2.5},
+        comparison_price_caps={"milk": 2.5},  # milk only: cream and other pricier products per litre are not capped
     ),
     Mandate(
         id="M-HOSPITAL-KITCHEN",
@@ -138,13 +138,14 @@ MANDATES = [
         terminal_products="silent",
         min_delivery_reliability=0.9,
         later_delivery="ask",
-        max_comparison_price_eur={"L": 2.5},
+        comparison_price_caps={"milk": 2.5},  # milk only: cream and other pricier products per litre are not capped
     ),
 ]
 
 
 # Demo policy fields the seed brings existing deployments up to date on (re-signed at startup when they differ).
-POLICY_FIELDS = ("substitutions", "first_time_products", "usual_products", "weekly_limit_eur")
+POLICY_FIELDS = ("substitutions", "first_time_products", "usual_products", "weekly_limit_eur",
+                 "max_comparison_price_eur", "comparison_price_caps")
 
 
 def _print_credential(mid: str, cred: dict) -> None:

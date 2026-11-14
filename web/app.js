@@ -949,6 +949,7 @@ function mandateCard(m) {
       ${rule("Min. delivery reliability", m.min_delivery_reliability != null ? Math.round(m.min_delivery_reliability * 100) + " %" : "–")}
       ${(m.required_claims || []).length ? rule("Required claims", esc(m.required_claims.join(", "))) : ""}
       ${Object.entries(m.max_comparison_price_eur || {}).map(([u, v]) => rule("Price cap", `${eur(v)} / ${esc(u)}`)).join("")}
+      ${Object.entries(m.comparison_price_caps || {}).map(([k, v]) => rule(`Price cap: ${esc(k)}`, `${eur(v)} / L or kg`)).join("")}
       ${m.allowed_categories ? rule("Categories", esc(m.allowed_categories.join(", "))) : ""}
       ${rule("Agent must authenticate", authRequired(m) ? `<span>Bearer token${!m.require_agent_auth ? " (gateway-wide)" : ""}</span>` : `<span class="muted">no (agent id only)</span>`)}
     </div>
