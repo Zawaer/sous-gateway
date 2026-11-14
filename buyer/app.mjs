@@ -541,7 +541,10 @@ async function renderOrder(current, order) {
   if (current !== state.order) return;
   $('order-content').replaceChildren(content);
   $('order-panel').hidden = false;
-  const fallback = `${gateway.base}/ui/#/orders/${encodeURIComponent(order.id)}`;
+  const buyerUrl = order.buyer_url && URL.parse(order.buyer_url, `${gateway.base}/`);
+  const buyerPage = buyerUrl?.origin === new URL(gateway.base).origin && !buyerUrl.username && !buyerUrl.password
+    ? buyerUrl : null;
+  const fallback = buyerPage?.href ?? `${gateway.base}/ui/#/orders/${encodeURIComponent(order.id)}`;
   let approval = fallback;
   if (order.approval_url) {
     const url = URL.parse(order.approval_url, `${gateway.base}/`);
@@ -549,7 +552,7 @@ async function renderOrder(current, order) {
   }
   $('approvals').href = approval;
   $('approvals').hidden = verifiedStatus !== 'pending_approval';
-  const audit = new URL(`${gateway.base}/ui/`);
+  const audit = new URL(buyerPage?.href ?? `${gateway.base}/ui/`);
   const orderUrl = order.order_url && URL.parse(order.order_url, `${gateway.base}/`);
   const sandbox = orderUrl?.origin === audit.origin && orderUrl.searchParams.get('sandbox');
   if (sandbox) audit.searchParams.set('sandbox', sandbox);
