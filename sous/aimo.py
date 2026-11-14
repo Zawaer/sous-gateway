@@ -42,7 +42,7 @@ PRICE_STALE_MAX = 900  # oldest last-known copy served when Valio Aimo can't be 
 AVAILABILITY_STALE_MAX = 300
 MAX_WAIT = 8.0  # most a request waits on retries before falling back / failing
 MAX_ATTEMPTS = 3
-DEFAULT_PAUSE = 10.0  # circuit-breaker pause after a 429 without Retry-After
+DEFAULT_PAUSE = 30.0  # circuit-breaker pause after a 429 without Retry-After (Valio: a 429 blocks the client for 30 s)
 MAX_PAUSE = 300.0
 
 _lock = threading.Lock()

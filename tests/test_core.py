@@ -233,3 +233,11 @@ def test_reasons_use_readable_names():
     from sous.mandate import readable_name
     assert readable_name("BRAVO CHEF 400G CHOPPED TOMATOES") == "Bravo chef 400g chopped tomatoes"
     assert readable_name("Valio Eila 3 % maitojuoma 1 l") == "Valio Eila 3 % maitojuoma 1 l"
+
+
+def test_valio_unknown_marker_on_stock_line_is_not_known_stock():
+    """Valio: availableAmount >= 999999 on any line means unknown, any quantity may be ordered."""
+    o = Q.build_offer(product(), PRICE, avail("Stock", 999999), date(2026, 11, 16), 5000, "L", NOW)
+    assert o["orderable"] and "PARTIAL_STOCK" not in codes(o) and o["quantity"] == 5000
+    from sous import aimo
+    assert aimo.DEFAULT_PAUSE == 30.0

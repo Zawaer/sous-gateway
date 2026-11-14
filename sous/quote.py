@@ -267,7 +267,8 @@ def build_offer(
     closing = _dt(a.get("closingTime"))
     available_amount = sl.get("availableAmount")
     available_date = date.fromisoformat(sl["availableDate"]) if sl.get("availableDate") else None
-    stock_known = model == "Stock" and available_amount is not None and available_amount < STOCK_PLENTY
+    # Valio Aimo (Tommi, 14.11): availableAmount >= 999999 on ANY line means "unknown, any quantity may be ordered"
+    stock_known = model == "Stock" and available_amount is not None and available_amount < TERMINAL_UNKNOWN
     if closing and available_date and available_date < requested:
         # closingTime is the cut-off for the earliest date (availableDate), not for the later date asked for.
         closing = None

@@ -54,7 +54,7 @@ def is_approver(reader) -> bool:
 
 def level(model: str | None, amount: float | None, requested: float | None, has_date: bool = True) -> str:
     """The stock bucket for an offer, from Valio Aimo's exact numbers (see the module docstring)."""
-    from .quote import STOCK_PLENTY
+    from .quote import STOCK_PLENTY, TERMINAL_UNKNOWN
 
     if model != "Stock":
         return "unknown"
@@ -64,6 +64,8 @@ def level(model: str | None, amount: float | None, requested: float | None, has_
         return "unknown"
     if amount >= STOCK_PLENTY:
         return "ample"
+    if amount >= TERMINAL_UNKNOWN:  # Valio's "unknown, any quantity may be ordered" marker
+        return "unknown"
     if requested is not None and amount < requested:
         return "short"
     if amount >= AMPLE_ABSOLUTE or (requested is not None and amount >= AMPLE_FACTOR * requested):
