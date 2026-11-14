@@ -356,7 +356,7 @@ class BuyerAgent:
     def run(self, request: str) -> BuyerRun:
         run = BuyerRun(request=request, model=getattr(self.llm.cfg, "label", "?"))
         self._rationale = " ".join(request.split())[:500]  # the buyer's own words, recorded by the gateway
-        messages = [{"role": "system", "content": system_prompt(self.cfg)}, {"role": "user", "content": request}]
+        messages = [{"role": "system", "content": self.system_prompt()}, {"role": "user", "content": self.user_message(request)}]
         run.messages = messages
         capped_at = None  # LLM call count when the tool-call budget ran out
         while True:
@@ -399,6 +399,17 @@ class BuyerAgent:
                 break
         return run
 
+    # --- hooks for specialised agents (agent/sous_agent.py) ---
+    def system_prompt(self) -> str:
+        return system_prompt(self.cfg)
+
+    def user_message(self, request: str) -> str:
+        return request
+
+    def vet(self, run: BuyerRun, name: str, args: dict) -> tuple[dict, dict | None]:
+        """Adjust a tool call's (model-visible) arguments before it runs, or refuse it with an error body."""
+        return args, None
+
     def _call(self, run: BuyerRun, name: str, raw_args) -> dict:
         try:
             args = json.loads(raw_args) if isinstance(raw_args, str) and raw_args.strip() else (raw_args or {})
@@ -415,6 +426,10 @@ class BuyerAgent:
             run.steps.append(Step(name, args, True, body, 0))
             return body
         shown = {k: v for k, v in args.items() if k not in BOUND}
+        shown, refusal = self.vet(run, name, shown)
+        if refusal is not None:
+            run.steps.append(Step(name, shown, True, refusal, 0))
+            return refusal
         full = dict(shown)
         props = self._props[name]
         if "agent_id" in props:

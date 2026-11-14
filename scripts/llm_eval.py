@@ -172,6 +172,8 @@ def run_case(case: dict, defaults: dict, make_agent) -> tuple[dict, object]:
     r["stop_reason"] = run.stop_reason
     r["explanation"] = run.final_text
     r["transcript"] = run.transcript()
+    if getattr(run, "agent_notes", None):  # the purpose-built agent's parsed need, corrections, self-check refusals
+        r["agent_notes"] = run.agent_notes
     return r, run
 
 
@@ -507,6 +509,10 @@ def main(argv=None) -> int:
     ap.add_argument("--report", action="store_true", help="only rebuild docs/LLM_EVAL.md from existing results")
     ap.add_argument("--state-dir", help="directory for the per-case SQLite files (default: a temp dir)")
     ap.add_argument("--max-tool-calls", type=int, default=12)
+    ap.add_argument("--agent", choices=("generic", "sous"), default="generic",
+                    help="generic: the reference agent (agent/buyer.py); sous: the purpose-built Sous agent "
+                         "(agent/sous_agent.py: parsed need, tool subset, self-check). Results go to "
+                         "evals/llm_results.<model>.sous-agent.json")
     a = ap.parse_args(argv)
 
     if a.report:
@@ -530,6 +536,7 @@ def main(argv=None) -> int:
     logging.getLogger("httpx").setLevel(logging.WARNING)  # one INFO line per HTTP call is noise here
 
     from agent.buyer import BuyerAgent, BuyerConfig, MCPGateway, helsinki_today
+    from agent.sous_agent import SousAgent
     from agent.llm import ChatClient, LLMConfig, config_from_env, key_present
     from sous import config
     from sous.mcp_server import mcp
@@ -547,7 +554,7 @@ def main(argv=None) -> int:
     defaults = spec.get("defaults", {})
     cases = [c for c in spec["cases"] if not a.cases or c["id"] in a.cases]
     client = None if provider == "oracle" else ChatClient(cfg)
-    print(f"LLM eval: {cfg.label} at {cfg.base_url or '-'}; {len(cases)} cases; Valio {config.AIMO_API_BASE}; "
+    print(f"LLM eval: {cfg.label} ({a.agent} agent) at {cfg.base_url or '-'}; {len(cases)} cases; Valio {config.AIMO_API_BASE}; "
           f"state in {state_dir}\n", flush=True)
 
     results = []
@@ -567,7 +574,7 @@ def main(argv=None) -> int:
                 bc = BuyerConfig(mandate_id=c["mandate"], agent_id=c["agent"], today=helsinki_today(),
                                  default_delivery=date.fromisoformat(str(defaults["delivery_date"])),
                                  max_tool_calls=a.max_tool_calls)
-                return BuyerAgent(llm, gw, bc)
+                return (SousAgent if a.agent == "sous" else BuyerAgent)(llm, gw, bc)
 
             try:
                 r, _ = run_case(case, defaults, make_agent)
@@ -600,11 +607,19 @@ def main(argv=None) -> int:
     from sous import reservations
     reservations.set_scope(None)  # ends the last case's pool (its Valkey hashes too)
     summary = summarize(results, cfg)
-    out = Path(a.out or ROOT / "evals" / f"llm_results.{slug(cfg.model if provider != 'oracle' else 'oracle')}.json")
+    if a.agent == "sous":
+        summary["need_corrections_by_parser"] = sum(len((r.get("agent_notes") or {}).get("corrections") or [])
+                                                    for r in results if not r.get("n_a"))
+        summary["self_check_refusals"] = sum(len((r.get("agent_notes") or {}).get("self_check_refusals") or [])
+                                             for r in results if not r.get("n_a"))
+    suffix = ".sous-agent" if a.agent == "sous" else ""
+    out = Path(a.out or ROOT / "evals" /
+               f"llm_results.{slug(cfg.model if provider != 'oracle' else 'oracle')}{suffix}.json")
     from sous.proof import run_provenance
     doc = {"generated_at": datetime.now(config.TZ).isoformat(timespec="seconds"), "provenance": run_provenance(),
            "provider": cfg.provider,
-           "model": cfg.model, "model_label": cfg.label, "where": cfg.where, "base_url": cfg.base_url,
+           "model": cfg.model, "model_label": cfg.label + (" + sous-agent" if a.agent == "sous" else ""),
+           "agent": "sous-agent" if a.agent == "sous" else "generic", "where": cfg.where, "base_url": cfg.base_url,
            "reasoning_effort": cfg.reasoning_effort, "price_usd_per_1m": [cfg.price_in, cfg.price_out],
            "valio_api_base": config.AIMO_API_BASE, "cases_file": str(Path(a.file).resolve().relative_to(ROOT))
            if Path(a.file).resolve().is_relative_to(ROOT) else a.file,
