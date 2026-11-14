@@ -532,6 +532,24 @@ async function renderOrder(current, order) {
       const { note, result_reason: resultReason } = signed.approval;
       if (note) content.append(element('p', `Approver note: ${note}`));
       if (resultReason && resultReason !== note) content.append(element('p', resultReason));
+      const recheck = signed.approval.recheck;
+      if (recheck) {
+        const details = element('details');
+        details.append(element('summary', 'Approval price and stock check'));
+        if (recheck.skipped) {
+          details.append(element('p', `Check skipped: ${recheck.skipped}`));
+        } else {
+          if (recheck.at) details.append(element('p', `Checked at ${recheck.at}`));
+          details.append(element('p', 'Recorded unit prices exclude VAT and are per sales unit.'));
+          for (const line of recheck.lines ?? []) {
+            const name = signed.lines?.find(item => item.product_id === line.product_id)?.name || line.product_id;
+            const quoted = Number.isFinite(line.quoted_ex_vat) ? money(line.quoted_ex_vat, quote.currency) : 'unavailable';
+            const now = Number.isFinite(line.now_ex_vat) ? money(line.now_ex_vat, quote.currency) : 'unavailable';
+            details.append(element('p', `${name}: quoted ${quoted}; at approval ${now}; ${line.orderable ? 'orderable' : 'not orderable'}.`));
+          }
+        }
+        content.append(details);
+      }
     }
     const message = signed.status === order.status ? 'Receipt signature verified' :
       `Original receipt verified (${statuses[signed.status] || signed.status}). Current status reported by the gateway.`;
