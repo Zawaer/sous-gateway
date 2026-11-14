@@ -132,6 +132,7 @@ function clearQuote() {
 
 function clearSearch() {
   state.search = null;
+  $('mandate-inspector').hidden = true;
   $('candidates').hidden = true;
   notice($('feedback'));
   if (!state.basket) clearQuote();
@@ -218,7 +219,41 @@ function claimLabel(code) {
   return code.toLowerCase().replaceAll('_', ' ').replace(/^free from (.+)$/, '$1 free');
 }
 
+function renderMandate(mandate) {
+  const content = $('mandate-content');
+  content.replaceChildren(element('p', `${mandate.buyer} · ${mandate.id} · issued by ${mandate.issued_by || 'unknown issuer'}`));
+  const autonomy = {
+    advise: 'Every order needs human approval',
+    reorder: 'Usual products may be ordered automatically',
+    order: 'Orders may proceed within the mandate rules',
+  };
+  if (mandate.autonomy) content.append(element('p', autonomy[mandate.autonomy] || mandate.autonomy));
+  const limits = [
+    ['auto_approve_limit_eur', 'Automatic order limit'],
+    ['hard_limit_eur', 'Hard order limit'],
+    ['daily_limit_eur', 'Daily approval threshold'],
+    ['weekly_limit_eur', 'Weekly approval threshold'],
+  ].filter(([key]) => mandate[key] != null)
+    .map(([key, label]) => `${label}: ${money(mandate[key])} ex VAT`);
+  appendList(content, 'Spending rules', limits);
+  appendList(content, 'Product constraints', [
+    mandate.avoid_allergens?.length && `Avoid allergens: ${mandate.avoid_allergens.join(', ')}`,
+    mandate.required_claims?.length && `Required claims: ${mandate.required_claims.map(claimLabel).join(', ')}`,
+    mandate.allowed_categories && `Allowed categories: ${mandate.allowed_categories.join(', ') || 'none'}`,
+    mandate.substitutions && `Substitutions: ${tierLabels[mandate.substitutions] || mandate.substitutions}`,
+    mandate.unknown_allergens && `Unknown allergen data: ${tierLabels[mandate.unknown_allergens] || mandate.unknown_allergens}`,
+  ].filter(Boolean));
+  if (mandate.approval_method === 'passkey') content.append(element('p', 'Approval requires a registered passkey.'));
+  if (mandate.valid_until) content.append(element('p', `Valid until ${time(mandate.valid_until)} Helsinki time`));
+  content.append(element('p', 'The gateway checks the current mandate and supplier conditions for each order.', 'muted'));
+  const payload = element('details');
+  payload.append(element('summary', 'Full verified mandate'), element('pre', JSON.stringify(mandate, null, 2)));
+  content.append(payload);
+  $('mandate-inspector').hidden = false;
+}
+
 function renderSearch(need, mandate, products, original) {
+  renderMandate(mandate);
   const context = [`${mandate.buyer} · ${need.amount} ${units[need.unit]} of ${original?.name || need.query} · ${need.deliveryDate}`];
   if (need.claims.length) context.push(need.claims.map(claimLabel).join(', '));
   if (need.avoidAllergens.length) context.push(`Avoid ${need.avoidAllergens.join(', ')}`);
@@ -622,6 +657,7 @@ async function requestQuote(gateway, mandate, deliveryDate, entries) {
   const quote = await gateway.quoteBasket(deliveryDate, mandate, entries);
   state.quoteContext = { gateway, mandate, deliveryDate, entries: [...entries] };
   state.quote = quote;
+  renderMandate(mandate);
   renderQuote(quote);
   $('quote-panel').scrollIntoView({ block: 'start' });
 }

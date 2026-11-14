@@ -100,3 +100,5 @@ legend { padding: 0; margin-bottom: .65rem; }
   .section-title { flex-wrap: wrap; gap: .2rem .7rem; margin-bottom: .6rem; }
   .section-title h2 { margin-bottom: 0; }
 }
+
+#mandate-content pre { white-space: pre-wrap; overflow-wrap: anywhere; }
