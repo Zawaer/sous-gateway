@@ -91,7 +91,7 @@ _TYPES: list[tuple[str, str, str, str, str]] = [
     ("levite", "spread", "spread", "levite rasvalevite rasvaseos öljyseos kasvivoi oivariini",
      "spread, butter blend, fat spread"),
     ("margariini", "spread", "margarine", "margariini", "margarine"),
-    ("pähkinävoi", "nut butter", "nut butter", "pähkinävoi", "peanut butter, nut butter"),
+    ("pähkinävoi", "nut butter", "nut butter", "pähkinävoi pähkinätahna", "peanut butter, nut butter"),
     ("öljy", "oil", "oil", "öljy", "oil"),
     # eggs
     ("muna", "egg", "eggs", "muna kananmuna", "egg, eggs"),
@@ -104,13 +104,16 @@ _TYPES: list[tuple[str, str, str, str, str]] = [
      "tuutti jäätelötuutti puikko jäätelöpuikko pikari jäätelöpikari", "ice cream cone, ice cream stick"),
     ("sorbetti", "ice cream", "sorbet", "sorbetti", "sorbet"),
     # plant drinks
-    ("kasvijuoma", "plant drink", "plant drink", "kaurajuoma soijajuoma mantelijuoma riisijuoma kookosjuoma",
-     "oat drink, soy drink, almond drink, rice drink, oat milk"),
+    # 'kauramaito' (oat milk) is an oat drink, not dairy milk: the longer head wins over 'maito'
+    ("kasvijuoma", "plant drink", "plant drink",
+     "kaurajuoma soijajuoma mantelijuoma riisijuoma kookosjuoma kasvijuoma kauramaito soijamaito mantelimaito riisimaito",
+     "oat drink, soy drink, almond drink, rice drink, oat milk, soy milk, soya milk, almond milk, rice milk, plant drink"),
+    ("kookosmaito", "coconut milk", "coconut milk", "kookosmaito", "coconut milk"),
     # meat cuts (the species is separate)
     ("filee", "boneless cut", "fillet", "filee file fileet rintafilee sisäfilee ulkofilee",
      "fillet, fillets, breast fillet"),
     ("rinta", "boneless cut", "breast", "rinta", "breast"),
-    ("paisti", "boneless cut", "roast", "paisti sisäpaisti ulkopaisti kulmapaisti paahtopaisti", "roast, roast beef"),
+    ("paisti", "boneless cut", "roast", "paisti sisäpaisti ulkopaisti kulmapaisti paahtopaisti", "roast beef, roast pork"),
     ("leike", "boneless cut", "cutlet", "leike paistileike", "cutlet, escalope, schnitzel"),
     ("pihvi", "boneless cut", "steak", "pihvi", "steak"),
     ("lapa", "boneless cut", "shoulder", "lapa", "shoulder"),
@@ -182,7 +185,7 @@ _TYPES: list[tuple[str, str, str, str, str]] = [
     ("punasipuli", "onion", "red onions", "punasipuli", "red onion"),
     ("valkosipuli", "garlic", "garlic", "valkosipuli", "garlic"),
     ("porkkana", "carrot", "carrots", "porkkana", "carrot, carrots"),
-    ("paprika", "pepper", "peppers", "paprika", "pepper, peppers, bell pepper"),
+    ("paprika", "pepper", "peppers", "paprika", "peppers, bell pepper, sweet pepper"),  # not 'black pepper'
     ("kaali", "cabbage", "cabbage", "kaali keräkaali", "cabbage"),
     ("kukkakaali", "cauliflower", "cauliflower", "kukkakaali", "cauliflower"),
     ("parsakaali", "broccoli", "broccoli", "parsakaali", "broccoli"),
@@ -294,6 +297,51 @@ def _head(word: str) -> tuple[str, str] | None:
     return None
 
 
+def _en_head(en: str) -> str | None:
+    """Type key from an English name or phrase: the known head that ends last (longest on a tie), else None."""
+    best = None
+    for h, k in _EN_HEADS:
+        for m in re.finditer(rf"\b{re.escape(h)}\b", en):
+            if best is None or m.end() > best[0] or (m.end() == best[0] and len(h) > best[1]):
+                best = (m.end(), len(h), k)
+    return best[2] if best else None
+
+
+# Words that may follow the head of an English product name without changing what it is.
+_EN_TRAIL = {"frozen", "organic", "uht", "pcs", "pc", "ca", "approx", "about", "fresh", "chilled", "msc", "asc",
+             "fairtrade", "bio", "eco", "x", "kg", "g", "l", "ml", "dl", "cl", "pack", "bag", "box", "jar", "can",
+             "tin", "bottle", "bib", "lactose", "gluten", "free", "lactose-free", "gluten-free"}
+_EN_NOT_IT = {"in", "with", "filled", "flavoured", "flavored", "no", "without", "added", "less", "reduced"}
+_FREE_OK = {"lactose", "gluten", "milk"}  # 'lactose free' trails; 'sugar free' does not: it is not sugar
+
+
+def _en_head_strict(en: str) -> str | None:
+    """A type only when the English name *ends* in a known head (after sizes and 'organic', 'frozen', 'lactose
+    free'): 'Biona organic cashew nut butter 170g' is nut butter, while 'Caramel syrup sugar free', 'Apple wine
+    vinegar' and 'Orange & Pepper' name no type. Used when the Finnish name has no known head."""
+    tokens = re.findall(r"[a-zåäö0-9][a-zåäö0-9,.\-/]*", en)
+    while tokens:
+        t = tokens[-1]
+        if t == "free" and len(tokens) > 1 and tokens[-2] in _FREE_OK:
+            del tokens[-2:]
+        elif t != "free" and (t in _EN_TRAIL or any(c.isdigit() for c in t)):
+            tokens.pop()
+        else:
+            break
+    if not tokens:
+        return None
+    tail = " ".join(tokens)
+    for h, k in _EN_HEADS:
+        if m := re.search(rf"(?:^|\s){re.escape(h)}$", tail):
+            before = tail[: m.start()].split()
+            # 'tuna in sunflower oil', 'filled with cream', 'no added sugar': the head is what it comes in or
+            # lacks; a fruit or vegetable at the end is usually a flavour ('Cheese & Onion')
+            if k in _WEAK or (before and before[-1] == "and") or set(before[-3:]) & _EN_NOT_IT:
+                return None
+            return k
+    return None
+
+
 def _clean(name: str, brand: str) -> str:
     n = (name or "").lower().replace("®", " ").replace("™", " ").translate(_ACCENTS)
     b = (brand or "").lower().strip()
@@ -332,20 +380,20 @@ def product_type(p: dict) -> dict:
                 strong = (hit[0], hit[1], i)
     if strong or weak:
         key, prefix, head_i = strong or weak
-    if key is None and en and not words:
-        best = None
-        for h, k in _EN_HEADS:
-            for m in re.finditer(rf"\b{re.escape(h)}\b", en):
-                if best is None or m.end() > best[0] or (m.end() == best[0] and len(h) > best[1]):
-                    best = (m.end(), len(h), k)
-        if best:
-            key = best[2]
+    # A recognised Finnish head (strong or weak) is authoritative, whatever the translation says. Only a food
+    # whose Finnish name has no known head ('cashewpähkinä tahna') is read from its English name.
+    if key is None and en:
+        if not words:  # no Finnish name at all (an agent's English hint)
+            key = _en_head(en)
+        elif catalog.is_food(p):
+            key = _en_head_strict(en)
     family, label = _TYPE_INFO.get(key, (None, None))
     text = fi if words else en
     tokens = words if words else _LETTERS.findall(en)
 
     # flavour: in any word but the head, or in the head's compound prefix ('mansikkajogurtti')
     flavour = None
+    label_words = set((label or "").split())
     plain = any(w.startswith(_PLAIN) for w in tokens)
     if not any(w.startswith(("maustamat", "unflavoured")) for w in tokens):
         parts = [prefix] + [w for i, w in enumerate(tokens) if i != head_i]
@@ -353,10 +401,11 @@ def product_type(p: dict) -> dict:
             if not part or part in _FOR_USE:
                 continue
             for stem, en_name in _FLAVOURS.items():
-                if stem in part and not (key and stem == key):
+                # the type's own word is not a flavour: 'nut' in nut butter, 'coffee' in coffee milk
+                if stem in part and not (key and stem == key) and en_name not in label_words:
                     flavour = en_name
                     break
-            if flavour is None and not words and part in _EN_FLAVOURS:
+            if flavour is None and not words and part in _EN_FLAVOURS and part not in label_words:
                 flavour = part
             if flavour:
                 break
@@ -470,7 +519,7 @@ def type_guard(offers: list[dict], hint: str | None = None) -> tuple[dict | None
     The intended type is the `hint` when given, else the most common type among the candidates (ties: the
     one listed first). Returns (intended type or None, {product_id: (verdict, reason)}), verdict 'ok' (the same
     kind, e.g. semi-skimmed for skimmed milk), 'related' (same family, another kind: milk drink for milk),
-    'unknown' (the name doesn't say) or 'different' (coffee milk for milk, sour cream for cream, strawberry
+    'unconfirmed' (the name doesn't say what it is; never treated as a different type) or 'different' (coffee milk for milk, sour cream for cream, strawberry
     yogurt for plain). Without a hint, a single
     candidate is the buyer's explicit choice and is not second-guessed.
     """
@@ -491,8 +540,8 @@ def type_guard(offers: list[dict], hint: str | None = None) -> tuple[dict | None
             verdicts[o["product_id"]] = ("ok", None)
         elif match == "compatible":  # same family, another kind: milk drink for milk, cooking cream for cream
             verdicts[o["product_id"]] = ("related", f"a related but different product ({t['label']} ≠ {intended['label']})")
-        elif match == "unknown":
-            verdicts[o["product_id"]] = ("unknown", f"its name does not confirm it is {intended['label']}")
+        elif match == "unknown":  # not shown to be another kind: unconfirmed, never 'different'
+            verdicts[o["product_id"]] = ("unconfirmed", f"type unconfirmed: its name does not say it is {intended['label']}")
         else:
             verdicts[o["product_id"]] = (
                 "different", "different product type (" + "; ".join(m.replace(" instead of ", " ≠ ") for m in major) + ")")

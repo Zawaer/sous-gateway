@@ -519,7 +519,7 @@ def _type_pool(offers: list[dict], hint: str | None) -> tuple[list[dict], dict[s
     intended, verdicts = substitutes.type_guard(offers, hint)
     if intended is None:
         return offers, {}, {}
-    tiers = ("ok", "related", "unknown", "different")  # closest kind first
+    tiers = ("ok", "related", "unconfirmed", "different")  # closest kind first
     by = {v: [o for o in offers if verdicts[o["product_id"]][0] == v] for v in tiers}
     for v in tiers:
         if any(o["orderable"] for o in by[v]):
@@ -533,6 +533,9 @@ def _type_pool(offers: list[dict], hint: str | None) -> tuple[list[dict], dict[s
     if v == "ok":
         return pool, off, {}
     label = intended["label"]
+    if v == "unconfirmed":  # nothing says it is another kind; a human just confirms what it is
+        return pool, off, {pid: f"Asked for {label}; this product's name does not confirm it is {label} (type "
+                                f"unconfirmed, not a different type). A human must confirm it." for pid in ids}
     return pool, off, {pid: f"Asked for {label}, but no {label} among the candidates can be delivered, so this "
                             f"line is the closest orderable product: {verdicts[pid][1]}. A human must confirm it."
                        for pid in ids}

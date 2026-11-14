@@ -207,3 +207,98 @@ def test_substitutes_cover_the_same_kilos_not_the_same_pack_count(monkeypatch):
     assert by["22"]["quantity"] == 16 and by["22"]["covers"] == {"amount": 16.0, "unit": "KG"}
     assert by["22"]["total_ex_vat"] == 35.2
     assert by["22"]["total_change_ex_vat"] == round(35.2 - 2.5 * 16, 2)  # vs the original, like for like
+
+
+# --- false mismatches reported by QA (board 02:09Z oat milk, 03:00Z cashew butter) ------------
+
+OAT = product("30", "Oatly Kaurajuoma Kevyt 1L", "Oatly Oat Drink Semi 1L", brand="Oatly", claims=[],
+              allergens={"declared": True, "contains": ["GO"], "may_contain": [], "free_from": []})
+CASHEW = product("31", "Biona luomu cashewpähkinä tahna 170g", "Biona organic cashew nut butter 170g",
+                 size=(0.17, "KG"), brand="Biona", category="21453", temperature="ambient", claims=[],
+                 allergens={"declared": True, "contains": ["AN"], "may_contain": ["AP"], "free_from": []})
+
+
+@pytest.fixture
+def extra():
+    """OAT and CASHEW in the fake catalog for one test."""
+    for p, v in ((OAT, 1.4), (CASHEW, 30.0)):
+        CATALOG[p["id"]], PRICE_PER_L[p["id"]] = p, v
+    yield
+    for p in (OAT, CASHEW):
+        CATALOG.pop(p["id"]), PRICE_PER_L.pop(p["id"])
+
+
+def test_oat_milk_in_finnish_or_english_is_the_oat_drink():
+    oat = Sub.product_type(OAT)
+    for hint in ("kauramaito", "oat milk", "kaurajuoma", "oat drink"):
+        t = Sub.type_from_hint(hint)
+        assert t["key"] == oat["key"] == "kasvijuoma", hint
+        assert Sub.compare_types(t, oat)[0] == "same", hint
+    # still not dairy milk, either way round
+    assert Sub.compare_types(Sub.product_type(MILK), oat)[0] == "different"
+    assert Sub.compare_types(Sub.type_from_hint("kauramaito"), Sub.product_type(MILK))[0] == "different"
+
+
+def test_oat_drink_quoted_for_kauramaito_without_a_type_review(gw, extra):
+    q = gw(["30"], product_type="kauramaito")
+    assert [l["product_id"] for l in q["lines"]] == ["30"]
+    assert "product.type_mismatch" not in rules(q) and q["mandate_preview"]["outcome"] == "silent"
+    assert "product.type_mismatch" in rules(gw(["30"], product_type="milk"))  # oat drink is not milk
+
+
+def test_cashew_butter_is_read_from_its_english_name_when_the_finnish_has_no_type():
+    t = Sub.product_type(CASHEW)
+    assert t["key"] == "pähkinävoi"
+    assert Sub.compare_types(Sub.type_from_hint("cashew nut butter"), t)[0] == "same"
+    assert Sub.compare_types(Sub.type_from_hint("peanut butter"), t)[0] == "same"  # 'nut' is the type, not a flavour
+
+
+def test_cashew_butter_needs_no_type_review_and_the_allergen_decision_is_separate(gw, extra):
+    q = gw(["31"], amount=1, unit="SALES_UNIT", product_type="cashew nut butter")  # this mandate permits nuts
+    assert "product.type_mismatch" not in rules(q) and q["mandate_preview"]["outcome"] == "silent"
+    S.issue_mandate(Mandate(id="MN", buyer="Hotel", agent_id="a", issued_by="chef", auto_approve_limit_eur=5000,
+                            hard_limit_eur=10000, avoid_allergens=["AN", "AP"]))
+    q = S.request_quote(S.QuoteRequest(agent_id="a", mandate_id="MN", delivery_date=DAY, items=[
+        S.QuoteItem(product_ids=["31"], amount=1, product_type="cashew nut butter")]))["quote"]
+    assert q["mandate_preview"]["outcome"] == "block"
+    assert "product.type_mismatch" not in rules(q)
+    assert rules(q) & {"allergen.contains", "allergen.may_contain"}
+
+
+def test_a_recognised_finnish_type_beats_a_contradicting_translation():
+    wrong_en = product("40", "Valio kahvimaito 1 l laktoositon", "Valio milk 1 l lactose free")
+    assert Sub.product_type(wrong_en)["key"] == "kahvimaito"
+    cafe = product("41", "Arla Cafè maito 1 L", "Arla milk 1 L", brand="Arla")
+    cocoa = product("42", "Valio maitokaakaojuoma 1 l", "Valio milk 1 l")
+    milk = Sub.type_from_hint("lactose-free milk")
+    for p in (wrong_en, cafe, cocoa):
+        assert Sub.compare_types(milk, Sub.product_type(p))[0] == "different", p["name"]
+    beans = product("43", "Paulig Juhla Mokka papukahvi 1kg", "Paulig Juhla Mokka beans 1kg", size=(1.0, "KG"))
+    assert Sub.product_type(beans)["key"] == "kahvi"
+    assert Sub.compare_types(Sub.type_from_hint("beans"), Sub.product_type(beans))[0] == "different"
+
+
+def test_english_fallback_only_trusts_a_name_that_ends_in_its_type():
+    def key(fi, en):
+        return Sub.product_type(product("50", fi, en, category="T"))["key"]
+    assert key("MONIN karamelli 70cl sokeriton", "MONIN caramel syrup 70cl sugar free") is None
+    assert key("Topfish tonnikalapaloja auringonkukkaöljyssä 1kg", "Topfish tuna chunks in sunflower oil 1kg") is None
+    assert key("Rajamäen 10l etikka", "Rajamäen 10l Apple wine vinegar") is None
+    assert key("Santa Maria 300G Orange & Pepper", "Santa Maria 300G Orange & Pepper") is None
+    assert key("Snellman Kunnon lauantai tanko 1 kg", "Snellman Cooked sausage 1 kg frozen") == "makkara"
+    # non-food is never typed from English ('Paper Towel Roll' is not a bread roll)
+    assert Sub.product_type(product("51", "Katrin pyyherulla", "Katrin Paper Towel Roll", category="6301"))["key"] is None
+
+
+def test_unknown_type_is_unconfirmed_not_different(gw, extra):
+    CATALOG["32"] = product("32", "Biona luomu tahna 170g", "Biona organic paste 170g", size=(0.17, "KG"),
+                            brand="Biona", category="21453", claims=[])
+    PRICE_PER_L["32"] = 20.0
+    try:
+        _, v = Sub.type_guard([{"product_id": "32"}], "nut butter")
+        assert v["32"][0] == "unconfirmed" and "different" not in v["32"][1]
+        q = gw(["32"], amount=1, unit="SALES_UNIT", product_type="nut butter")
+        [f] = [f for f in q["mandate_preview"]["findings"] if f["rule"] == "product.type_mismatch"]
+        assert f["outcome"] == "ask" and "unconfirmed" in f["message"] and "different product type" not in f["message"]
+    finally:
+        CATALOG.pop("32"), PRICE_PER_L.pop("32")
