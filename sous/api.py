@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
-from . import access, autonomy, account, agent_auth, aimo, catalog, clock, config, erp, exposure, holds, pause, peppol, proof, quote as Q, rules, sandbox, service as S, signing, standing, store
+from . import access, autonomy, account, agent_auth, aimo, catalog, clock, config, erp, exposure, holds, origin as origin_mod, pause, peppol, proof, quote as Q, rules, sandbox, service as S, signing, standing, store
 from .mandate import Mandate
 from .mcp_server import mcp
 
@@ -396,13 +396,20 @@ def search_products(
     limit: int = Query(15, ge=1, le=50),
     agent_id: str = "anonymous-agent",
     food_only: bool | None = None,
+    origin: list[str] = Query(default=[]),
 ):
     """Search the static catalog (fi/sv/en with synonyms). No live price or stock: request a quote for that.
 
-    food_only: default ranks food first; true drops non-food; false = no preference."""
+    food_only: default ranks food first; true drops non-food; false = no preference.
+    origin: keep only products declared from these countries or groups (fi, se, EU, NORDIC ...); the country is
+    supplier-declared and products without one drop out."""
+    try:
+        origins = origin_mod.normalize(origin) if origin else None
+    except ValueError as e:
+        raise S.GatewayError("invalid_request", str(e), 422)
     return S.search(agent_id, q, claims=claims or None, avoid_allergens=avoid_allergens or None,
                     labels=labels or None, temperature=temperature, category=category, limit=limit,
-                    food_only=food_only)
+                    food_only=food_only, origins=origins)
 
 
 @app.get("/products/{product_id}", tags=["catalog"])

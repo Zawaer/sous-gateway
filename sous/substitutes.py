@@ -42,7 +42,7 @@ import json
 import re
 from datetime import date
 
-from . import catalog, quote as Q
+from . import catalog, origin, quote as Q
 from .mandate import Mandate
 
 SHORTLIST = 25
@@ -766,7 +766,7 @@ def suggest(
 
     # 1. static filter: hard constraints never relaxed
     pool, held_back = [], []
-    excluded = {"allergen": 0, "claims": 0, "measure_or_temperature": 0, "product_type": 0, "weak_match": 0}
+    excluded = {"allergen": 0, "claims": 0, "origin": 0, "measure_or_temperature": 0, "product_type": 0, "weak_match": 0}
     category = [(c, product_type(c)) for c in _same_category(orig["category"])]
     # A name that names no type ('Valio Oltermanni') in a category that is nearly all the original's
     # kind (cheese) is very likely that kind too; elsewhere it stays unconfirmed.
@@ -789,6 +789,10 @@ def suggest(
         if avoid and catalog.allergen_status(c, avoid, mandate.allow_may_contain if mandate else False)["status"] in (
                 "contains", "may_contain"):
             excluded["allergen"] += 1
+            continue
+        if mandate and origin.check(c.get("country_of_origin"), mandate.allowed_origins,
+                                    mandate.avoid_origins) in ("avoided", "outside"):
+            excluded["origin"] += 1  # never propose goods from a country the mandate rules out
             continue
         cpack = _pack_of(c)
         match, minor, major = compare_types(otype, ctype)
@@ -915,6 +919,8 @@ def suggest(
         "need": {"amount": need, "unit": need_unit or "SALES_UNIT",
                  "asked": _asked(amount, unit, orig, opack, content, need, per)},
         "constraints": {"required_claims": sorted(required_claims), "avoid_allergens": avoid,
+                        **({"allowed_origins": mandate.allowed_origins} if mandate and mandate.allowed_origins else {}),
+                        **({"avoid_origins": mandate.avoid_origins} if mandate and mandate.avoid_origins else {}),
                         "same_category": orig["category"], "measure": measure, "temperature": orig["temperature"],
                         "type": _public_type(otype)},
         "considered": {"in_category": len(pool) + sum(excluded.values()), "excluded": excluded,

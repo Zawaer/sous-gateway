@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import typing
 
-from . import config, deadline, reservations
+from . import config, deadline, origin as origins, reservations
 from .mandate import UNUSUAL_MIN_HISTORY, Mandate
 
 OWNERS = {
@@ -153,6 +153,14 @@ def _build() -> list[dict]:
            "refusal), so a new product reaches the kitchen only when a human wants it to.", ["first_time_products", "usual_products"]),
         _r("product.category", "finding", ["block"], "buyer",
            "The product's category is outside the categories the mandate allows.", "allowed_categories"),
+        _r("origin.restricted", "finding", ["ask", "block"], "buyer",
+           "The product's country of origin is outside the countries the mandate allows, or is one it avoids. The "
+           "country is the supplier-declared countryOfOrigin of Valio Aimo's product master, not independently "
+           "verified. The buyer chooses whether a human decides or the order is refused.",
+           ["allowed_origins", "avoid_origins", "origin_violation"]),
+        _r("origin.unknown", "finding", ["notify", "ask", "block"], "buyer",
+           "The product master gives no usable country of origin (empty or a placeholder code) while the mandate "
+           "restricts origin: unknown is never treated as allowed.", ["allowed_origins", "avoid_origins", "origin_unknown"]),
         _r("product.claims", "finding", ["block"], "buyer",
            "The product lacks a claim the mandate requires (e.g. lactose-free).", "required_claims"),
         _r("allergen.contains", "finding", ["block"], "buyer",
@@ -369,6 +377,13 @@ def mandate_summary(m: Mandate) -> list[dict]:
     if m.required_claims:
         add("product.claims", "only products claiming " + ", ".join(
             c.replace("_", " ").lower() for c in m.required_claims))
+    if m.allowed_origins:
+        add("origin.restricted", f"only goods from {origins.label(m.allowed_origins)}; "
+            f"{'refused' if m.origin_violation == 'block' else 'a human decides'} otherwise (supplier-declared)")
+    if m.avoid_origins:
+        add("origin.restricted", f"no goods from {origins.label(m.avoid_origins)}")
+    if m.allowed_origins or m.avoid_origins:
+        add("origin.unknown", f"unknown origin {_TIER_SAYS[m.origin_unknown]}")
     if m.allowed_categories is not None:
         add("product.category", "only categories " + ", ".join(m.allowed_categories))
     if m.first_time_products:

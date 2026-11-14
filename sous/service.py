@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import account, agent_auth, aimo, allergen_ai, autonomy, catalog, clearance, clock, config, credentials, deadline, erp, exposure, holds, notify, options as OPT, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
+from . import account, agent_auth, aimo, allergen_ai, autonomy, catalog, clearance, clock, config, credentials, deadline, erp, exposure, holds, notify, options as OPT, origin, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
 from .mandate import Mandate, evaluate, product_refusals
 
 
@@ -319,9 +319,10 @@ def verify_mandate(mandate_id: str) -> dict:
 
 def search(agent_id: str, query: str, *, claims=None, avoid_allergens=None, labels=None,
            temperature=None, category=None, limit: int = 15, buyer: str | None = None,
-           food_only: bool | None = None) -> dict:
+           food_only: bool | None = None, origins: list[str] | None = None) -> dict:
     results = catalog.search(query, claims=claims, avoid_allergens=avoid_allergens, labels=labels,
-                             temperature=temperature, category=category, limit=min(limit, 50), food_only=food_only)
+                             temperature=temperature, category=category, limit=min(limit, 50), food_only=food_only,
+                             origins=origins)
     store.audit("catalog.search", agent_id, "agent", None, buyer,
                 {"query": query, "claims": claims, "avoid_allergens": avoid_allergens,
                  "results": [r["id"] for r in results], "valio_api_calls": 0})
@@ -528,6 +529,7 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
         # every line's price, unorderable ones too: what the need would cost, for reference only
         "indicative_total_ex_vat": round(sum(l["line_total_ex_vat"] or 0 for l in lines), 2),
         "uncovered": gaps,
+        "origin_summary": origin.summary(lines),
         "alternatives_considered": considered,
         "valio_api_calls": {k: aimo.stats[k] - before[k] for k in aimo.stats},
         "clock": clock.info(now),

@@ -28,7 +28,7 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import access, agent_auth, catalog, clock, exposure, holds, rules, service as S, standing
+from . import access, agent_auth, catalog, clock, exposure, holds, origin as origin_mod, rules, service as S, standing
 from .mandate import Finding, Mandate
 from .standards import OrderDoc, QuoteDoc
 
@@ -370,6 +370,7 @@ def search_products(
     limit: int = 15,
     agent_id: str = "anonymous-agent",
     food_only: bool | None = None,
+    origin: list[str] | None = None,
 ) -> dict:
     """Search Valio Aimo's catalog (17.5k products) by name, brand or ingredient in Finnish, Swedish or English.
 
@@ -381,11 +382,18 @@ def search_products(
     temperature: ambient, chilled or frozen.
     food_only: default ranks food first (equipment first only when the query names it, e.g. "milk jug");
       true drops non-food (tableware, cleaning, disposables); false = no preference.
+    origin: keep only products declared from these countries or groups, e.g. ["fi"], ["EU"], ["NORDIC"]; the
+      country is supplier-declared (not verified) and products without one drop out. Every card and quote line
+      carries country_of_origin.
     Synonyms work across languages: "butter" also finds voi / smör.
     Returns {products: [card], note}: cards without price or stock; pass several of the ids to request_quote next.
     """
+    try:
+        origins = origin_mod.normalize(origin) if origin else None
+    except ValueError as e:
+        raise S.GatewayError("invalid_request", str(e), 422)
     return S.search(agent_id, query, claims=claims, avoid_allergens=avoid_allergens, labels=labels,
-                    temperature=temperature, limit=limit, food_only=food_only)
+                    temperature=temperature, limit=limit, food_only=food_only, origins=origins)
 
 
 @_tool(ProductOut, title="Product details", annotations=READ_LOCAL)

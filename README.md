@@ -53,7 +53,7 @@ Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it: scripted c
 
 ## What it does
 
-- **Search** 17,546 products in Finnish, Swedish and English, with filters for claims, allergens, labels and temperature. Search uses a local index and costs no Valio API calls.
+- **Search** 17,546 products in Finnish, Swedish and English, with filters for claims, allergens, labels, temperature and country of origin. Search uses a local index and costs no Valio API calls.
 - **Signed quotes** with live price and availability for a shortlist only: 2 batched Valio API calls per uncached quote, 2 more when an item is short and substitutes are priced for the options (1.0 on average with the cache in `evals/results.json`). Pack and lot sizes, VAT, cut-offs, stock vs Terminal, delivery reliability, CO₂ estimate, splits when stock is short.
 - **Mandate engine** in plain code. Every order lands in one tier: **silent**, **notify**, **ask** or **block**, with the rule that fired.
 - **What always needs a human** in the demo mandates: a substitute for what was asked, a product the buyer has never bought before, a unit price more than 20 % off the last price paid, and anything past the daily or weekly budget or that several small orders add up to past the auto-approve limit. **Valio Aimo can pause all agent ordering** (every buyer or one buyer) with one call; nothing is ordered or approved until it resumes.
@@ -63,6 +63,7 @@ Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it: scripted c
 - **Orders and approvals**: one order per quote, idempotency keys, cut-offs re-checked at order and at approval, signed receipts. A human approves or rejects from a phone link.
 - **Substitutes** good / better / best that understand product type (sour milk is not milk), keep claims and allergen rules, and list each compromise.
 - **Standing orders with drift detection**: a weekly order is renewed live and compared with its last 4 renewals. Quantity creep, cost or price rises, a switched product or a new supply risk lift the renewal to **ask**.
+- **Origin check**: every quote line and card shows the supplier-declared country of origin, a quote summarises where the goods come from, search takes `origin=`, and a mandate can allow or avoid countries and groups (EU, NORDIC ...). Unknown origin is never treated as allowed. See [PROTOCOL.md section 30](docs/PROTOCOL.md).
 - **Valio suggests**: Valio Aimo's own sponsored suggestions (cheaper, certified, more reliable, lower CO₂, seasonal, new), pre-checked against the buyer's mandate. Offers only, never orders, and audited.
 - **Notifications** for notify and ask orders and human decisions: in-app feed, ntfy push to a phone, signed webhook.
 - **Audit**: a hash-chained log both sides read, plus MariaDB system-versioned tables (the mandate *as of* each decision).

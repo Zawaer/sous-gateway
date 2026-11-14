@@ -35,7 +35,7 @@ import re
 import threading
 from datetime import date, timedelta
 
-from . import access, aimo, catalog, config, exposure, quote as Q, sandbox, service as S, store
+from . import access, aimo, catalog, config, exposure, origin, quote as Q, sandbox, service as S, store
 from .mandate import Mandate, evaluate
 
 SPONSOR = "Valio Aimo"
@@ -175,6 +175,8 @@ def _static_block(p: dict, m: Mandate) -> str | None:
         return "category"
     if not set(m.required_claims) <= set(p.get("claims") or []):
         return "claims"
+    if origin.check(p.get("country_of_origin"), m.allowed_origins, m.avoid_origins) in ("avoided", "outside"):
+        return "origin"
     if m.avoid_allergens:
         st = catalog.allergen_status(p, m.avoid_allergens, m.allow_may_contain)["status"]
         if st in ("contains", "may_contain"):

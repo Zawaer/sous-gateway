@@ -15,7 +15,7 @@ import sqlite3
 import threading
 from typing import Any
 
-from . import config
+from . import config, origin
 
 # GS1 allergen type codes seen in the data (UN/CEFACT AllergenTypeCode list).
 ALLERGENS: dict[str, str] = {
@@ -453,6 +453,7 @@ def search(
     category: str | None = None,
     limit: int = 20,
     food_only: bool | None = None,
+    origins: list[str] | None = None,
 ) -> list[dict]:
     """Search names (fi/sv/en), brand and ingredients, then filter structurally.
 
@@ -500,6 +501,8 @@ def search(
             continue
         if category and p["category"] != category:
             continue
+        if origins and (origin.code(p.get("country_of_origin")) or "") not in origin.expand(origins):
+            continue  # origin= keeps only products declared from these countries / groups (unknown ones drop out)
         if avoid_allergens:
             st = allergen_status(p, avoid_allergens)
             if st["status"] in ("contains", "may_contain"):
@@ -516,6 +519,7 @@ def card(p: dict) -> dict:
     keys = ("id", "name", "brand", "sales_unit", "size_from_name", "temperature", "claims",
             "labels", "allergens", "delivery_reliability", "co2_kg_per_kg_group_avg", "category")
     c = {k: p[k] for k in keys}
+    c["country_of_origin"] = origin.code(p.get("country_of_origin"))
     if "allergen_check" in p:
         c["allergen_check"] = p["allergen_check"]
     return c

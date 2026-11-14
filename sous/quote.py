@@ -15,7 +15,7 @@ from typing import Annotated, Literal
 
 from pydantic import BeforeValidator, WithJsonSchema
 
-from . import aimo, catalog, clock, config, exposure, holds
+from . import aimo, catalog, clock, config, exposure, holds, origin
 
 # --- need units: the one place they are normalised -----------------------------------------------------------
 # Needs are in litres, kilos, sales units (SALES_UNIT, 'pack(s)') or one of Valio's own unit codes (ST = piece,
@@ -429,6 +429,9 @@ def build_offer(
         "delivery_reliability": rel,
         "co2_estimate_kg": co2,
         "co2_note": "product-group average x quantity, an estimate" if co2 is not None else None,
+        "country_of_origin": origin.code(product.get("country_of_origin")),
+        "origin_name": origin.name(origin.code(product.get("country_of_origin"))) if origin.code(product.get("country_of_origin")) else None,
+        "origin_basis": origin.BASIS,
         "labels": product["labels"],
         "claims": product["claims"],
         "allergens": product["allergens"],

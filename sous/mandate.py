@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from . import autonomy, catalog, config, holds, pause
+from . import autonomy, catalog, config, holds, origin as origins, pause
 
 # Four tiers, from least to most human involvement:
 #   silent: routine, the order goes through and is logged
@@ -63,6 +63,18 @@ class Mandate(BaseModel):
     allow_may_contain: bool = False
     unknown_allergens: Literal["ask", "block"] = "ask"  # unknown is never treated as safe
     required_claims: list[str] = Field(default_factory=list, description="e.g. FREE_FROM_LACTOSE")
+    allowed_origins: list[str] | None = Field(
+        None, description="Countries (fi, se, de ...) and/or groups (EU, EEA, NORDIC, BALTIC, EUROPE) the goods may "
+        "come from; a product from anywhere else gets origin_violation. The country is the supplier-declared "
+        "countryOfOrigin of Valio Aimo's product master, not independently verified. None = any country")
+    avoid_origins: list[str] = Field(
+        default_factory=list, description="Countries and/or groups the goods must not come from (same codes as "
+        "allowed_origins); a product from one gets origin_violation")
+    origin_violation: Literal["ask", "block"] = Field(
+        "ask", description="Tier for a product from outside allowed_origins or from an avoided origin")
+    origin_unknown: Literal["notify", "ask", "block"] = Field(
+        "ask", description="Tier for a product whose product master has no usable country of origin while "
+        "allowed_origins or avoid_origins is set: unknown is never treated as allowed")
     substitutions: Tier = "ask"
     terminal_products: Tier = "silent"
     min_delivery_reliability: float | None = 0.9
@@ -92,6 +104,11 @@ class Mandate(BaseModel):
         if any(x <= 0 for x in v.values()):
             raise ValueError("price caps must be above 0")
         return v
+
+    @field_validator("allowed_origins", "avoid_origins")
+    @classmethod
+    def _origins(cls, v: list[str] | None) -> list[str] | None:
+        return origins.normalize(v)
 
     @field_validator("valid_until")
     @classmethod
@@ -339,6 +356,19 @@ def evaluate(
                 f"{name}: €{cp_now['ex_vat']:,.2f}/{per}, {up:.0f}% above the €{prev['ex_vat']:,.2f}/{per} paid for "
                 f"{fam[1].lower()} on {prev['at'][8:10]}.{prev['at'][5:7]} ({readable_name(prev.get('name') or prev['product_id'])}, "
                 f"order {prev['order_id']}); the mandate asks above {mandate.max_price_change_pct:g}%.", pid)
+
+        if mandate.allowed_origins or mandate.avoid_origins:
+            oc = origins.check(p.get("country_of_origin"), mandate.allowed_origins, mandate.avoid_origins)
+            if oc == "unknown":
+                add("origin.unknown", mandate.origin_unknown,
+                    f"{name}: the product master gives no country of origin, so it can't be checked against the "
+                    f"mandate ({origins.label(mandate.allowed_origins) or 'avoiding ' + origins.label(mandate.avoid_origins)}).", pid)
+            elif oc in ("avoided", "outside"):
+                where = origins.name(origins.code(p.get("country_of_origin")))
+                rule = (f"avoids {origins.label(mandate.avoid_origins)}" if oc == "avoided"
+                        else f"allows only {origins.label(mandate.allowed_origins)}")
+                add("origin.restricted", mandate.origin_violation,
+                    f"{name} comes from {where} (supplier-declared); the mandate {rule}.", pid)
 
         if mandate.allowed_categories is not None and p.get("category") not in mandate.allowed_categories:
             add("product.category", "block",

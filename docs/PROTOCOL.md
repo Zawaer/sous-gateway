@@ -107,6 +107,10 @@ Source: `sous/mandate.py`, class `Mandate`. All money is EUR excluding VAT.
 | `allow_may_contain` | bool | false | If false, "may contain" counts as contains. |
 | `unknown_allergens` | `ask` or `block` | `ask` | What to do when a product has no allergen declaration. Never `silent`: unknown is never safe. |
 | `required_claims` | list | [] | Claims every line must carry, e.g. `FREE_FROM_LACTOSE`. |
+| `allowed_origins` | list or null | null | Countries (`fi`, `se`, `de` ...) and/or groups (`EU`, `EEA`, `NORDIC`, `BALTIC`, `EUROPE`) the goods may come from. Null = any. See section 30. |
+| `avoid_origins` | list | [] | Countries and/or groups the goods must not come from. |
+| `origin_violation` | `ask` or `block` | `ask` | Tier for a product from outside `allowed_origins` or from an avoided origin (`origin.restricted`). |
+| `origin_unknown` | `notify`, `ask` or `block` | `ask` | Tier for a product without a usable country while an origin rule is set (`origin.unknown`). |
 | `substitutions` | tier | `ask` | Tier for any line marked `substitute_for`. |
 | `terminal_products` | tier | `silent` | Tier for products shipped from the supplier's warehouse (stock unknown). |
 | `min_delivery_reliability` | number or null | 0.9 | Lines with historical full-delivery rate below this are held. |
@@ -168,7 +172,7 @@ Response: `{"quote": {...}, "jws": "<compact JWS of quote>"}`. Quote fields:
 | `options[]` | Only when an item can't be covered as asked: complete alternatives for that item (section 5.1). |
 | `chosen_option` | Only on a quote made from `option_id`: the option it came from. |
 
-Each line has: `product_id, name, brand, sales_unit, content_per_sales_unit {amount, unit, source}, quantity, covers {amount, unit}, unit_price_ex_vat, unit_price_inc_vat, vat_rate, comparison_price {ex_vat, per}, list_price_ex_vat, line_total_ex_vat, line_total_inc_vat, logistic_model (Stock|Terminal), available_amount (null unless the stock policy shows exact numbers, section 5.2), stock (known|plenty|unknown), stock_level (ample|limited|short|none|unknown), available_date, delivery_date, order_cutoff, delivery_reliability, co2_estimate_kg, co2_note, labels, claims, allergens, temperature, orderable, issues[], item_index` (which entry of `items[]` it covers), and `substitute_for` when set.
+Each line has: `product_id, name, brand, sales_unit, content_per_sales_unit {amount, unit, source}, quantity, covers {amount, unit}, unit_price_ex_vat, unit_price_inc_vat, vat_rate, comparison_price {ex_vat, per}, list_price_ex_vat, line_total_ex_vat, line_total_inc_vat, logistic_model (Stock|Terminal), available_amount (null unless the stock policy shows exact numbers, section 5.2), stock (known|plenty|unknown), stock_level (ample|limited|short|none|unknown), available_date, delivery_date, order_cutoff, delivery_reliability, co2_estimate_kg, co2_note, country_of_origin (lower-case ISO code or null), origin_name, origin_basis, labels, claims, allergens, temperature, orderable, issues[], item_index` (which entry of `items[]` it covers), and `substitute_for` when set.
 
 `delivery_date = max(requested, available_date)`. `co2_estimate_kg` is a product-group average times quantity, labelled as an estimate.
 
@@ -302,6 +306,8 @@ If the tier is `silent` or `notify`, a final `mandate.ok` finding is added with 
 | `availability.data_stale` | ask | Line has `DATA_STALE`: never ordered on last-known data without a human. |
 | `product.category` | block | Category not in `allowed_categories`. |
 | `product.claims` | block | Line lacks a `required_claims` claim. |
+| `origin.restricted` | ask or block | Line's country is outside `allowed_origins` or in `avoid_origins`; tier is `origin_violation`. |
+| `origin.unknown` | notify, ask or block | No usable country of origin while the mandate restricts origin; tier is `origin_unknown`. |
 | `allergen.contains` | block | Line contains an avoided allergen. |
 | `allergen.may_contain` | block | Line may contain one and `allow_may_contain` is false. |
 | `allergen.likely` | block | The product declares no allergens, but the Gemini Decisions API puts an avoided allergen at p ≥ 0.8 from its names, brand and key ingredients (section 25). |
@@ -960,3 +966,16 @@ Things also go wrong after an order went through. Valio Aimo reports them as **a
 - **Reading.** `GET /orders/{id}` and MCP `get_order` return `amendments[]` (each with `erp`, the change message's outbox status) and `credit_notes[]`.
 - **ERP.** Every amendment that changes the lines (applied, accepted, or rejected) queues one change message in the ERP outbox (section on `sous/erp.py`, docs/INTEGRATION.md): ORDERS05 JSON with `MESTYP ORDCHG`, `E1EDK01 ACTION 002`, the same `BELNR` (order id), every line at its original `POSEX` with item `ACTION` 000 unchanged / 002 changed / 003 cancelled. Keyed `<order id>/<amendment id>` (also its `Idempotency-Key`), so it is queued and sent once, retried like orders. The original order's outbox row is never rewritten. Only orders that went through the outbox get one.
 - **Limits.** One pending amendment per line at a time (`amendment_pending` 409). Valio staff and the buyer's human share the demo approver code here; production would give Valio its own credential. No MCP tool to accept or reject (agents read them with `get_order`; REST covers both).
+
+## 30. Country of origin (`sous/origin.py`)
+
+The brief asks for "minimum verification for stock, price, origin". Stock and price come from Valio Aimo's live API, inside a signed quote. Origin comes from the product master's `countryOfOrigin` (ISO 3166 alpha-2, present for 99.9 % of the 17,546 products). It is **supplier-declared**: the gateway does not verify it, and says so on every quote line (`origin_basis`) and in every finding message.
+
+- **Shown everywhere.** Every quote line has `country_of_origin` (null when unusable), `origin_name` and `origin_basis`; every catalog card has `country_of_origin`; each quote has `origin_summary {countries[{country, name, value_ex_vat, share, lines}], domestic_share, unknown_share, basis}` (share by value of the orderable lines; domestic = Finland).
+- **Searchable.** `GET /products?origin=fi&origin=SE` and the MCP `search_products(origin=[...])` keep only products declared from those countries or groups; products without a country drop out.
+- **Enforced by the mandate.** `allowed_origins` / `avoid_origins` take country codes and groups (`EU`, `EEA`, `NORDIC`, `BALTIC`, `EUROPE`); anything else is a 422. A line outside the allowed list or inside the avoided list fires `origin.restricted` at `origin_violation` (`ask` by default, `block` if the buyer wants it refused).
+- **Unknown is never allowed.** An empty country or a placeholder code (`zz`, `zy`, `xs`) while an origin rule is set fires `origin.unknown` at `origin_unknown` (`ask` by default), the same stance as for undeclared allergens. With no origin rule nothing changes.
+- **Substitutes and suggestions respect it.** Substitute candidates and Valio's suggestions from a country the mandate rules out are never proposed (`considered.excluded.origin` counts them).
+- **Signed and audited.** The origin fields are part of the signed quote, the rules are in the register (`GET /rules`), and the mandate fields are in the signed mandate (and its VC form).
+
+Production path: replace the supplier-declared field with a verified claim (a certificate of origin or a traceability record, e.g. from the supplier's GS1 / EPCIS data) and let `origin_basis` say `verified`.
