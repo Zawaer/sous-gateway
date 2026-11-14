@@ -42,6 +42,12 @@ class Mandate(BaseModel):
         "auto-approve limit, add up to more than it (an agent slicing one big order into small ones); None = off")
     first_time_products: Literal["notify", "ask", "block"] | None = Field(
         None, description="Tier for a product never ordered under this mandate before; None = off")
+    usual_products: list[str] = Field(
+        default_factory=list, description="Product ids the buyer has bought before (e.g. imported from their Valio "
+        "order history); with first_time_products they count as known, like products ordered under this mandate")
+    max_price_change_pct: float | None = Field(
+        20.0, gt=0, description="Ask when a product's unit price (ex VAT) differs by more than this many percent, up "
+        "or down, from the last price paid for it under this mandate; None = off")
     allowed_categories: list[str] | None = Field(None, description="Category codes; None = any")
     avoid_allergens: list[str] = Field(default_factory=list, description="GS1 allergen codes, e.g. AM (milk), AN (nuts)")
     allow_may_contain: bool = False
@@ -110,13 +116,15 @@ def evaluate(
     spent_week_eur: float = 0.0,
     recent_orders: list[dict] | None = None,
     ordered_products: set[str] | None = None,
+    last_prices: dict[str, dict] | None = None,
 ) -> tuple[Tier, list[Finding]]:
     """`extra_findings` are checks made outside the mandate (e.g. standing-order drift); they count like any rule.
     `quantities` is this order's amount per (product family, unit), `usual_quantities` the same buyer's past
     ordered amounts per key (both from sous/usual.py); they feed quantity.unusual.
     `spent_week_eur` is this calendar week's ordered total (spend.weekly_limit), `recent_orders` the orders that
     went through within split_window_minutes as [{id, total_ex_vat}] (spend.split_orders), `ordered_products`
-    every product id ever ordered under the mandate (product.first_time)."""
+    every product id ever ordered under the mandate (product.first_time), `last_prices` the last unit price paid
+    per product under the mandate as {product_id: {unit_price_ex_vat, order_id, at}} (price.changed)."""
     f: list[Finding] = []
 
     def add(rule, outcome, message, pid=None):
@@ -213,9 +221,22 @@ def evaluate(
             elif issue["code"] == "TYPE_MISMATCH":  # not the kind of product asked for (coffee milk for milk)
                 add("product.type_mismatch", "ask", f"{name}: {issue['message']}", pid)
 
-        if mandate.first_time_products and ordered_products is not None and pid not in ordered_products:
+        if (mandate.first_time_products and ordered_products is not None
+                and pid not in ordered_products and pid not in mandate.usual_products):
             add("product.first_time", mandate.first_time_products,
                 f"{name} has never been ordered under this mandate before.", pid)
+
+        last = (last_prices or {}).get(pid) if mandate.max_price_change_pct else None
+        now_price = l.get("unit_price_ex_vat")
+        if last and now_price is not None and last.get("unit_price_ex_vat"):
+            was = last["unit_price_ex_vat"]
+            change = (now_price - was) / was * 100
+            if abs(change) > mandate.max_price_change_pct:
+                unit = l.get("sales_unit") or "unit"
+                add("price.changed", "ask",
+                    f"{name}: €{now_price:,.2f} per {unit} now, {abs(change):.0f}% {'above' if change > 0 else 'below'} "
+                    f"the €{was:,.2f} paid on {last['at'][8:10]}.{last['at'][5:7]} (order {last['order_id']}); the "
+                    f"mandate asks above {mandate.max_price_change_pct:g}%.", pid)
 
         if mandate.allowed_categories is not None and p.get("category") not in mandate.allowed_categories:
             add("product.category", "block",

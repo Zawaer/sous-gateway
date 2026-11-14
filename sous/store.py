@@ -396,6 +396,17 @@ def ordered_since(mandate_id: str, since_iso: str) -> list[dict]:
     return [{"id": r["id"], "total_ex_vat": float(r["total_ex_vat"])} for r in rows]
 
 
+def last_unit_prices(mandate_id: str) -> dict[str, dict]:
+    """{product_id: {unit_price_ex_vat, order_id, at}}: the newest price paid per product in orders that went through."""
+    out: dict[str, dict] = {}
+    for o in list_orders(status="ordered", mandate_id=mandate_id):  # newest first
+        for l in o.get("lines") or []:
+            if l.get("unit_price_ex_vat") is not None and l["product_id"] not in out:
+                out[l["product_id"]] = {"unit_price_ex_vat": l["unit_price_ex_vat"], "order_id": o["id"],
+                                        "at": o["created_at"]}
+    return out
+
+
 def ordered_product_ids(mandate_id: str) -> set[str]:
     """Every product id in an order that went through under the mandate."""
     return {l["product_id"] for o in list_orders(status="ordered", mandate_id=mandate_id) for l in o.get("lines") or []}

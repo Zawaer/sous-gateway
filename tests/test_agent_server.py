@@ -120,6 +120,9 @@ def env(tmp_path, monkeypatch):
     signing._key.cache_clear()
     monkeypatch.setattr(catalog, "get", lambda pid: PRODUCTS.get(pid))
     monkeypatch.setattr(catalog, "search", fake_search)
+    from scripts.seed import MANDATES  # the fake products count as the demo buyers' usual ones (first-time rule)
+    for m in MANDATES:
+        monkeypatch.setattr(m, "usual_products", m.usual_products + list(PRODUCTS))
     monkeypatch.setattr(Q, "offers", offers_at_now)
     monkeypatch.setattr(S, "_now", lambda: NOW)
     monkeypatch.setattr(sandbox, "_clock", lambda: NOW.timestamp())

@@ -73,6 +73,9 @@ def env(tmp_path, monkeypatch):
     signing._key.cache_clear()
     monkeypatch.setattr(catalog, "get", lambda pid: OAT if pid == "OAT" else None)
     monkeypatch.setattr(catalog, "search", lambda *a, **k: [OAT])  # CI has no catalog data
+    from scripts.seed import MANDATES  # OAT counts as the demo buyers' usual product (first-time rule)
+    for m in MANDATES:
+        monkeypatch.setattr(m, "usual_products", m.usual_products + ["OAT"])
     monkeypatch.setattr(Q, "offers", offers_at_now)
     monkeypatch.setattr(S, "_now", lambda: NOW)
     monkeypatch.setattr(notify, "_deliver", lambda *a, **k: None)  # feed only, never a real push

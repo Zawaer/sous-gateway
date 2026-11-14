@@ -99,6 +99,8 @@ Source: `sous/mandate.py`, class `Mandate`. All money is EUR excluding VAT.
 | `weekly_limit_eur` | number or null | null | This calendar week's (Mon-Sun, Helsinki) `ordered` total plus this order above the limit means a human must approve. |
 | `split_window_minutes` | 1-1440 or null | null | Orders that went through within this many minutes, each under `auto_approve_limit_eur`, plus this one above that limit: a human must approve (rule `spend.split_orders`). |
 | `first_time_products` | `notify` \| `ask` \| `block` or null | null | Tier for a product never ordered under this mandate before (rule `product.first_time`). |
+| `usual_products` | list of product ids | [] | Products the buyer has bought before (e.g. imported from their Valio order history): not first-time. |
+| `max_price_change_pct` | number or null | 20 | Ask when a product's unit price ex VAT differs by more than this %, up or down, from the last price paid for it under this mandate (rule `price.changed`). |
 | `allowed_categories` | list or null | null | Valio Aimo category codes. Null means any. |
 | `avoid_allergens` | list | [] | GS1 allergen codes, e.g. `AM` milk, `AN` tree nuts, `AP` peanuts, `AW` gluten cereals. `AM`, `AN` and `AW` expand to their whole family (see `GET /allergens`). |
 | `allow_may_contain` | bool | false | If false, "may contain" counts as contains. |
@@ -261,7 +263,8 @@ If the tier is `silent` or `notify`, a final `mandate.ok` finding is added with 
 | `spend.daily_limit` | ask | Today's ordered total + this total > `daily_limit_eur`. |
 | `spend.weekly_limit` | ask | This week's ordered total + this total > `weekly_limit_eur`. |
 | `spend.split_orders` | ask | This order is under `auto_approve_limit_eur`, and with the orders under it that went through in the last `split_window_minutes` it passes that limit. |
-| `product.first_time` | `first_time_products` | The product is in no order that went through under this mandate. |
+| `product.first_time` | `first_time_products` | The product is in no order that went through under this mandate and not in `usual_products`. |
+| `price.changed` | ask | Unit price differs from the last price paid for the product under this mandate by more than `max_price_change_pct`. |
 | `ordering.paused` | block | Valio Aimo has paused agent ordering for every buyer or this buyer (section 24). |
 | `need.partial` | ask | Part of the need is uncovered. |
 | `availability.<code>` | block | Any blocking issue on a line, code lowercased: `availability.unit_mismatch`, `availability.content_unknown`, `availability.no_price`, `availability.no_availability`, `availability.sales_block`, `availability.undeliverable`, `availability.out_of_stock`, `availability.cutoff_passed`. |

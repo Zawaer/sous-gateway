@@ -277,7 +277,9 @@ KAARNA = {
     "avoid_allergens": ["AM", "AE", "AN", "AP"],  # milk, egg, tree nuts, peanuts
     "allow_may_contain": False,
     "unknown_allergens": "ask",
-    "substitutions": "notify",
+    "substitutions": "ask",
+    "first_time_products": "ask",
+    "weekly_limit_eur": 6000,
     "terminal_products": "ask",
     "min_delivery_reliability": 0.9,
     "later_delivery": "ask",

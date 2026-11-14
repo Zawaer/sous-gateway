@@ -109,13 +109,17 @@ def _build() -> list[dict]:
            f"An order far above the buyer's usual amount of the same kind of product (more than the factor × "
            f"the median of their past orders in the same unit, needing at least {UNUSUAL_MIN_HISTORY} past orders) "
            "waits for a human: it catches an extra zero or packs read as litres.", "unusual_quantity_factor"),
+        _r("price.changed", "finding", ["ask"], "buyer",
+           "A product whose unit price (ex VAT) differs by more than the mandate's percentage, up or down, from the "
+           "last price paid for it under this mandate waits for a human: a price rise, or a different pack read as "
+           "the usual one.", "max_price_change_pct"),
         _r("price.comparison_cap", "finding", ["ask"], "buyer",
            "A product above the buyer's cap on comparison price (e.g. € per litre) waits for a human.",
            "max_comparison_price_eur"),
         # --- what is bought
         _r("product.first_time", "finding", ["notify", "ask", "block"], "buyer",
-           "A product never ordered under this mandate before gets the tier the buyer chose (FYI, approval or "
-           "refusal), so a new product reaches the kitchen only when a human wants it to.", "first_time_products"),
+           "A product never ordered under this mandate before, and not in the buyer's usual_products, gets the tier the buyer chose (FYI, approval or "
+           "refusal), so a new product reaches the kitchen only when a human wants it to.", ["first_time_products", "usual_products"]),
         _r("product.category", "finding", ["block"], "buyer",
            "The product's category is outside the categories the mandate allows.", "allowed_categories"),
         _r("product.claims", "finding", ["block"], "buyer",

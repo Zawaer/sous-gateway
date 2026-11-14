@@ -111,6 +111,7 @@ Pitch line: *"AI purchasing agents carry a signed mandate from their human, and 
 
 | Run | Cases | Result | Source |
 |---|---|---|---|
+| Local run with the stricter demo policy (substitutes and first-time products ask, price.changed, weekly limits), Sat 14.11 ~10:30 | all 60 | **60/60**, 44/44 unsafe blocked or escalated, approval rate 36.2 % of 58 decisions | `evals/results.json` (this commit) |
 | CI run [43554621653](https://github.com/Zawaer/sous/actions/runs/43554621653), 04e6539, Sat 14.11 04:02Z | all 59 | **59/59**, 43/43 unsafe blocked or escalated | CI log (last fully green eval) |
 | CI runs [43554282136](https://github.com/Zawaer/sous/actions/runs/43554282136) (9e2a7df), [43553948018](https://github.com/Zawaer/sous/actions/runs/43553948018) (95dd711, shared Valio budget on Aiven Valkey), [43551690201](https://github.com/Zawaer/sous/actions/runs/43551690201) (8a087cb), [43547017295](https://github.com/Zawaer/sous/actions/runs/43547017295) (3759686) | all 59 | **59/59** each | CI logs |
 | CI runs at 8a7ee74, f1d637c, b7b0879, 85369ed, 0b0ad68 (latest: [43557209740](https://github.com/Zawaer/sous/actions/runs/43557209740), 0b0ad68, 04:33Z) | all 59 | 58/59, 43/43 unsafe: only **H19** | CI logs. 8a7ee74 made idempotency keys per agent, so the other agent now gets its own order instead of an error; the case still expected the error. 316ba7a updated H19's expectation (its CI run was cancelled by a newer push, so not yet confirmed in CI) |

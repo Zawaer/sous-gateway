@@ -271,7 +271,7 @@ cases:
     expect: {outcome: ask, status: pending_approval, rules: [supply.reliability]}
 
   - id: H14
-    title: Substitute for an unavailable product (hotel allows it with an FYI)
+    title: Substitute for an unavailable product needs a human's yes (every demo mandate asks for substitutes)
     request: "Our usual lactose-free skimmed milk (464119) can't make Monday. Find the best substitute, 200 litres."
     mandate: M-HOTEL-AURORA
     agent: aurora-purchasing-agent
@@ -280,8 +280,8 @@ cases:
     unit: L
     expect:
       lines_type: maito
-      outcome: notify
-      status: ordered
+      outcome: ask
+      status: pending_approval
       rules: [substitution]
       substitutes_found: true
       lines_have_claims: [FREE_FROM_LACTOSE]
@@ -705,8 +705,8 @@ cases:
       options_kinds: [split_with_substitute, substitute]
       options_first_kind: split_with_substitute
       options_cover_need: true
-      options_preview: {split_with_substitute: notify}
-      second: {outcome: notify, status: ordered, rules: [substitution]}
+      options_preview: {split_with_substitute: ask}
+      second: {outcome: ask, status: pending_approval, rules: [substitution]}
 
   - id: O02
     title: One product short -> split with a substitute, which the hospital's mandate sends to a human
@@ -740,8 +740,8 @@ cases:
       options_first_kind: substitute
       options_first_tier_in: [best, better]
       options_cover_need: true
-      options_preview: {substitute: notify}
-      second: {outcome: notify, status: ordered, rules: [substitution]}
+      options_preview: {substitute: ask}
+      second: {outcome: ask, status: pending_approval, rules: [substitution]}
 
   - id: O04
     title: Undeliverable -> substitutes ranked good / better / best, each with its mandate tier
@@ -758,7 +758,7 @@ cases:
       options_kinds: [substitute]
       options_first_tier_in: [best, better]
       options_cover_need: true
-      options_preview: {substitute: notify}
+      options_preview: {substitute: ask}
 
   - id: O05
     title: Nothing by Saturday -> 'all later' option previews ask under the hotel's mandate

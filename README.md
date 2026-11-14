@@ -6,7 +6,7 @@ Built at Junction 2026 for Valio Aimo's challenge "Trusted Trade Agents".
 
 ## Judge path in 5 minutes
 
-The demo server is production, `https://135-181-8-209.sslip.io`, set as `SOUS` below. It is redeployed from `main` until the Sun 15.11 08:00 Helsinki freeze. If `curl $SOUS/rules` returns 404, it is still on the older build (no `/rules`, AP2 exports, read scopes or demo clock): use staging, `https://staging.135-181-63-134.sslip.io`, which runs current `main` and is the fallback. [docs/STATUS.md](docs/STATUS.md#deployed-now) says what runs where. Needs `curl` and `jq`.
+The demo server is production, `https://135-181-8-209.sslip.io`, set as `SOUS` below. It is redeployed from `main` until the Sun 15.11 08:00 Helsinki freeze. Staging, `https://staging.135-181-63-134.sslip.io`, runs the same code and is the fallback if production is ever down; [docs/STATUS.md](docs/STATUS.md#deployed-now) says what runs where. Needs `curl` and `jq`.
 
 1. **Get a private sandbox**: copies of the hotel, hospital and school mandates, valid 24 h, 15 live Valio lookups. The two tokens in the response are shown once.
    ```bash
@@ -37,7 +37,7 @@ The demo server is production, `https://135-181-8-209.sslip.io`, set as `SOUS` b
    jq -r '.prompts[] | .title, .prompt, ""' sandbox.json
    ```
 
-Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it: scripted cases (no LLM, live Valio prices) 59/59 in a local run (`evals/results.json` at 285f126), 43/43 unsafe actions blocked or escalated; 59/59 also in CI on CRACI (last green: run 43554621653, 04e6539). LLM agent, live in CI run 43557209740 (0b0ad68), 49 buyer sentences: Kimi K3.1 Pro 48/49, Gemini 4 Hydrogen 46/49, 0 mandate violations auto-ordered.
+Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it: scripted cases (no LLM, live Valio prices) 60/60 in a local run with the stricter demo policy (`evals/results.json`, Sat 14.11 10:30), 44/44 unsafe actions blocked or escalated; 59/59 also in CI on CRACI (last green: run 43554621653, 04e6539). LLM agent, live in CI run 43557209740 (0b0ad68), 49 buyer sentences: Kimi K3.1 Pro 48/49, Gemini 4 Hydrogen 46/49, 0 mandate violations auto-ordered.
 
 ## Where to read more
 
@@ -55,6 +55,7 @@ Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it: scripted c
 - **Search** 17,546 products in Finnish, Swedish and English, with filters for claims, allergens, labels and temperature. Search uses a local index and costs no Valio API calls.
 - **Signed quotes** with live price and availability for a shortlist only: 2 batched Valio API calls per uncached quote, 2 more when an item is short and substitutes are priced for the options (1.0 on average with the cache in `evals/results.json`). Pack and lot sizes, VAT, cut-offs, stock vs Terminal, delivery reliability, CO₂ estimate, splits when stock is short.
 - **Mandate engine** in plain code. Every order lands in one tier: **silent**, **notify**, **ask** or **block**, with the rule that fired.
+- **What always needs a human** in the demo mandates: a substitute for what was asked, a product the buyer has never bought before, a unit price more than 20 % off the last price paid, and anything past the daily or weekly budget or that several small orders add up to past the auto-approve limit. **Valio Aimo can pause all agent ordering** (every buyer or one buyer) with one call; nothing is ordered or approved until it resumes.
 - **Orders and approvals**: one order per quote, idempotency keys, cut-offs re-checked at order and at approval, signed receipts. A human approves or rejects from a phone link.
 - **Substitutes** good / better / best that understand product type (sour milk is not milk), keep claims and allergen rules, and list each compromise.
 - **Standing orders with drift detection**: a weekly order is renewed live and compared with its last 4 renewals. Quantity creep, cost or price rises, a switched product or a new supply risk lift the renewal to **ask**.

@@ -650,7 +650,7 @@ def _evaluate(mandate: Mandate, agent_id: str, q: dict, now: datetime, extra_fin
 
 
 def _spend_context(mandate: Mandate, now: datetime) -> dict:
-    """History for spend.weekly_limit, spend.split_orders and product.first_time; read only when the mandate uses
+    """History for spend.weekly_limit, spend.split_orders, product.first_time and price.changed; read only when it uses
     the rule. An order being approved isn't 'ordered' yet, so it never counts against itself."""
     local = now.astimezone(config.TZ)
     out: dict = {}
@@ -662,6 +662,8 @@ def _spend_context(mandate: Mandate, now: datetime) -> dict:
         out["recent_orders"] = store.ordered_since(mandate.id, since.isoformat(timespec="milliseconds"))
     if mandate.first_time_products:
         out["ordered_products"] = store.ordered_product_ids(mandate.id)
+    if mandate.max_price_change_pct:
+        out["last_prices"] = store.last_unit_prices(mandate.id)
     return out
 
 
