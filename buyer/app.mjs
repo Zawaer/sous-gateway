@@ -10,6 +10,10 @@ const statusPollMs = 4000;
 let statusTimer;
 let quoteExpiryTimer;
 const units = { L: 'L', KG: 'kg', SALES_UNIT: 'packs' };
+const salesUnits = new Map(Object.entries({
+  ST: 'pcs', KPL: 'pcs', PRK: 'packs', KI: 'cartons', PSS: 'bags',
+  BOT: 'bottles', PLO: 'bottles', RAS: 'tins', SK: 'cases',
+}));
 const tiers = {
   silent: 'Within mandate', notify: 'Within mandate · buyer notification required',
   ask: 'Human approval required', block: 'Blocked by mandate',
@@ -349,7 +353,7 @@ function renderQuote(quote) {
     const row = element('li');
     row.append(element('strong', line.name));
     const details = [
-      line.quantity != null && `${line.quantity} ${line.sales_unit || 'sales units'}`,
+      line.quantity != null && `${line.quantity} ${salesUnits.get(line.sales_unit?.toUpperCase()) ?? (line.sales_unit || 'sales units')}`,
       line.covers?.unit && `${line.covers.amount} ${units[line.covers.unit]}`,
       line.delivery_date && `Delivery ${line.delivery_date}`,
       line.orderable ? money(line.line_total_ex_vat, quote.currency) : 'Unavailable for this order',
