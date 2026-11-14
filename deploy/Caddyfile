@@ -1,0 +1,6 @@
+# Reverse proxy for the Sous gateway. SOUS_DOMAIN comes from compose.https.yaml.
+# Add more names separated by commas to serve aliases (e.g. an old hostname during a move).
+{$SOUS_DOMAIN} {
+	encode gzip
+	reverse_proxy valtakirja:8000
+}

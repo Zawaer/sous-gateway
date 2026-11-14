@@ -1,0 +1,20 @@
+# HTTPS in front of the gateway with Caddy (automatic Let's Encrypt certificates).
+# Use together with the main compose file:
+#   SOUS_DOMAIN=sous.example.com docker compose -f compose.yaml -f deploy/compose.https.yaml up -d --build
+# With no domain of your own, <ip-with-dashes>.sslip.io resolves to the server and works with Let's Encrypt.
+services:
+  valtakirja:
+    ports: !reset []          # only Caddy is reachable from outside
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      SOUS_DOMAIN: ${SOUS_DOMAIN:?set SOUS_DOMAIN, e.g. 1-2-3-4.sslip.io}
+    volumes:
+      - caddy-data:/data      # certificates; keep across redeploys to avoid Let's Encrypt rate limits
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on: [valtakirja]
+
+volumes:
+  caddy-data:
