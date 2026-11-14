@@ -399,7 +399,8 @@ def seed(sid: str, mandate_id: str, token: str) -> dict | None:
     o = r["order"]
     return {"note": SEED_NOTE, "standing_order_id": so["id"], "held_order_id": o["id"], "status": o["status"],
             "why": r["drift"]["summary"],
-            "reasons": hold_reasons(o["decision"]["findings"]), "order_url": o["order_url"]}
+            "reasons": hold_reasons(o["decision"]["findings"]), "order_url": o["order_url"],
+            "approval_url": o.get("approval_url")}
 
 
 _RANK = {"silent": 0, "notify": 1, "ask": 2, "block": 3}
@@ -449,7 +450,8 @@ def quickstart(sid: str, base: str, token: str, approver: str, mandates: list[di
                        f"\"quote_id\": \"<quote.id>\", \"idempotency_key\": \"{sid.lower()}-<quote.id>\"}}'"),
         "curl_approve": (f"curl -s -X POST {base}/orders/<PO-id>/approve -H 'X-Approver-Code: {approver}' "
                          "-H 'Content-Type: application/json' -d '{\"by\": \"<your name>\"}'"),
-        "seller_ui": f"{base}/ui/?sandbox={sid}#/inbox",
+        "buyer_side": f"{base}/ui/buyer.html?sandbox={sid}#/inbox",  # where the buyer approves held orders
+        "seller_ui": f"{base}/ui/?sandbox={sid}#/inbox",  # Valio Aimo's side: held orders are read-only there
         "break_ui": f"{base}/ui/break.html?sandbox={sid}",
         "buyer_ui": f"{base}/buyer/?sandbox={sid}&mandate={hotel['mandate_id']}&agent={hotel['agent_id']}",
         "status": f"{base}/sandbox/{sid}",

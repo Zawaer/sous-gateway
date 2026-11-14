@@ -13,6 +13,8 @@ The short version: a human issues a **mandate** to their purchasing agent. The a
 | Gateway | Valio Aimo's Sous service (this repo) | Holds the catalog, calls Valio Aimo's price and availability APIs, signs mandates, quotes and receipts, enforces the mandate, writes the audit log. |
 | Approver | The buyer human (or someone they delegate to) | Calls approve or reject on orders in `pending_approval`. |
 
+**Buyer side and seller side.** The web UI has two sides of one app. The **buyer side** (`/ui/buyer.html`) is the buyer's own: Approvals, Orders, Your rules, Standing, History. Held orders are decided there, and buyers accept or reject Valio's post-order amendments there. The **seller side** (`/ui/`) is Valio Aimo's: Orders, Audit log, Mandates, Standing, Stats, Insights, and reporting delivery exceptions. Held orders are read-only there ("waiting for the buyer", with a link to the buyer side), because a held order is the buyer's decision, not Valio's. Every order carries `order_url` (seller side), `buyer_url` (buyer side) and, while held, `approval_url` (the buyer dashboard, or the passkey page when the mandate accepts only passkeys). Every notification links to the buyer side. Today both sides use the same demo approver code; in production the buyer side would sit behind the buyer's own login.
+
 | Valio Aimo's suggestions | `sous/suggest.py`, actor `valio-aimo-suggestions` | Offers sponsored, mandate-checked suggestions to the buyer agent. Never quotes or orders. |
 
 Human actions (issue or revoke a mandate, approve or reject an order, pause or resume a standing order, store simulated standing-order history, send a test notification) require the `X-Approver-Code` header when `SOUS_APPROVER_CODE` is set. This is a demo stand-in for the buyer's real login (see [DECISIONS.md](DECISIONS.md)).
@@ -975,7 +977,7 @@ The approver code proves someone knew a shared secret. A passkey approval proves
 
 **RP ID and origin.** `SOUS_PASSKEY_RP_ID` and `SOUS_PASSKEY_ORIGINS` (comma-separated), else the host of `SOUS_PUBLIC_BASE_URL` and that origin, else the request's own host (development). WebAuthn needs HTTPS (or `localhost`); the sslip.io deployments qualify. A passkey works only on the RP ID it was enrolled on.
 
-**Page.** `/ui/approve.html?order=PO-…&sandbox=SBX-…` is every held order's `approval_url` (and so the `order.ask` notification link); `order_url` still opens the order in the seller UI. It shows the amount, the rules that held the order, the approve-by countdown and the lines, then the decision:
+**Page.** `/ui/approve.html?order=PO-…&sandbox=SBX-…` is the buyer's one-order passkey page: the `approval_url` of held orders whose mandate accepts only passkeys, and linked from every held order on the buyer side. Other held orders' `approval_url` is the buyer dashboard (`buyer_url`, see "Buyer side and seller side" in section 1); `order_url` opens the order on Valio Aimo's seller side. It shows the amount, the rules that held the order, the approve-by countdown and the lines, then the decision:
 
 - a passkey is set up: "Approve €… with passkey" (primary) and "Reject" (signed with the passkey); unless the mandate requires a passkey, "Approve with the approver code instead" underneath (name + code, secondary);
 - no passkey, mandate requires one: "Set up a passkey" (needs the code once) and "Reject" with the code;

@@ -311,11 +311,12 @@ def test_offline_script_verifies_saved_event(client, tmp_path):
     assert r.returncode == 1 and "FAIL order_id" in r.stdout
 
 
-def test_approval_url_is_the_approval_page_for_every_held_order():
+def test_approval_url_is_on_the_buyer_side_for_every_held_order():
     o, op = held("M"), held("MP")
-    assert op["approval_url"] == f"/ui/approve.html?order={op['id']}"
-    assert o["approval_url"] == f"/ui/approve.html?order={o['id']}"
-    assert o["order_url"] == f"/ui/#/orders/{o['id']}"  # order_url unchanged
+    assert op["approval_url"] == f"/ui/approve.html?order={op['id']}"  # passkey-only mandate: the passkey page
+    assert o["approval_url"] == f"/ui/buyer.html#/orders/{o['id']}"  # otherwise the buyer dashboard
+    assert o["buyer_url"] == f"/ui/buyer.html#/orders/{o['id']}"
+    assert o["order_url"] == f"/ui/#/orders/{o['id']}"  # order_url: Valio Aimo's seller side
 
 
 def test_approval_page_offers_code_unless_passkey_required():

@@ -109,10 +109,20 @@ def _sentence(s: str) -> str:
     return s.strip().rstrip(".")
 
 
+def buyer_link(order: dict) -> str | None:
+    """The order on the buyer side (web/buyer.html). Orders stored before buyer_url existed: derived from order_url
+    (<base>/ui/<?sandbox>#/orders/<id> -> <base>/ui/buyer.html<?sandbox>#/orders/<id>)."""
+    if order.get("buyer_url"):
+        return order["buyer_url"]
+    u = order.get("order_url")
+    return u.replace("/ui/", "/ui/buyer.html", 1) if u and "/ui/buyer.html" not in u else u
+
+
 def compose(event: str, order: dict, mandate: Mandate) -> dict:
-    """Title, message and link for one event, in plain language."""
+    """Title, message and link for one event, in plain language. Every link goes to the buyer side: these messages
+    are for the buyer's people (and the agent acting for them), never Valio Aimo's seller view."""
     oid, total = order.get("id"), eur(order.get("total_ex_vat"))
-    url = order.get("order_url")
+    url = buyer_link(order)
     if event == "order.notify":
         fs = _findings(order, "notify")
         if any(f["rule"] == "spend.notify" for f in fs) and mandate.notify_above_eur is not None:
@@ -273,7 +283,7 @@ _AMEND_KIND = {"short_pick": "short pick", "delay": "delay", "substitution_at_pi
 def amendment_message(event: str, order: dict) -> dict:
     """order.amended / order.amendment_pending / order.amendment_decided: `order["amendment"]` is the amendment
     (sous/amendments.py)."""
-    a, oid, url = order.get("amendment") or {}, order.get("id"), order.get("order_url")
+    a, oid, url = order.get("amendment") or {}, order.get("id"), buyer_link(order)
     kind = _AMEND_KIND.get(a.get("kind"), a.get("kind"))
     why = _sentence(next((f["message"] for f in a.get("findings") or [] if f.get("outcome") == a.get("tier")),
                          a.get("reason") or ""))

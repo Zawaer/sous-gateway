@@ -378,11 +378,20 @@ def order_url(order_id: str, sandbox_id: str | None = None) -> str:
     return f"{config.PUBLIC_BASE_URL}/ui/{q}#/orders/{order_id}"
 
 
+def buyer_url(order_id: str, sandbox_id: str | None = None) -> str:
+    """The order on the buyer side (web/buyer.html): the buyer's own dashboard, where held orders are decided.
+    order_url is Valio Aimo's seller side, where held orders are read-only."""
+    q = f"?sandbox={sandbox_id}" if sandbox_id else ""
+    return f"{config.PUBLIC_BASE_URL}/ui/buyer.html{q}#/orders/{order_id}"
+
+
 def approval_url(order_id: str, mandate) -> str:
-    """Where the human decides a held order: the one-order approval page (web/approve.html), which offers a
-    passkey and, unless the mandate requires a passkey, the approver code."""
+    """Where the buyer's human decides a held order, always on the buyer side: the buyer dashboard (code or passkey),
+    or straight to the one-order passkey page (web/approve.html) when the mandate accepts only passkeys."""
     sid = getattr(mandate, "sandbox", None)
-    return f"{config.PUBLIC_BASE_URL}/ui/approve.html?order={order_id}" + (f"&sandbox={sid}" if sid else "")
+    if getattr(mandate, "approval_method", "any") == "passkey":
+        return f"{config.PUBLIC_BASE_URL}/ui/approve.html?order={order_id}" + (f"&sandbox={sid}" if sid else "")
+    return buyer_url(order_id, sid)
 
 
 def request_quote(req: QuoteRequest, agent_token: str | None = None, approver: bool = False) -> dict:
@@ -844,6 +853,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
                      "at": now.isoformat(timespec="milliseconds")},
         "approval": None,
         "order_url": order_url(oid, getattr(mandate, "sandbox", None)),
+        "buyer_url": buyer_url(oid, getattr(mandate, "sandbox", None)),
         "approval_url": approval_url(oid, mandate) if status == "pending_approval" else None,
         "idempotency_key": idempotency_key,
         "agent_rationale": rationale or q.get("rationale"),

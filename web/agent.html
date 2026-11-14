@@ -221,7 +221,7 @@ function renderSandbox() {
   $("#sbx-create").removeAttribute("data-i18n");
   $("#sbx-status").innerHTML = t("agent.sbx_line_html", { id: `<b class="mono">${esc(state.id)}</b>` }) +
     (state.expires_at ? " · " + esc(t("agent.sbx_until", { time: I18N.time(state.expires_at) })) : "") +
-    " · " + t("agent.sbx_approve_html", { href: `./?sandbox=${encodeURIComponent(state.id)}#/inbox` }) +
+    " · " + t("agent.sbx_approve_html", { href: `buyer.html?sandbox=${encodeURIComponent(state.id)}#/inbox` }) +
     (state.approver ? " " + t("agent.sbx_with_token_html", { token: `<span class="mono">${esc(state.approver.slice(0, 10))}…</span>` }) : "") +
     ". " + esc(t("agent.sbx_acting"));
   $("#sbx-create").textContent = t("agent.sbx_new");

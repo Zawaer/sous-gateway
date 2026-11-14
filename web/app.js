@@ -1,4 +1,7 @@
-// Sous gateway UI: approval inbox, orders, audit log and mandates.
+// Sous gateway UI, two sides of one app (same file, chosen by <body data-side>):
+//   buyer  (/ui/buyer.html): the buyer's own people. Approvals live here: a held order is the buyer's decision.
+//   seller (/ui/):           Valio Aimo. Orders, audit, mandates, standing orders, stats, insights; held orders are
+//                            read-only ("waiting for the buyer") with a link to the buyer side.
 // Plain JS, no build step. Talks to the gateway's REST API on the same origin
 // (override with ?api=http://host:port for development).
 
@@ -20,6 +23,10 @@ const store = {
 // Its approver token (sbxa_…) is kept per sandbox, and also unlocks substitutes and suggestions there.
 const SANDBOX = (new URLSearchParams(location.search).get("sandbox") || "").trim().toUpperCase();
 const CODE_KEY = "vk-approver-code" + (SANDBOX ? ":" + SANDBOX : "");
+const SIDE = document.body.dataset.side === "buyer" ? "buyer" : "seller";
+const SBX_QS = SANDBOX ? `?sandbox=${encodeURIComponent(SANDBOX)}` : "";
+const buyerLink = (id) => `/ui/buyer.html${SBX_QS}#/orders/${encodeURIComponent(id)}`;
+const passkeyLink = (id) => `/ui/approve.html?order=${encodeURIComponent(id)}${SANDBOX ? `&sandbox=${encodeURIComponent(SANDBOX)}` : ""}`;
 const SANDBOX_LISTS = /^\/(orders|mandates|audit|notifications|standing-orders)(\?|$)/;
 
 // One code prompt at a time: the page refreshes every few seconds, so parallel 401s share one dialog,
@@ -296,10 +303,11 @@ views.inbox = {
     const main = orders.length
       ? `${orders.map((o) => inboxCard(o, !firstRender && !seen.has(o.id))).join("")}`
       : `<div class="empty"><div class="big">Nothing waiting</div>
-          <p>Orders that fall outside an agent's mandate show up here for a human to approve or reject.</p>
+          <p>${SIDE === "buyer" ? "Orders that fall outside your agent's mandate show up here for you to approve or reject."
+            : "Orders held by a buyer's mandate show up here while they wait for the buyer's own approval."}</p>
           <p><a href="#/orders">See the last decided orders</a> · try it yourself: <a href="/docs#/sandbox">POST /sandbox</a> gives you
             private copies of the demo buyers and a token to approve with.</p></div>`;
-    view.innerHTML = `<div class="head"><div><h2>${orders.length ? "Waiting for a human" : "Approvals"}</h2>
+    view.innerHTML = `<div class="head"><div><h2>${orders.length ? (SIDE === "buyer" ? "Waiting for you" : "Waiting for buyers") : (SIDE === "buyer" ? "Approvals" : "Held")}</h2>
       <div class="muted">${orders.length ? `${orders.length} order${orders.length > 1 ? "s" : ""} held by the mandate engine` : "Agents are ordering within their mandates."}</div></div></div>
       <div class="inbox-grid"><div>${main}</div>
         <aside class="feed"><div class="feed-head"><span class="live-dot"></span>Live activity</div><div id="feed"></div></aside></div>`;
@@ -366,14 +374,28 @@ function inboxCard(o, isNew = false) {
       <dt>Mandate</dt><dd class="mono">${esc(o.mandate_id)}</dd>
       <dt>Order</dt><dd><a href="#" data-open="${esc(o.id)}" class="mono">${esc(o.id)}</a> · ${eur(o.total_inc_vat)} incl. VAT · delivery ${dateOnly(o.delivery_date)}</dd>
     </dl>
-    <textarea data-note rows="2" placeholder="Note for the agent and the log (optional)"></textarea>
+    ${SIDE === "buyer" ? `<textarea data-note rows="2" placeholder="Note for the agent and the log (optional)"></textarea>
     ${rememberBox(o)}
     ${editBox(o)}
     <div class="actions">
       <button class="btn no" data-act="reject">Reject</button>
       <button class="btn yes" data-act="approve">Approve ${eur(o.total_ex_vat)}</button>
     </div>
+    ${passkeyNote(o)}` : waitingForBuyer(o)}
   </article>`;
+}
+
+// Seller side: a held order is the buyer's decision, so Valio Aimo sees it read-only, with the way to the buyer side.
+function waitingForBuyer(o) {
+  return `<div class="wait-buyer"><p class="note-line">${ic("hourglass_top")} Waiting for ${esc(bn(o.buyer))}'s approval.
+      Held orders are decided by the buyer's own people on the buyer side, not by Valio Aimo.</p>
+    <a class="btn plain sm" href="${buyerLink(o.id)}">Open on the buyer side ${ic("arrow_forward")}</a></div>`;
+}
+
+// Buyer side: the passkey page (web/approve.html) approves this exact order with the buyer's own device.
+function passkeyNote(o) {
+  return `<p class="small muted">Or <a href="${passkeyLink(o.id)}">approve with a passkey</a> on your phone
+    (required when the mandate accepts only passkeys).</p>`;
 }
 
 // Remember a human's allergen clearance (sous/clearance.py): offered only when the order waits on allergen.unknown.
@@ -386,7 +408,7 @@ function rememberBox(o) {
 }
 // Approve with changes (sous/approve_changes.py): edit quantities, re-priced live and re-checked by the gateway.
 function editBox(o) {
-  if (!(o.lines || []).length || /approve\.html/.test(o.approval_url || "")) return "";  // passkey mandates: no edits
+  if (!(o.lines || []).length) return "";
   return `<details class="qty-edit"><summary>${ic("edit")} Change quantities</summary>
     <div class="qty-rows">${o.lines.map((l, i) => `<label><span>${esc(pname(l.name))}</span>
       <input type="number" min="0" step="any" inputmode="decimal" data-line="${i}" data-was="${esc(l.quantity)}" value="${esc(l.quantity)}">
@@ -410,10 +432,11 @@ function amendSection(o) {
     return `<li class="amend">${ic(icon, am.status === "pending_buyer" ? "st-ask" : "st-notify")}
       <div><b>${label}</b> ${what} <span class="muted small">· ${esc(AMEND_STATUS[am.status] || am.status)} · ${when(am.reported_at)}</span>
         <div class="small muted">${esc(am.reason)}</div>
-        ${am.status === "pending_buyer" ? `<div class="amend-acts"><button class="btn plain sm" data-amend="${esc(am.id)}" data-res="reject">Reject</button>
+        ${am.status === "pending_buyer" && SIDE === "seller" ? `<div class="small muted">Waiting for the buyer to accept or reject it.</div>` : ""}
+        ${am.status === "pending_buyer" && SIDE === "buyer" ? `<div class="amend-acts"><button class="btn plain sm" data-amend="${esc(am.id)}" data-res="reject">Reject</button>
           <button class="btn yes sm" data-amend="${esc(am.id)}" data-res="accept">Accept</button></div>` : ""}</div></li>`;
   }).join("");
-  const can = o.status === "ordered";
+  const can = o.status === "ordered" && SIDE === "seller";  // Valio reports exceptions; the buyer accepts or rejects
   return `<h3>After the order</h3>
     ${list ? `<ul class="amends">${list}</ul>` : `<p class="small muted">No delays or short deliveries reported.</p>`}
     ${can ? `<details class="amend-form"><summary>${ic("report")} Report a delivery exception (Valio)</summary>
@@ -519,7 +542,7 @@ function setBadge(n) {
   const b = $("#badge");
   b.hidden = !n;
   b.textContent = n;
-  document.title = (n ? `(${n}) ` : "") + "Sous gateway";
+  document.title = (n ? `(${n}) ` : "") + (SIDE === "buyer" ? "Sous · your orders" : "Sous · Valio Aimo");
 }
 
 // All orders, filterable by status.
@@ -627,14 +650,15 @@ async function openOrder(id) {
     <details><summary>Raw JWS</summary><pre>${esc(o.receipt_jws)}</pre></details>
     <h3>History</h3>
     <div id="order-audit" class="list"><div class="empty">Loading…</div></div>
-    ${o.status === "pending_approval" ? `<div class="actionbar decide" data-order="${esc(o.id)}">
+    ${o.status === "pending_approval" && SIDE === "seller" ? waitingForBuyer(o) : ""}
+    ${o.status === "pending_approval" && SIDE === "buyer" ? `<div class="actionbar decide" data-order="${esc(o.id)}">
       <input data-note type="text" placeholder="Note for the agent and the log (optional)" aria-label="Note">
       ${rememberBox(o)}
       ${editBox(o)}
       <div class="actionbar-buttons">
         <button class="btn no" data-act="reject">Reject</button>
         <button class="btn yes" data-act="approve">Approve ${eur(o.total_ex_vat)}</button>
-      </div></div>` : ""}
+      </div>${passkeyNote(o)}</div>` : ""}
   `);
   const box = $("#sheet-body [data-order]");
   if (box) { tickDeadlines(); wireDecision(box, () => openOrder(id)); }
@@ -1227,7 +1251,7 @@ views.today = {
           ${o.status === "rejected" || o.status === "expired" ? `<p>${msg(firstReason(o))}</p>` : ""}
           ${reasons(o).length ? `<ul class="why">${reasons(o).slice(0, 4).map((f) => `<li>${msg(f.message)}</li>`).join("")}
             ${reasons(o).length > 4 ? `<li class="muted">+ ${reasons(o).length - 4} more</li>` : ""}</ul>` : ""}
-          <a class="btn plain sm" href="#/orders/${esc(o.id)}">${o.status === "pending_approval" ? "Review and decide" : "Open order"} ${ic("arrow_forward")}</a>
+          <a class="btn plain sm" href="#/orders/${esc(o.id)}">${o.status === "pending_approval" && SIDE === "buyer" ? "Review and decide" : "Open order"} ${ic("arrow_forward")}</a>
           <span class="muted mono small">${esc(o.id)}</span></div></details>`;
     const buyerSigned = mandates.filter((m) => m.issuer?.kind === "buyer").length;
     const authed = mandates.filter(authRequired).length;
@@ -1238,13 +1262,13 @@ views.today = {
     view.innerHTML = `<div class="head"><h2>Today</h2>
         <span class="muted">${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Helsinki" })}</span></div>
       <div class="mstats">
-        ${stat("pending_actions", pending.length ? "st-ask" : "", pending.length, "waiting for you", "#/inbox")}
+        ${stat("pending_actions", pending.length ? "st-ask" : "", pending.length, SIDE === "buyer" ? "waiting for you" : "waiting for buyers", "#/inbox")}
         ${stat("check_circle", "", ordered.length, `ordered, ${eur(spent)}`, "#/orders")}
         ${stat("block", stopped.length ? "st-block" : "", stopped.length, "stopped", "#/orders")}
         ${stat("trending_up", heldDrift ? "st-ask" : "", heldDrift, "drift held", "#/standing")}
         ${stat(chain.ok ? "verified" : "gpp_bad", chain.ok ? "st-silent" : "st-block", chain.ok ? "Intact" : "Broken", "audit chain", "#/audit")}
       </div>
-      <section class="msec"><h3>Waiting for you</h3>
+      <section class="msec"><h3>${SIDE === "buyer" ? "Waiting for you" : "Waiting for buyers"}</h3>
         ${pending.length ? `<div class="mlist">${pending.slice(0, 6).map((o) => {
           const cut = earliestCutoff(o);
           return row(o, cut ? `<span class="mrow-due small">${ic("schedule")}<span class="deadline" data-until="${esc(cut)}"></span></span>` : "");
@@ -1544,11 +1568,21 @@ async function refresh() {
   }
 }
 
+// Valio Aimo's own views; the buyer side doesn't show them.
+const SELLER_ONLY = new Set(["stats", "insights"]);
+// The side switch keeps the sandbox and, for an open order, the order.
+function syncSideSwitch() {
+  const a = $("#to-other-side");
+  if (a) a.href = (SIDE === "buyer" ? "./" : "buyer.html") + SBX_QS + (location.hash.startsWith("#/orders/") ? location.hash : "");
+}
+window.addEventListener("hashchange", syncSideSwitch);
+syncSideSwitch();
+
 function route() {
   const [path, query] = location.hash.split("?", 2);
   const [, name, openId] = path.match(/^#\/(\w+)(?:\/([\w-]+))?\/?$/) || [];
   const same = current === name && openId;
-  current = views[name] ? name : "today";  // S5: Today is the front page
+  current = views[name] && !(SIDE === "buyer" && SELLER_ONLY.has(name)) ? name : "today";  // S5: Today is the front page
   if (current === "audit" && query !== undefined) {
     views.audit.q = new URLSearchParams(query).get("subject") || "";
   }

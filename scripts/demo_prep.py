@@ -284,10 +284,10 @@ class Prep:
             "agent_token": s["agent_token"], "approver_token": s["approver_token"],
             "held_order_id": (s.get("seeded") or {}).get("held_order_id"),
             "open_in_order": [
-                {"what": "Laptop tab 1: seller inbox (paste the approver token when asked)", "url": qs["seller_ui"]},
+                {"what": "Laptop tab 1: Valio's seller side (paste the approver token when asked)", "url": qs["seller_ui"]},
                 {"what": "Laptop tab 2: buyer page (hotel)", "url": qs["buyer_ui"]},
                 {"what": "Laptop tab 3: break page (paste the agent token)", "url": qs["break_ui"]},
-                {"what": "Phone: seller inbox (approver token)", "url": qs["seller_ui"]},
+                {"what": "Phone: buyer side approvals (approver token)", "url": qs.get("buyer_side", qs["seller_ui"])},
             ],
             "mcp_connect": qs["claude_code"],
             "prompts": s.get("prompts", []),
@@ -345,8 +345,10 @@ class Prep:
         return self.finish()
 
     def check_links_for(self, qs: dict) -> None:
-        for key in ("seller_ui", "break_ui", "buyer_ui", "status"):
-            url = qs.get(key, "")
+        for key in ("seller_ui", "buyer_side", "break_ui", "buyer_ui", "status"):
+            if key not in qs:  # a gateway older than the buyer side has no buyer_side link
+                continue
+            url = qs[key]
             path = url[len(self.base):] if url.startswith(self.base) else url
             if not url.startswith(self.base):
                 self.say(None, f"quickstart {key} points at {url.split('?')[0]}, not {self.base} (SOUS_PUBLIC_BASE_URL?)")

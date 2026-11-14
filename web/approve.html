@@ -41,11 +41,17 @@
 <header class="top">
   <div class="top-in">
     <span class="brand"><svg class="logo" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 4h4l5 11 5-11h4l-7.5 16h-3z" fill="currentColor"/></svg>
-      <span class="name">Sous</span></span>
+      <span class="name">Sous</span><span class="side-tag" data-i18n="approve.side">Buyer</span></span>
+    <a id="all-orders" class="small" href="buyer.html" data-i18n="approve.all_orders" style="margin-left:auto;margin-right:12px">All your orders</a>
     <span data-i18n-toggle></span>
   </div>
 </header>
 <main id="main" aria-live="polite"><p class="muted" data-i18n="approve.loading">Loading the order…</p></main>
+<script>
+// The buyer dashboard link keeps this page's sandbox.
+(() => { const sb = new URLSearchParams(location.search).get("sandbox");
+  document.getElementById("all-orders").href = "buyer.html" + (sb ? "?sandbox=" + encodeURIComponent(sb) : "") + "#/inbox"; })();
+</script>
 <script>
 "use strict";
 // Passkey approval of one held order. Opened from an order link: approve.html?order=PO-…&sandbox=SBX-…
