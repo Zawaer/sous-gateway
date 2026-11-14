@@ -331,8 +331,12 @@ def scene_5(gw: Gateway, when: date) -> None:
                                                    for p in ps}.items())]
         say(_c("33", f"    ! not covered: {g['uncovered']:g} {g.get('unit') or ''} of “{g['item'].get('note')}”. "
                      f"All {len(ps)} candidates out: {', '.join(reasons) or 'no orderable option'}"))
-    show_order(gw.order(agent, mandate, q["id"]), gw.base)
-    say(_c("2", "    The reviewer can verify the flagged ingredients and decide whether to accept the partial order."))
+    o = gw.order(agent, mandate, q["id"])
+    show_order(o, gw.base)
+    if o["status"] == "pending_approval":
+        say(_c("2", "    The reviewer can verify the flagged ingredients and decide whether to accept the partial order."))
+    else:  # e.g. on a day when every candidate for an item is past its cut-off
+        say(_c("2", "    Nothing was ordered: a line that can't be delivered stops the whole basket."))
 
     gw.why = 'Add 2 jars of the Biona cashew nut butter for the dressing.'
     say(_c("1", '"Add 2 jars of the Biona cashew nut butter for the dressing."'))
