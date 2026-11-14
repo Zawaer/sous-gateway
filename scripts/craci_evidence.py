@@ -592,8 +592,25 @@ def build(args) -> tuple[dict, int]:
                                               for x in creators],
                            "status": "recorded" if creators else ("no creating job recorded" if st2 in (200, 404)
                                                                   else problem(st2, body))})
+    # Which branch and commit wrote each cache? (GitHub's view of the creating job CRACI named.) A cache written
+    # by a pull-request or feature-branch job and restored on main is the cache-poisoning path.
+    gh_jobs: dict[str, dict] = {}
+    for x in ledger:
+        for cr in x["craci_creators"]:
+            jid = cr["github_job_id"]
+            if cr["repository"] == args.repo and jid not in gh_jobs and len(gh_jobs) < 40:
+                st3, gj = api.github(f"/repos/{args.repo}/actions/jobs/{jid}", {}, f"github_job_{jid}")
+                gh_jobs[jid] = gj if st3 == 200 and isinstance(gj, dict) else {}
+            gj = gh_jobs.get(jid) or {}
+            cr.update({"branch": gj.get("head_branch"), "commit": (gj.get("head_sha") or "")[:12] or None,
+                       "run_id": str(gj["run_id"]) if gj.get("run_id") else None, "job_name": gj.get("name")})
+    off_main = sorted({f"{x['key'][:60]} <- {cr['branch']}" for x in ledger for cr in x["craci_creators"]
+                       if cr.get("branch") not in (None, bundle.get("branch") or "main")})
     foreign = [x for x in ledger for cr in x["craci_creators"] if cr["repository"] not in (None, args.repo)]
     prov["gha_caches"] = {"checked": len(ledger), "created_on_craci": sum(1 for x in ledger if x["craci_creators"]),
+                          "created_on_other_branch": off_main,
+                          "creator_commits": sorted({cr["commit"] for x in ledger for cr in x["craci_creators"]
+                                                     if cr.get("commit")}),
                           "not_recorded": sum(1 for x in ledger if x["status"] == "no creating job recorded"),
                           "lookup_failed": sum(1 for x in ledger if x["status"].startswith("HTTP")),
                           "created_by_other_repo": len(foreign),
@@ -665,6 +682,16 @@ def markdown(bundle: dict, jwk: dict | None, key_note: str | None, digest: str |
             if x["allowed"] and x["declared_by"] != "github-infra (implicit)" and x["bytes_out"]:
                 out.append(f"- `{j['job']}` -> {x['host']}:{x['port']}: {_kb(x['bytes_out'])} out, "
                            f"{_kb(x['bytes_in'])} in ({x['declared_by']})")
+    blocked = [(j["job"], x) for j in bundle["jobs"] for x in (j.get("egress") or {}).get("destinations", [])
+               if x["denied"]]
+    if blocked:
+        out += ["", "Blocked by the deny policy (attempts that never left the VM):", ""]
+        out += [f"- `{k}` -> {x['host']}:{x['port']} x{x['denied']} ({'; '.join(x['deny_reasons']) or 'denied'})"
+                for k, x in blocked]
+    for j in bundle["jobs"]:
+        if j.get("suggested_network_policy"):
+            out += ["", f"<details><summary>`{j['job']}` runs in observe mode: the deny policy its trace implies"
+                        "</summary>", "", "```yaml", j["suggested_network_policy"], "```", "</details>"]
     sb = bundle["sboms"]
     if "docker_craci_vs_syft" in sb:
         d = sb["docker_craci_vs_syft"]
@@ -696,7 +723,10 @@ def markdown(bundle: dict, jwk: dict | None, key_note: str | None, digest: str |
         fam = ", ".join(f"{k} x{v}" for k, v in sorted(c["families"].items()))
         out += ["", f"Cache lineage: {c['checked']} Actions caches named in the job SBOMs ({fam}): "
                     f"{c['created_on_craci']} created by a CRACI job it can name, {c['not_recorded']} with no creating "
-                    f"job recorded, {c['created_by_other_repo']} from another repo, {c['lookup_failed']} lookups failed."]
+                    f"job recorded, {c['created_by_other_repo']} from another repo, {c['lookup_failed']} lookups failed; "
+                    f"written by {len(c['creator_commits'])} commits, "
+                    f"{len(c['created_on_other_branch'])} by a job on another branch"
+                    f"{': ' + '; '.join(c['created_on_other_branch']) if c['created_on_other_branch'] else ''}."]
     imgs = bundle["provenance"].get("pulled_images") or []
     if imgs:
         out += ["", "Images pulled (by digest, from CRACI's SBOMs): " + "; ".join(
