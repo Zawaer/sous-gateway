@@ -68,7 +68,9 @@ def token(c, client, **form):
     return c.post("/oauth/token", data={"client_id": client["client_id"], **form})
 
 
-def mcp_quote(c, access):
+def mcp_quote(c, access, calls=None):
+    """initialize over /connect/mcp, then request_quote (or the given [(tool, args)]); returns (response, result
+    of the last call)."""
     h = {**ACCEPT, "Authorization": f"Bearer {access}"}
 
     def rpc(body, sid=None):
@@ -82,8 +84,11 @@ def mcp_quote(c, access):
         return r, None
     sid = r.headers.get("mcp-session-id")
     rpc({"jsonrpc": "2.0", "method": "notifications/initialized"}, sid)
-    return r, rpc({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-                   "params": {"name": "request_quote", "arguments": ARGS}}, sid)[1]
+    out = None
+    for i, (name, args) in enumerate(calls or [("request_quote", ARGS)]):
+        out = rpc({"jsonrpc": "2.0", "id": 2 + i, "method": "tools/call",
+                   "params": {"name": name, "arguments": args}}, sid)[1]
+    return r, out
 
 
 def test_discovery_and_401_challenge(c):
@@ -204,3 +209,53 @@ def test_registration_and_redirect_rules(c, monkeypatch):
     monkeypatch.setattr(oauth, "_clock", lambda: 4e9)
     assert token(c, cc, grant_type="authorization_code", code="x", redirect_uri=CALLBACK,
                  code_verifier=verifier).status_code == 401  # the client registration expired too
+
+
+def test_my_mandates_and_agent_id_derived_from_the_credential(c):
+    """claude.ai asked the human for the mandate and agent ids: my_mandates answers it, and agent_id may be left
+    out when the credential covers the mandate."""
+    from jsonschema.validators import validator_for
+
+    from sous import mcp_server
+    agent = issue(require_agent_auth=True)["agent_credential"]["token"]
+    issue("OTHER", agent_id="b", require_agent_auth=True)
+    client = register(c)
+    verifier, challenge = pkce()
+    code = code_from(authorize(c, client, agent, challenge=challenge))
+    t = token(c, client, grant_type="authorization_code", code=code, redirect_uri=CALLBACK,
+              code_verifier=verifier).json()
+    _, mine = mcp_quote(c, t["access_token"], [("my_mandates", {})])
+    body = mine["result"]["structuredContent"]
+    assert [m["mandate_id"] for m in body["mandates"]] == ["M"]  # not OTHER
+    m = body["mandates"][0]
+    assert m["agent_id"] == "a" and m["buyer"] == "Hotel" and m["active"] and "auto-approve up to" in m["rules"]
+    schema = mcp_server.mcp._tool_manager.get_tool("my_mandates").fn_metadata.output_schema
+    validator_for(schema)(schema).validate(body)
+    no_agent = {k: v for k, v in ARGS.items() if k != "agent_id"}
+    _, q = mcp_quote(c, t["access_token"], [("request_quote", no_agent)])
+    assert not q["result"].get("isError"), q
+    quote = q["result"]["structuredContent"]["quote"]
+    assert quote["agent_id"] == "a" and quote["mandate_id"] == "M"
+    _, o = mcp_quote(c, t["access_token"], [("place_order", {"mandate_id": "M", "quote_id": quote["id"],
+                                                            "idempotency_key": "k1"})])
+    assert not o["result"].get("isError") and o["result"]["structuredContent"]["status"] == "ordered", o
+    # a mandate the credential doesn't cover: agent_id is not derived
+    _, e = mcp_quote(c, t["access_token"], [("request_quote", {**no_agent, "mandate_id": "OTHER"})])
+    assert e["result"]["isError"] and e["result"]["structuredContent"]["error"] == "invalid_argument"
+    assert "my_mandates" in e["result"]["structuredContent"]["message"]
+    # REST: GET /mandates with the agent token lists its own (non-public) mandate, marked
+    lst = c.get("/mandates", headers={"Authorization": f"Bearer {agent}"}).json()["mandates"]
+    assert [x["id"] for x in lst if x.get("yours")] == ["M"] and "OTHER" not in [x["id"] for x in lst]
+    assert not any(x.get("yours") for x in c.get("/mandates").json()["mandates"])
+
+
+def test_my_mandates_without_a_credential_is_empty_and_says_why(c):
+    r = c.post("/mcp/", headers=ACCEPT, json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}})
+    h = {**ACCEPT, "Mcp-Session-Id": r.headers["mcp-session-id"]}
+    c.post("/mcp/", headers=h, json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+    r = c.post("/mcp/", headers=h, json={"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                                         "params": {"name": "my_mandates", "arguments": {}}})
+    data = json.loads([ln[5:] for ln in r.text.splitlines() if ln.startswith("data:")][-1])
+    body = data["result"]["structuredContent"]
+    assert body["mandates"] == [] and "agent token" in body["note"]

@@ -28,7 +28,7 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import access, agent_auth, catalog, clock, exposure, holds, offers, origin as origin_mod, rules, service as S, standing
+from . import access, agent_auth, catalog, clock, exposure, holds, offers, origin as origin_mod, oauth, rules, sandbox, service as S, standing, store
 from .mandate import Finding, Mandate
 from .standards import OrderDoc, QuoteDoc
 
@@ -36,9 +36,12 @@ log = logging.getLogger(__name__)
 
 INSTRUCTIONS = """\
 You buy from Valio Aimo (Finnish food-service wholesaler) for a buyer whose mandate (sous) you hold.
-You need the mandate_id and your agent_id; the mandate is issued to exactly that agent_id.
+You need the mandate_id; the mandate is issued to exactly one agent_id. Start with my_mandates: it lists the
+mandates your credential covers (buyer, label such as hotel / hospital / school, agent_id, rules in one line).
+Pick the one whose buyer the user names ("the hotel"); don't ask the user for ids that my_mandates gives you.
+With a credential that covers the mandate, agent_id may be left out of request_quote and place_order.
 
-Typical flow, 3-4 calls:
+Typical flow, 3-4 calls (after my_mandates):
 1. search_products: put dietary needs in filters, not just the query text: claims=["FREE_FROM_LACTOSE"],
    avoid_allergens=["AM"] (GS1 codes; resource sous://allergens). No price or stock here, and it is free.
 2. request_quote with mandate_id: one item per need, with SEVERAL candidate product_ids and the amount in
@@ -230,6 +233,24 @@ class MandateCheckOut(_Open):
     findings: list[Finding]
 
 
+class MyMandateOut(_Open):
+    mandate_id: str
+    buyer: str
+    label: str | None = Field(None, description="Scenario of a judge sandbox mandate: hotel, hospital, school")
+    agent_id: str
+    sandbox: str | None = None
+    active: bool
+    valid_until: str | None = None
+    require_agent_auth: bool
+    rules: str = Field(description="The mandate's active rules in one line (rules.mandate_summary)")
+
+
+class MyMandatesOut(_Open):
+    """my_mandates: the mandates the caller's credential covers."""
+    mandates: list[MyMandateOut]
+    note: str
+
+
 class SuggestionOut(_Open):
     id: str
     kind: str
@@ -381,6 +402,30 @@ def _agent_token(ctx: Context | None, agent_token: str | None) -> str | None:
     return agent_auth.bearer((headers or {}).get("authorization")) or agent_token or None
 
 
+def _own_mandates(ctx: Context | None, agent_token: str | None) -> set[str]:
+    """The mandates the caller's credential was issued for (Bearer header, which /connect/mcp fills from the OAuth
+    token, the agent_token argument, or a sandbox approver token in X-Approver-Code)."""
+    try:
+        headers = ctx.headers if ctx is not None else None
+    except ValueError:
+        headers = None
+    h = {k.lower(): v for k, v in (headers or {}).items()}
+    return access.credential_mandates(agent_auth.bearer(h.get("authorization")), agent_token,
+                                      h.get("x-approver-code"))
+
+
+def _agent_for(agent_id: str | None, mandate_id: str | None, ctx: Context | None, agent_token: str | None) -> str:
+    """agent_id as given, else the agent the mandate is issued to when the caller's credential covers that mandate
+    (the agent never has to know its own id). Authentication is unchanged: the mandate still checks the token."""
+    if agent_id:
+        return agent_id
+    if mandate_id and mandate_id in _own_mandates(ctx, agent_token):
+        if m := store.get_mandate(mandate_id):
+            return m["agent_id"]
+    raise ValueError("agent_id is required unless your credential covers mandate_id: call my_mandates to see "
+                     "your mandates and their agent_id.")
+
+
 def _reader(ctx: Context | None, agent_token: str | None = None) -> access.Reader:
     """Read scope (sous/access.py) from the HTTP request's X-Approver-Code / Authorization headers. Over stdio
     there is no request: the local operator reads everything."""
@@ -455,7 +500,7 @@ def get_product(product_id: str) -> dict:
        annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False,
                                    open_world_hint=True))
 def request_quote(
-    agent_id: str,
+    agent_id: str | None = None,
     delivery_date: str | None = None,
     items: list[S.QuoteItem] | None = None,
     mandate_id: str | None = None,
@@ -487,9 +532,11 @@ def request_quote(
     offer_id: a Valio Aimo offer from list_offers (e.g. 'OF-1A2B3C4D'), only when the buyer wants it: name the
       offer's product_ids in items; they are priced at min(offer price, live price) and the quote carries `offer`.
       The mandate decides as always (rule offer.applied tells the buyer).
+    agent_id: optional when your credential covers mandate_id (see my_mandates); required without a mandate.
     agent_token: only if you can't send the Authorization: Bearer header and the mandate requires agent auth.
     Returns {quote (schema /schemas/quote.json), jws (sous-quote+jws over quote)}.
     """
+    agent_id = _agent_for(agent_id, mandate_id, ctx, agent_token)
     return S.request_quote(S.QuoteRequest(agent_id=agent_id, mandate_id=mandate_id,
                                           delivery_date=_date(delivery_date) if delivery_date else None,
                                           items=items or [], rationale=rationale, option_id=option_id,
@@ -529,7 +576,7 @@ def suggest_substitutes(
        # idempotent: a retry with the same idempotency_key returns the same order instead of ordering again.
        annotations=ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=True,
                                    open_world_hint=True))
-def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: str | None = None,
+def place_order(mandate_id: str, quote_id: str, agent_id: str | None = None, idempotency_key: str | None = None,
                 rationale: str | None = None, agent_token: str | None = None,
                 ctx: Context | None = None) -> dict:
     """Order a quote under a mandate. This is the only call that commits the buyer to a purchase.
@@ -543,8 +590,10 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
     Valio Aimo's order system). In this demo erp.status is "simulated" with a SIM- confirmation_id: tell the
     buyer the order is placed with Sous and the Valio hand-off is simulated, not that Valio confirmed it.
     rationale: one sentence on why the buyer needs this order; the approver sees it next to the mandate's findings.
+    agent_id: optional when your credential covers mandate_id (see my_mandates).
     agent_token: only if you can't send the Authorization: Bearer header and the mandate requires agent auth.
     """
+    agent_id = _agent_for(agent_id, mandate_id, ctx, agent_token)
     return S.place_order(agent_id, mandate_id, quote_id, idempotency_key,
                          agent_token=_agent_token(ctx, agent_token), rationale=rationale)
 
@@ -561,6 +610,35 @@ def get_order(order_id: str, agent_token: str | None = None, ctx: Context | None
     demo (no real order reached Valio)."""
     access.check_order(_reader(ctx, agent_token), order_id)
     return access.label_order(S.get_order(order_id))
+
+
+@_tool(MyMandatesOut, title="Which mandates am I acting under?", annotations=READ_LOCAL)
+def my_mandates(agent_token: str | None = None, ctx: Context | None = None) -> dict:
+    """Call this first. The mandates your credential (Authorization: Bearer agent token, or the OAuth sign-in of
+    this connector) was issued for: mandate_id, buyer, label (e.g. hotel / hospital / school), agent_id and a
+    one-line summary of the rules. Pick the mandate by the buyer the user names ("the hotel"); pass its mandate_id
+    to request_quote / place_order (agent_id can then be left out). active=false: revoked, expired or its sandbox
+    closed. Empty without a credential: ask the user for the agent token or a mandate_id; never guess one."""
+    out = []
+    labels = {}
+    idx = sandbox.index()
+    for mid in sorted(_own_mandates(ctx, agent_token)):
+        m = store.get_mandate(mid)
+        if not m:
+            continue
+        sid = idx["mandates"].get(mid)
+        if sid and sid not in labels:
+            row = sandbox._row(sid)
+            labels[sid] = {v: k for k, v in (row["data"]["mandates"] if row else {}).items()}
+        mandate = S._mandate(mid)  # the signed mandate
+        out.append({"mandate_id": mid, "buyer": m["buyer"], "label": labels.get(sid, {}).get(mid) if sid else None,
+                    "agent_id": m["agent_id"], "sandbox": sid, "active": oauth._mandate_live(mid),
+                    "valid_until": str(m["valid_until"]) if m.get("valid_until") else None, "require_agent_auth": bool(m.get("require_agent_auth")),
+                    "rules": "; ".join(r["text"] for r in rules.mandate_summary(mandate))})
+    note = ("Pick the mandate whose buyer the user means; pass its mandate_id. Read the full rules with get_mandate."
+            if out else "No credential: connect with 'Authorization: Bearer <agent token>' (or sign in to the "
+                        "connector with it). Ask the user; don't guess a mandate_id.")
+    return {"mandates": out, "note": note}
 
 
 @_tool(MandateOut, title="Read the mandate", annotations=READ_LOCAL)
@@ -623,7 +701,7 @@ def create_standing_order(mandate_id: str, agent_id: str, name: str, items: list
 @_tool(RenewalOut, title="Renew a standing order (with drift check)",
        annotations=ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False,
                                    open_world_hint=True))
-def renew_standing_order(standing_id: str, agent_id: str, delivery_date: str | None = None,
+def renew_standing_order(standing_id: str, agent_id: str | None = None, delivery_date: str | None = None,
                          amounts: list[float] | None = None, rationale: str | None = None,
                          agent_token: str | None = None, ctx: Context | None = None) -> dict:
     """Renew this week's standing order: live quote, drift check against past renewals, then the order.
@@ -632,8 +710,12 @@ def renew_standing_order(standing_id: str, agent_id: str, delivery_date: str | N
     The gateway compares with the median of recent renewals: quantity creep, cost or price drift, a different
     product, new Terminal or reliability issues. Any drift puts the order on hold for a human (pending_approval);
     tell the buyer drift.summary and share order.approval_url. delivery_date defaults to the next delivery day.
+    agent_id: optional when your credential covers the standing order's mandate (see my_mandates).
     agent_token: only if you can't send the Authorization: Bearer header and the mandate requires agent auth.
     """
+    if not agent_id:
+        so = standing.get(standing_id)["standing_order"]
+        agent_id = _agent_for(None, so["mandate_id"], ctx, agent_token)
     return standing.renew(standing_id, _date(delivery_date) if delivery_date else None, agent_id=agent_id,
                           amounts=amounts, agent_token=_agent_token(ctx, agent_token),
                           rationale=rationale)

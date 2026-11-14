@@ -926,16 +926,21 @@ def issue_mandate(m: Mandate, mint_agent_credential: bool | None = None):
 
 
 @app.get("/mandates", tags=["mandates"])
-def list_mandates(sandbox_id: str | None = _SANDBOX_Q, r: access.Reader = Depends(access.reader)):
+def list_mandates(request: Request, sandbox_id: str | None = _SANDBOX_Q, r: access.Reader = Depends(access.reader)):
     """Mandates you may read: all with the approver code, a sandbox's with its token, an agent's own with its
-    bearer token, and the public demo mandates (demo_public) without credentials."""
+    bearer token, and the public demo mandates (demo_public) without credentials. The mandates your agent or
+    sandbox token was issued for are always listed (even sandbox ones without ?sandbox=) and marked `yours: true`,
+    so a credential answers "which mandate am I?" (MCP: my_mandates)."""
     access.check_sandbox_list(r, sandbox_id)
     scope = sandbox.list_scope(sandbox_id)
     if scope is None:
         return {"mandates": []}
     idx = sandbox.index()
-    return {"mandates": [m for m in store.list_mandates()
-                         if sandbox.keep(scope, m["id"], idx) and access.can_read_mandate(r, m["id"], m)]}
+    own = access.credential_mandates(request.headers.get("x-approver-code"),
+                                     agent_auth.bearer(request.headers.get("authorization")))
+    return {"mandates": [({**m, "yours": True} if m["id"] in own else m) for m in store.list_mandates()
+                         if (m["id"] in own or sandbox.keep(scope, m["id"], idx))
+                         and access.can_read_mandate(r, m["id"], m)]}
 
 
 @app.get("/mandates/{mandate_id}", tags=["mandates"], dependencies=[Depends(_read_mandate)])

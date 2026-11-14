@@ -92,6 +92,10 @@ Any MCP client: `$SOUS/mcp` with the header. Clients that can't set headers but 
 
 ## 3. What the assistant can and can't do
 
+It finds its own mandates: `my_mandates` lists what the credential covers (buyer, hotel / hospital / school,
+rules in one line), so "order milk for the hotel" needs no ids from you; `agent_id` can be left out.
+(REST: `GET /mandates` with the token marks them `yours: true`.)
+
 It can: search the 17.5k-product catalog (free), ask for signed quotes priced live at Valio Aimo, look for
 substitutes, place orders, follow up on orders and standing orders, read its own mandates.
 

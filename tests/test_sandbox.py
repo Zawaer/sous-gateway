@@ -574,6 +574,24 @@ def live(monkeypatch):
         yield client
 
 
+def test_a_sandbox_token_finds_its_own_mandates(live):
+    """Toivo's question on staging: which mandate am I? GET /mandates without ?sandbox= and MCP my_mandates."""
+    from tests.test_oauth import mcp_quote
+    seed_curated()
+    s, other = new(live, "10.0.0.1"), new(live, "10.0.0.2")
+    ids = {m["scenario"]: m["mandate_id"] for m in s["mandates"]}
+    for tok in (s["agent_token"], s["approver_token"]):
+        h = {"Authorization": f"Bearer {tok}"}
+        mine = [m["id"] for m in live.get("/mandates", headers=h).json()["mandates"] if m.get("yours")]
+        assert sorted(mine) == sorted(ids.values())
+    assert not any(m.get("yours") or m.get("sandbox") for m in live.get("/mandates").json()["mandates"])
+    _, out = mcp_quote(live, s["agent_token"], [("my_mandates", {})])
+    got = {m["label"]: (m["mandate_id"], m["agent_id"], m["sandbox"]) for m in out["result"]["structuredContent"]["mandates"]}
+    assert {k: v[0] for k, v in got.items()} == ids
+    assert got["hotel"][1] == s["mandates"][0]["agent_id"] and got["hotel"][2] == s["sandbox"]["id"]
+    assert not set(m["mandate_id"] for m in other["mandates"]) & {v[0] for v in got.values()}
+
+
 @pytest.mark.parametrize("how", ["expired", "expired_unswept", "deleted"])
 def test_connector_grants_end_with_the_sandbox(live, monkeypatch, how):
     from tests.test_oauth import authorize, pkce, token

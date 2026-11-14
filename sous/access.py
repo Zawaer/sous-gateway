@@ -97,6 +97,20 @@ def _agent_grant(token: str) -> set[str]:
     return out
 
 
+def credential_mandates(*tokens: str | None) -> set[str]:
+    """The mandates these credentials were issued for ("which mandate am I?"): an agent token's own mandates, a
+    sandbox approver token's sandbox mandates. Independent of the read mode (works without an approver code too);
+    never the approver code's "everything"."""
+    out: set[str] = set()
+    for tok in dict.fromkeys(t for t in tokens if t):
+        if tok.startswith(sandbox.APPROVER_PREFIX):
+            if g := _sandbox_grant(tok):
+                out |= g[1]
+        else:
+            out |= _agent_grant(tok)
+    return out
+
+
 def from_headers(headers: Mapping | None) -> Reader:
     """The reader behind a request's headers. headers=None means no HTTP request (MCP over stdio): the local operator."""
     if headers is None or not config.APPROVER_CODE:
