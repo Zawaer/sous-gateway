@@ -103,7 +103,10 @@ export class Gateway {
     }), 'quote');
     if (!quote.id || !Number.isFinite(Date.parse(quote.expires_at)) || quote.agent_id !== mandate.agent_id || quote.mandate_id !== mandate.id ||
         quote.requested_delivery_date !== deliveryDate || !tiers.has(quote.mandate_preview?.outcome) ||
-        (quote.items ? !equalJson(quote.items, items) : entries.length > 1)) {
+        (quote.items ? !equalJson(
+          quote.items.map((item) => ({ product_type: null, ...item })),
+          items.map((item) => ({ product_type: null, ...item })),
+        ) : entries.length > 1)) {
       throw new Error('The signed quote does not match this buyer, delivery date, or product shortlist.');
     }
     for (const line of quote.lines) {
