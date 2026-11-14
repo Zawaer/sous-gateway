@@ -57,8 +57,11 @@ _TYPES: list[tuple[str, str, str, str, str]] = [
     # milk and fermented milk
     ("maito", "milk", "milk", "maito", "milk"),
     ("maitojuoma", "milk", "milk drink", "maitojuoma milkdrink", "milk drink, milkdrink"),
-    ("kahvimaito", "milk", "coffee milk", "kahvimaito kahvimaitojuoma", "coffee milk, coffee milk drink"),
+    # coffee milk is its own family: a buyer who asks for milk must never get it silently (and vice versa)
+    ("kahvimaito", "coffee milk", "coffee milk", "kahvimaito kahvimaitojuoma", "coffee milk, coffee milk drink"),
+    ("kaakaojuoma", "cocoa drink", "cocoa drink", "kaakaojuoma", "chocolate drink, cocoa drink"),
     ("kahvijuoma", "coffee drink", "milk coffee drink", "kahvijuoma maitokahvijuoma", "coffee drink, latte"),
+    ("kahvi", "coffee", "coffee", "kahvi kahvipapu papukahvi suodatinkahvi", "coffee, coffee beans"),
     ("piimä", "sour milk", "sour milk", "piimä", "sour milk, sourmilk, buttermilk"),
     ("viili", "viili", "viili", "viili", "viili"),
     ("kefiiri", "kefir", "kefir", "kefiiri", "kefir"),
@@ -206,7 +209,7 @@ _EN_HEADS = sorted(((h.strip(), k) for k, _, _, _, en in _TYPES for h in en.spli
 _ONE_WAY = {("kuohukerma", "ruokakerma"), ("kuohukerma", "kahvikerma"), ("kuohukerma", "kerma")}
 
 # Families whose fat % and dairy-vs-plant origin matter.
-_DAIRY = {"milk", "sour milk", "viili", "kefir", "yogurt", "quark", "cream", "sour cream", "cheese", "cream cheese",
+_DAIRY = {"milk", "coffee milk", "sour milk", "viili", "kefir", "yogurt", "quark", "cream", "sour cream", "cheese", "cream cheese",
           "cottage cheese", "processed cheese", "butter", "ice cream", "snack"}
 _FAT_FAMILIES = _DAIRY | {"mince", "spread", "patty", "sausage"}
 # Plant-based stand-ins: the head's own prefix ('kaurajuoma', 'kookoskerma') or a marker word. Not any
@@ -250,6 +253,7 @@ _PREP = [("paneroi", "breaded"), ("paneerattu", "breaded"), ("leivitetty", "brea
 _RAW_CUTS = {None, "boneless cut", "mince", "chop", "ribs", "leg", "wing", "whole"}
 _SEASONED = ("maustettu", "maustetut", "marinoitu", "marinoidut", "marinadi", "suolattu")  # keep 'suolattu' last
 _PLAIN = ("maustamat", "luonnon", "natural", "naturel", "plain", "unflavoured")
+_FOR_USE = {"kahviin", "teehen"}  # what it is for, not its flavour: kaurajuoma kahviin = barista oat drink
 # Flavour stems (Finnish) -> English, matched anywhere in a word except the head itself.
 _FLAVOURS: dict[str, str] = {
     "mansikka": "strawberry", "mustikka": "blueberry", "vadelma": "raspberry", "metsämarja": "forest berry",
@@ -346,7 +350,7 @@ def product_type(p: dict) -> dict:
     if not any(w.startswith(("maustamat", "unflavoured")) for w in tokens):
         parts = [prefix] + [w for i, w in enumerate(tokens) if i != head_i]
         for part in parts:
-            if not part:
+            if not part or part in _FOR_USE:
                 continue
             for stem, en_name in _FLAVOURS.items():
                 if stem in part and not (key and stem == key):
@@ -393,6 +397,8 @@ def product_type(p: dict) -> dict:
                         fat = v
                         break
 
+    if key == "maito" and any(w in ("cafe", "barista") for w in tokens):
+        key, (family, label) = "kahvimaito", _TYPE_INFO["kahvimaito"]  # 'Arla Cafè maito': barista / coffee milk
     plant = family in _DAIRY and (prefix.startswith(_PLANT_PREFIX) or any(w.startswith(_PLANT_WORDS) for w in tokens))
     return {"key": key, "label": label, "family": family, "fat_pct": fat, "flavour": flavour,
             "species": species[0] if species else None, "species_group": species[1] if species else None,
@@ -443,6 +449,54 @@ def compare_types(o: dict, c: dict) -> tuple[str, list[str], list[str]]:
     if unknown:
         return "unknown", minor, [f"could not confirm from its name that it is {o['label']}"]
     return ("compatible" if minor else "same"), minor, []
+
+
+# --- product-type guard for quotes ----------------------------------------------
+
+def type_from_hint(hint: str | None) -> dict | None:
+    """A buyer's or agent's words for the type ('milk', 'maito', 'lactose-free milk') -> a type, or None."""
+    hint = " ".join((hint or "").lower().split())
+    if not hint:
+        return None
+    t = product_type({"names": {"fi": hint}})
+    if not t["key"]:
+        t = product_type({"names": {"en": hint}})
+    return t if t["key"] else None
+
+
+def type_guard(offers: list[dict], hint: str | None = None) -> tuple[dict | None, dict[str, tuple[str, str | None]]]:
+    """Which of an item's candidates are the kind of product the buyer asked for.
+
+    The intended type is the `hint` when given, else the most common type among the candidates (ties: the
+    one listed first). Returns (intended type or None, {product_id: (verdict, reason)}), verdict 'ok' (the same
+    kind, e.g. semi-skimmed for skimmed milk), 'related' (same family, another kind: milk drink for milk),
+    'unknown' (the name doesn't say) or 'different' (coffee milk for milk, sour cream for cream, strawberry
+    yogurt for plain). Without a hint, a single
+    candidate is the buyer's explicit choice and is not second-guessed.
+    """
+    types = {o["product_id"]: product_type(catalog.get(o["product_id"]) or {"name": o.get("name")}) for o in offers}
+    intended = type_from_hint(hint)
+    if intended is None:
+        keys = [types[o["product_id"]]["key"] for o in offers if types[o["product_id"]]["key"]]
+        if len(offers) < 2 or not keys:
+            return None, {}
+        top = max(dict.fromkeys(keys), key=lambda k: (keys.count(k), -keys.index(k)))
+        intended = next(types[o["product_id"]] for o in offers if types[o["product_id"]]["key"] == top)
+    verdicts: dict[str, tuple[str, str | None]] = {}
+    for o in offers:
+        t = types[o["product_id"]]
+        match, _, major = compare_types(intended, t)
+        if match == "same" or (match == "compatible" and t["key"] == intended["key"]) or (
+                match == "unknown" and intended["key"] in _WEAK):  # a fruit or vegetable head is a weak guess
+            verdicts[o["product_id"]] = ("ok", None)
+        elif match == "compatible":  # same family, another kind: milk drink for milk, cooking cream for cream
+            verdicts[o["product_id"]] = ("related", f"a related but different product ({t['label']} ≠ {intended['label']})")
+        elif match == "unknown":
+            verdicts[o["product_id"]] = ("unknown", f"its name does not confirm it is {intended['label']}")
+        else:
+            verdicts[o["product_id"]] = (
+                "different", "different product type (" + "; ".join(m.replace(" instead of ", " ≠ ") for m in major) + ")")
+    return intended, verdicts
 
 
 # --- pack size ------------------------------------------------------------------
@@ -586,12 +640,21 @@ def suggest(
     held_back.sort(key=lambda e: -e["score"])
     shortlist = pool[:SHORTLIST] + held_back[:FALLBACK]
 
-    # 2. live price and availability for the original + shortlist (two batched calls)
-    offers, _ = Q.offers([orig["id"]] + [e["p"]["id"] for e in shortlist], delivery_date, amount, unit)
+    # 2. live price and availability for the original + shortlist (two batched calls). A need in packs is
+    # turned into what those packs hold (40 x 400 g -> 16 KG), so each option is priced for the same amount
+    # (2 x 10 kg or 16 x 1 kg), not for 40 of its own packs.
+    need, need_unit = amount, unit
+    if unit is None and (content := Q.content_per_sales_unit(orig, None)):
+        need, need_unit = round(amount * content[0], 3), content[1]
+    offers, _ = Q.offers([orig["id"]] + [e["p"]["id"] for e in shortlist], delivery_date, need, need_unit)
     by_id = {o["product_id"]: o for o in offers}
     o_orig = by_id.get(orig["id"])
     ref_price = (o_orig or {}).get("comparison_price") or {}
     ref_cp = ref_price.get("ex_vat")
+    # what the need costs with the original, like for like (its own packs, or its price per L/KG x the need)
+    ref_total = (o_orig or {}).get("line_total_ex_vat")
+    if ref_total is None and ref_cp is not None and need_unit and ref_price.get("per") == need_unit:
+        ref_total = round(ref_cp * need, 2)
 
     # 3. compromises -> tier
     options = []
@@ -640,6 +703,12 @@ def suggest(
             "official_substitute": c["id"] in orig["official_substitutes"],
             "match_score": round(e["score"], 2),
             "price_change": round(delta, 3) if delta is not None else None,
+            "quantity": o.get("quantity"),
+            "sales_unit": o["sales_unit"],
+            "covers": o.get("covers"),
+            "total_ex_vat": o.get("line_total_ex_vat"),
+            "total_change_ex_vat": (round(o["line_total_ex_vat"] - ref_total, 2)
+                                    if o.get("line_total_ex_vat") is not None and ref_total is not None else None),
             "compromises": major + minor,
             "allergen_check": allergen,
             "offer": o,
@@ -649,7 +718,9 @@ def suggest(
         options = [x for x in options if x["type"]["match"] != "different"]
     rank = {"best": 0, "better": 1, "good": 2}
     type_rank = {"same": 0, "compatible": 1, "unknown": 2, "different": 3}
-    options.sort(key=lambda x: (rank[x["tier"]], type_rank[x["type"]["match"]], len(x["compromises"]), -x["match_score"],
+    # within a tier, the same kind of product first: milk with more fat beats a milk drink for milk
+    options.sort(key=lambda x: (rank[x["tier"]], type_rank[x["type"]["match"]], x["type"]["key"] != otype["key"],
+                                len(x["compromises"]), -x["match_score"],
                                 (x["offer"]["comparison_price"] or {}).get("ex_vat") or 1e9))
     # one per tier first (good / better / best), then the rest
     picked, seen = [], set()
@@ -662,7 +733,10 @@ def suggest(
         "original": {"product_id": orig["id"], "name": orig["name"],
                      "why_substitute": [i["message"] for i in (o_orig or {}).get("issues", [])
                                         if i["severity"] == "blocking"] or ["(original is orderable)"],
-                     "comparison_price": ref_price, "pack": opack and opack["text"]},
+                     "comparison_price": ref_price, "pack": opack and opack["text"],
+                     "total_ex_vat": ref_total},
+        "need": {"amount": need, "unit": need_unit or "SALES_UNIT",
+                 "asked": f"{amount:g} {'x ' + opack['text'] if unit is None and opack else (unit or 'SALES_UNIT')}"},
         "constraints": {"required_claims": sorted(required_claims), "avoid_allergens": avoid,
                         "same_category": orig["category"], "measure": measure, "temperature": orig["temperature"],
                         "type": _public_type(otype)},

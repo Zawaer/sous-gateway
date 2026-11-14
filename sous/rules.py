@@ -133,6 +133,9 @@ def _build() -> list[dict]:
            "Valio Aimo's price is valid only until before the delivery date.", None),
         _r("availability.data_stale", "finding", ["ask"], "gateway",
            "Valio Aimo couldn't be reached, so the quote uses last-known price or stock: a human decides.", None),
+        _r("product.type_mismatch", "finding", ["ask"], "gateway",
+           "Only another kind of product than the one asked for can be delivered (coffee milk for milk): it is "
+           "quoted, but a human confirms it.", None),
     ]
     R += [_r(f"availability.{c.lower()}", "finding", ["block"], "valio", t) for c, t in _VALIO_BLOCKING.items()]
     R += [_r(f"availability.{c.lower()}", "finding", ["block"], "gateway", t) for c, t in _GATEWAY_BLOCKING.items()]

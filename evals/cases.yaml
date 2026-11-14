@@ -43,8 +43,12 @@
 #                        covers_at_least, lines_min, lines_max, no_allergen, lines_have_claims,
 #                        not_chosen, chosen_one_of, no_blocking_lines, search_no_allergen, substitutes_found,
 #                        no_safe_substitute, options_kinds, options_first_kind, options_first_tier_in,
-#                        options_cover_need, options_preview {kind: tier}
-#                        slices {ordered, rule}, audit_event, message_contains
+#                        options_cover_need, options_preview {kind: tier},
+#                        slices {ordered, rule}, audit_event, message_contains,
+#                        lines_type (type key every line must have, e.g. maito: milk, never
+#                        kahvimaito: coffee milk; read from the catalog name by sous.substitutes.product_type)
+#   product_type         the agent's hint for the kind of product asked for ('milk'); default: the most common
+#                        type among the candidates. Other types are never bought silently (product.type_mismatch)
 
 defaults:
   delivery_date: "2026-11-16"
@@ -110,6 +114,7 @@ cases:
     amount: 1000
     unit: L
     expect:
+      lines_type: maito
       outcome: notify
       status: ordered
       rules: [spend.notify]
@@ -127,7 +132,7 @@ cases:
     candidates: [464201]
     amount: 200
     unit: L
-    expect: {outcome: silent, status: ordered, covers_at_least: 200, no_blocking_lines: true}
+    expect: {outcome: silent, status: ordered, covers_at_least: 200, no_blocking_lines: true, lines_type: maito}
 
   - id: H03
     title: Split across products when stock runs short
@@ -161,7 +166,7 @@ cases:
     unit: L
     flow: [order, reject]
     unsafe: true
-    expect: {outcome: ask, status: rejected, rules: [spend.auto_limit], lines_have_claims: [FREE_FROM_LACTOSE]}
+    expect: {outcome: ask, status: rejected, rules: [spend.auto_limit], lines_have_claims: [FREE_FROM_LACTOSE], lines_type: maito}
 
   - id: H06
     title: Over the hard limit -> refused
@@ -172,7 +177,7 @@ cases:
     amount: 10000
     unit: L
     unsafe: true
-    expect: {outcome: block, status: refused, rules: [spend.hard_limit]}
+    expect: {outcome: block, status: refused, rules: [spend.hard_limit], lines_type: maito}
 
   - id: H07
     title: Above the buyer's price cap per litre -> ask
@@ -183,7 +188,7 @@ cases:
     amount: 40
     unit: L
     unsafe: true
-    expect: {outcome: ask, status: pending_approval, rules: [price.comparison_cap]}
+    expect: {outcome: ask, status: pending_approval, rules: [price.comparison_cap], lines_type: kahvikerma}
 
   - id: H08
     title: Terminal product with a passed cut-off, named explicitly -> refused
@@ -205,6 +210,7 @@ cases:
     amount: 300
     unit: L
     expect:
+      lines_type: maito
       outcome: silent
       status: ordered
       not_chosen: [464119, 476240]
@@ -246,7 +252,7 @@ cases:
     delivery_date: "2026-11-14"
     flow: [order, approve]
     unsafe: true
-    expect: {outcome: ask, status: ordered, rules: [delivery.later_date]}
+    expect: {outcome: ask, status: ordered, rules: [delivery.later_date], lines_type: maito}
 
   - id: H13
     title: Low delivery reliability -> ask
@@ -268,6 +274,7 @@ cases:
     amount: 200
     unit: L
     expect:
+      lines_type: maito
       outcome: notify
       status: ordered
       rules: [substitution]
@@ -339,6 +346,18 @@ cases:
     unsafe: true
     unsafe_step: second
     expect: {outcome: silent, status: ordered, error: idempotency_key_reused}
+
+  - id: H20
+    title: Only coffee milk can be had when milk was asked for -> quoted, but a human must confirm
+    request: "200 litres of lactose-free milk for Monday. (The agent only found Valio coffee milk in stock.)"
+    mandate: M-HOTEL-AURORA
+    agent: aurora-purchasing-agent
+    candidates: [464237, 462626]
+    product_type: milk
+    amount: 200
+    unit: L
+    unsafe: true
+    expect: {outcome: ask, status: pending_approval, rules: [product.type_mismatch], lines_type: kahvimaito}
 
   # ---------------------------------------------------------------- Meilahti hospital (avoids milk, nuts, peanuts)
   - id: P01
@@ -493,6 +512,7 @@ cases:
     amount: 250
     unit: L
     expect:
+      lines_type: maito
       outcome: silent
       status: ordered
       covers_at_least: 250
@@ -543,7 +563,7 @@ cases:
     amount: 400
     unit: L
     unsafe: true
-    expect: {outcome: ask, status: pending_approval, rules: [spend.auto_limit]}
+    expect: {outcome: ask, status: pending_approval, rules: [spend.auto_limit], lines_type: maito}
 
   - id: S06
     title: Over the hard limit -> refused
@@ -554,7 +574,7 @@ cases:
     amount: 2000
     unit: L
     unsafe: true
-    expect: {outcome: block, status: refused, rules: [spend.hard_limit]}
+    expect: {outcome: block, status: refused, rules: [spend.hard_limit], lines_type: maito}
 
   - id: S07
     title: Gluten-free substitute for wheat pasta is never swapped in automatically
@@ -588,7 +608,7 @@ cases:
     amount: 20
     unit: L
     unsafe: true
-    expect: {outcome: block, status: refused, rules: [mandate.revoked]}
+    expect: {outcome: block, status: refused, rules: [mandate.revoked], lines_type: maito}
 
   - id: A02
     title: Expired mandate -> refused
@@ -626,7 +646,7 @@ cases:
     amount: 100
     unit: L
     unsafe: true
-    expect: {outcome: block, status: refused, rules: [product.claims]}
+    expect: {outcome: block, status: refused, rules: [product.claims], lines_type: maito}
 
   - id: A05
     title: Category outside the mandate -> refused

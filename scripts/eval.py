@@ -118,8 +118,8 @@ def run_case(case: dict, defaults: dict) -> dict:
     # 4. quote
     def quote():
         req = S.QuoteRequest(agent_id=agent, mandate_id=mid, delivery_date=delivery, items=[S.QuoteItem(
-            product_ids=candidates, amount=case["amount"], unit=unit, substitute_for=substitute_for)],
-            rationale=case.get("rationale"))
+            product_ids=candidates, amount=case["amount"], unit=unit, substitute_for=substitute_for,
+            product_type=case.get("product_type"))], rationale=case.get("rationale"))
         tq = time.perf_counter()
         q = call(S.request_quote, req)["quote"]
         r.setdefault("quote_latency_ms", []).append(round((time.perf_counter() - tq) * 1000))

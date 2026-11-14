@@ -336,6 +336,9 @@ class QuoteItem(BaseModel):
     amount: float = Field(gt=0, description="How much is needed")
     unit: Literal["L", "KG", "SALES_UNIT"] = Field("SALES_UNIT", description="L or KG for volume/weight, SALES_UNIT for packs")
     substitute_for: str | None = Field(None, description="Product id this item replaces, if it is a substitute")
+    product_type: str | None = Field(None, description="The kind of product the buyer asked for, e.g. 'milk' or "
+                                     "'maito'. Candidates of another type (coffee milk for milk) are never chosen "
+                                     "silently. Default: the most common type among the candidates")
     note: str | None = None
 
 
@@ -433,8 +436,10 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset()) -> d
                          "reason": "No such product ids."})
             continue
         # Sized to known stock, even for one named product: what isn't in stock goes to `uncovered` (and options),
-        # never into a line a human could approve for stock that doesn't exist.
-        chosen, uncovered = Q.plan(item.amount, unit, offers)
+        # never into a line a human could approve for stock that doesn't exist. Only the type asked for is
+        # chosen silently (coffee milk is not milk).
+        pool, off_type, mismatch = _type_pool(offers, item.product_type)
+        chosen, uncovered = Q.plan(item.amount, unit, pool)
         if not chosen and (blocked := [o for o in offers if not o["orderable"]]):
             # Nothing orderable for this need: keep the products that can't be ordered as (unorderable) lines,
             # so the mandate engine checks them and the refusal names the real reasons (allergen, undeliverable,
@@ -442,19 +447,24 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset()) -> d
             chosen, uncovered = blocked, 0.0
         for l in chosen:
             l["item_index"] = item_index
+            if l["product_id"] in mismatch and l["orderable"]:
+                l["issues"] = l["issues"] + [{"code": "TYPE_MISMATCH", "severity": "warning",
+                                              "message": mismatch[l["product_id"]]}]
             if item.substitute_for:
                 l["substitute_for"] = item.substitute_for
             lines.append(l)
         picked = {l["product_id"] for l in chosen}
         considered += [{"product_id": o["product_id"], "name": o["name"], "item_index": item_index,
                         "comparison_price": o["comparison_price"], "orderable": o["orderable"],
-                        "why_not": [i["message"] for i in o["issues"] if i["severity"] == "blocking"]
+                        "why_not": [r for r in [off_type.get(o["product_id"])] if r]
+                        + [i["message"] for i in o["issues"] if i["severity"] == "blocking"]
                         or ["More expensive per unit than the chosen option."]}
-                       for o in sorted(offers, key=Q.rank_key) if o["product_id"] not in picked][:6]
+                       for o in sorted(offers, key=lambda o: (o["product_id"] not in off_type, Q.rank_key(o)))
+                       if o["product_id"] not in picked][:6]
         if uncovered > 0:
             gaps.append({"item": item.model_dump(), "item_index": item_index, "uncovered": uncovered, "unit": item.unit})
         if item_index not in skip_options and OPT.trouble(chosen, uncovered, req.delivery_date):
-            troubled.append((item_index, item, offers, chosen))
+            troubled.append((item_index, item, [o for o in offers if o["product_id"] not in off_type], chosen))
 
     # Lines that can't be ordered are shown for their reasons but never bought, so they cost nothing.
     total_ex = round(sum(l["line_total_ex_vat"] or 0 for l in lines if l["orderable"]), 2)
@@ -495,6 +505,33 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset()) -> d
                     for l in lines], "uncovered": gaps, "preview": body.get("mandate_preview", {}).get("outcome"),
                  "valio_api_calls": body["valio_api_calls"], "rationale": body.get("rationale")})
     return {"quote": body, "jws": jws}
+
+
+def _type_pool(offers: list[dict], hint: str | None) -> tuple[list[dict], dict[str, str], dict[str, str]]:
+    """The candidates the gateway may choose from silently: those of the type the buyer asked for (see
+    substitutes.type_guard). Returns (pool, {product_id: why its type was passed over}, {product_id: mismatch
+    reason}).
+    When only other types can be ordered they are quoted, with a reason that makes the mandate ask a human."""
+    intended, verdicts = substitutes.type_guard(offers, hint)
+    if intended is None:
+        return offers, {}, {}
+    tiers = ("ok", "related", "unknown", "different")  # closest kind first
+    by = {v: [o for o in offers if verdicts[o["product_id"]][0] == v] for v in tiers}
+    for v in tiers:
+        if any(o["orderable"] for o in by[v]):
+            pool = by[v]
+            break
+    else:
+        return offers, {}, {}
+    ids = {o["product_id"] for o in pool}
+    off = {o["product_id"]: verdicts[o["product_id"]][1] for o in offers
+           if o["product_id"] not in ids and verdicts[o["product_id"]][0] != "ok"}
+    if v == "ok":
+        return pool, off, {}
+    label = intended["label"]
+    return pool, off, {pid: f"Asked for {label}, but no {label} among the candidates can be delivered, so this "
+                            f"line is the closest orderable product: {verdicts[pid][1]}. A human must confirm it."
+                       for pid in ids}
 
 
 MAX_SUBSTITUTE_LOOKUPS = 3  # items per quote whose options look up substitutes (2 batched Valio calls each)

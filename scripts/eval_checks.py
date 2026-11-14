@@ -94,6 +94,12 @@ def check(case: dict, r: dict) -> list[tuple[str, bool, str]]:
     for claim in e.get("lines_have_claims", []):
         bad = [l["product_id"] for l in lines if claim not in (l.get("claims") or [])]
         add(f"every line {claim}", lines and not bad, f"offending {bad}" if bad else "")
+    if "lines_type" in e:  # the kind of product bought (coffee milk is not milk), read from the catalog name
+        from sous.substitutes import product_type
+        want = e["lines_type"] if isinstance(e["lines_type"], list) else [e["lines_type"]]
+        got = {l["product_id"]: product_type(catalog.get(l["product_id"]) or {})["key"] for l in lines}
+        bad = {pid: k for pid, k in got.items() if k not in want}
+        add(f"every line is {'/'.join(want)}", lines and not bad, f"offending {bad}" if bad else "")
     if "not_chosen" in e:
         bad = [l["product_id"] for l in lines if int(l["product_id"]) in [int(x) for x in e["not_chosen"]]]
         add(f"not chosen {e['not_chosen']}", not bad, f"chosen {bad}" if bad else "")
