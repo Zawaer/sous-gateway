@@ -34,7 +34,7 @@ from email.utils import parsedate_to_datetime
 
 import httpx
 
-from . import config, shared
+from . import config, replay, shared
 
 PRICE_TTL = 600  # prices change rarely within a session
 AVAILABILITY_TTL = 60  # availability and cut-offs are time-sensitive
@@ -325,6 +325,8 @@ def _shared_stale(kind: str, day: str, chunk: list[str]) -> None:
 
 
 def _post(kind: str, requested: date, ids: list[str], ttl: int, stale_max: int) -> dict[str, dict]:
+    if replay.active():  # offline replay (SOUS_VALIO_REPLAY): a recorded snapshot, never the network
+        return replay.lookup(kind, ids)
     day = requested.isoformat()
     out: dict[str, dict] = {}
     missing: list[str] = []
@@ -386,6 +388,7 @@ def health() -> dict:
             "stale_items_served": _health["stale_served"],
             "coalesced_requests": _health["coalesced"],
             "shared_budget": budget,
+            **({"replay": replay.info()} if replay.active() else {}),
         }
 
 
