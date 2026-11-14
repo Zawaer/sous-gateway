@@ -35,6 +35,7 @@ AI purchasing agents carry a signed mandate from their human, and Valio Aimo's g
 
 ## Challenge
 - **Valio Aimo: Trusted Trade Agents** (main)
+- Built on **MariaDB** (for mariadb.org): mandates, orders, standing orders, holds and the pause switch live in system-versioned tables, so "what did the buyer's mandate say when this order was decided?" is one `SELECT … FOR SYSTEM_TIME AS OF TIMESTAMP '<decision time>'` query, served at `GET /orders/{id}/history`; the hash-chained audit log sits next to it.
 - Tech challenges: **Best Use of Verda** ([write-up](../tech-challenges/verda.md)), **Best Use of Gemini API** ([gemini.md](../tech-challenges/gemini.md)), **Best Use of Nemotron** ([nemotron.md](../tech-challenges/nemotron.md)), **Best Use of Aiven** ([aiven.md](../tech-challenges/aiven.md)), **Best use of CRACI** ([craci.md](../tech-challenges/craci.md)), **Best Use of Codex** ([codex.md](../tech-challenges/codex.md))
 
 ## Technologies
