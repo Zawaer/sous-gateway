@@ -259,3 +259,35 @@ def test_my_mandates_without_a_credential_is_empty_and_says_why(c):
     data = json.loads([ln[5:] for ln in r.text.splitlines() if ln.startswith("data:")][-1])
     body = data["result"]["structuredContent"]
     assert body["mandates"] == [] and "agent token" in body["note"]
+
+
+def test_no_token_yet_creates_a_sandbox_and_connects(c, monkeypatch):
+    """'Create a demo sandbox and connect': the human sees the approver token once; the assistant gets a code that
+    maps to the sandbox's agent token, never the approver token."""
+    import re
+    from sous import sandbox
+    monkeypatch.setattr(config, "SANDBOX_ENABLED", True)
+    monkeypatch.setattr(config, "SANDBOX_PER_IP_HOUR", 1)
+    monkeypatch.setattr(sandbox, "_seed_standing", lambda *a, **k: None, raising=False)
+    client = register(c)
+    verifier, challenge = pkce()
+    params = {"response_type": "code", "client_id": client["client_id"], "redirect_uri": CALLBACK, "state": "st-1",
+              "code_challenge": challenge, "code_challenge_method": "S256", "scope": "agent",
+              "resource": "http://testserver/connect/mcp"}
+    page = c.get("/oauth/authorize", params=params)
+    assert 'value="sandbox"' in page.text
+    r = c.post("/oauth/authorize", data={**params, "action": "sandbox"}, follow_redirects=False)
+    assert r.status_code == 200, r.text
+    approver = re.search(r"(sbxa_[A-Za-z0-9_\-]+)", r.text).group(1)
+    link = re.search(r'href="(https://claude\.ai/api/mcp/auth_callback\?[^"]+)"', r.text).group(1).replace("&amp;", "&")
+    q = parse_qs(urlsplit(link).query)
+    assert q["state"] == ["st-1"] and approver not in link
+    t = token(c, client, grant_type="authorization_code", code=q["code"][0], redirect_uri=CALLBACK,
+              code_verifier=verifier).json()
+    assert t["access_token"].startswith(oauth.ACCESS_PREFIX)
+    r2, out = mcp_quote(c, t["access_token"], [("my_mandates", {})])
+    mandates = out["result"]["structuredContent"]["mandates"]
+    assert r2.status_code == 200 and len(mandates) == 3 and all(m["sandbox"] for m in mandates)
+    # the per-IP sandbox limit shows on the consent page instead of an error page
+    again = c.post("/oauth/authorize", data={**params, "action": "sandbox"}, follow_redirects=False)
+    assert again.status_code == 200 and "sandboxes in the last hour" in again.text and 'name="agent_token"' in again.text

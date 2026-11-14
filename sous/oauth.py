@@ -403,6 +403,11 @@ agent at the Valio Aimo gateway: search the catalog, request quotes and place or
 <input id="t" type="password" name="agent_token" required spellcheck="false">
 <div><button name="action" value="allow">Connect</button><button name="action" value="deny" formnovalidate>
 Cancel</button></div></form>
+<div class="box"><b>No token yet?</b> Create a private demo sandbox (copies of a hotel, a hospital and a school
+mandate, 24 h, a few live Valio lookups). You get its approver token on the next page, for you only; the assistant
+gets the agent token.
+<form method="post" action="/oauth/authorize">{hidden}<button name="action" value="sandbox">Create a demo
+sandbox and connect</button></form></div>
 <p>What the assistant can't do: approve or reject orders (that stays with your approver token, never paste it
 here), change the mandate, or exceed it. Orders above your limits wait for a human. You can cut it off any time by
 rotating the agent token. <a href="{DOCS}">More</a></p>"""
@@ -423,6 +428,8 @@ async def oauth_authorize_submit(request: Request):
     client, bad = _check_authorize(p, request)
     if bad:
         return bad
+    if form.get("action") == "sandbox":
+        return _sandbox_and_connect(p, client, request)
     if form.get("action") != "allow":
         return _redirect(p["redirect_uri"], request, error="access_denied", error_description="The user cancelled.",
                          state=p.get("state"))
@@ -433,6 +440,11 @@ async def oauth_authorize_submit(request: Request):
                                 "agent token (vka_...) instead.")
     if not _agent_token_live(token):
         return _form(p, client, "That agent token is not valid (wrong, rotated, revoked or its sandbox expired).")
+    return _redirect(p["redirect_uri"], request, code=_issue_code(p, client, token, request), state=p.get("state"))
+
+
+def _issue_code(p: dict, client: dict, token: str, request: Request) -> str:
+    """An authorization code for a valid agent token (sealed under the code), audited as oauth.authorized."""
     code = secrets.token_urlsafe(32)
     who = agent_auth.identify(token)
     _ensure()
@@ -444,7 +456,41 @@ async def oauth_authorize_submit(request: Request):
                 {"client_id": client["client_id"], "client_name": client.get("client_name"),
                  "redirect_host": urlsplit(p["redirect_uri"]).hostname, "mandate_ids": who["mandate_ids"],
                  "last4": who["last4"]})
-    return _redirect(p["redirect_uri"], request, code=code, state=p.get("state"))
+    return code
+
+
+def _client_ip(request: Request) -> str:
+    """Same rule as api._client_ip: CF-Connecting-IP only when Cloudflare is the only way in."""
+    if config.env("TRUST_CF_HEADER") == "1" and (ip := request.headers.get("cf-connecting-ip")):
+        return ip
+    return request.client.host if request.client else "?"
+
+
+def _sandbox_and_connect(p: dict, client: dict, request: Request) -> HTMLResponse:
+    """'No token yet?': a judge sandbox for this visitor (sandbox.create, same per-IP limit as POST /sandbox), then
+    the code flow continues with its agent token. The approver token is shown here to the human, once; it never
+    goes to the assistant. The code in the Continue link is valid for CODE_TTL seconds, like any code."""
+    from . import service as S
+    try:
+        sb = sandbox.create(_client_ip(request), base(request) + "/")
+    except S.GatewayError as e:
+        return _form(p, client, e.message)
+    code = _issue_code(p, client, sb["agent_token"], request)
+    back = _redirect(p["redirect_uri"], request, code=code, state=p.get("state")).headers["location"]
+    sid = html.escape(sb["sandbox"]["id"])
+    inbox = html.escape(sb.get("quickstart", {}).get("seller_ui") or f"{base(request)}/ui/?sandbox={sid}#/inbox")
+    rules = "".join(f"<li><b>{html.escape(m.get('scenario') or m.get('label') or m['mandate_id'])}</b>: "
+                    f"{html.escape(m.get('rules') or m['mandate_id'])}</li>" for m in sb.get("mandates", []))
+    name = html.escape(client.get("client_name") or "your assistant")
+    body = f"""<h1>Your demo sandbox {sid} is ready</h1>
+<div class="box warn"><b>Your approver token, for you only</b> (shown once, keep it): orders above a mandate's limits
+wait for a person, and this token approves or rejects them in the <a href="{inbox}" target="_blank" rel="noopener">
+approval inbox</a>. Never give it to an assistant.<br><code style="word-break:break-all">{html.escape(sb["approver_token"])}</code></div>
+<div class="box">{name} will act as the purchasing agent for these mandates (valid 24 h):<ul>{rules}</ul></div>
+<p><a href="{html.escape(back)}"><button type="button">Continue to {name}</button></a></p>
+<p>Continue within 5 minutes. Then ask, for example: "Buy 100 litres of lactose-free milk for the hotel for
+Monday."</p>"""
+    return _page("Sandbox ready", body)
 
 
 # --- token endpoint ------------------------------------------------------------------------

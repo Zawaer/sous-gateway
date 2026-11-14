@@ -47,9 +47,13 @@ Authenticate, and paste the agent token in the browser page.
 1. Settings > Connectors > **Add custom connector** (on Team/Enterprise an Owner adds it under Organization settings).
 2. Name `Sous`, URL **`$SOUS/connect/mcp`** (e.g. `https://135-181-8-209.sslip.io/connect/mcp`). Leave the
    advanced OAuth client fields empty: Claude registers itself (dynamic client registration).
-3. **Connect**. A Sous page opens: paste the `agent_token`, press Connect. Claude stores an access token
-   (`vko_...`, 1 h, refreshed automatically); it never sees your approver token.
-4. In a chat, enable the Sous connector and ask, e.g. the sandbox's `prompts[0].prompt`.
+3. **Connect**. A Sous page opens: paste the `agent_token`, press Connect. **No token yet?** Press **Create a demo
+   sandbox and connect** instead: the next page shows your sandbox's approver token (for you, once) and a link to its
+   approval inbox, then **Continue** finishes the connection with the sandbox's agent token. Either way Claude stores
+   an access token (`vko_...`, 1 h, refreshed automatically); it never sees your approver token.
+4. In a chat, enable the Sous connector and ask, e.g. "Buy 100 litres of lactose-free milk for the hotel for
+   Monday." Quotes and orders appear as cards in the chat (MCP Apps) with the gateway's signature checked in the card.
+   An order above the mandate's limits waits for you: open the approval inbox with your approver token.
 
 Desktop and mobile use the same connector once added on claude.ai.
 
