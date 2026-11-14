@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import account, agent_auth, aimo, allergen_ai, autonomy, catalog, clearance, clock, config, remembered, credentials, deadline, erp, exposure, fi, carbon, holds, notify, offers as OFFERS, options as OPT, origin, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
+from . import account, agent_auth, aimo, allergen_ai, autonomy, catalog, clearance, clock, config, remembered, credentials, deadline, erp, exposure, fi, carbon, holds, notify, offers as OFFERS, options as OPT, origin, purpose as purposes, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
 from .mandate import Mandate, evaluate, product_refusals, readable_name
 
 
@@ -346,6 +346,12 @@ class QuoteItem(BaseModel):
                                      "'maito'. Candidates of another type (coffee milk for milk) are never chosen "
                                      "silently. Default: the most common type among the candidates")
     note: str | None = None
+    purpose: str | None = Field(None, max_length=120, description="What this item is for, e.g. 'coffee', 'recipe: "
+                                "lasagne', 'allergy menu'. Decides how strictly it may be substituted (see substitution)")
+    substitution: purposes.Substitution | None = Field(
+        None, description="exact = only these products (no substitute is proposed or ordered); ask = a substitute "
+        "needs the buyer's yes; allowed = the mandate's substitutions tier. Default: read from the purpose. An agent "
+        "can only make an item stricter than the buyer's mandate (product_purposes), never looser")
 
 
 RATIONALE_DOC = ("The agent's business reason for this call, in a sentence (e.g. 'weekly breakfast milk for 400 "
@@ -511,7 +517,20 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
             chosen, uncovered = blocked, 0.0
             Q.mark_oversize(chosen, item.amount, unit)  # information, shown next to whatever blocks the line
         carbon.add_range(chosen, cands)
+        item_ctx = (item.purpose, item.substitution)
+        locked_ids = [p for p in ([item.substitute_for] if item.substitute_for else item.product_ids)
+                      if purposes.for_product(mandate, p, item_ctx)[0] in ("exact", "ask")]
         for l in chosen:
+            orig_pid = item.substitute_for or (l["product_id"] if l["product_id"] in item.product_ids[:1] else
+                                               (locked_ids[0] if locked_ids else None))
+            lvl, why = purposes.for_product(mandate, orig_pid, item_ctx) if orig_pid else purposes.strictest(item_ctx)
+            if why:
+                l["purpose"] = why
+            if lvl:
+                l["substitution"] = lvl
+            if locked_ids and l["product_id"] not in locked_ids and not item.substitute_for:
+                # another candidate in place of a product the buyer locked: a substitute, so the rules see it
+                l["substitute_for"] = locked_ids[0]
             l["item_index"] = item_index
             if l["product_id"] in mismatch and l["orderable"]:
                 l["issues"] = l["issues"] + [{"code": "TYPE_MISMATCH", "severity": "warning",
@@ -688,7 +707,10 @@ def _options(body: dict, troubled: list, requested: date, mandate: Mandate | Non
                     break
         opts = OPT.build(item_index, item.amount, unit, offers, chosen, requested, next_offers=nxt)
         original = item.substitute_for or item.product_ids[0]
-        if not any(o["on_time"] for o in opts) and lookups < MAX_SUBSTITUTE_LOOKUPS and catalog.get(original):
+        exact = purposes.for_product(mandate, original, (item.purpose, item.substitution))[0] == "exact"
+        if exact:  # only this product: options may move the date or split it, never swap it
+            opts = [o for o in opts if not o.get("substitute")]
+        if not exact and not any(o["on_time"] for o in opts) and lookups < MAX_SUBSTITUTE_LOOKUPS and catalog.get(original):
             lookups += 1
             try:
                 subs = substitutes.suggest(original, requested, item.amount, unit, mandate, None, 4)["options"]
@@ -846,6 +868,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
         "requested_delivery_date": q["requested_delivery_date"],
         "lines": [{k: l.get(k) for k in ("product_id", "name", "quantity", "sales_unit", "unit_price_ex_vat",
                                          "line_total_ex_vat", "delivery_date", "logistic_model", "order_cutoff")}
+                  | {k: l[k] for k in ("purpose", "substitution", "substitute_for") if l.get(k)}  # what it is for
                   | ({"unit_note": l["unit_note"]} if l.get("unit_note") else {})  # how the unit was read
                   | ({"offer_id": l["offer_id"]} if l.get("offer_id") else {})  # bought on a Valio offer
                   for l in q["lines"]],
@@ -1178,8 +1201,11 @@ def get_order(order_id: str) -> dict:
 def suggest_substitutes(agent_id: str, product_id: str, delivery_date: date | None, amount: float,
                         unit: str = "SALES_UNIT", mandate_id: str | None = None,
                         avoid_allergens: list[str] | None = None, limit: int = 3,
-                        agent_token: str | None = None, reader=None) -> dict:
+                        agent_token: str | None = None, reader=None, purpose: str | None = None,
+                        substitution: str | None = None) -> dict:
     from . import access
+    if substitution is not None and substitution not in ("exact", "ask", "allowed"):
+        raise GatewayError("invalid_request", "substitution must be exact, ask or allowed.", 422)
     if mandate_id:
         access.check_live(reader, mandate_id)  # before the mandate and product lookups: no existence oracle
     unit = Q.normalize_unit(unit)  # MCP passes any string; REST already normalised
@@ -1194,7 +1220,8 @@ def suggest_substitutes(agent_id: str, product_id: str, delivery_date: date | No
     try:
         with sandbox.metered(mandate):
             r = substitutes.suggest(product_id, delivery_date, amount, None if unit == "SALES_UNIT" else unit,
-                                    mandate, avoid_allergens, limit=min(limit, 6))
+                                    mandate, avoid_allergens, limit=min(limit, 6),
+                                    **{k: v for k, v in (("purpose", purpose), ("substitution", substitution)) if v})
     except KeyError:
         raise GatewayError("product_not_found", f"No product {product_id}.", 404)
     except aimo.AimoError as e:

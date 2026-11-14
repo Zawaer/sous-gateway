@@ -41,7 +41,7 @@ from __future__ import annotations
 import re
 from datetime import date
 
-from . import catalog, origin, quote as Q
+from . import catalog, origin, purpose as purposes, quote as Q
 from .mandate import Mandate
 
 SHORTLIST = 25
@@ -747,10 +747,21 @@ def suggest(
     mandate: Mandate | None = None,
     avoid_allergens: list[str] | None = None,
     limit: int = 3,
+    purpose: str | None = None,
+    substitution: str | None = None,
 ) -> dict:
     orig = catalog.get(product_id)
     if not orig:
         raise KeyError(product_id)
+    lvl, why = purposes.for_product(mandate, product_id, (purpose, substitution))
+    if lvl == "exact":  # the buyer needs this exact product (allergy recipe): no substitute, and no live lookups
+        msg = f"the buyer uses {orig['name']} for {why or 'a purpose'} where only this product works"
+        return {"original": {"product_id": orig["id"], "name": orig["name"], "why_substitute": []},
+                "need": {"amount": amount, "unit": unit or "SALES_UNIT"},
+                "constraints": {"purpose": why, "substitution": "exact"},
+                "considered": {"in_category": 0, "excluded": {}, "priced_live": 0},
+                "options": [], "no_safe_substitute": msg, "not_offered": [],
+                "next_step": "Order the product itself (another date or a split), or ask the buyer."}
     avoid = sorted(set(avoid_allergens or []) | set(mandate.avoid_allergens if mandate else []))
     required_claims = set(orig["claims"]) & {
         "FREE_FROM_LACTOSE", "FREE_FROM_GLUTEN", "VEGAN", "VEGETARIAN", "LOW_LACTOSE", "FREE_FROM_MILK",
@@ -919,7 +930,10 @@ def suggest(
                         **({"allowed_origins": mandate.allowed_origins} if mandate and mandate.allowed_origins else {}),
                         **({"avoid_origins": mandate.avoid_origins} if mandate and mandate.avoid_origins else {}),
                         "same_category": orig["category"], "measure": measure, "temperature": orig["temperature"],
-                        "type": _public_type(otype)},
+                        "type": _public_type(otype),
+                        **({"purpose": why, "substitution": lvl} if lvl or why else {})},
+        **({"buyer_decides": f"The buyer uses {orig['name']} for {why or 'a recipe'}: any substitute here needs "
+                             "the buyer's yes (purpose.ask)."} if lvl == "ask" else {}),
         "considered": {"in_category": len(pool) + sum(excluded.values()), "excluded": excluded,
                        "priced_live": len(shortlist)},
         "options": picked,

@@ -251,12 +251,22 @@ function findingsList(findings, { only, plain } = {}) {
   </ul>`;
 }
 
+// What the line is for (sous/purpose.py): decides how strictly it may be substituted.
+const PURPOSE_SAYS = { exact: "only this product", ask: "substitute needs the buyer's yes", allowed: "any brand is fine" };
+function purposeChip(l) {
+  if (!l.purpose && !l.substitution) return "";
+  return `<div class="small purpose">${ic(l.substitution === "exact" ? "lock" : l.substitution === "ask" ? "help" : "swap_horiz")}
+    ${l.purpose ? `for ${esc(l.purpose)}` : ""}${l.substitution ? ` · ${esc(PURPOSE_SAYS[l.substitution] || l.substitution)}` : ""}
+    ${l.substitute_for ? ` · replaces <span class="mono">${esc(l.substitute_for)}</span>` : ""}</div>`;
+}
+
 function linesTable(lines) {
   return `<table class="lines"><thead><tr>
       <th>Product</th><th class="num">Qty</th><th class="num hide-s">Unit €</th><th class="num">Total €</th><th class="hide-s">Delivery</th>
     </tr></thead><tbody>${(lines || []).map((l) => `
     <tr>
-      <td>${esc(pname(l.name))}<div class="muted small mono">${esc(l.product_id)}${l.logistic_model ? " · " + esc(l.logistic_model) : ""}</div></td>
+      <td>${esc(pname(l.name))}<div class="muted small mono">${esc(l.product_id)}${l.logistic_model ? " · " + esc(l.logistic_model) : ""}</div>
+        ${purposeChip(l)}</td>
       <td class="num">${esc(l.quantity)} ${esc(unit(l.sales_unit))}</td>
       <td class="num hide-s">${eur(l.unit_price_ex_vat)}</td>
       <td class="num">${eur(l.line_total_ex_vat)}</td>

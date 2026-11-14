@@ -513,11 +513,16 @@ def suggest_substitutes(
     agent_id: str = "anonymous-agent",
     token: str | None = Depends(agent_token),
     r: access.Reader = Depends(access.reader),
+    purpose: str | None = Query(None, max_length=120, description="What the product is for ('coffee', 'recipe: "
+                                "lasagne'); with the mandate's product_purposes it decides how strict substitution is"),
+    substitution: Literal["exact", "ask", "allowed"] | None = None,
 ):
     """Good / better / best substitutes with their compromises and live offers. With mandate_id the call is
-    read-scoped like GET /mandates/{id} (docs/PROTOCOL.md section 22)."""
+    read-scoped like GET /mandates/{id} (docs/PROTOCOL.md section 22). For an `exact` product (by the mandate's
+    product_purposes or the purpose given) there are none; for `ask`, every option needs the buyer's yes."""
     return S.suggest_substitutes(agent_id, product_id, delivery_date, amount, unit, mandate_id,
-                                 avoid_allergens or None, limit, agent_token=token, reader=r)
+                                 avoid_allergens or None, limit, agent_token=token, reader=r, purpose=purpose,
+                                 substitution=substitution)
 
 
 # --- quotes and orders ------------------------------------------------------

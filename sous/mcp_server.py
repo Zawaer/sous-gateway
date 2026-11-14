@@ -628,8 +628,14 @@ def suggest_substitutes(
     limit: int = 3,
     agent_token: str | None = None,
     ctx: Context | None = None,
+    purpose: str | None = None,
+    substitution: str | None = None,
 ) -> dict:
     """Good / better / best substitutes for a product that can't be ordered (or for any product).
+
+    purpose: what the buyer uses the product for ('coffee', 'recipe: lasagne', 'allergy menu'); substitution
+    exact | ask | allowed. A product the buyer needs exactly (by purpose or the mandate's product_purposes) has no
+    substitutes; for 'ask', any substitute needs the buyer's yes. Pass the same purpose on request_quote items.
 
     Same category, measure and temperature class; keeps the original's dietary claims and the mandate's
     allergen rules (never relaxed). Each option lists its compromises in plain language and has a live offer.
@@ -640,7 +646,7 @@ def suggest_substitutes(
     """
     return S.suggest_substitutes(agent_id, product_id, _date(delivery_date) if delivery_date else None, amount, unit,
                                  mandate_id, avoid_allergens, limit, agent_token=_agent_token(ctx, agent_token),
-                                 reader=_reader(ctx, agent_token))
+                                 reader=_reader(ctx, agent_token), purpose=purpose, substitution=substitution)
 
 
 @_tool(OrderOut, title="Core 4/4: Place the order",

@@ -489,3 +489,5 @@ div.mstat:hover { background: none; }
 .side-switch { display: inline-flex; align-items: center; text-decoration: none; white-space: nowrap; }
 .wait-buyer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; }
 .wait-buyer .note-line { margin: 0; flex: 1 1 260px; }
+.purpose { color: var(--ink-60, inherit); display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+.purpose .ms { font-size: 15px; }

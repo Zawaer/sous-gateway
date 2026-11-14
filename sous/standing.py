@@ -48,6 +48,10 @@ class StandingItem(BaseModel):
     amount: float = Field(gt=0, description="Usual weekly amount")
     unit: Q.Unit = Field("SALES_UNIT", description=Q.UNIT_DOC)
     label: str | None = Field(None, description="Short name for messages, e.g. 'milk'")
+    purpose: str | None = Field(None, max_length=120, description="What it is for, e.g. 'coffee' or 'recipe: "
+                                "whipped desserts'; decides how strictly a renewal may substitute it")
+    substitution: Literal["exact", "ask", "allowed"] | None = Field(
+        None, description="exact | ask | allowed (default read from the purpose); see QuoteItem.substitution")
 
 
 class StandingOrderIn(BaseModel):
@@ -333,7 +337,8 @@ def renew(standing_id: str, delivery_date: date | None = None, *, agent_id: str 
     with S.aimo.background():  # a renewal never takes the Valio calls kept for interactive quotes (a sandbox's do)
         q = S.request_quote(S.QuoteRequest(
             agent_id=so["agent_id"], mandate_id=so["mandate_id"], delivery_date=when,
-            items=[S.QuoteItem(product_ids=it["product_ids"], amount=it["amount"], unit=it["unit"]) for it in items],
+            items=[S.QuoteItem(product_ids=it["product_ids"], amount=it["amount"], unit=it["unit"],
+                               purpose=it.get("purpose"), substitution=it.get("substitution")) for it in items],
             rationale=rationale or f"Weekly renewal of standing order {so['name']}",
         ), agent_token=agent_token)["quote"]
     return place_renewal(so, items, q, when, rens, agent_token=agent_token, rationale=rationale)

@@ -35,7 +35,7 @@ import re
 import threading
 from datetime import date, timedelta
 
-from . import access, aimo, catalog, config, exposure, origin, quote as Q, sandbox, service as S, store
+from . import access, aimo, catalog, config, exposure, origin, purpose as purposes, quote as Q, sandbox, service as S, store
 from .mandate import Mandate, evaluate
 
 SPONSOR = "Valio Aimo"
@@ -242,8 +242,11 @@ def _suggestions(mandate_id: str, agent_id: str, delivery_date: date, basis: lis
     orders = [o for o in store.list_orders(mandate_id=m.id) if o["status"] in ("ordered", "pending_approval")]
     orders = orders[:ORDERS_CONSIDERED]
     usual: dict[str, dict] = {}
+    used_for: dict[str, tuple[str | None, str | None]] = {}  # what past orders said each product is for
     for o in orders:
         for l in o["lines"]:
+            if l.get("product_id") and (l.get("purpose") or l.get("substitution")):
+                used_for.setdefault(l["product_id"], (l.get("purpose"), l.get("substitution")))
             if l.get("product_id") and l.get("quantity") and l["product_id"] not in usual:
                 usual[l["product_id"]] = {"quantity": l["quantity"], "order_id": o["id"],
                                           "ordered_at": o["created_at"][:10]}
@@ -263,6 +266,9 @@ def _suggestions(mandate_id: str, agent_id: str, delivery_date: date, basis: lis
     alt_for: dict[str, str] = {}  # candidate id -> original id
     cands: dict[str, dict] = {}
     for orig in originals:
+        if purposes.for_product(m, orig["id"], used_for.get(orig["id"]))[0] == "exact":
+            skip("purpose_exact")  # the buyer needs exactly this product: Valio proposes no alternative to it
+            continue
         measure = (orig.get("size_from_name") or [None, None])[1]
         keep = set(orig["claims"]) & DIETARY_CLAIMS
         pool = []
@@ -443,6 +449,9 @@ def _suggestions(mandate_id: str, agent_id: str, delivery_date: date, basis: lis
             reason = "New or updated listing: " + "; ".join(reasons) + "."
 
         # the mandate engine, in preview: what would happen if the buyer ordered this at the usual quantity
+        if oid:  # what the buyer uses the original for: purpose.exact / purpose.ask apply to Valio's offer too
+            lvl, why = purposes.for_product(m, oid, used_for.get(oid))
+            offer.update({k: v for k, v in (("purpose", why), ("substitution", lvl)) if v})
         outcome, findings = evaluate(m, agent_id, [offer], requested_date=delivery_date,
                                      substitute_for={cid: oid} if oid else None, spent_today_eur=spent, now=now)
         if outcome == "block":

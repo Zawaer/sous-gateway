@@ -366,6 +366,13 @@ def round_up(amount: float, unit: str) -> float:
     return round(math.ceil(amount / step - 1e-9) * step, 2)
 
 
+def _purpose(n) -> str:
+    """What an ingredient is for, on its quote item: 'recipe: <dishes>'. The gateway reads a recipe purpose as
+    substitution 'ask' (Valio Aimo: a substitute may not work the same in a recipe, so the buyer decides)."""
+    dishes = ", ".join(dict.fromkeys(d.split(" (")[0] for d in (getattr(n, "dishes", None) or [])))
+    return ("recipe: " + dishes)[:120] if dishes else "recipe"
+
+
 @dataclass
 class Need:
     key: str
@@ -835,21 +842,21 @@ def plan(request_text: str, *, gateway, mandate_id: str, agent_id: str, llm=None
             n.items = [len(items)]
             n.status = "quoted"
             items.append({"product_ids": [c["id"] for c in n.candidates], "amount": n.to_buy, "unit": n.unit,
-                          "note": n.name_fi})
+                          "note": n.name_fi, "purpose": _purpose(n)})
         elif blocked and substitutes and sub_calls < MAX_SUBSTITUTE_CALLS:
             # nothing meets the mandate's allergen/claim rules: ask the gateway for a substitute it has checked
             n.status = "ruled_out_by_mandate"
             sub_calls += 1
             err, r = _call(gateway, p.trace, "suggest_substitutes", {
                 "agent_id": agent_id, "mandate_id": mandate_id, "product_id": blocked["id"], "delivery_date": dd,
-                "amount": n.to_buy, "unit": n.unit})
+                "amount": n.to_buy, "unit": n.unit, "purpose": _purpose(n)})
             o = None if err else _first_substitute(r, mandate, n.to_buy)
             if o:
                 n.substitute = _sub_view(blocked["id"], blocked["name"], o, n.to_buy, n.unit)
                 p.substitutes.append(n.substitute)
                 n.items = [len(items)]
                 items.append({"product_ids": [o["product_id"]], "amount": n.to_buy, "unit": n.unit,
-                              "substitute_for": blocked["id"], "note": n.name_fi})
+                              "substitute_for": blocked["id"], "note": n.name_fi, "purpose": _purpose(n)})
             else:
                 n.notes.append(f"no product meets the mandate; closest match {blocked['name']} is ruled out")
         else:
@@ -917,7 +924,8 @@ def plan(request_text: str, *, gateway, mandate_id: str, agent_id: str, llm=None
             if ok and covered > 0:  # keep what the original products cover, substitute only the rest
                 entries.append((n, {**item, "product_ids": [l["product_id"] for l in ok], "amount": round(covered, 3)}))
             entries.append((n, {"product_ids": [o["product_id"]], "amount": missing, "unit": item["unit"],
-                                "substitute_for": orig[0], "note": f"{n.name_fi} (substitute)"}))
+                                "substitute_for": orig[0], "note": f"{n.name_fi} (substitute)",
+                                "purpose": _purpose(n)}))
         if changed and entries:
             kept = [it for _, it in entries]
             err, r2 = _call(gateway, p.trace, "request_quote",

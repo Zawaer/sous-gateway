@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from . import autonomy, catalog, config, fi, holds, origin as origins, pause
+from . import autonomy, catalog, config, fi, holds, origin as origins, pause, purpose as purposes
 
 # Four tiers, from least to most human involvement:
 #   silent: routine, the order goes through and is logged
@@ -63,6 +63,11 @@ class Mandate(BaseModel):
     allow_may_contain: bool = False
     unknown_allergens: Literal["ask", "block"] = "ask"  # unknown is never treated as safe
     required_claims: list[str] = Field(default_factory=list, description="e.g. FREE_FROM_LACTOSE")
+    product_purposes: dict[str, purposes.ProductPurpose] = Field(
+        default_factory=dict, description="What the buyer uses a product for, set by the buyer's human, keyed by "
+        "product id, e.g. {'464411': {'purpose': 'recipe: whipped desserts', 'substitution': 'ask'}}. substitution "
+        "exact = only this product (a substitute is refused, and Valio Aimo proposes none), ask = a substitute "
+        "always needs the buyer's yes, allowed = the substitutions tier applies; default read from the purpose")
     allowed_origins: list[str] | None = Field(
         None, description="Countries (fi, se, de ...) and/or groups (EU, EEA, NORDIC, BALTIC, EUROPE) the goods may "
         "come from; a product from anywhere else gets origin_violation. The country is the supplier-declared "
@@ -471,6 +476,20 @@ def evaluate(
                     f"{fi.allergens(mandate.avoid_allergens)}. Tuntematonta ei pidetä turvallisena.")
 
         if pid in subs:
+            lvl, why = purposes.for_product(mandate, subs[pid], (l.get("purpose"), l.get("substitution")))
+            orig_name = readable_name((catalog.get(subs[pid]) or {}).get("name") or subs[pid])
+            if lvl == "exact":
+                add("purpose.exact", "block",
+                    f"{name} would replace {orig_name}, but the buyer uses {orig_name} for {why or 'a purpose'} "
+                    "where only that exact product works.", pid,
+                    f"{name} korvaisi tuotteen {orig_name}, mutta ostaja käyttää sitä ({why or 'käyttötarkoitus'}) "
+                    "niin, että vain juuri se tuote käy.")
+            elif lvl == "ask":
+                add("purpose.ask", "ask",
+                    f"{name} would replace {orig_name}, which the buyer uses for {why or 'a recipe'}: a substitute "
+                    "may not work the same there, so the buyer decides.", pid,
+                    f"{name} korvaisi tuotteen {orig_name}, jota ostaja käyttää: {why or 'resepti'}. Korvaava ei "
+                    "välttämättä toimi samoin, joten ostaja päättää.")
             msg = {"block": "this mandate allows no substitutes", "ask": "substitutes need a human",
                    "notify": "the buyer will be told", "silent": "substitutes are allowed"}[mandate.substitutions]
             msg_fi = {"block": "valtakirja ei salli korvaavia tuotteita",

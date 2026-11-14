@@ -38,7 +38,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from . import catalog, config, signing, store
+from . import catalog, config, purpose as purposes, signing, store
 from .mandate import Finding, Mandate
 
 TYP = "sous-offer+jws"
@@ -190,6 +190,10 @@ def _static_block(p: dict | None, m: Mandate) -> str | None:
     """Why the mandate rules this product out, in words, or None (the same static checks as suggestions)."""
     if p is None:
         return None
+    for pid, pp in purposes.locked(m).items():  # the buyer needs exactly that product: no Valio offer replaces it
+        if pid != p.get("id") and purposes.resolve(pp.purpose, pp.substitution) == "exact" \
+                and (catalog.get(pid) or {}).get("category") == p.get("category"):
+            return f"the buyer uses {(catalog.get(pid) or {}).get('name') or pid} for {pp.purpose} and takes no other product"
     if m.allowed_categories is not None and p.get("category") not in m.allowed_categories:
         return f"category {p.get('category')} is not allowed by the mandate"
     if missing := sorted(set(m.required_claims) - set(p.get("claims") or [])):

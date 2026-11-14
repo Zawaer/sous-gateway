@@ -93,7 +93,9 @@ def _sub_line(o: dict, a: dict) -> dict:
             "sales_unit": p.get("sales_unit") or old.get("sales_unit"), "unit_price_ex_vat": unit,
             "line_total_ex_vat": round((unit or 0) * a["quantity"], 2), "delivery_date": old.get("delivery_date"),
             "logistic_model": None, "order_cutoff": None, "claims": p.get("claims") or [],
-            "delivery_reliability": p.get("delivery_reliability"), "issues": [], "orderable": True}
+            "delivery_reliability": p.get("delivery_reliability"), "issues": [], "orderable": True,
+            # what the replaced line is for (purpose.exact / purpose.ask decide whether Valio's pick can stand)
+            **{k: old[k] for k in ("purpose", "substitution") if old.get(k)}}
 
 
 def assess(o: dict, a: dict, mandate: Mandate) -> tuple[str, list[dict]]:

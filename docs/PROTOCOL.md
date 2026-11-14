@@ -110,6 +110,7 @@ Source: `sous/mandate.py`, class `Mandate`. All money is EUR excluding VAT.
 | `allow_may_contain` | bool | false | If false, "may contain" counts as contains. |
 | `unknown_allergens` | `ask` or `block` | `ask` | What to do when a product has no allergen declaration. Never `silent`: unknown is never safe. |
 | `required_claims` | list | [] | Claims every line must carry, e.g. `FREE_FROM_LACTOSE`. |
+| `product_purposes` | object | {} | What the buyer uses a product for, by product id: `{purpose, substitution}` with substitution `exact`, `ask` or `allowed` (default read from the purpose). See section 32. |
 | `allowed_origins` | list or null | null | Countries (`fi`, `se`, `de` ...) and/or groups (`EU`, `EEA`, `NORDIC`, `BALTIC`, `EUROPE`) the goods may come from. Null = any. See section 30. |
 | `avoid_origins` | list | [] | Countries and/or groups the goods must not come from. |
 | `origin_violation` | `ask` or `block` | `ask` | Tier for a product from outside `allowed_origins` or from an avoided origin (`origin.restricted`). |
@@ -1035,4 +1036,14 @@ Production path: replace the supplier-declared field with a verified claim (a ce
 - **Passed over**: blocking issue codes on quote lines (cut-off passed, out of stock, held, allocated to others...) with the products most often hit.
 
 Totals are public; `by_buyer` (lost value and Valio-side lost value per buyer) only with the global approver code. The Valio UI's stats page shows it as "Lost demand".
+
+## 32. Purpose per item (`sous/purpose.py`)
+
+
+- **Where it is said.** A quote item (and a standing-order item) takes `purpose` (free text: `coffee`, `recipe: lasagne`, `allergy menu`) and `substitution`: `exact` (only these products), `ask` (a substitute needs the buyer's yes) or `allowed` (the mandate's `substitutions` tier applies). Without `substitution`, it is read from the purpose: recipe and dish words mean `ask`, allergy and "only this" words mean `exact`, coffee and "any brand" mean `allowed`. The buyer's human can pin it per product in the mandate (`product_purposes`), which binds every agent and Valio Aimo's side.
+- **Strictest wins.** Mandate, standing item and quote item are combined and the strictest level wins, so an agent can only make an item stricter, never looser than the buyer said.
+- **On the quote and order.** Lines carry `purpose` and `substitution` (signed), and order lines keep them. A candidate in an item that replaces a product the buyer locked (`exact` or `ask`) counts as a substitute (`substitute_for`), so the rules see it.
+- **Rules.** A substitute for an `exact` product fires `purpose.exact` (block). A substitute for an `ask` product fires `purpose.ask` (ask), even when the mandate lets substitutes through silently.
+- **Valio Aimo's side follows it.** `GET /substitutes` and MCP `suggest_substitutes` (which take `purpose` / `substitution`) return no options for an `exact` product, without a live lookup. For `ask`, they add `buyer_decides`. Quote options never swap an `exact` item (only another date or a split). "Valio suggests" proposes no alternative to a product the buyer uses exactly (by the mandate or by what past order lines said), and its mandate preview applies `purpose.ask`. A Valio offer for a product in the same category as an `exact` product is not shown to that buyer. A substitution at pick (section 29) inherits the line's purpose, so for an `exact` line it goes to the buyer as blocked (`pending_buyer`).
+- **Recipe planner.** Items get `purpose: recipe: <dishes>`, so its substitutes wait for the buyer.
 

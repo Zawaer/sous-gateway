@@ -57,6 +57,10 @@ Because "same as usual" is where creep hides. Each renewal is quoted live and co
 
 ---
 
+- *"What about payment?"* Contract customers pay by invoice, so there is deliberately no payment step.
+
+---
+
 ## Backup facts
 - 17,546 products, fi/sv/en. Search: SQLite FTS5 trigram, no API calls.
 - Quote: 2 batched Valio API calls (price + availability), up to 4 with substitute options; 1.0 per request on average with the cache. Signed, expiring.

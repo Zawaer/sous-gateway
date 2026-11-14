@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import typing
 
-from . import config, deadline, fi, origin as origins, reservations
+from . import catalog, config, deadline, fi, origin as origins, purpose as purposes, reservations
 from .mandate import UNUSUAL_MIN_HISTORY, Mandate
 
 OWNERS = {
@@ -202,6 +202,15 @@ def _build() -> list[dict]:
         _r("remembered.type_mismatch", "finding", ["notify"], "buyer",
            "The same other kind of product (oat drink for milk) that a human of this buyer approved and asked the "
            "gateway to remember: notify instead of ask, under the same limits as remembered.unit_interpreted.", None),
+        _r("purpose.exact", "finding", ["block"], "buyer",
+           "A substitute for a product the buyer uses where only that exact product works (e.g. an allergy recipe): "
+           "refused, and Valio Aimo proposes no alternative for it. Set per product in the mandate (product_purposes) or "
+           "per item (purpose / substitution = exact); an agent can only make an item stricter.",
+           "product_purposes"),
+        _r("purpose.ask", "finding", ["ask"], "buyer",
+           "A substitute for a product the buyer uses in a recipe (whipping cream may not whip the same): the buyer "
+           "decides, whatever the substitutions tier says. Coffee cream, by contrast, can be marked allowed.",
+           "product_purposes"),
         _r("substitution", "finding", _field_tiers("substitutions"), "buyer",
            "A line replaces the product the buyer asked for; the mandate says how much say the human gets.",
            "substitutions"),
@@ -447,6 +456,10 @@ def mandate_summary(m: Mandate) -> list[dict]:
         known = f" (beyond {len(m.usual_products)} usual products)" if m.usual_products else ""
         add("product.first_time", f"new products{known} {_TIER_SAYS[m.first_time_products]}")
     add("substitution", f"substitutes {_TIER_SAYS[m.substitutions]}")
+    for pid, pp in (m.product_purposes or {}).items():
+        lvl = purposes.resolve(pp.purpose, pp.substitution)
+        if lvl in ("exact", "ask"):
+            add(f"purpose.{lvl}", f"{(catalog.get(pid) or {}).get('name') or pid} ({pp.purpose}): {purposes.LABEL[lvl]}")
     if m.terminal_products != "silent":
         add("supply.terminal", f"supplier-shipped products {_TIER_SAYS[m.terminal_products]}")
     if m.min_delivery_reliability is not None:

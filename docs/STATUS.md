@@ -192,4 +192,6 @@ Before 8d9efc1 the set caught two gateway bugs (now fixed, cases kept as regress
 5. Is there a real launch or season date per product? Seasonal and new suggestions use name keywords and Synkka's lastUpdated as proxies.
 6. What rate limit would the real price and availability APIs give each partner?
 
-Answers: _(not asked yet)_
+- **Sign-off (question 3).** Routine repeat orders can be authorised once by the customer; surprising exceptions (an unusual quantity) need an "is this OK?" check. Allergy substitutes need the customer's yes, and some allergy recipes work with only one specific product. Matches our defaults (drift, unusual quantity, unknown allergens, substitutions) and led to purpose per item (section 32 of PROTOCOL.md).
+- **Payment is out of scope.** Contract customers pay by invoice. Matches our "orders on account, no payment rail".
+- Questions 1, 2, 4, 5 and 6 were not covered.

@@ -265,7 +265,7 @@ def test_table_plan_builds_one_basket_quote_and_orders(gw):
 
 
 def test_llm_plan_respects_mandate_allergens_with_a_gateway_substitute(gw, monkeypatch):
-    def fake_suggest(product_id, delivery_date, amount, unit, mandate, avoid, limit=3):
+    def fake_suggest(product_id, delivery_date, amount, unit, mandate, avoid, limit=3, **kw):
         assert mandate.avoid_allergens == ["AM"]
         from sous import quote as Q
         offers, _ = Q.offers(["120"], delivery_date, amount, unit)
@@ -284,7 +284,11 @@ def test_llm_plan_respects_mandate_allergens_with_a_gateway_substitute(gw, monke
     lines = {l["product_id"]: l for l in p.quote["lines"]}
     assert "121" not in lines and "122" not in lines  # milk products never quoted under an AM mandate
     assert lines["120"]["substitute_for"] in ("121", "122") and lines["120"]["quantity"] == 2
-    assert p.quote["mandate_preview"]["outcome"] == "notify"  # the mandate says substitutes notify
+    # the mandate says substitutes notify, but a substitute in a recipe is the buyer's call (Valio: whipping cream
+    # may not whip the same), so purpose.ask holds it
+    assert lines["120"]["purpose"].startswith("recipe") and lines["120"]["substitution"] == "ask"
+    assert p.quote["mandate_preview"]["outcome"] == "ask"
+    assert "purpose.ask" in {f["rule"] for f in p.quote["mandate_preview"]["findings"]}
     # the onion: 0.8 kg needed, the 10 kg sack is left out
     assert "103" not in lines and lines["104"]["quantity"] == 1
 
@@ -292,7 +296,7 @@ def test_llm_plan_respects_mandate_allergens_with_a_gateway_substitute(gw, monke
 def test_uncovered_item_gets_a_substitute_and_a_revised_quote(gw, monkeypatch):
     UNAVAILABLE.update({"121", "122"})  # no whipping cream on Monday
 
-    def fake_suggest(product_id, delivery_date, amount, unit, mandate, avoid, limit=3):
+    def fake_suggest(product_id, delivery_date, amount, unit, mandate, avoid, limit=3, **kw):
         from sous import quote as Q
         offers, _ = Q.offers(["120"], delivery_date, amount, unit)
         return {"original": {"product_id": product_id}, "constraints": {}, "considered": {}, "no_safe_substitute": None,

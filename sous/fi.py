@@ -278,6 +278,11 @@ RULES = {
                                 "hyväksynyt ja pyytänyt muistamaan: ilmoitus hyväksynnän sijaan, samoin rajoin kuin "
                                 "remembered.unit_interpreted.",
     "substitution": "Rivillä on korvaava tuote pyydetyn tilalla; valtakirja määrää, kuinka paljon ihminen saa siihen sanoa.",
+    "purpose.exact": "Korvaava tuote tuotteelle, jota ostaja käyttää niin, että vain juuri se tuote käy (esim. "
+                     "allergiaresepti): estetään, eikä Valio Aimo ehdota sille vaihtoehtoa. Asetetaan valtakirjassa "
+                     "tuotekohtaisesti tai rivillä; agentti voi vain tiukentaa.",
+    "purpose.ask": "Korvaava tuote tuotteelle, jota ostaja käyttää reseptissä (kuohukerma ei välttämättä vaahdotu "
+                   "samoin): ostaja päättää aina. Kahvikerma taas voidaan merkitä vapaasti korvattavaksi.",
     "product.held": "Valio Aimo on pysäyttänyt tuotteen (takaisinveto, laatupidätys tai myyntikielto; GET "
                     "/holds): sitä ei voi tarjota tilattavana, tilata eikä hyväksyä, ei edes ennen pysäytystä "
                     "annetulla tarjouksella.",
@@ -622,6 +627,14 @@ def summary_text(m, rule: str | None, idx: int = 0) -> str | None:
         return f"uudet tuotteet{known} {TIER_SAYS[m.first_time_products]}"
     if rule == "substitution":
         return f"korvaavat tuotteet {TIER_SAYS[m.substitutions]}"
+    if rule in ("purpose.exact", "purpose.ask"):
+        from . import catalog as _cat, purpose as _p
+        lvl = rule.split(".")[1]
+        hits = [(pid, pp) for pid, pp in (m.product_purposes or {}).items() if _p.resolve(pp.purpose, pp.substitution) == lvl]
+        if idx < len(hits):
+            pid, pp = hits[idx]
+            return (f"{(_cat.get(pid) or {}).get('name') or pid} ({pp.purpose}): "
+                    + ("vain juuri tämä tuote" if lvl == "exact" else "korvaava vaatii ostajan hyväksynnän"))
     if rule == "supply.terminal":
         return f"toimittajan varastosta tulevat tuotteet {TIER_SAYS[m.terminal_products]}"
     if rule == "supply.reliability":
