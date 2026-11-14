@@ -143,7 +143,8 @@ def test_create_gives_signed_mandate_copies_tokens_and_quickstarts(c):
     assert qs["claude_code"] == (f'claude mcp add --transport http sous https://sous.test/mcp/ '
                                  f'--header "Authorization: Bearer {token}"')
     assert qs["seller_ui"].startswith(f"https://sous.test/ui/?sandbox={sid}")
-    assert qs["buyer_ui"] == f"https://sous.test/buyer/?sandbox={sid}"
+    assert qs["buyer_ui"].startswith(f"https://sous.test/buyer/?sandbox={sid}&mandate=M-")
+    assert token not in qs["buyer_ui"]  # the agent token is pasted separately, never put in a link
     assert approver in qs["curl_approve"] and token in qs["curl_quote"]
     assert len(s["prompts"]) == 4 and all(ids["hotel"] in p["prompt"] or ids["hospital"] in p["prompt"]
                                           or ids["school"] in p["prompt"] for p in s["prompts"])

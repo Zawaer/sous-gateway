@@ -417,7 +417,7 @@ def quickstart(sid: str, base: str, token: str, approver: str, mandates: list[di
         "curl_approve": (f"curl -s -X POST {base}/orders/<PO-id>/approve -H 'X-Approver-Code: {approver}' "
                          "-H 'Content-Type: application/json' -d '{\"by\": \"<your name>\"}'"),
         "seller_ui": f"{base}/ui/?sandbox={sid}#/inbox",
-        "buyer_ui": f"{base}/buyer/?sandbox={sid}",
+        "buyer_ui": f"{base}/buyer/?sandbox={sid}&mandate={hotel['mandate_id']}&agent={hotel['agent_id']}",
         "status": f"{base}/sandbox/{sid}",
     }
 
