@@ -500,6 +500,7 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
             # so the mandate engine checks them and the refusal names the real reasons (allergen, undeliverable,
             # cut-off), not just "nothing orderable". Same as for a single named product: lines, no gap.
             chosen, uncovered = blocked, 0.0
+            Q.mark_oversize(chosen, item.amount, unit)  # information, shown next to whatever blocks the line
         carbon.add_range(chosen, cands)
         for l in chosen:
             l["item_index"] = item_index

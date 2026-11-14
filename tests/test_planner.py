@@ -144,6 +144,18 @@ def test_one_20kg_bag_for_12kg_is_flagged_when_nothing_closer_is_affordable():
     assert q["mandate_preview"]["outcome"] == "notify"
 
 
+def test_oversize_is_shown_on_a_line_blocked_by_its_cut_off_too(monkeypatch):
+    monkeypatch.setattr(S.substitutes, "suggest", lambda *a, **k: {"options": []})  # no catalog offline
+    add("BOX", "Cream 10 l", 30.0, 3.0, per="L", size_from_name=(10.0, "L"),
+        avail=stock(closing="2026-11-13T12:00:00+0200"))  # cut-off passed at noon; now is 21:00
+    q = quote(["BOX"], 1, unit="L")
+    [line] = q["lines"]
+    codes = {i["code"] for i in line["issues"]}
+    assert not line["orderable"] and {"CUTOFF_PASSED", "PACK_OVERSIZE"} <= codes
+    issue = next(i for i in line["issues"] if i["code"] == "PACK_OVERSIZE")
+    assert issue["message"].startswith("10 L for a 1 L need (+900%)") and issue["severity"] == "warning"
+
+
 def test_smaller_packs_win_when_within_ten_percent():
     add("BIG", "Sugar 20 kg", 20.0, 1.0, size_from_name=(20.0, "KG"))
     add("SMALL", "Sugar 1 kg", 1.8, 1.8)  # 12 x 1.80 = 21.60, within 10% of 20.00

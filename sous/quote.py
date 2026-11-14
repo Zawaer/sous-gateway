@@ -533,6 +533,22 @@ def plan(need: float, need_unit: str | None, candidates: list[dict], sized: bool
     return lines, left
 
 
+def mark_oversize(lines: list[dict], need: float, need_unit: str | None) -> None:
+    """PACK_OVERSIZE on lines that can't be ordered (each is the whole need on its own: a 10 L box for a 1 L need,
+    blocked by a cut-off). Information next to the blocking issue, so the buyer sees both problems at once."""
+    if is_packs(need_unit) or need_unit not in ("L", "KG") or need <= 0:
+        return
+    u = "kg" if need_unit == "KG" else "L"
+    for l in lines:
+        if any(i["code"] == "PACK_OVERSIZE" for i in l["issues"]):
+            continue
+        surplus = _surplus([l], need)
+        if surplus > need * config.PACK_OVERSIZE_PCT / 100 + 1e-9:
+            l["issues"] = l["issues"] + [asdict(Issue(
+                "PACK_OVERSIZE", WARNING, f"{round(need + surplus, 2):g} {u} for a {round(need, 2):g} {u} need "
+                f"(+{surplus / need:.0%}): the smallest pack of this product that covers it."))]
+
+
 def _surplus(lines: list[dict], need: float) -> float:
     return max(0.0, round(sum((l.get("covers") or {}).get("amount") or 0 for l in lines) - need, 3))
 
