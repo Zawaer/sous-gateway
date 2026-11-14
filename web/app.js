@@ -1301,8 +1301,7 @@ function route() {
   closeSheet();
   // Deep link: #/orders/PO-XXXX opens that order (a buyer agent can send this to its human).
   // #/standing/SO-XXXX opens that standing order.
-  if (openId) (current === "standing" ? openStanding : openOrder)(openId)
-    .catch((e) => toast("Can't open " + openId + ": " + e.message, 5000));
+  if (openId) openLinked(openId);
   if (same) return;
   document.querySelectorAll(".tabs a").forEach((a) => a.classList.toggle("on", a.dataset.tab === current));
   document.querySelector(".tabs a.on")?.scrollIntoView({ block: "nearest", inline: "center" });
@@ -1312,6 +1311,30 @@ function route() {
   refresh();
   clearInterval(timer);
   timer = setInterval(() => { if (!document.hidden) refresh(); tickDeadlines(); }, REFRESH_MS);
+}
+
+// Deep links: with read access control a private order answers 404 like a missing one, so offer the code.
+async function openLinked(id) {
+  const open = current === "standing" ? openStanding : openOrder;
+  try { await open(id); } catch (e) {
+    const hasCode = !!store.get(CODE_KEY);
+    openSheet(`<h2>${esc(id)}</h2>
+      <p>This ${current === "standing" ? "standing order" : "order"} can't be shown: it doesn't exist, or it is private
+        to its buyer${hasCode ? " and the code saved in this browser doesn't cover it" : ""}.</p>
+      <p class="small muted">Approvers see everything with the approver code; a judge sandbox's own orders open with its
+        sbxa_ token (use the link with ?sandbox=…).</p>
+      <div class="actions"><button class="btn yes" id="link-code">${hasCode ? "Enter a different code" : "Enter the approver code"}</button>
+        <a class="btn plain" href="#/today">Back to Today</a></div>`);
+    $("#link-code")?.addEventListener("click", async () => {
+      const c = await askCode("Enter the approver code to open private orders. It stays in this browser only.");
+      if (!c) return;
+      store.set(CODE_KEY, c);
+      codeDeclined = false;
+      for (const v of Object.values(views)) v.key = "";
+      openLinked(id);
+      refresh();
+    });
+  }
 }
 
 function renderQAToggle() {
