@@ -236,6 +236,9 @@ function renderMandate(mandate) {
     ['weekly_limit_eur', 'Weekly approval threshold'],
   ].filter(([key]) => mandate[key] != null)
     .map(([key, label]) => `${label}: ${money(mandate[key])} ex VAT`);
+  if (mandate.split_window_minutes != null) {
+    limits.push(`Split-order check: small orders within ${mandate.split_window_minutes} minutes are combined against the automatic order limit.`);
+  }
   appendList(content, 'Spending rules', limits);
   appendList(content, 'Product constraints', [
     mandate.avoid_allergens?.length && `Avoid allergens: ${mandate.avoid_allergens.join(', ')}`,
