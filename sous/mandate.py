@@ -78,6 +78,14 @@ UNUSUAL_MIN_HISTORY = 3
 _RANK = {"silent": 0, "notify": 1, "ask": 2, "block": 3}
 
 
+def readable_name(name: str) -> str:
+    """Catalog names are often ALL CAPS ('BRAVO CHEF 400G CHOPPED TOMATOES'); reasons read better in sentence case."""
+    letters = [c for c in name or "" if c.isalpha()]
+    if letters and sum(c.isupper() for c in letters) / len(letters) > 0.8:
+        return name[:1].upper() + name[1:].lower()
+    return name
+
+
 def evaluate(
     mandate: Mandate,
     agent_id: str,
@@ -151,7 +159,7 @@ def evaluate(
 
     subs = substitute_for or {}
     for l in lines:
-        pid, name = l["product_id"], l["name"]
+        pid, name = l["product_id"], readable_name(l["name"])
         p = catalog.get(pid) or {}
 
         for issue in l.get("issues", []):

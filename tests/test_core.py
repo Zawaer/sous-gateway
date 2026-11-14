@@ -211,3 +211,9 @@ def test_name_pack_count_not_multiplied_twice():
     p = product(names={"fi": "Paulig Presidentti 4x1kg kahvipavut", "en": "", "sv": ""},
                 sales_unit="KI", base_unit="BAG", units={"BAG": 1.0, "KI": 4.0}, size_from_name=(4.0, "KG"))
     assert Q.content_per_sales_unit(p, None)[:2] == (4.0, "KG")
+
+
+def test_reasons_use_readable_names():
+    from sous.mandate import readable_name
+    assert readable_name("BRAVO CHEF 400G CHOPPED TOMATOES") == "Bravo chef 400g chopped tomatoes"
+    assert readable_name("Valio Eila 3 % maitojuoma 1 l") == "Valio Eila 3 % maitojuoma 1 l"
