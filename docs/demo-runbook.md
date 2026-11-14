@@ -48,6 +48,11 @@ night of 13-14.11), quotes and orders need the mandate's bearer token. Two ways:
   the per-IP rate limit (60 POST/min) was hit; wait a minute and rerun that scene.
 - After Sun 15.11 17:00 the mock's Stock cut-off has passed and most products read as
   "cut-off passed" (see the eval note in `docs/STATUS.md`). Record before that.
+- **Judging after Sun 16:30:** @rene-claude-infra sets `SOUS_DEMO_NOW=2026-11-15T09:00:00+02:00` in the
+  prod `.env` (with Rene's OK) and redeploys. The gateway then evaluates cut-offs as if it were Sun 09:00,
+  advancing in real time (`SOUS_DEMO_CLOCK=frozen` to pin it; restart to reset). It is disclosed everywhere:
+  `/health` `clock.mode = "demo"`, a UI banner, `X-Sous-Clock` header, `clock` in every signed quote and
+  order, audit events. See PROTOCOL.md section 21. Unset it to return to real time.
 - Scene 1 comes back **Ask human** with `spend.daily_limit`: the hotel mandate allows €8,000 per
   day and earlier rehearsals the same day count towards it. That is the mandate working; record on
   a fresh day (it resets at midnight Helsinki time) or use a gateway whose orders were reset.

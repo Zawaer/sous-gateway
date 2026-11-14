@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
-from . import aimo, catalog, config, sandbox, service as S, signing, standing, store
+from . import aimo, catalog, clock, config, sandbox, service as S, signing, standing, store
 from .mandate import Mandate
 from .mcp_server import mcp
 
@@ -56,6 +56,15 @@ app = FastAPI(
 )
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
                    expose_headers=["Mcp-Session-Id"])
+
+
+@app.middleware("http")
+async def clock_header(request: Request, call_next):
+    """Demo clock never silent: every response says which instant business rules were evaluated at."""
+    response = await call_next(request)
+    if (h := clock.header()) is not None:
+        response.headers["X-Sous-Clock"] = h
+    return response
 
 
 @app.middleware("http")
@@ -251,7 +260,7 @@ def order_schema_org(order_id: str, request: Request):
 
 @app.get("/health", tags=["meta"])
 def health():
-    return {"ok": True, "valio_api_calls": aimo.stats, "approver_code_required": bool(config.APPROVER_CODE),
+    return {"ok": True, "clock": clock.info(), "valio_api_calls": aimo.stats, "approver_code_required": bool(config.APPROVER_CODE),
             "agent_auth_required_globally": config.REQUIRE_AGENT_AUTH,
             "storage": store.backend(), "valio_aimo": aimo.health()}
 

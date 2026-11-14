@@ -11,7 +11,7 @@ import math
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta
 
-from . import aimo, catalog, config
+from . import aimo, catalog, clock, config
 
 STOCK_PLENTY = 1e9  # Stock lines report 9999999999 when there is effectively no limit
 TERMINAL_UNKNOWN = 999999  # Terminal (supplier-shipped) lines always report 999999 = unknown
@@ -229,10 +229,10 @@ def offers(
     products = {pid: p for pid in product_ids if (p := catalog.get(pid))}
     ids = list(products)
     if not ids:
-        return [], datetime.now(config.TZ)
+        return [], clock.now()
     prices = aimo.prices(ids, requested)
     avail = aimo.availability(ids, requested)
-    now = datetime.now(config.TZ)
+    now = clock.now()
     out = [build_offer(products[i], prices.get(i), avail.get(i), requested, need, need_unit, now) for i in ids]
     return out, now
 

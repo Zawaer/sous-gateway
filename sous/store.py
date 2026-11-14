@@ -24,7 +24,7 @@ import threading
 from datetime import datetime, timezone
 from urllib.parse import unquote, urlparse
 
-from . import config
+from . import clock, config
 from .signing import canonical
 
 _lock = threading.RLock()
@@ -137,6 +137,7 @@ def _utc(ts: str) -> str:
 # --- audit -----------------------------------------------------------------
 
 def audit(event: str, actor: str, actor_type: str, subject: str | None, buyer: str | None, data: dict) -> dict:
+    data = {**data, "clock": clock.audit_tag()}  # the event's ts stays real time; this says which clock decided
     with _lock:
         last, _, _ = _exec("SELECT hash FROM audit_event ORDER BY seq DESC LIMIT 1")
         prev = last[0]["hash"] if last else "0" * 64

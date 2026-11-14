@@ -668,3 +668,30 @@ basket and stays free of LLM calls. Source: `agent/recipe.py`, `agent/recipes.js
 6. **Preview, then order or ask.** The plan shows `mandate_preview`; with `--order` it calls `place_order` with an
    idempotency key per quote, and the gateway's tier decides (ordered, held for approval, refused).
 
+
+## 21. Demo clock
+
+**Why.** Valio Aimo's mock API returns fixed dates: every Stock product has `closingTime` Sun 15.11 17:00
+Helsinki for delivery Mon 16.11, and Terminal products' cut-offs have already passed. After Sun 17:00 the
+real clock makes every product "cut-off passed", so quotes, the demo and the eval stop showing anything but
+refusals. Judging can happen after that.
+
+**How.** `SOUS_DEMO_NOW` (ISO datetime; without an offset it is Helsinki time) sets the gateway's business
+clock (`sous/clock.py`): cut-off checks, quote `issued_at`/`expires_at`, the order decision time, approval
+deadlines and "today" (daily spend, standing-order next delivery, suggestions). It advances in real time from
+the configured instant (`demo_now + (real_now - process start)`), or stays put with `SOUS_DEMO_CLOCK=frozen`.
+Unset (the default) = real time. Technical timers (rate limits, caches, the Valio circuit breaker, sandbox
+expiry) and cryptographic validity (buyer-signed VC windows, `verify_mandate`, revocation `iat`) always use
+real time, and so do the audit log's `ts` and storage timestamps.
+
+**Disclosed, never silent.**
+- Every signed quote and order receipt carries `clock`:
+  `{"mode": "real", "now": ...}`, or in demo mode
+  `{"mode": "demo", "now": "<evaluated at>", "advancing": true, "configured": ..., "real_now": ...,
+  "note": "Demo clock: cut-offs are evaluated as if it were <time>; Valio's mock returns fixed dates ..."}`.
+  A human decision adds `approval.clock`.
+- Every audit event's `data.clock` is `{"mode": "real"}` or `{"mode": "demo", "now": ...}` (part of the
+  hash chain).
+- `GET /health` has `clock` at the top level; the web UI shows a banner when `clock.mode == "demo"`.
+- Every REST response has the header `X-Sous-Clock: demo <iso>` while demo mode is on (absent in real mode).
+- The MCP server's instructions say the gateway runs on a demo clock and ask agents to tell the user.

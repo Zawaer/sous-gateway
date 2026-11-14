@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import agent_auth, aimo, catalog, config, credentials, notify, options as OPT, quote as Q, sandbox, signing, store, substitutes
+from . import agent_auth, aimo, catalog, clock, config, credentials, notify, options as OPT, quote as Q, sandbox, signing, store, substitutes
 from .mandate import Mandate, evaluate
 
 
@@ -35,7 +35,14 @@ def _id(prefix: str) -> str:
 
 
 def _now() -> datetime:
-    return datetime.now(config.TZ)
+    """Business time (cut-offs, expiry, deadlines, 'today'): the demo clock when SOUS_DEMO_NOW is set."""
+    return clock.now()
+
+
+def _real_now() -> datetime:
+    """Credential/signature validity windows: always real time, even under the demo clock (in real mode this is
+    _now(), so the two never disagree there)."""
+    return clock.real_now() if clock.is_demo() else _now()
 
 
 # The gateway runs as one process: this lock makes "check idempotency key, claim quote, sum today's spend,
@@ -177,7 +184,7 @@ def issue_credential_mandate(token: str, mint_agent_credential: bool | None = No
     with _order_lock:
         try:
             c = credentials.parse_vc(token)
-            credentials.check_window(c, _now())
+            credentials.check_window(c, _real_now())
         except credentials.CredentialError as e:
             raise _cred_error(e) from None
         m, did = c["mandate"], c["issuer"]
@@ -250,7 +257,7 @@ def verify_mandate(mandate_id: str) -> dict:
     if not m:
         raise GatewayError("mandate_not_found", f"No mandate {mandate_id}.", 404)
     jws = m.pop("_jws")
-    now = _now()
+    now = _real_now()
     payload = signing.verify(jws, "sous-mandate+jws")
     gw_ok = payload is not None and payload.get("id") == mandate_id
     p = payload if gw_ok else m
@@ -468,6 +475,7 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset()) -> d
         "uncovered": gaps,
         "alternatives_considered": considered,
         "valio_api_calls": {k: aimo.stats[k] - before[k] for k in aimo.stats},
+        "clock": clock.info(now),
     }
     if rationale := clean_rationale(req.rationale):
         body["rationale"] = rationale
@@ -605,6 +613,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
         "idempotency_key": idempotency_key,
         "agent_rationale": rationale or q.get("rationale"),
         "created_at": now.isoformat(timespec="milliseconds"), "updated_at": now.isoformat(timespec="milliseconds"),
+        "clock": clock.info(now),
     }
     order["receipt_jws"] = _receipt(order)
     # Claim the quote and store the order together: if storing fails, the quote is released again.
@@ -629,7 +638,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
 def _receipt(order: dict) -> str:
     """Signed receipt of the order's current state (re-issued after a human decision)."""
     return signing.sign({k: order.get(k) for k in ("id", "quote_id", "mandate_id", "status", "total_ex_vat",
-                                                   "lines", "decision", "approval", "updated_at")},
+                                                   "lines", "decision", "approval", "updated_at", "clock")},
                         "sous-order+jws")
 
 
@@ -682,7 +691,7 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None) -> tu
         status, reason = blocked
     o["status"] = status
     o["approval"] = {"by": approver, "approved": approve, "note": note, "at": now.isoformat(timespec="milliseconds"),
-                     "result_reason": reason}
+                     "result_reason": reason, "clock": clock.info(now)}
     o["updated_at"] = now.isoformat(timespec="milliseconds")
     o["approval_url"] = None
     o["receipt_jws"] = _receipt(o)

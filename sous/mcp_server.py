@@ -17,7 +17,7 @@ from datetime import date
 from mcp.server.mcpserver import Context, MCPServer
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
 
-from . import agent_auth, catalog, service as S, standing
+from . import agent_auth, catalog, clock, service as S, standing
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +45,11 @@ the header "Authorization: Bearer <token>" (or, where headers are impossible, pa
 
 On an error, follow its "hint" field. Never state a price, stock level, delivery date or allergen fact
 that a tool did not return; say "unknown" instead. Allergen data marked 'unknown' is not safe."""
+if clock.is_demo():
+    INSTRUCTIONS += (f"\n\nDEMO CLOCK: this gateway evaluates cut-offs, quote expiry and daily limits as if it were "
+                     f"{clock.info()['configured']} ({'frozen' if not clock.info()['advancing'] else 'advancing in real time'}), "
+                     "because Valio's mock API returns fixed dates. Quotes and orders carry clock.mode='demo'; "
+                     "tell the user this is a demo clock if you mention dates or cut-offs.")
 
 mcp = MCPServer(name="sous", title="Sous: Valio Aimo agent gateway", instructions=INSTRUCTIONS,
                 version="0.2.0")
