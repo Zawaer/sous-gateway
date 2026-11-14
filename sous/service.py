@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import agent_auth, aimo, catalog, clock, config, credentials, notify, options as OPT, quote as Q, sandbox, signing, store, substitutes, usual
+from . import agent_auth, aimo, catalog, clock, config, credentials, exposure, notify, options as OPT, quote as Q, sandbox, signing, store, substitutes, usual
 from .mandate import Mandate, evaluate
 
 
@@ -369,7 +369,8 @@ def order_url(order_id: str, sandbox_id: str | None = None) -> str:
     return f"{config.PUBLIC_BASE_URL}/ui/{q}#/orders/{order_id}"
 
 
-def request_quote(req: QuoteRequest, agent_token: str | None = None) -> dict:
+def request_quote(req: QuoteRequest, agent_token: str | None = None, approver: bool = False) -> dict:
+    """`approver`: the caller proved the global approver code (exact stock under SOUS_STOCK_EXPOSURE=approver_exact)."""
     m = authorize_agent(req.mandate_id, req.agent_id, agent_token, "request_quote") if req.mandate_id else None
     skip: set[int] = set()
     if req.option_id:
@@ -381,7 +382,7 @@ def request_quote(req: QuoteRequest, agent_token: str | None = None) -> dict:
                            f"At most {config.MAX_CANDIDATES_PER_QUOTE} candidate products per quote; narrow the search first.")
     try:
         with sandbox.metered(m):
-            return _request_quote(req, skip)
+            return _request_quote(req, skip, approver)
     except aimo.AimoError as e:
         raise valio_error(e)
 
@@ -418,7 +419,7 @@ def _apply_option(req: QuoteRequest) -> tuple[QuoteRequest, set[int]]:
         "rationale": req.rationale or q.get("rationale")}), skip
 
 
-def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset()) -> dict:
+def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), approver: bool = False) -> dict:
     mandate = _mandate(req.mandate_id) if req.mandate_id else None
     before = dict(aimo.stats)
     lines: list[dict] = []
@@ -497,6 +498,9 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset()) -> d
     if mandate:
         outcome, findings = _evaluate(mandate, req.agent_id, body, now)
         body["mandate_preview"] = {"outcome": outcome, "findings": [f.model_dump() for f in findings]}
+    # The stock policy (sous/exposure.py) applies before signing: the JWS, the stored quote and the response are the
+    # same view. Everything above (plan, options, mandate preview) used the exact numbers; nothing after needs them.
+    body = exposure.view(body, approver)
     jws = signing.sign(body, "sous-quote+jws")
     store.put_quote(body, jws)
     store.audit("quote.issued", req.agent_id, "agent", qid, mandate.buyer if mandate else None,

@@ -59,3 +59,7 @@ SANDBOX_QUOTES = int(env("SANDBOX_QUOTES", "15"))  # live quote/substitute/sugge
 # Live Valio Aimo calls per minute shared by all sandboxes: at most half the gateway's budget by default,
 # so visitors can never starve the curated demo.
 SANDBOX_CALLS_PER_MIN = int(env("SANDBOX_CALLS_PER_MIN", str(max(1, AIMO_CALLS_PER_MIN // 2))))
+
+# What agents see of Valio's stock (sous/exposure.py): "buckets" (default; ample/limited/short/none/unknown),
+# "exact" (available_amount as reported) or "approver_exact" (exact only with the global approver code).
+STOCK_EXPOSURE = env("STOCK_EXPOSURE", "buckets")

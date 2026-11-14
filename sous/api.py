@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
-from . import access, agent_auth, aimo, catalog, clock, config, rules, sandbox, service as S, signing, standing, store
+from . import access, agent_auth, aimo, catalog, clock, config, exposure, rules, sandbox, service as S, signing, standing, store
 from .mandate import Mandate
 from .mcp_server import mcp
 
@@ -352,11 +352,13 @@ def suggest_substitutes(
 # --- quotes and orders ------------------------------------------------------
 
 @app.post("/quotes", tags=["ordering"])
-def request_quote(req: S.QuoteRequest, token: str | None = Depends(agent_token)):
+def request_quote(req: S.QuoteRequest, token: str | None = Depends(agent_token),
+                  r: access.Reader = Depends(access.reader)):
     """Live price + availability for a shortlist, as a signed, expiring quote (with a mandate preview).
 
-    If the mandate requires agent authentication, send `Authorization: Bearer <agent token>`."""
-    return S.request_quote(req, agent_token=token)
+    If the mandate requires agent authentication, send `Authorization: Bearer <agent token>`.
+    Stock appears as `stock_level` buckets unless SOUS_STOCK_EXPOSURE says otherwise (docs/PROTOCOL.md)."""
+    return S.request_quote(req, agent_token=token, approver=exposure.is_approver(r))
 
 
 @app.get("/quotes/{quote_id}", tags=["ordering"], dependencies=[Depends(_read_quote)])

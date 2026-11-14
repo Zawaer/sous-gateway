@@ -38,8 +38,8 @@ MAX_PER_ITEM = 5
 _TIER_RANK = {"best": 0, "better": 1, "good": 2}
 _MATCH_RANK = {"same": 0, "compatible": 1, "unknown": 2, "different": 3}
 _COMPACT = ("product_id", "name", "quantity", "sales_unit", "unit_price_ex_vat", "line_total_ex_vat",
-            "line_total_inc_vat", "covers", "available_amount", "delivery_date", "order_cutoff", "logistic_model",
-            "substitute_for")
+            "line_total_inc_vat", "covers", "available_amount", "stock_level", "delivery_date", "order_cutoff",
+            "logistic_model", "substitute_for")
 
 
 def trouble(lines: list[dict], uncovered: float, requested: date) -> list[str]:

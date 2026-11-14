@@ -11,7 +11,7 @@ import math
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta
 
-from . import aimo, catalog, clock, config
+from . import aimo, catalog, clock, config, exposure
 
 STOCK_PLENTY = 1e9  # Stock lines report 9999999999 when there is effectively no limit
 TERMINAL_UNKNOWN = 999999  # Terminal (supplier-shipped) lines always report 999999 = unknown
@@ -217,6 +217,8 @@ def build_offer(
         "logistic_model": model,
         "available_amount": available_amount if stock_known else None,
         "stock": "known" if stock_known else ("plenty" if model == "Stock" else "unknown"),
+        # what agents see under SOUS_STOCK_EXPOSURE=buckets (sous/exposure.py); available_amount may be withheld
+        "stock_level": exposure.level(model, available_amount, qty, bool(available_date)),
         "available_date": available_date.isoformat() if available_date else None,
         "delivery_date": delivery_date.isoformat() if delivery_date else None,
         "order_cutoff": closing.isoformat() if closing else None,

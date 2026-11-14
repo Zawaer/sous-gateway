@@ -23,7 +23,7 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import access, agent_auth, catalog, clock, rules, service as S, standing
+from . import access, agent_auth, catalog, clock, exposure, rules, service as S, standing
 from .mandate import Finding, Mandate
 from .standards import OrderDoc, QuoteDoc
 
@@ -426,7 +426,8 @@ def request_quote(
     return S.request_quote(S.QuoteRequest(agent_id=agent_id, mandate_id=mandate_id,
                                           delivery_date=_date(delivery_date) if delivery_date else None,
                                           items=items or [], rationale=rationale, option_id=option_id),
-                           agent_token=_agent_token(ctx, agent_token))
+                           agent_token=_agent_token(ctx, agent_token),
+                           approver=exposure.is_approver(_reader(ctx, agent_token)))
 
 
 @_tool(SubstitutesOut, title="Suggest substitutes", annotations=READ_LIVE)
