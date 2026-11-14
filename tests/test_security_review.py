@@ -4,8 +4,12 @@ Offline, like test_read_scopes.py (test_sandbox.py's fixtures): no data/, Valio 
 Stock sizing of anonymous quotes is tested in test_exposure.py.
 """
 
+import logging
 import pathlib
 import re
+
+import pytest
+from fastapi.testclient import TestClient
 
 from test_sandbox import CODE, c, env  # noqa: F401  (pytest fixtures)
 
@@ -40,6 +44,42 @@ def test_rest_guards_use_compare_digest(c, monkeypatch):
     calls.clear()
     assert c.delete("/sandbox/SBX-NOPE", headers={"X-Approver-Code": "wrong"}).status_code == 401
     assert calls, "require_global_approver must compare the code with hmac.compare_digest"
+
+
+# --- fail closed without an approver code outside development ---------------
+
+def test_startup_refuses_internet_facing_roles_without_code(monkeypatch):
+    monkeypatch.setattr(config, "APPROVER_CODE", "")
+    for role in ("prod", "staging", "demo"):
+        with pytest.raises(RuntimeError, match="SOUS_APPROVER_CODE"):
+            access.startup_check(role)
+
+
+def test_startup_allows_dev_with_a_warning_and_any_role_with_a_code(monkeypatch, caplog):
+    monkeypatch.setattr(config, "APPROVER_CODE", "")
+    with caplog.at_level(logging.WARNING, logger="sous.access"):
+        access.startup_check("dev")
+        access.startup_check("ci")
+    assert "SOUS_APPROVER_CODE is not set" in caplog.text
+    monkeypatch.setattr(config, "APPROVER_CODE", CODE)
+    access.startup_check("prod")  # no error
+
+
+def test_app_lifespan_runs_the_check(monkeypatch):
+    from sous import api, shared
+    monkeypatch.setattr(config, "APPROVER_CODE", "")
+    monkeypatch.setattr(shared, "ROLE", "staging")
+    with pytest.raises(RuntimeError, match="refusing to start"):
+        with TestClient(api.app):
+            pass
+
+
+def test_without_code_an_agent_token_still_cannot_approve(c, monkeypatch):
+    monkeypatch.setattr(config, "APPROVER_CODE", "")
+    for how in ({"Authorization": "Bearer vka_not-a-real-token"}, {"X-Approver-Code": "vka_not-a-real-token"}):
+        for action in ("approve", "reject"):
+            r = c.post(f"/orders/PO-NOPE/{action}", headers=how, json={"by": "agent"})
+            assert r.status_code == 403 and "agent_cannot_approve" in r.text, r.text
 
 
 def test_no_plain_comparison_of_the_approver_code():

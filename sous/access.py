@@ -17,7 +17,7 @@ X-Sous-Read-Scope says which scope applied. Notifications and audit events are f
 visible when every mandate with that buyer name is readable (so a shared name never leaks a private mandate).
 
 Without a configured approver code (SOUS_APPROVER_CODE unset: local dev, most tests) everything is readable,
-the same as writes. MCP over stdio (no HTTP request) is the local operator and reads everything too.
+the same as writes; a prod / staging / demo deployment (SOUS_DEPLOYMENT_ROLE) refuses to start then (startup_check). MCP over stdio (no HTTP request) is the local operator and reads everything too.
 
 Public on purpose: catalog, allergens, /.well-known/*, /schemas/*, /health, /docs, /openapi.json, /audit/verify
 (only ok / count / head hash), buyer did:keys, sandbox status. Quotes requested without a mandate are readable by
@@ -29,12 +29,32 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from fastapi import Request, Response
 
-from . import agent_auth, config, sandbox, store
+from . import agent_auth, config, sandbox, shared, store
+
+log = logging.getLogger("sous.access")
+
+# Deployments that face the internet: without an approver code they would let anyone (an agent too) approve
+# orders and read everything, so the gateway refuses to start there (startup_check).
+FAIL_CLOSED_ROLES = ("prod", "staging", "demo")
+
+
+def startup_check(role: str | None = None) -> None:
+    """Fail closed: refuse to start a prod / staging / demo gateway (SOUS_DEPLOYMENT_ROLE) without
+    SOUS_APPROVER_CODE. Elsewhere (dev, ci, tests) the open mode stays, with a warning."""
+    if config.APPROVER_CODE:
+        return
+    role = (role if role is not None else shared.ROLE) or "dev"
+    if role in FAIL_CLOSED_ROLES:
+        raise RuntimeError(f"SOUS_APPROVER_CODE is not set but SOUS_DEPLOYMENT_ROLE={role}: refusing to start. Without "
+                           "it anyone could approve orders and read every mandate. Set SOUS_APPROVER_CODE.")
+    log.warning("SOUS_APPROVER_CODE is not set (SOUS_DEPLOYMENT_ROLE=%s): approvals and mandate writes need no code "
+                "and every read is open. Fine for local development only.", role)
 
 
 @dataclass

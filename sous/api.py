@@ -33,6 +33,7 @@ mcp_app = mcp.streamable_http_app(
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
+    access.startup_check()  # fail closed: no prod/staging/demo gateway without an approver code
     catalog._db()  # build the index on first start
     async with contextlib.AsyncExitStack() as stack:
         await stack.enter_async_context(mcp_app.router.lifespan_context(mcp_app))
