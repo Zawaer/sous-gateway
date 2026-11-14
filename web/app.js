@@ -661,6 +661,7 @@ async function openOrder(id) {
     </dl>
     <h3>How it happened</h3>
     <ol class="flow" id="flow"><li class="muted small">Loading…</li></ol>
+    <p class="small"><a href="/ui/trace.html?order=${encodeURIComponent(o.id)}${SANDBOX ? `&sandbox=${encodeURIComponent(SANDBOX)}` : ""}">Show the journey</a> on the trust board, hop by hop with signatures checked.</p>
     <h3>Mandate decision ${tier(d.outcome)}</h3>
     <div class="muted small">By ${esc(d.by)} at ${when(d.at)}. Deterministic rules; no AI in this step.</div>
     ${findingsList(d.findings)}

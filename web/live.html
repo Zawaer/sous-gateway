@@ -110,6 +110,7 @@
       .dot { width: 38px; height: 38px; }
       .tag { font-size: .85rem; } .mode { display: none; } .btn { padding: 7px 12px; font-size: .82rem; }
       header { gap: 10px; } .cta { flex-wrap: nowrap; }
+      .trace-link { display: none; }  /* the header row is already full on phones */
     }
     @media (prefers-reduced-motion: reduce) { .ticker span { animation: none; } }
   </style>
@@ -125,6 +126,7 @@
     <div class="cta">
       <a class="btn" href="/ui/">Seller view</a>
       <a class="btn" href="/buyer/">Buyer view</a>
+      <a class="btn trace-link" href="/ui/trace.html"><span class="ms">route</span>Trust board</a>
       <button class="btn" id="rush-btn" type="button"><span class="ms">bolt</span>Monday rush</button>
       <a class="btn solid" href="/ui/break.html"><span class="ms">play_arrow</span>Try it yourself</a>
     </div>

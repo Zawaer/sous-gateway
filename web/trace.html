@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f8f8f3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141412" media="(prefers-color-scheme: dark)">
+  <title>Trust board · Sous</title>
+  <meta name="description" content="One order's whole journey from the buyer's agent to Valio Aimo, step by step, with every signature checked in your browser.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Fragment+Mono&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,400,0..1,0&display=block">
+  <link rel="stylesheet" href="tokens.css">
+  <style>
+    :root { color-scheme: light dark; --gap-x: 56px; --gap-y: 54px; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body { background: var(--paper); color: var(--ink); font: 400 15px/1.5 var(--sans); -webkit-font-smoothing: antialiased;
+      overflow-x: hidden; padding-bottom: env(safe-area-inset-bottom); }
+    button, input, select { font: inherit; color: inherit; }
+    a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--ink-40); text-underline-offset: 3px; }
+    a:hover { text-decoration-color: var(--ink); }
+    .ms { font-family: "Material Symbols Rounded"; font-weight: normal; font-style: normal; font-size: 18px; line-height: 1;
+      display: inline-block; width: 1em; overflow: hidden; white-space: nowrap; font-feature-settings: "liga";
+      -webkit-font-smoothing: antialiased; vertical-align: -.2em; }
+    .mono { font-family: var(--mono); font-size: .82em; letter-spacing: 0; overflow-wrap: anywhere; }
+    .muted { color: var(--ink-60); }
+    .small { font-size: .84rem; }
+
+    /* header */
+    .top { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--paper) 90%, transparent);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--rule); }
+    .top-in { max-width: 1180px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+    .brand { display: flex; align-items: center; gap: 8px; text-decoration: none; }
+    .brand .name { font: 500 1.15rem/1 var(--serif); }
+    .brand .tag { font: .7rem var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-60); }
+    .nav { display: flex; gap: 16px; margin-left: auto; flex-wrap: wrap; font-size: .86rem; }
+    .nav a { color: var(--ink-60); text-decoration: none; }
+    .nav a:hover { color: var(--ink); }
+    .btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 14px; border-radius: 999px;
+      border: 1px solid var(--rule); background: var(--pill); color: var(--ink); font-size: .86rem; font-weight: 500;
+      cursor: pointer; text-decoration: none; white-space: nowrap; }
+    .btn:hover { background: var(--pill-hover); }
+    .btn.solid { background: var(--solid); color: var(--on-solid); border-color: var(--solid); }
+    .btn[disabled] { opacity: .5; cursor: progress; }
+
+    main { max-width: 1180px; margin: 0 auto; padding: 32px 24px 64px; }
+    .intro { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; flex-wrap: wrap; margin-bottom: 22px; }
+    h1 { font: 400 2.2rem/1.1 var(--serif); letter-spacing: -.015em; margin: 0 0 6px; }
+    .lede { font: 400 1.08rem/1.45 var(--serif); color: var(--ink-60); max-width: 640px; margin: 0; }
+    .picker { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .picker select { min-height: 40px; max-width: min(440px, 100%); border: 1px solid var(--rule); border-radius: 8px;
+      background: var(--paper); padding: 0 10px; font-size: .88rem; }
+    .picker label { font: .72rem var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-60); }
+
+    /* order strip */
+    .strip { display: grid; grid-template-columns: 1fr auto; gap: 14px 24px; align-items: center; padding: 16px 20px;
+      background: var(--panel); border-radius: var(--radius); margin-bottom: 14px; }
+    .strip h2 { font: 400 1.5rem/1.15 var(--serif); margin: 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .strip .meta { color: var(--ink-60); font-size: .88rem; margin-top: 4px; }
+    .strip .acts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .proofs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 26px; padding: 0; list-style: none; }
+    .proofs li { font-size: .8rem; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--rule); color: var(--ink-80); }
+    .proofs li.ok { border-color: var(--silent-line); color: var(--silent); }
+    .proofs li.bad { border-color: var(--block-ink); color: var(--block-ink); }
+    .proofs li .ms { font-size: 15px; margin-right: 3px; }
+
+    /* the board: snake order on desktop, one column on phones */
+    .board { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap-y) var(--gap-x);
+      grid-template-areas: "h1 h2 h3" "h6 h5 h4" "h7 h8 h9"; }
+    .wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 0; }
+    .wire { fill: none; stroke: var(--rule); stroke-width: 1.5; }
+    .wire.lit { stroke: var(--ink-40); stroke-width: 1.5; }
+    .wire.flow { stroke: var(--aimo); stroke-width: 2; stroke-dasharray: 6 7; animation: flow 1s linear infinite; }
+    .wire-head { fill: var(--rule); } .wire-head.lit { fill: var(--ink-40); } .wire-head.flow { fill: var(--aimo); }
+    @keyframes flow { to { stroke-dashoffset: -13; } }
+
+    .hop { position: relative; z-index: 1; text-align: left; background: var(--paper); border: 1px solid var(--rule);
+      border-radius: 12px; padding: 14px 16px 16px; cursor: pointer; min-width: 0; outline: none;
+      transition: border-color .35s, box-shadow .35s, opacity .35s; }
+    .hop::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--panel); pointer-events: none; }
+    .hop > * { position: relative; }
+    .hop:hover { border-color: var(--ink-40); }
+    .hop:focus-visible { box-shadow: var(--focus-ring); }
+    .hop.dim { opacity: .38; }
+    .hop.current { border-color: var(--aimo); box-shadow: 0 0 0 4px var(--aimo-tint); }
+    .hop.sel { border-color: var(--ink); }
+    .hop-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .hop-n { font: .72rem var(--mono); color: var(--ink-60); }
+    .side { font: .66rem var(--mono); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-60); }
+    .side.valio { color: var(--aimo); }
+    .state { margin-left: auto; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 14px;
+      border: 1px solid var(--rule); color: var(--ink-60); flex: 0 0 auto; }
+    .state .ms { font-size: 15px; vertical-align: 0; }
+    .st-ok .state { color: var(--silent); border-color: var(--silent-line); }
+    .st-fyi .state { color: var(--notify); background: var(--notify-bg); border-color: transparent; }
+    .st-ask .state { color: var(--ask); background: var(--ask-bg); border-color: var(--ask-line); }
+    .st-block .state { color: var(--block); background: var(--block-bg); border-color: var(--block-line); }
+    .st-skip { border-style: dashed; }
+    .st-ask.decisive { border-color: var(--ask-line); } .st-block.decisive { border-color: var(--block-line); }
+    .st-fyi.decisive, .st-ok.decisive { border-color: var(--silent-line); }
+    .hop h3 { font: 400 1.22rem/1.2 var(--serif); margin: 0 0 2px; display: flex; gap: 8px; align-items: center; }
+    .hop h3 .ms { font-size: 20px; color: var(--ink-60); }
+    .hop .who { font-size: .8rem; color: var(--ink-60); margin-bottom: 10px; }
+    .facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 0; font-size: .84rem; }
+    .facts dt { font: .7rem/1.9 var(--mono); color: var(--ink-60); }
+    .facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+    .claim { font: italic 400 .98rem/1.4 var(--serif); margin: 8px 0 0; padding-left: 10px; border-left: 2px solid var(--rule); }
+    .claim-tag { font: .66rem var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--ask-ink); }
+    .more { margin-top: 10px; font-size: .78rem; color: var(--ink-60); display: flex; align-items: center; gap: 4px; }
+    .finding { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 8px; padding: 4px 0; font-size: .84rem; }
+    .finding i { width: 8px; height: 8px; margin-top: 6px; border-radius: 2px; background: var(--ink-40); }
+    .finding i.silent { background: var(--silent); } .finding i.notify { background: var(--notify); }
+    .finding i.ask { background: var(--ask-line); } .finding i.block { background: var(--block-bg); }
+    .rule-id { font: .72rem var(--mono); color: var(--ink-60); }
+    .bad-ink { color: var(--block-ink); } .warn-ink { color: var(--ask-ink); } .ok-ink { color: var(--silent); }
+    .ev { display: grid; grid-template-columns: 3.2em minmax(0, 1fr); gap: 2px 8px; font-size: .8rem; padding: 3px 0; }
+    .ev .seq { font-family: var(--mono); color: var(--ink-60); }
+
+    /* detail drawer */
+    .drawer-bg { position: fixed; inset: 0; background: rgba(0, 0, 0, .25); z-index: 30; opacity: 0; pointer-events: none; transition: opacity .25s; }
+    .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 100vw); z-index: 31; background: var(--paper);
+      border-left: 1px solid var(--rule); transform: translateX(100%); transition: transform .28s ease; overflow-y: auto;
+      padding: 22px 24px 40px; overscroll-behavior: contain; }
+    body.open .drawer { transform: none; } body.open .drawer-bg { opacity: 1; pointer-events: auto; }
+    .drawer h2 { font: 400 1.7rem/1.15 var(--serif); margin: 4px 0 6px; padding-right: 44px; }
+    .drawer h4 { font: .72rem var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-60); font-weight: 400; margin: 22px 0 8px; }
+    .drawer .x { position: absolute; top: 14px; right: 14px; width: 40px; height: 40px; border-radius: 50%; border: 0;
+      background: var(--pill); cursor: pointer; display: grid; place-items: center; }
+    .drawer table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    .drawer th { text-align: left; font: .68rem var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--ink-60);
+      font-weight: 400; padding: 4px 8px 4px 0; border-bottom: 1px solid var(--rule); }
+    .drawer td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--rule); vertical-align: top; overflow-wrap: anywhere; }
+    .drawer td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .drawer pre { white-space: pre-wrap; word-break: break-all; font: .72rem/1.5 var(--mono); background: var(--panel);
+      padding: 10px; border-radius: 8px; max-height: 220px; overflow: auto; }
+    .drawer .links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .sig { font-size: .84rem; padding: 8px 10px; border-radius: 8px; background: var(--panel-strong); margin: 8px 0; }
+    .sig.ok { color: var(--silent); } .sig.bad { color: var(--block-ink); }
+    .note { font-size: .82rem; color: var(--ink-60); margin: 8px 0; }
+
+    .msg { padding: 40px 20px; text-align: center; color: var(--ink-60); background: var(--panel); border-radius: var(--radius); }
+    .msg b { display: block; font: 400 1.4rem/1.2 var(--serif); color: var(--ink); margin-bottom: 6px; }
+    .msg details { margin-top: 14px; text-align: left; max-width: 460px; margin-inline: auto; }
+    .tokenrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .tokenrow input { flex: 1 1 200px; min-height: 40px; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); padding: 0 10px; }
+    .status { font-size: .84rem; color: var(--ink-60); min-height: 1.3em; margin: 0 0 10px; }
+    .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .78rem; color: var(--ink-60); margin-top: 28px; }
+    .foot { max-width: 1180px; margin: 0 auto; padding: 20px 24px; border-top: 1px solid var(--rule); font-size: .8rem; color: var(--ink-60);
+      display: flex; gap: 12px; justify-content: space-between; flex-wrap: wrap; }
+    .foot a { color: var(--ink-60); }
+
+    @media (max-width: 900px) {
+      .board { grid-template-columns: minmax(0, 1fr); grid-template-areas: "h1" "h2" "h3" "h4" "h5" "h6" "h7" "h8" "h9"; --gap-y: 30px; }
+      .strip { grid-template-columns: 1fr; }
+      .strip .acts { justify-content: flex-start; }
+    }
+    @media (max-width: 560px) {
+      .top { position: static; }
+      .top-in { padding: 10px 16px; gap: 8px 10px; }
+      #try { margin-left: auto; }
+      .nav { gap: 14px; margin-left: 0; width: 100%; order: 3; font-size: .82rem; }
+      main { padding: 22px 16px 48px; }
+      h1 { font-size: 1.8rem; }
+      .picker, .picker select { width: 100%; max-width: 100%; }
+      .drawer { top: auto; height: 86vh; width: 100vw; border-left: 0; border-top: 1px solid var(--rule); border-radius: 16px 16px 0 0;
+        transform: translateY(100%); padding: 20px 16px 40px; }
+      .foot { padding: 18px 16px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .wire.flow { animation: none; stroke-dasharray: none; }
+      .hop, .drawer, .drawer-bg { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="top-in">
+      <a class="brand" href="/ui/live.html">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 4h4l5 11 5-11h4l-7.5 16h-3z" fill="currentColor"/></svg>
+        <span class="name">Sous</span><span class="tag">Trust board</span>
+      </a>
+      <nav class="nav" aria-label="Pages">
+        <a href="/ui/live.html">Live view</a>
+        <a href="/ui/">Seller view</a>
+        <a href="/ui/buyer.html">Buyer side</a>
+        <a href="/rules" target="_blank" rel="noopener">Rules</a>
+        <a href="/docs" target="_blank" rel="noopener">API</a>
+      </nav>
+      <button class="btn solid" id="try" type="button"><span class="ms">play_arrow</span>Try it live</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="intro">
+      <div>
+        <h1>One order, every hop</h1>
+        <p class="lede">What happened between a buyer's purchasing agent and Valio Aimo, and why you can check it yourself:
+          each card comes from the gateway's API, and the signatures are verified here in your browser.</p>
+      </div>
+      <div class="picker">
+        <label for="pick">Order</label>
+        <select id="pick" aria-label="Choose an order"><option value="">Loading orders…</option></select>
+      </div>
+    </div>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+    <div id="out"></div>
+    <div class="legend" aria-label="Legend">
+      <span><span class="tier tier-silent">Auto</span></span>
+      <span><span class="tier tier-notify">Auto + FYI</span></span>
+      <span><span class="tier tier-ask">Needs approval</span></span>
+      <span><span class="tier tier-block">Refused</span></span>
+      <span>Dashed card: step not needed for this order. "–": not recorded.</span>
+    </div>
+  </main>
+
+  <footer class="foot">
+    <span>Everything on this page is read from Sous's public API; nothing is filled in by the page.</span>
+    <span><a href="/.well-known/jwks.json">Signing key</a> · <a href="/audit/verify">Audit chain</a> · <a href="/ui/#/audit">Audit log</a></span>
+  </footer>
+
+  <div class="drawer-bg" id="drawer-bg"></div>
+  <aside class="drawer" id="drawer" aria-label="Step details" aria-hidden="true" tabindex="-1">
+    <button class="x" id="drawer-x" type="button" aria-label="Close"><span class="ms">close</span></button>
+    <div id="drawer-body"></div>
+  </aside>
+  <script src="trace.js"></script>
+</body>
+</html>
