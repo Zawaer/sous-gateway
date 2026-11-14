@@ -474,6 +474,11 @@ def report_section() -> list[str]:
         L += ["### Findings (reported, not fixed against these cases)", ""]
         L += [f"- {x}" for x in yaml.safe_load(findings.read_text()) or []]
         L.append("")
+    fixed = HELDOUT / "fixed.yaml"
+    if fixed.exists():
+        L += ["### Fixed after the held-out run", ""]
+        L += [f"- {x}" for x in yaml.safe_load(fixed.read_text()) or []]
+        L.append("")
     return L
 
 

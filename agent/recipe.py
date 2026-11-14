@@ -38,6 +38,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from .buyer import WEEKDAYS, helsinki_today, next_delivery_day
+from .dates import relative_date
 
 RECIPES_PATH = Path(__file__).with_name("recipes.json")
 MAX_CANDIDATES = 5
@@ -136,11 +137,6 @@ def match_ingredient(*names: str) -> str | None:
 
 # --- interpretation: table ------------------------------------------------------------------------
 
-_WEEKDAY_WORDS = {
-    0: ("monday", "maanantai", "måndag"), 1: ("tuesday", "tiistai", "tisdag"), 2: ("wednesday", "keskiviikko", "onsdag"),
-    3: ("thursday", "torstai", "torsdag"), 4: ("friday", "perjantai", "fredag"), 5: ("saturday", "lauantai", "lördag"),
-    6: ("sunday", "sunnuntai", "söndag"),
-}
 _UNIT_WORDS = {"kg": "kg", "kilo": "kg", "kilos": "kg", "kilogram": "kg", "kilograms": "kg", "kiloa": "kg",
                "g": "g", "gram": "g", "grams": "g", "grammaa": "g", "l": "l", "litre": "l", "litres": "l",
                "liter": "l", "liters": "l", "litraa": "l", "dl": "dl", "ml": "ml", "pcs": "pcs", "pieces": "pcs",
@@ -158,13 +154,7 @@ def parse_date(text: str, today: date) -> date | None:
     if m := re.search(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})?", t):
         d = date(int(m[3]) if m[3] else today.year, int(m[2]), int(m[1]))
         return d if d > today or m[3] else date(today.year + 1, d.month, d.day)
-    if re.search(r"\b(tomorrow|huomenna|i morgon)\b", t):
-        return today + timedelta(days=1)
-    for wd, words in _WEEKDAY_WORDS.items():
-        if re.search(r"\b(" + "|".join(words) + r")\w*", t):
-            ahead = (wd - today.weekday()) % 7 or 7
-            return today + timedelta(days=ahead)
-    return None
+    return relative_date(t, today)  # tomorrow / huomiseksi / torstaiksi / ensi maanantaina (agent/dates.py)
 
 
 def parse_portions(text: str) -> int | None:
@@ -192,6 +182,14 @@ def parse_stock(text: str) -> list[Stock]:
             continue
         name = re.split(r"\s+(?:and|ja|och|plus)\b", m[3])[0].strip()
         out.append(Stock(ingredient=name, amount=float(m[1].replace(",", ".")), unit=unit))
+    # "we have pasta sheets, order the rest": a known ingredient named without an amount is all on hand
+    clause = re.split(r"[.;:!?]|\b(?:order|tilaa|need|tarvit\w*|please|but|mutta|beställ)\b", part, flags=re.I)[0]
+    named = {x.ingredient.lower() for x in out}
+    for chunk in re.split(r",|\s+(?:and|ja|sekä|och|plus|&)\s+", clause):
+        chunk = re.sub(r"^\s*(?:some|the|our|own|omat?|jo)\s+", "", chunk.strip(), flags=re.I).strip()
+        if chunk and not re.search(r"\d", chunk) and not _PLENTY.search(chunk) and chunk.lower() not in named \
+                and match_ingredient(chunk):
+            out.append(Stock(ingredient=chunk, plenty=True))
     return out
 
 
@@ -703,6 +701,7 @@ class Plan:
     error: str | None = None
     trace: Trace = field(default_factory=Trace)
     llm: LLMUse = field(default_factory=LLMUse)
+    declared_risks: list[str] = field(default_factory=list)  # sent with the quote (plan(declare_assumptions=True))
 
     @property
     def delivery_date(self) -> date | None:
@@ -739,6 +738,7 @@ class Plan:
                 "id": self.order["id"], "status": self.order["status"], "tier": self.order["decision"]["outcome"],
                 "total_ex_vat": self.order["total_ex_vat"], "approval_url": self.order.get("approval_url"),
                 "findings": [f["message"] for f in self.order["decision"]["findings"] if f["outcome"] != "silent"]},
+            "declared_risks": self.declared_risks,
             "summary": self.summary(),
             "valio_api_calls": self.trace.valio_api_calls,
             "llm": {"calls": self.llm.calls, "prompt_tokens": self.llm.prompt_tokens,
@@ -806,11 +806,15 @@ def interpret(text: str, today: date, llm=None, use: LLMUse | None = None) -> tu
 
 def plan(request_text: str, *, gateway, mandate_id: str, agent_id: str, llm=None,
          delivery_date: date | None = None, today: date | None = None, place: bool = False,
-         substitutes: bool = True) -> Plan:
+         substitutes: bool = True, declared_risks: list[str] | None = None,
+         declare_assumptions: bool = False) -> Plan:
     """Request text -> recipe -> ingredient quantities -> catalog candidates -> ONE basket quote (-> order).
 
     gateway: anything with call(tool, args) -> (is_error, body), e.g. agent.buyer.MCPGateway.
     llm: a ChatClient (or anything with chat(messages) -> response with .content and .usage); None = table.
+    declared_risks / declare_assumptions: doubts sent with every quote (request_quote declared_risks, PROTOCOL 7.3),
+      so the gateway holds the order for a human; declare_assumptions adds the plan's own assumptions (recipe
+      amounts scaled to the portions, ingredients assumed on hand). The buyer agent (agent/sous_agent.py) sets it.
     """
     today = today or helsinki_today()
     p = Plan(request=request_text, interpretation="", mandate_id=mandate_id, agent_id=agent_id)
@@ -832,6 +836,9 @@ def plan(request_text: str, *, gateway, mandate_id: str, agent_id: str, llm=None
         return p
     mandate = m["mandate"]
     p.needs = compute_needs(p.spec)
+    p.declared_risks = cap_risks(list(declared_risks or []) + (assumption_risks(p) if declare_assumptions else []))
+    if p.declared_risks:
+        gateway = _WithRisks(gateway, p.declared_risks)
 
     # catalog candidates per ingredient (local search, no Valio calls)
     items: list[dict] = []
@@ -948,6 +955,38 @@ def plan(request_text: str, *, gateway, mandate_id: str, agent_id: str, llm=None
         else:
             p.order = o
     return p
+
+
+def cap_risks(risks: list[str], n: int = 5, chars: int = 200) -> list[str]:
+    """At most n doubts of at most `chars` characters (the gateway refuses more): extra ones join the last."""
+    out = list(dict.fromkeys(" ".join(r.split()) for r in risks if r and r.strip()))
+    if len(out) > n:
+        out = out[:n - 1] + ["Also: " + "; ".join(out[n - 1:])]
+    return [r if len(r) <= chars else r[:chars - 3] + "..." for r in out]
+
+
+def assumption_risks(p: Plan) -> list[str]:
+    """What the plan assumed rather than read from the buyer: per-portion recipe amounts and stock on hand."""
+    s = p.spec
+    dishes = ", ".join(d.name.split(" (")[0] for d in s.dishes)
+    out = [f"Ingredient amounts are assumed: a standard recipe for {dishes} scaled to {s.portions} portions "
+           f"({'curated recipe table' if p.interpretation.startswith('table') else 'interpreted by a model'})."]
+    assumed = [n.name_en for n in p.needs if n.on_hand == math.inf]
+    if assumed:
+        out.append("Not ordered, assumed fully on hand (no amount given): " + ", ".join(assumed) + ".")
+    return out
+
+
+class _WithRisks:
+    """A gateway whose request_quote calls carry the plan's declared_risks."""
+
+    def __init__(self, gw, risks: list[str]):
+        self.gw, self.risks = gw, risks
+
+    def call(self, tool: str, args: dict):
+        if tool == "request_quote" and not args.get("option_id"):
+            args = {**args, "declared_risks": cap_risks(list(args.get("declared_risks") or []) + self.risks)}
+        return self.gw.call(tool, args)
 
 
 # --- rendering ----------------------------------------------------------------------------------------

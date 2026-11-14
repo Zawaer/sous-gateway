@@ -48,7 +48,7 @@ class _Gw:
 def _agent(text):
     a = SousAgent(llm=None, gateway=_Gw(), cfg=BuyerConfig("M", "a", SAT, default_delivery=MON))
     a.need = parse_need(text, SAT, MON)
-    assert [t["function"]["name"] for t in a.tools] == list(SOUS_TOOLS)
+    assert [t["function"]["name"] for t in a.tools] == [*SOUS_TOOLS, "plan_menu"]
     return a
 
 
