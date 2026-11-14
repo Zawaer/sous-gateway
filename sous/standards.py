@@ -592,56 +592,78 @@ def peppol_order(order_id: str, base_url: str) -> bytes:
     endpoint, num = _buyer(o)
     _party(root, "BuyerCustomerParty", endpoint, num, o["buyer"], o["buyer"])
     _party(root, "SellerSupplierParty", PEPPOL_SELLER_ENDPOINT, None, MERCHANT["name"], SELLER_LEGAL_NAME)
+    # The Order is what the buyer ordered: the signed quote's lines (order lines start as a 1:1 copy of them and
+    # amendments change them later; those changes are the Order Response's business, ?doc=order_response).
+    lines = [(i, ql) for i, ql in enumerate(q["lines"]) if ql.get("orderable") and ql.get("quantity")]
     period = _el(_el(root, "cac:Delivery"), "cac:RequestedDeliveryPeriod")
     _el(period, "cbc:StartDate", o.get("requested_delivery_date"))
-    _el(period, "cbc:EndDate", o.get("delivery_date") or o.get("requested_delivery_date"))
-    lines = [(i, l, ql) for i, (l, ql) in enumerate(zip(o["lines"], q["lines"]))
-             if ql.get("orderable") and l.get("quantity")]
-    line_sum = sum((Decimal(_money(l.get("line_total_ex_vat"))) for _, l, _ in lines), Decimal("0"))
+    _el(period, "cbc:EndDate", max((ql["delivery_date"] for _, ql in lines if ql.get("delivery_date")),
+                                   default=o.get("requested_delivery_date")))
+    line_sum = sum((Decimal(_money(ql.get("line_total_ex_vat"))) for _, ql in lines), Decimal("0"))
     tax_sum = sum((Decimal(_money(ql.get("line_total_inc_vat"))) - Decimal(_money(ql.get("line_total_ex_vat")))
-                   for _, _, ql in lines), Decimal("0"))
+                   for _, ql in lines), Decimal("0"))
     _el(_el(root, "cac:TaxTotal"), "cbc:TaxAmount", _money(tax_sum), currencyID="EUR")
     tot = _el(root, "cac:AnticipatedMonetaryTotal")
     _el(tot, "cbc:LineExtensionAmount", _money(line_sum), currencyID="EUR")
     _el(tot, "cbc:TaxExclusiveAmount", _money(line_sum), currencyID="EUR")
     _el(tot, "cbc:TaxInclusiveAmount", _money(line_sum + tax_sum), currencyID="EUR")
     _el(tot, "cbc:PayableAmount", _money(line_sum + tax_sum), currencyID="EUR")
-    for i, l, ql in lines:
-        item = _el(_el(root, "cac:OrderLine"), "cac:LineItem")
-        unit = l.get("sales_unit") or ""
-        _el(item, "cbc:ID", str(i + 1))
-        if peppol_unit(unit) == "XPK" and unit.upper() not in PEPPOL_UNIT_CODES:
-            _el(item, "cbc:Note", f"Valio sales unit {unit or 'unknown'}")
-        _el(item, "cbc:Quantity", f"{float(l['quantity']):g}", unitCode=peppol_unit(unit))
-        _el(item, "cbc:LineExtensionAmount", _money(l.get("line_total_ex_vat")), currencyID="EUR")
-        if l.get("delivery_date"):
-            dp = _el(_el(item, "cac:Delivery"), "cac:RequestedDeliveryPeriod")
-            _el(dp, "cbc:StartDate", l["delivery_date"])
-            _el(dp, "cbc:EndDate", l["delivery_date"])
-        price = _el(item, "cac:Price")
-        _el(price, "cbc:PriceAmount", _money(l.get("unit_price_ex_vat")), currencyID="EUR")
-        _el(price, "cbc:BaseQuantity", "1", unitCode=peppol_unit(unit))
-        it = _el(item, "cac:Item")
-        _el(it, "cbc:Name", l["name"])
-        _el(_el(it, "cac:SellersItemIdentification"), "cbc:ID", l["product_id"])
-        rate = ql.get("vat_rate")
-        tax = _el(it, "cac:ClassifiedTaxCategory")
-        _el(tax, "cbc:ID", "S" if rate else "Z")
-        _el(tax, "cbc:Percent", f"{float(rate or 0):g}")
-        _el(_el(tax, "cac:TaxScheme"), "cbc:ID", "VAT")
+    for i, ql in lines:
+        _line_item(_el(root, "cac:OrderLine"), i, ql, ql.get("vat_rate"), "RequestedDeliveryPeriod")
     return _xml(root)
 
 
+def _line_item(order_line, i: int, l: dict, vat_rate, period: str, status: str | None = None,
+               notes: tuple[str, ...] = ()) -> None:
+    """One cac:LineItem (UBL 2.1 sequence: ID, Note, LineStatusCode, Quantity, LineExtensionAmount, Delivery,
+    Price, Item). Line ids are the 1-based position in the order, the same in Order and Order Response."""
+    item = _el(order_line, "cac:LineItem")
+    unit = l.get("sales_unit") or ""
+    _el(item, "cbc:ID", str(i + 1))
+    if unit.upper() not in PEPPOL_UNIT_CODES:
+        notes = (*notes, f"Valio sales unit {unit or 'unknown'}")
+    for n in notes:
+        _el(item, "cbc:Note", n)
+    if status:
+        _el(item, "cbc:LineStatusCode", status)
+    _el(item, "cbc:Quantity", f"{float(l.get('quantity') or 0):g}", unitCode=peppol_unit(unit))
+    _el(item, "cbc:LineExtensionAmount", _money(l.get("line_total_ex_vat")), currencyID="EUR")
+    if l.get("delivery_date"):
+        dp = _el(_el(item, "cac:Delivery"), f"cac:{period}")
+        _el(dp, "cbc:StartDate", l["delivery_date"])
+        _el(dp, "cbc:EndDate", l["delivery_date"])
+    price = _el(item, "cac:Price")
+    _el(price, "cbc:PriceAmount", _money(l.get("unit_price_ex_vat")), currencyID="EUR")
+    _el(price, "cbc:BaseQuantity", "1", unitCode=peppol_unit(unit))
+    it = _el(item, "cac:Item")
+    _el(it, "cbc:Name", l["name"])
+    _el(_el(it, "cac:SellersItemIdentification"), "cbc:ID", l["product_id"])
+    tax = _el(it, "cac:ClassifiedTaxCategory")
+    _el(tax, "cbc:ID", "S" if vat_rate else "Z")
+    _el(tax, "cbc:Percent", f"{float(vat_rate or 0):g}")
+    _el(_el(tax, "cac:TaxScheme"), "cbc:ID", "VAT")
+
+
 def peppol_order_response(order_id: str, base_url: str) -> bytes:
-    """A Peppol BIS Ordering 3.0 Order Response at header level: AP (accepted) for `ordered`, RE (rejected) for
-    refused / rejected / expired orders. No line detail: under AP and RE Peppol needs none."""
+    """A Peppol BIS Ordering 3.0 Order Response: AP (accepted) for `ordered`, RE (rejected) for refused /
+    rejected / expired orders, CA (accepted with change) for an ordered order whose lines Valio Aimo's amendments
+    changed (sous/amendments.py: short pick, delay, substitution at pick, cancelled line). Only CA carries lines,
+    the changed ones: LineStatusCode 3 (changed) with the line as it stands, or 7 (not accepted) when cancelled.
+    Amendments still waiting for the buyer change nothing yet."""
     o = _signed_order(order_id)
     code = _RESPONSE_CODE.get(o["status"])
     if code is None:
         raise S.GatewayError("peppol_not_final", f"Order {order_id} is {o['status']}: an Order Response is "
                              "issued once the order is final (ordered, refused, rejected or expired).", 409)
     root = _ubl_root("OrderResponse", PEPPOL_ORDER_RESPONSE_CUSTOMIZATION, f"{order_id}-R", o["updated_at"])
+    changed = [(i, l) for i, l in enumerate(o["lines"]) if l.get("amended_by")] if code == "AP" else []
+    if changed:
+        code = "CA"
     _el(root, "cbc:OrderResponseCode", code)
+    if changed:
+        _el(root, "cbc:Note", f"{len(changed)} line(s) changed by Valio Aimo after the order (signed amendments "
+                              f"{', '.join(sorted({l['amended_by'] for _, l in changed}))}); total ex VAT "
+                              f"{_money(o.get('original_total_ex_vat'))} -> {_money(o['total_ex_vat'])} EUR.")
     if code == "RE":
         reason = (o.get("approval") or {}).get("result_reason") or "; ".join(
             f["message"] for f in o["decision"]["findings"] if f["outcome"] == "block") or o["status"]
@@ -655,10 +677,19 @@ def peppol_order_response(order_id: str, base_url: str) -> bytes:
     _party(root, "SellerSupplierParty", PEPPOL_SELLER_ENDPOINT, None, MERCHANT["name"], SELLER_LEGAL_NAME)
     endpoint, num = _buyer(o)
     _party(root, "BuyerCustomerParty", endpoint, num, o["buyer"], o["buyer"])
-    if code == "AP":
+    if code in ("AP", "CA"):
         period = _el(_el(root, "cac:Delivery"), "cac:PromisedDeliveryPeriod")
         _el(period, "cbc:StartDate", o.get("delivery_date") or o.get("requested_delivery_date"))
         _el(period, "cbc:EndDate", o.get("delivery_date") or o.get("requested_delivery_date"))
+    if changed:
+        rates = [ql.get("vat_rate") for ql in _signed_quote(o["quote_id"])[0]["lines"]]
+        for i, l in changed:
+            sub = l.get("substituted_for")
+            notes = (f"Substituted for {sub['product_id']} {sub['name']} x {float(sub['quantity']):g}",) if sub else ()
+            if l.get("ordered_quantity") is not None:
+                notes += (f"Short pick: {float(l['quantity']):g} of {float(l['ordered_quantity']):g}",)
+            _line_item(_el(root, "cac:OrderLine"), i, l, rates[i] if i < len(rates) else None,
+                       "PromisedDeliveryPeriod", "7" if l.get("cancelled") else "3", notes)
     return _xml(root)
 
 

@@ -45,7 +45,8 @@ Every export is built from the **signature-verified** native payload, never from
 Peppol is the EU e-procurement network; in Finland it carries most B2B and public-sector e-invoices and, increasingly, orders. A Peppol access point (or an ERP's EDI layer) can take Sous's orders without knowing Sous's JSON.
 
 - `GET /orders/{id}/peppol` (default `doc=order`): a Peppol BIS **Order** for an `ordered` order. Other statuses give `409 peppol_not_ordered`: a held, refused or rejected order was never placed with the seller.
-- `GET /orders/{id}/peppol?doc=order_response`: a header-level **Order Response**, `AP` (accepted) for `ordered`, `RE` (rejected) for refused / rejected / expired orders, with the reason in `Note`. `409 peppol_not_final` while an order is held for approval. AP and RE need no line detail in Peppol.
+- `GET /orders/{id}/peppol?doc=order_response`: an **Order Response**. `AP` (accepted) for `ordered`; `RE` (rejected) for refused / rejected / expired orders, with the reason in `Note`; `CA` (accepted with change) once Valio Aimo's signed amendments ([sous/amendments.py](../sous/amendments.py): short pick, delay, substitution at pick, cancelled line) have changed lines. CA lists only the changed lines, as they now stand: `LineStatusCode` 3 (changed; substitutions and short picks say so in the line `Note`) or 7 (not accepted: cancelled, quantity 0), with the promised delivery date. Amendments still waiting for the buyer change nothing yet. `409 peppol_not_final` while an order is held for approval.
+- The Order always shows what the buyer ordered (the signed quote's orderable lines), also after amendments; its receipt reference is the current, re-signed receipt.
 - Read scoping is the same as `GET /orders/{id}` (private orders answer 404). Media type `application/xml`. Built from the signature-verified receipt and quote, deterministic. Code: `peppol_order`, `peppol_order_response` in [`sous/standards.py`](../sous/standards.py); tests: [`tests/test_peppol.py`](../tests/test_peppol.py).
 
 | Sous | Peppol Order (UBL 2.1) |
@@ -73,7 +74,7 @@ Peppol is the EU e-procurement network; in Finland it carries most B2B and publi
 - **Participant ids are placeholders.** Peppol needs `EndpointID`s from the EAS list (0216 = Finnish OVT code, 0037 = business id). Sous's customer master has no Peppol ids, so both parties carry a labelled `PLACEHOLDER-…` value under scheme 0216 until Valio Aimo's master data supplies them. A real access point would reject these.
 - **Validated structurally, not by schematron.** Tests check that the XML is well-formed, has the elements BIS marks mandatory, writes the top-level elements in UBL 2.1 sequence order, uses EUR on every amount and that line amounts sum to the order totals. The UBL 2.1 XSDs (the Order schema pulls in the large common-component schemas) are not vendored and there is no XML Schema validator in our dependencies. Next step: run the OpenPeppol validation artefacts (UBL XSD + PEPPOL-T01/T76 schematron) in CI, e.g. with phive.
 - **List prices.** As in the ORDERS05 outbox, prices are the list prices Sous quoted; the seller's ERP prices with the customer's conditions.
-- **No line-level Order Response.** Sous has no "accepted with changes" (`CA`) state today; amendments would map to `CA` with changed lines.
+- **Substitutions in the Order Response** are shown as a changed line carrying the substitute item, with the original in `Note`, not with UBL's `SellerSubstitutedLineItem`.
 - **Postal addresses** carry only the country (FI): Sous does not hold delivery addresses.
 
 ## Why not just adopt X?
@@ -95,5 +96,5 @@ Peppol is the EU e-procurement network; in Finland it carries most B2B and publi
 5. **Key rotation and signed cards:** several keys in the JWKS with KMS-held private keys, and JWS signatures on the agent card (RFC 8785 canonical JSON, as A2A specifies).
 6. **Revocation:** a W3C Bitstring Status List for mandates, so revocation is checkable without asking the gateway.
 7. **Audit anchoring:** publish signed chain heads to the buyer or to a transparency log, with inclusion proofs.
-8. **Peppol in production:** real Peppol participant ids from the customer master, schematron validation in CI, an access point (or Valio's EDI operator) as the transport, and a line-level Order Response (`CA`) once orders can change.
+8. **Peppol in production:** real Peppol participant ids from the customer master, schematron validation in CI, an access point (or Valio's EDI operator) as the transport, and `SellerSubstitutedLineItem` for substitutions at pick.
 9. **Spec drift:** AP2, A2A and MCP server cards all changed in 2026. CI should re-download their schemas and run `tests/test_standards.py` against the latest versions, not only the pinned ones.

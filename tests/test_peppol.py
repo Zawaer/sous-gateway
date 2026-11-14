@@ -139,3 +139,31 @@ def test_peppol_route():
     assert ET.fromstring(r.content).findtext("cbc:OrderResponseCode", namespaces=NS) == "AP"
     assert c.get(f"/orders/{o['id']}/peppol", params={"doc": "invoice"}).status_code == 422
     assert c.get("/orders/PO-NOPE/peppol").status_code == 404
+
+
+def test_amendments_give_an_accepted_with_change_response_and_leave_the_order_as_ordered():
+    from sous import amendments as AM
+    issue()
+    o = S.place_order("kide-agent", "M-STD", quote(amount=10)["id"])
+    AM.report(o["id"], AM.AmendmentIn(kind="short_pick", line=0, delivered_quantity=6, reason="warehouse"),
+              "global approver code")
+    r = ET.fromstring(STD.peppol_order_response(o["id"], "https://x"))
+    assert r.findtext("cbc:OrderResponseCode", namespaces=NS) == "CA"
+    assert "10.00 -> 6.00" in r.findtext("cbc:Note", namespaces=NS)
+    (li,) = r.findall("cac:OrderLine/cac:LineItem", NS)
+    assert li.findtext("cbc:ID", namespaces=NS) == "1" and li.findtext("cbc:LineStatusCode", namespaces=NS) == "3"
+    assert li.findtext("cbc:Quantity", namespaces=NS) == "6"
+    assert li.findtext("cac:Price/cbc:PriceAmount", namespaces=NS) == "1.00"
+    # the Order itself is still what the buyer ordered, tied to the re-signed receipt
+    order = ET.fromstring(STD.peppol_order(o["id"], "https://x"))
+    assert order.findtext("cac:OrderLine/cac:LineItem/cbc:Quantity", namespaces=NS) == "10"
+    assert order.findtext("cac:AnticipatedMonetaryTotal/cbc:LineExtensionAmount", namespaces=NS) == "10.00"
+    ids = [e.findtext("cbc:ID", namespaces=NS) for e in order.findall("cac:AdditionalDocumentReference", NS)]
+    assert STD.b64_sha256(S.get_order(o["id"])["receipt_jws"]) in ids
+
+    o2 = S.place_order("kide-agent", "M-STD", quote(amount=3)["id"])
+    AM.report(o2["id"], AM.AmendmentIn(kind="cancel_line", line=0, reason="out of stock"), "global approver code")
+    r = ET.fromstring(STD.peppol_order_response(o2["id"], "https://x"))
+    assert r.findtext("cbc:OrderResponseCode", namespaces=NS) == "CA"
+    li = r.find("cac:OrderLine/cac:LineItem", NS)
+    assert li.findtext("cbc:LineStatusCode", namespaces=NS) == "7" and li.findtext("cbc:Quantity", namespaces=NS) == "0"
