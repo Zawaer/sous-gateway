@@ -63,9 +63,10 @@ PRESET_HOSTS = {
 }
 # "CRACI always allows CI job and cache management traffic to GitHub services": the runner talking to
 # GitHub (job control, logs, artifacts, caches, checkout). Listed separately in the evidence, never hidden.
-GITHUB_INFRA = ["github.com", "api.github.com", "*.github.com", "*.actions.githubusercontent.com",
-                "*.githubusercontent.com", "*.blob.core.windows.net", "*.githubapp.com",
-                "token.actions.githubusercontent.com"]
+# Narrow on purpose (taken from real traces, where CRACI tags them github-actions-* / github-downloads-*): a
+# blanket *.blob.core.windows.net or *.githubusercontent.com would hide an exfiltration path to any Azure account.
+GITHUB_INFRA = ["github.com", "codeload.github.com", "api.github.com", "*.actions.githubusercontent.com",
+                "productionresultssa*.blob.core.windows.net", "cache.blob.core.windows.net"]
 
 
 # ---------------------------------------------------------------- declared policy (ci.yml)
@@ -202,18 +203,21 @@ def check_egress(policy: dict, trace: dict) -> dict:
 
 
 def suggest_policy(check: dict) -> str:
-    """The narrowest `network:` block that would have allowed what an observe-mode job did."""
+    """The narrowest `network:` block that would have allowed what an observe-mode job did.
+
+    CRACI's matchedRule is the ground truth here: traffic it matched to no rule went out only because the job
+    had no policy, so under `default: deny` it needs an explicit connection."""
     presets, tls = set(), defaultdict(set)
     for d in check["destinations"]:
-        if not d["allowed"]:
+        if not d["allowed"] or _host_match(d["host"], GITHUB_INFRA):
+            continue
+        if not d.get("craci_rules"):
+            tls[d["port"]].add(d["host"])
             continue
         for p, hosts in PRESET_HOSTS.items():
             if _host_match(d["host"], hosts):
                 presets.add(p)
                 break
-        else:
-            if not _host_match(d["host"], GITHUB_INFRA):
-                tls[d["port"]].add(d["host"])
     lines = ["default: deny", f"presets: [{', '.join(sorted(presets))}]"]
     if tls:
         lines.append("connections:")
@@ -247,22 +251,66 @@ def sbom_packages(sbom: dict) -> dict:
         for c in comps or []:
             k = purl_key(c.get("purl", ""))
             if k:
-                out[k] = {"hashes": {h.get("alg"): h.get("content") for h in c.get("hashes") or []}}
+                out.setdefault(k, {"hashes": {}})["hashes"].update({h.get("alg"): h.get("content") for h in c.get("hashes") or []})
             walk(c.get("components"))
     walk(sbom.get("components"))
     return out
 
 
-def sbom_summary(sbom: dict) -> dict:
+def _components(sbom: dict):
+    def walk(comps):
+        for c in comps or []:
+            yield c
+            yield from walk(c.get("components"))
+    yield from walk(sbom.get("components"))
+
+
+def _restored(c: dict) -> bool:
+    return any(p.get("name") == "craci:source:restored" and p.get("value") == "true" for p in c.get("properties") or [])
+
+
+def sbom_summary(sbom: dict, repo: str | None = None) -> dict:
     pk = sbom_packages(sbom)
     meta = sbom.get("metadata") or {}
     props = {p.get("name"): p.get("value") for p in meta.get("properties") or []}
-    comp = [c for c in (sbom.get("compositions") or [])]
-    return {"spec": sbom.get("specVersion"), "serial": sbom.get("serialNumber"), "packages": len(pk),
-            "by_type": dict(Counter(k[0] for k in pk)),
-            "completeness": {k: v for k, v in props.items() if "complete" in (k or "").lower()} or None,
-            "compositions": [c.get("aggregate") for c in comp] or None,
-            "properties": props}
+    comps = list(_components(sbom))
+    own = sorted({c["purl"].split("@", 1)[1][:12] for c in comps if repo and
+                  c.get("purl", "").lower().startswith(f"pkg:github/{repo.lower()}@")})
+    out = {"spec": sbom.get("specVersion"), "serial": sbom.get("serialNumber"), "packages": len(pk),
+           "by_type": dict(Counter(k[0] for k in pk)),
+           # CRACI marks what a job inherited from a restored cache rather than downloaded itself
+           "restored_from_cache": sum(1 for c in comps if _restored(c)),
+           "observed_in_job": sum(1 for c in comps if not _restored(c)),
+           "completeness": next((v for k, v in props.items() if "complete" in (k or "").lower()), None),
+           "job": {k.split(":")[-1]: v for k, v in props.items() if k and k.startswith("craci:job:")}}
+    if repo:
+        out["own_repo_commits"] = len(own)
+    return out
+
+
+def oci_refs(sbom: dict) -> list[dict]:
+    """Container images a job pulled, by digest (pkg:oci purls in its CRACI SBOM)."""
+    out = []
+    for c in _components(sbom):
+        m = re.match(r"pkg:oci/([^@]+)@(sha256:[0-9a-f]{64})(?:\?(.*))?$", c.get("purl", ""))
+        if m:
+            q = urllib.parse.parse_qs(m.group(3) or "")
+            out.append({"name": m.group(1), "digest": m.group(2),
+                        "repository_url": (q.get("repository_url") or [""])[0]})
+    return out
+
+
+def cache_refs(sbom: dict) -> list[dict]:
+    """GitHub Actions caches a job restored or saved (pkg:ghacache purls), with CRACI's entry id and key."""
+    out = []
+    for c in _components(sbom):
+        p = c.get("purl", "")
+        if p.startswith("pkg:ghacache/"):
+            q = urllib.parse.parse_qs(p.split("?", 1)[1] if "?" in p else "")
+            out.append({"entry_id": (q.get("entry_id") or [""])[0], "key": (q.get("key") or [""])[0],
+                        "version": p.split("@", 1)[1].split("?", 1)[0] if "@" in p else "",
+                        "restored": _restored(c)})
+    return out
 
 
 def diff_sboms(a: dict, b: dict, a_name: str, b_name: str, types=None) -> dict:
@@ -287,41 +335,71 @@ def diff_sboms(a: dict, b: dict, a_name: str, b_name: str, types=None) -> dict:
 
 
 def lock_packages(lock_text: str) -> dict:
-    """{(pypi, name, version): {"sha256": {...all wheel/sdist hashes}}} from uv.lock."""
+    """{(pypi, name, version): {"sha256": {...}, "files": {...}}} (every wheel/sdist uv.lock allows) from uv.lock."""
     out = {}
     for p in tomllib.loads(lock_text).get("package", []):
         if "version" not in p or (p.get("source") or {}).get("editable") or (p.get("source") or {}).get("virtual"):
             continue
-        hashes = {f["hash"].split(":", 1)[1] for f in (p.get("wheels") or []) if "hash" in f}
-        if p.get("sdist", {}).get("hash"):
-            hashes.add(p["sdist"]["hash"].split(":", 1)[1])
-        out[("pypi", _norm_name("pypi", p["name"]), p["version"])] = hashes
+        files = list(p.get("wheels") or []) + ([p["sdist"]] if p.get("sdist") else [])
+        out[("pypi", _norm_name("pypi", p["name"]), p["version"])] = {
+            "sha256": {f["hash"].split(":", 1)[1] for f in files if "hash" in f},
+            "files": {urllib.parse.unquote(f["url"].rsplit("/", 1)[-1]) for f in files if "url" in f}}
     return out
 
 
+def _file_names(sbom: dict) -> dict:
+    """{(pypi, name, version): {file_name qualifiers}} from CRACI's purls (pkg:pypi/x@1?file_name=x-1-py3-none-any.whl)."""
+    out = defaultdict(set)
+    for c in _components(sbom):
+        k = purl_key(c.get("purl", ""))
+        if k and k[0] == "pypi" and "?" in c["purl"]:
+            for f in urllib.parse.parse_qs(c["purl"].split("?", 1)[1]).get("file_name", []):
+                out[k].add(f)
+    return out
+
+
+# Why a downloaded PyPI package can legitimately be missing from uv.lock.
+NOT_LOCKED_REASONS = {
+    "hatchling": "build backend ([build-system] requires, resolved at build time, not locked)",
+    "editables": "build backend dependency", "pathspec": "build backend dependency",
+    "pluggy": "build backend dependency", "trove-classifiers": "build backend dependency",
+    "tomlkit": "build backend dependency", "packaging": "build backend dependency",
+    "pip": "tooling (pipx installing uv)", "uv": "tooling (pipx install uv==<pinned>)",
+}
+
+
 def check_against_lock(sbom: dict, lock_text: str) -> dict:
-    """Did the job download exactly what uv.lock pins? Versions, and sha256 where CRACI recorded one."""
+    """Did the job download exactly what uv.lock pins? Version, then the exact wheel file name (CRACI records the
+    file name, not a hash, so sha256 can't be compared), and sha256 if CRACI ever records one."""
     lock = lock_packages(lock_text)
     seen = {k: v for k, v in sbom_packages(sbom).items() if k[0] == "pypi"}
+    names = _file_names(sbom)
     lock_names = {(t, n): v for t, n, v in lock}
-    not_in_lock, wrong_version, hash_ok, hash_bad, no_hash = [], [], 0, [], 0
+    not_in_lock, wrong_version, file_ok, file_bad, hash_ok, hash_bad = [], [], 0, [], 0, []
     for k, v in seen.items():
         if k in lock:
+            for f in names.get(k, ()):
+                if f in lock[k]["files"]:
+                    file_ok += 1
+                else:
+                    file_bad.append(f)
             sha = (v["hashes"].get("SHA-256") or v["hashes"].get("sha256") or "").lower()
-            if not sha:
-                no_hash += 1
-            elif sha in lock[k]:
+            if sha and sha in lock[k]["sha256"]:
                 hash_ok += 1
-            else:
+            elif sha:
                 hash_bad.append(f"{k[1]}=={k[2]}")
         elif (k[0], k[1]) in lock_names:
             wrong_version.append(f"{k[1]}: saw {k[2]}, lock {lock_names[(k[0], k[1])]}")
         else:
-            not_in_lock.append(f"{k[1]}=={k[2]}")
+            not_in_lock.append({"package": f"{k[1]}=={k[2]}", "why": NOT_LOCKED_REASONS.get(k[1], "unexplained")})
     return {"lock_packages": len(lock), "craci_pypi_packages": len(seen),
             "in_lock": len(seen) - len(not_in_lock) - len(wrong_version),
-            "not_in_lock": sorted(not_in_lock), "wrong_version": sorted(wrong_version),
-            "sha256_match": hash_ok, "sha256_mismatch": sorted(hash_bad), "no_hash_recorded": no_hash}
+            "not_in_lock": sorted(not_in_lock, key=lambda x: x["package"]),
+            "unexplained_not_in_lock": sorted(x["package"] for x in not_in_lock if x["why"] == "unexplained"),
+            "wrong_version": sorted(wrong_version),
+            "wheel_file_in_lock": file_ok, "wheel_file_not_in_lock": sorted(file_bad),
+            "sha256_match": hash_ok, "sha256_mismatch": sorted(hash_bad),
+            "sha256_recorded_by_craci": hash_ok + len(hash_bad)}
 
 
 # ---------------------------------------------------------------- API clients (+ raw capture / replay)
@@ -442,7 +520,7 @@ def build(args) -> tuple[dict, int]:
         st, sbom = api.craci("/v1preview1/sbom", q, f"sbom_{key}", "application/vnd.cyclonedx+json")
         if st == 200 and isinstance(sbom, dict):
             job_sboms[key] = sbom
-            entry["sbom"] = sbom_summary(sbom)
+            entry["sbom"] = sbom_summary(sbom, args.repo)
             entry["sbom"]["sha256"] = hashlib.sha256(json.dumps(sbom, sort_keys=True).encode()).hexdigest()
         else:
             entry["sbom"] = {"error": problem(st, sbom)}
@@ -480,27 +558,46 @@ def build(args) -> tuple[dict, int]:
                              "application/vnd.cyclonedx+json")
         prov["image"]["oci_manifest_sbom"] = sbom_summary(body) if st == 200 and isinstance(body, dict) \
             else problem(st, body)
-    st, caches = api.github(f"/repos/{args.repo}/actions/caches", {"per_page": 100, "ref": "refs/heads/main",
-                                                                     "sort": "created_at"}, "github_caches")
-    ledger = []
-    for c in ((caches or {}).get("actions_caches") or [])[: args.max_caches] if st == 200 else []:
-        st2, body = api.craci("/v1preview1/artifact-provenance/gha_cache", {"cache_id": c["id"]}, f"cache_{c['id']}")
-        creators = body.get("jobs_created_in", []) if st2 == 200 and isinstance(body, dict) else []
-        ledger.append({"cache_id": c["id"], "key": c["key"], "created_at": c.get("created_at"),
-                       "size_bytes": c.get("size_in_bytes"),
-                       "family": re.sub(r"[-#](sha256:)?[0-9a-f]{8,}.*$|#\d+$", "", c["key"]),
-                       "craci_creators": [{"github_job_id": str((x.get("provider") or {}).get("job_id")),
-                                           "repository": (x.get("provider") or {}).get("repository"),
-                                           "accepted_at": x.get("accepted_at")} for x in creators],
-                       "status": "recorded" if creators else ("not recorded by CRACI" if st2 in (200, 404)
-                                                              else problem(st2, body))})
-    if st != 200:
-        bundle["api_gaps"].append(f"GitHub cache list unavailable (HTTP {st})")
+    # Base images the docker/test/smoke jobs pulled (from CRACI's SBOMs): who does CRACI say created them?
+    images = {}
+    for key, sb in job_sboms.items():
+        for r in oci_refs(sb):
+            images.setdefault(r["digest"], r | {"pulled_by": []})["pulled_by"].append(key)
+    for i, (dg, r) in enumerate(sorted(images.items())):
+        st, body = api.craci("/v1preview1/artifact-provenance/oci_manifest", {"digest": dg}, f"prov_oci_{i}")
+        if st == 200 and isinstance(body, dict):
+            r["kind"] = body.get("kind")
+            r["created_by_craci_jobs"] = len(body.get("jobs_created_in") or [])
+            r["refers"] = len(body.get("refers") or [])
+        else:
+            r["provenance"] = problem(st, body)
+    prov["pulled_images"] = list(images.values())
+
+    # Cache lineage: every Actions cache a job's SBOM names, and the CRACI job that created it.
+    ledger, seen_ids = [], set()
+    for key, sb in job_sboms.items():
+        for c in cache_refs(sb):
+            if not c["entry_id"] or c["entry_id"] in seen_ids or len(ledger) >= args.max_caches:
+                continue
+            seen_ids.add(c["entry_id"])
+            st2, body = api.craci("/v1preview1/artifact-provenance/gha_cache", {"cache_id": c["entry_id"]},
+                                  f"cache_{c['entry_id']}")
+            creators = body.get("jobs_created_in", []) if st2 == 200 and isinstance(body, dict) else []
+            ledger.append({"job": key, "entry_id": c["entry_id"], "key": c["key"],
+                           "family": re.sub(r"-(sha256:)?[0-9a-f]{8,}.*$|#\d+$", "", c["key"]),
+                           "craci_creators": [{"github_job_id": str((x.get("provider") or {}).get("job_id")),
+                                               "repository": (x.get("provider") or {}).get("repository"),
+                                               "accepted_at": x.get("accepted_at"),
+                                               "cache_key": (x.get("metadata") or {}).get("cache_key")}
+                                              for x in creators],
+                           "status": "recorded" if creators else ("no creating job recorded" if st2 in (200, 404)
+                                                                  else problem(st2, body))})
     foreign = [x for x in ledger for cr in x["craci_creators"] if cr["repository"] not in (None, args.repo)]
     prov["gha_caches"] = {"checked": len(ledger), "created_on_craci": sum(1 for x in ledger if x["craci_creators"]),
-                          "not_recorded": sum(1 for x in ledger if x["status"] == "not recorded by CRACI"),
+                          "not_recorded": sum(1 for x in ledger if x["status"] == "no creating job recorded"),
                           "lookup_failed": sum(1 for x in ledger if x["status"].startswith("HTTP")),
-                          "created_by_other_repo": len(foreign), "entries": ledger}
+                          "created_by_other_repo": len(foreign),
+                          "families": dict(Counter(x["family"] for x in ledger)), "entries": ledger}
 
     missing = [j["job"] for j in bundle["jobs"] if (j.get("egress") or {}).get("verdict") == "unavailable"
                and (j.get("declared") or {}).get("mode", "observe") != "observe"]
@@ -576,24 +673,40 @@ def markdown(bundle: dict, jwk: dict | None, key_note: str | None, digest: str |
         out += [f"| {t} | {v['craci']} | {v['syft']} | {v['both']} |" for t, v in d["per_type"].items()]
         out += ["", f"Only in CRACI: {len(d['only_craci'])}; only in syft: {len(d['only_syft'])}; "
                     f"version mismatches: {len(d['version_mismatch'])}."]
+        pp = d["per_type"].get("pypi", {})
+        out += [f"PyPI: {pp.get('both', 0)} of CRACI's {pp.get('craci', 0)} observed downloads are in syft's image "
+                f"SBOM; syft-only PyPI: {', '.join(x for x in d['only_syft'] if x.startswith('pkg:pypi')) or 'none'}."]
+    out += ["", "### PyPI downloads (CRACI) vs uv.lock", "",
+            "| Job | Downloads | Locked version | Exact wheel file in lock | Not in lock (why) |", "|---|---|---|---|---|"]
     for k, v in sb.items():
-        if k.endswith("_vs_uv_lock"):
-            out.append(f"- `{k[:-11]}` PyPI downloads vs uv.lock: {v['in_lock']}/{v['craci_pypi_packages']} pinned, "
-                       f"{len(v['not_in_lock'])} not in lock, {len(v['wrong_version'])} wrong version, sha256 "
-                       f"{v['sha256_match']} match / {len(v['sha256_mismatch'])} mismatch / "
-                       f"{v['no_hash_recorded']} not recorded")
-    comp = [(j["job"], (j.get("sbom") or {}).get("completeness")) for j in bundle["jobs"] if j.get("sbom")]
-    if comp:
-        out += ["", "CRACI SBOM completeness: " + "; ".join(f"`{k}` {v}" for k, v in comp)]
+        if k.endswith("_vs_uv_lock") and v["craci_pypi_packages"]:
+            why = ", ".join(f"{x['package']} ({x['why'].split(' (')[0]})" for x in v["not_in_lock"]) or "-"
+            bad = f" ({len(v['wheel_file_not_in_lock'])} not)" if v["wheel_file_not_in_lock"] else ""
+            out.append(f"| `{k[:-11]}` | {v['craci_pypi_packages']} | {v['in_lock']} | {v['wheel_file_in_lock']}{bad}"
+                       f" | {why} |")
+    out += ["", "### CRACI job SBOMs", "", "| Job | Components | Observed in job | Inherited from restored caches "
+            "| Commits of this repo listed |", "|---|---|---|---|---|"]
+    for j in bundle["jobs"]:
+        x = j.get("sbom") or {}
+        if "packages" in x:
+            out.append(f"| `{j['job']}` | {x['packages']} | {x['observed_in_job']} | {x['restored_from_cache']} | "
+                       f"{x.get('own_repo_commits', '-')} |")
     c = bundle["provenance"].get("gha_caches") or {}
     if c:
-        out += ["", f"### Cache provenance (main): {c['checked']} caches, {c['created_on_craci']} created by a "
-                    f"recorded CRACI job, {c['not_recorded']} not recorded, {c['created_by_other_repo']} from another "
-                    f"repo, {c['lookup_failed']} lookups failed"]
+        fam = ", ".join(f"{k} x{v}" for k, v in sorted(c["families"].items()))
+        out += ["", f"Cache lineage: {c['checked']} Actions caches named in the job SBOMs ({fam}): "
+                    f"{c['created_on_craci']} created by a CRACI job it can name, {c['not_recorded']} with no creating "
+                    f"job recorded, {c['created_by_other_repo']} from another repo, {c['lookup_failed']} lookups failed."]
+    imgs = bundle["provenance"].get("pulled_images") or []
+    if imgs:
+        out += ["", "Images pulled (by digest, from CRACI's SBOMs): " + "; ".join(
+            f"`{i['repository_url'] or i['name']}@{i['digest'][7:19]}` ({', '.join(sorted(set(i['pulled_by'])))}; "
+            f"{i.get('provenance') or str(i.get('kind')) + ', created by ' + str(i.get('created_by_craci_jobs')) + ' CRACI jobs'})"
+            for i in imgs)]
     img = bundle["provenance"].get("image")
     if img:
         p = img["oci_manifest_provenance"]
-        out += ["", f"Image `{img['digest'][:19]}...`: CRACI provenance "
+        out += ["", f"Built image `{img['digest'][:19]}...` (loaded into the runner, never pushed): CRACI provenance "
                     f"{'recorded' if isinstance(p, dict) else p}"]
     if bundle["api_gaps"]:
         out += ["", "Gaps: " + "; ".join(bundle["api_gaps"])]
