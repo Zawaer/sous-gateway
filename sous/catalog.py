@@ -234,7 +234,7 @@ _SYNONYM_GROUPS: list[tuple[str, str, str]] = [
     ("lohi", "lax", "salmon"),
     ("kala", "fisk", "fish"),
     ("kaura", "havre", "oat/oats"),
-    ("kaurajuoma", "havredryck", "oat drink/oat milk"),
+    ("kaurajuoma/kauramaito", "havredryck", "oat drink/oat milk"),
     ("kaurahiutale/kaurahiutaleet", "havregryn", "oat flakes/rolled oats/oatmeal"),
     ("riisi", "ris", "rice"),
     ("sokeri", "socker", "sugar"),

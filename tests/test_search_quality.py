@@ -64,6 +64,7 @@ CASES: list[tuple[str, object]] = [
     ("olive oil", fi(r"oliiviöljy")),
     ("rapeseed oil", fi(r"rypsiöljy|rapsiöljy")),
     ("oat milk", fi(r"kaurajuoma|kauramaito")),
+    ("kauramaito", fi(r"kaurajuoma|kauramaito")),
     ("lactose free milk", fi(r"laktoositon", exclude=r"kondens|jauhe|suklaa|kahvi|juoma|kerma|jogurtti|juusto")),
     ("yogurt", fi(r"jogurtti\b")),
     ("whipping cream", fi(r"vispikerma|kuohukerma|vispautuva")),
