@@ -579,6 +579,19 @@ def _diet_sig(text: str) -> frozenset:
     return frozenset(h for rx, h in DIET_HINTS if rx.search(text))
 
 
+def _stock_sig(text: str) -> frozenset:
+    """Only subtract inventory with the same diet and explicit salt specification."""
+    signature = set(_diet_sig(text))
+    for pattern, label in (
+        (r"\bunsalted\b|\bsuolato(?:n|nt)\w*|\bsuolatto\w*|\bsuolaamato\w*", "unsalted"),
+        (r"\bsalted\b|\bsuolattu\w*|\bnormaalisuolai\w*|\bvoimakassuolai\w*", "salted"),
+        (r"\blow[- ]salt\b|\breduced[- ]salt\b|\bvähäsuolai\w*", "reduced salt"),
+    ):
+        if re.search(pattern, text, re.I):
+            signature.add(label)
+    return frozenset(signature)
+
+
 def _subtract_stock(n: Need, entries: list[dict]) -> None:
     """Stock the buyer already has is subtracted from the item it belongs to, never ordered. With a stated total
     ("yhteensä 12 kg", "25 l in total") the result is certain; otherwise the amount the buyer gave may already be
@@ -605,12 +618,12 @@ def _subtract_stock(n: Need, entries: list[dict]) -> None:
                 target.foods = list(dict.fromkeys(target.foods + foods_in(s["text"])))
                 target.total = True
         else:
-            sig, cands = _diet_sig(s["text"]), []
+            sig, cands = _stock_sig(s["text"]), []
             for j, e in enumerate(entries):
                 it = item_of.get(id(e))
                 if it is None or it not in n.items:
                     continue
-                if s["foods"] and not (e["foods"] & s["foods"] and _diet_sig(e["text"]) == sig):
+                if s["foods"] and not (e["foods"] & s["foods"] and _stock_sig(e["text"]) == sig):
                     continue
                 cands.append((abs(j - k) + (0.5 if j > k else 0), it))
             target = min(cands, key=lambda x: x[0])[1] if cands else None
