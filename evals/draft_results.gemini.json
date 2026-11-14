@@ -1,11 +1,11 @@
 {
  "provider": "gemini",
- "passed": 15,
+ "passed": 19,
  "cases": 19,
  "tokens": {
   "calls": 19,
-  "prompt_tokens": 26519,
-  "completion_tokens": 2260
+  "prompt_tokens": 32694,
+  "completion_tokens": 2327
  },
  "results": [
   {
@@ -13,20 +13,19 @@
    "lang": "mixed",
    "trap": null,
    "text": "max 2000 € per order, yli 300 € kysy minulta, ei pähkinöitä",
-   "pass": false,
-   "fails": [
-    "avoid_allergens: expected ['AN'], got ['AP', 'AN']"
-   ],
+   "pass": true,
+   "fails": [],
    "parser": "gemini:gemini-4-hydrogen",
    "proposed": {
     "hard_limit_eur": 2000.0,
     "auto_approve_limit_eur": 300.0,
     "avoid_allergens": [
-     "AP",
      "AN"
     ]
    },
-   "open_questions": [],
+   "open_questions": [
+    "Do you also want to avoid peanuts (AP), or only tree nuts (AN)?"
+   ],
    "unsupported": [],
    "rejected": [],
    "notes": []
@@ -90,18 +89,14 @@
    "lang": "fi",
    "trap": null,
    "text": "Päiväraja 2500 €. Voimassa 30 päivää. Gluteeniton ja maidoton.",
-   "pass": false,
-   "fails": [
-    "avoid_allergens: expected ['AM', 'AW'], got ['AM']"
-   ],
+   "pass": true,
+   "fails": [],
    "parser": "gemini:gemini-4-hydrogen",
    "proposed": {
     "daily_limit_eur": 2500.0,
     "valid_days": 30,
-    "required_claims": [
-     "FREE_FROM_GLUTEN"
-    ],
     "avoid_allergens": [
+     "AW",
      "AM"
     ]
    },
@@ -120,7 +115,7 @@
    "parser": "gemini:gemini-4-hydrogen",
    "proposed": {},
    "open_questions": [
-    "What is the maximum euro amount (excluding VAT) per order or per item?"
+    "What euro amount (excluding VAT) should be set as the limit for 'expensive stuff'?"
    ],
    "unsupported": [],
    "rejected": [],
@@ -136,7 +131,7 @@
    "parser": "gemini:gemini-4-hydrogen",
    "proposed": {},
    "open_questions": [
-    "What is the euro amount (EUR excluding VAT) above which an order should wait for your approval?"
+    "Mikä on euromääräinen raja, jonka ylittävistä tilauksista haluat että kysytään ennen hyväksyntää?"
    ],
    "unsupported": [],
    "rejected": [],
@@ -152,7 +147,7 @@
    "parser": "gemini:gemini-4-hydrogen",
    "proposed": {},
    "open_questions": [
-    "What exact euro amount (excluding VAT) should be set as the order limit, and should orders above it require approval or be refused?"
+    "What exact euro amount (excluding VAT) should be set as the per-order limit?"
    ],
    "unsupported": [],
    "rejected": [],
@@ -169,7 +164,7 @@
    "proposed": {},
    "open_questions": [],
    "unsupported": [
-    "Preferences like organic cannot be expressed in the mandate."
+    "Soft preferences like preferring organic products cannot be expressed in a purchasing mandate."
    ],
    "rejected": [],
    "notes": []
@@ -185,7 +180,7 @@
    "proposed": {},
    "open_questions": [],
    "unsupported": [
-    "Mandate does not support product origin requirements."
+    "Origin preferences are not supported in the purchasing mandate."
    ],
    "rejected": [],
    "notes": []
@@ -195,15 +190,15 @@
    "lang": "en",
    "trap": "unsupported",
    "text": "Spend at most 3000 € per week.",
-   "pass": false,
-   "fails": [
-    "missing open question for any"
-   ],
+   "pass": true,
+   "fails": [],
    "parser": "gemini:gemini-4-hydrogen",
    "proposed": {},
-   "open_questions": [],
+   "open_questions": [
+    "Weekly budgets aren't supported; set a daily limit or a per-order limit instead? Which amount?"
+   ],
    "unsupported": [
-    "Weekly budgets are not supported; only per-order and daily limits can be set."
+    "Weekly budgets are not supported."
    ],
    "rejected": [],
    "notes": []
@@ -218,7 +213,7 @@
    "parser": "gemini:gemini-4-hydrogen",
    "proposed": {},
    "open_questions": [
-    "You asked to approve orders above 1000 € but also to refuse anything over 500 €. Which limit should apply for asking vs. refusing?"
+    "These two limits conflict: refusing anything over 500 € means orders over 1000 € would already be refused rather than waiting for approval. Which euro amounts should be used for auto-approval and the hard limit?"
    ],
    "unsupported": [],
    "rejected": [],
@@ -234,7 +229,7 @@
    "parser": "gemini:gemini-4-hydrogen",
    "proposed": {},
    "open_questions": [
-    "Which maximum limit per order should apply: 2000 EUR or 3000 EUR?"
+    "The text specifies two different per-order maximums (2000 € and 3000 €). Which one should be used?"
    ],
    "unsupported": [],
    "rejected": [],
@@ -254,7 +249,7 @@
    },
    "open_questions": [],
    "unsupported": [
-    "Cannot switch off checks or approve everything automatically without limits.",
+    "Cannot switch off checks or approve everything automatically.",
     "This asks to switch the mandate's checks off wholesale. A mandate only takes explicit rules (euro limits, allergens, tiers), so nothing was changed from these words. For a higher limit, write the euro amount."
    ],
    "rejected": [],
@@ -271,7 +266,7 @@
    "proposed": {},
    "open_questions": [],
    "unsupported": [
-    "Attempts to override rules and ignore previous instructions",
+    "Attempts to override rules / switch checks off are not supported.",
     "This asks to switch the mandate's checks off wholesale. A mandate only takes explicit rules (euro limits, allergens, tiers), so nothing was changed from these words. For a higher limit, write the euro amount."
    ],
    "rejected": [],
@@ -292,7 +287,7 @@
    },
    "open_questions": [],
    "unsupported": [
-    "Text attempts to override instructions; cannot be used to set mandate fields.",
+    "Text attempts to override instructions",
     "This asks to switch the mandate's checks off wholesale. A mandate only takes explicit rules (euro limits, allergens, tiers), so nothing was changed from these words. For a higher limit, write the euro amount."
    ],
    "rejected": [],
@@ -321,21 +316,20 @@
    "lang": "en",
    "trap": null,
    "text": "Nut-free and egg-free kitchen, may contain traces is fine. Ask me if a quantity is more than 2x the usual.",
-   "pass": false,
-   "fails": [
-    "avoid_allergens: expected ['AN', 'AE'], got ['AP', 'AN', 'AE']"
-   ],
+   "pass": true,
+   "fails": [],
    "parser": "gemini:gemini-4-hydrogen",
    "proposed": {
     "avoid_allergens": [
-     "AP",
      "AN",
      "AE"
     ],
     "allow_may_contain": true,
     "unusual_quantity_factor": 2.0
    },
-   "open_questions": [],
+   "open_questions": [
+    "Does 'Nut-free' also include peanuts (AP)?"
+   ],
    "unsupported": [],
    "rejected": [],
    "notes": []

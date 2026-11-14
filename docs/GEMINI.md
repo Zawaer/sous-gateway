@@ -152,6 +152,24 @@ key; the gateway only ever sees that signed credential.
     them, so avoiding the allergen is the better rule.
   - **D11** ("at most 3000 € per week"): Gemini correctly listed weekly budgets as unsupported but didn't ask
     whether a per-order or daily limit should replace it. The rule parser asks.
+- **Closing the loop: 15/19 → 19/19.** The four misses became deterministic validator rules, so they hold for any
+  drafter, plus matching prompt and schema hints:
+  - a required `FREE_FROM_<X>` claim with an allergen behind it (mapped through the catalog's allergen names:
+    gluten → AW, lactose → ML, milk → AM, nuts → AN, …) is rewritten to an avoided allergen, with the reason in the
+    diff note. Claims with no allergen behind them, such as `FREE_FROM_PRESERVATIVES`, stay claims (D05);
+  - an unsupported item with a euro amount (a weekly or monthly budget) always gets the question "set a daily limit
+    or a per-order limit instead? Which amount?". The validator never divides the amount, and a money limit drafted
+    from a weekly amount is rejected (D11);
+  - an allergen the text doesn't name (peanuts for "nuts") stays in the draft but gets a question ("You wrote
+    'nuts'; also avoid peanuts?"). The eval now accepts that extra AP only together with the question
+    (`stricter_if_asked` in D01/D18). Adding it silently still fails.
+
+  `tests/test_draft.py` replays Gemini's recorded answers from run 43562850006 through the new validator offline:
+  19/19. Then [run 43563950578](https://github.com/Zawaer/sous/actions/runs/43563950578) (5c44284) scored
+  **Gemini 4 Hydrogen 19/19** (19 calls, 32,694 tokens in, 2,327 out, about $0.07; the longer prompt costs ~6k
+  tokens per run). With the tighter prompt Gemini now gets these right on its own. It avoids gluten (AW), asks
+  about the weekly budget, and asks about peanuts instead of adding them. The validator is the guarantee when it
+  doesn't.
 
 ## Run it
 
