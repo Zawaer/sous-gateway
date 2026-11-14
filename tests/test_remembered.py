@@ -203,3 +203,51 @@ def test_mcp_mandate_outputs_list_remembered_and_stay_schema_valid(monkeypatch):
     schema = MS.output_schema(MS.MyMandatesOut)
     validator_for(schema)(schema).validate(mine)
     assert mine["mandates"][0]["remembered"][0]["by"] == "Mikko"
+
+
+def _two_line_quote(qid, need_each=10):
+    lines = []
+    for _ in range(2):
+        line = Q.build_offer(PRODUCTS["1"], PRICE, AVAIL, date(2026, 11, 16), need_each, "L", NOW)
+        line["substitute_for"] = "9"
+        lines.append(line)
+    q = {"id": qid, "agent_id": "a", "mandate_id": "M", "issued_at": NOW.isoformat(),
+         "expires_at": "2026-11-13T23:00:00+02:00", "requested_delivery_date": "2026-11-16", "currency": "EUR",
+         "lines": lines, "total_ex_vat": round(sum(l["line_total_ex_vat"] for l in lines), 2),
+         "total_inc_vat": round(sum(l["line_total_inc_vat"] for l in lines), 2),
+         "uncovered": [], "alternatives_considered": []}
+    store.put_quote(q, signing.sign(q, "sous-quote+jws"))
+    return qid
+
+
+def test_caps_count_every_line_of_the_product():
+    """Regression: two lines of the same substitute (10 + 10) must not each pass a 15-unit cap."""
+    mandate()
+    c = TestClient(api.app)
+    o1 = S.place_order("a", "M", quote("Q-1"))
+    assert approve(c, o1["id"], [{**SUB[0], "max_quantity": 15}]).json()["status"] == "ordered"
+    o2 = S.place_order("a", "M", _two_line_quote("Q-2"))
+    assert o2["status"] == "pending_approval" and rules(o2)["substitution"] == "ask"
+    assert "remembered.substitution" not in rules(o2)
+    # within the cap together (5 + 5): remembered
+    o3 = S.place_order("a", "M", _two_line_quote("Q-3", need_each=5))
+    assert o3["status"] == "ordered" and rules(o3)["remembered.substitution"] == "notify"
+
+
+def test_a_copied_row_does_not_apply_under_another_mandate():
+    """Regression: a signed decision of mandate M copied under mandate M2's column is not M2's decision."""
+    mandate()
+    c = TestClient(api.app)
+    approve(c, S.place_order("a", "M", quote("Q-1"))["id"], SUB)
+    r = remembered.list_for("M")[0]
+    S.issue_mandate(Mandate(id="M2", buyer="Kitchen", agent_id="a", issued_by="chef"))
+    store._exec("INSERT INTO remembered_decision (id, mandate_id, product_id, active, data, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)", ("REM-COPY", "M2", r["product_id"], 1,
+                                              __import__("json").dumps(r), r["created_at"]))
+    assert remembered.list_for("M2") == []
+    # and soften itself refuses a decision signed for another mandate, however it was fetched
+    from sous.mandate import Finding
+    f = Finding(rule="substitution", outcome="ask", message="x", product_id="1")
+    line = {"product_id": "1", "substitute_for": "9", "quantity": 1, "line_total_ex_vat": 1.0}
+    assert remembered.soften([f], [line], [r], NOW, "M2")[0].rule == "substitution"
+    assert remembered.soften([f], [line], [r], NOW, "M")[0].rule == "remembered.substitution"

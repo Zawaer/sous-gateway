@@ -565,7 +565,7 @@ def evaluate(
     f.extend(extra_findings or [])
     if remembered:
         from .remembered import soften
-        f[:] = soften(f, lines, remembered, now)
+        f[:] = soften(f, lines, remembered, now, mandate.id)
     if mandate.delegated:  # earned autonomy (sous/ramp.py): a delegated scope's ask becomes its earned.* notify
         from .ramp import relax
         f[:] = relax(f, mandate)

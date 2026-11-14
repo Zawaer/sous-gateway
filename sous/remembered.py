@@ -114,8 +114,15 @@ def list_for(mandate_id: str, active_only: bool = True, now: datetime | None = N
     if store._conn is None and not config.DB_URL and not config.STATE_DB.exists():
         return []
     _ensure()
-    sql = "SELECT data FROM remembered_decision WHERE mandate_id = ?" + (" AND active = 1" if active_only else "")
-    out = [json.loads(r["data"]) for r in store._exec(sql + " ORDER BY created_at DESC", (mandate_id,))[0]]
+    sql = ("SELECT data, mandate_id, product_id FROM remembered_decision WHERE mandate_id = ?"
+           + (" AND active = 1" if active_only else ""))
+    out = []
+    for row in store._exec(sql + " ORDER BY created_at DESC", (mandate_id,))[0]:
+        r = json.loads(row["data"])
+        # the signed body names its own mandate and product: a row copied under another mandate (or product) column
+        # is not this mandate's decision
+        if r.get("mandate_id") == mandate_id == row["mandate_id"] and r.get("product_id") == row["product_id"]:
+            out.append(r)
     now = now or _now()
     return [r for r in out if not active_only or datetime.fromisoformat(r["expires_at"]) > now]
 
@@ -135,46 +142,55 @@ def for_lines(mandate, lines: list[dict], now: datetime | None = None) -> list[d
     return [r for r in list_for(mandate.id, now=now) if r["product_id"] in pids]
 
 
-def _valid(r: dict, now: datetime) -> bool:
+def _valid(r: dict, now: datetime, mandate_id: str | None = None) -> bool:
     if not r.get("active") or datetime.fromisoformat(r["expires_at"]) <= now:
         return False
+    if mandate_id is not None and r.get("mandate_id") != mandate_id:
+        return False  # signed for another mandate (checked again below against the signature)
     signed = signing.verify(r.get("jws") or "", TYP)
     if signed != {k: v for k, v in r.items() if k != "jws"}:
         return False  # the stored row was changed after it was signed
     return all(fingerprint(catalog.get(pid)) == fp for pid, fp in (r.get("fingerprints") or {}).items())
 
 
-def _matches(r: dict, f, line: dict) -> bool:
-    if r["rule"] != f.rule or r["product_id"] != f.product_id:
+def _matches(r: dict, f, lines: list[dict]) -> bool:
+    """`lines`: every line of the quote with the finding's product. Each must be what was remembered, and the caps
+    apply to them together (two lines of 200 L + 10 L are 210 L against a 50 L cap, not 10 L)."""
+    if r["rule"] != f.rule or r["product_id"] != f.product_id or not lines:
         return False
-    if f.rule == "substitution" and r.get("original_product_id") != line.get("substitute_for"):
-        return False
-    # what the substitute is used for (sous/use_sensitivity.py): one approved for coffee is not one for a dessert
-    if f.rule == "substitution" and r.get("use") != use_key(line.get("use")):
-        return False
+    for line in lines:
+        if f.rule == "substitution" and r.get("original_product_id") != line.get("substitute_for"):
+            return False
+        # what the substitute is used for (sous/use_sensitivity.py): one approved for coffee is not one for a dessert
+        if f.rule == "substitution" and r.get("use") != use_key(line.get("use")):
+            return False
     if f.rule in _READING and r.get("reading") != reading(f.message):
         return False
-    if r.get("max_quantity") is not None and (line.get("quantity") or 0) > r["max_quantity"] + 1e-9:
+    quantity = sum(line.get("quantity") or 0 for line in lines)
+    total = sum(round((line.get("line_total_ex_vat") or 0) * 100) for line in lines)
+    if r.get("max_quantity") is not None and quantity > r["max_quantity"] + 1e-9:
         return False
-    if r.get("max_line_total_eur") is not None and \
-            round((line.get("line_total_ex_vat") or 0) * 100) > round(r["max_line_total_eur"] * 100):
+    if r.get("max_line_total_eur") is not None and total > round(r["max_line_total_eur"] * 100):
         return False
     return True
 
 
-def soften(findings: list, lines: list[dict], decisions: list[dict] | None, now: datetime) -> list:
-    """`findings` with each ask of a REMEMBERABLE rule that a valid remembered decision covers turned into its
-    notify twin (remembered.*). Every other finding, and any block, is returned unchanged."""
+def soften(findings: list, lines: list[dict], decisions: list[dict] | None, now: datetime,
+           mandate_id: str | None = None) -> list:
+    """`findings` with each ask of a REMEMBERABLE rule that a valid remembered decision of `mandate_id` covers
+    turned into its notify twin (remembered.*). Every other finding, and any block, is returned unchanged."""
     if not decisions:
         return findings
     from . import fi
-    by_pid = {l.get("product_id"): l for l in lines}
+    by_pid: dict = {}
+    for l in lines:
+        by_pid.setdefault(l.get("product_id"), []).append(l)
     out = []
     for f in findings:
-        line = by_pid.get(f.product_id)
+        same = by_pid.get(f.product_id) or []
         hit = None
-        if f.outcome == "ask" and f.rule in REMEMBERABLE and line is not None:
-            hit = next((r for r in decisions if _matches(r, f, line) and _valid(r, now)), None)
+        if f.outcome == "ask" and f.rule in REMEMBERABLE and same:
+            hit = next((r for r in decisions if _matches(r, f, same) and _valid(r, now, mandate_id)), None)
         if hit is None:
             out.append(f)
             continue
