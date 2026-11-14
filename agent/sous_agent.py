@@ -380,7 +380,12 @@ def parse_need(text: str, today: date, default: date | None = None, now: datetim
         if it.amount is None and (it.headcount or n.headcount):
             _apply_portion(it, it.headcount or n.headcount, t)
     _subtract_stock(n, entries)
-    n.delivery_date, n.date_from = _date(t, today), "sentence"
+    try:
+        n.delivery_date, n.date_from = _date(t, today), "sentence"
+    except ValueError:  # "29.2." in a common year, "31.11.": a day that doesn't exist is a doubt, never a crash
+        n.delivery_date = None
+        n.risks.append("The buyer's sentence names a date that doesn't exist; quoted for the default delivery day: "
+                       "check the date.")
     if n.delivery_date is None:
         n.delivery_date, n.date_from = default or next_delivery_day(today), "default"
     else:

@@ -246,3 +246,14 @@ class _NoGw:
                 self.input_schema = {"properties": {"items": {}, "delivery_date": {}, "quote_id": {},
                                                     "declared_risks": {}}}
         return [T(n) for n in ("search_products", "suggest_substitutes", "request_quote", "place_order")]
+
+
+# --- a date that doesn't exist (review2) ---------------------------------------------------------------------
+
+@pytest.mark.parametrize("text", ["Maitoa 20 l 29.2.", "40 l milk for 31.11.", "milk 20 l on 2026-02-30",
+                                  "milk 10 l 30 february", "kermaa 5 l 31. marraskuuta"])
+def test_an_impossible_date_is_a_declared_doubt_not_a_crash(text):
+    n = parse_need(text, SAT, MON)  # raised ValueError ("day is out of range for month"): /agent/ask answered 500
+    assert n.delivery_date == MON and n.date_from == "default"
+    assert any("date that doesn't exist" in r for r in n.risks)
+    assert R.parse_date(text, SAT) is None or "february" in text or "marraskuuta" in text

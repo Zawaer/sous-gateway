@@ -149,11 +149,14 @@ _PLENTY = re.compile(r"\b(?:plenty of|enough|lots of|a lot of|runsaasti|riittäv
 
 def parse_date(text: str, today: date) -> date | None:
     t = text.lower()
-    if m := re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", t):
-        return date(int(m[1]), int(m[2]), int(m[3]))
-    if m := re.search(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})?", t):
-        d = date(int(m[3]) if m[3] else today.year, int(m[2]), int(m[1]))
-        return d if d > today or m[3] else date(today.year + 1, d.month, d.day)
+    try:  # a day that doesn't exist ("31.11.", "29.2." next year) is no date, never a crash
+        if m := re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", t):
+            return date(int(m[1]), int(m[2]), int(m[3]))
+        if m := re.search(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})?", t):
+            d = date(int(m[3]) if m[3] else today.year, int(m[2]), int(m[1]))
+            return d if d > today or m[3] else date(today.year + 1, d.month, d.day)
+    except ValueError:
+        return None
     return relative_date(t, today)  # tomorrow / huomiseksi / torstaiksi / ensi maanantaina (agent/dates.py)
 
 
