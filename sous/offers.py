@@ -306,6 +306,7 @@ def create(req: OfferIn, scope: str | None, *, reference_prices: dict[str, float
     if not mandates:
         raise _err("offer_no_targets", "Every target mandate was excluded: " + "; ".join(
             f"{e['mandate_id']} ({e['reason']})" for e in excluded), 422)
+    core["targets_sha256"] = _targets_digest(mandates)  # the targets are signed too, without naming other buyers
     jws = signing.sign(core, TYP)
     o = {**core, "status": "active", "jws": jws, "target": req.target.model_dump(exclude_none=True),
          "mandates": mandates, "excluded": excluded, "by": req.by,
@@ -382,7 +383,7 @@ def for_mandate(mandate_id: str, include_inactive: bool = False) -> dict:
     m = S._mandate(mandate_id)
     offers = []
     for o in _all("*"):
-        if mandate_id not in o["mandates"]:
+        if mandate_id not in o["mandates"] or (o := verified(o)) is None:
             continue
         if not include_inactive and not (_active(o) and remaining(o) > 0):
             continue
@@ -393,12 +394,35 @@ def for_mandate(mandate_id: str, include_inactive: bool = False) -> dict:
 
 # --- quoting and ordering ---------------------------------------------------
 
+def _targets_digest(mandates: dict) -> str:
+    return hashlib.sha256(signing.canonical(
+        {mid: sorted(t["product_ids"]) for mid, t in mandates.items()})).hexdigest()
+
+
+def verified(o: dict | None) -> dict | None:
+    """The offer with every commercial term (products and prices, cap, validity, reason, scope) taken from its
+    verified JWS, and its targets checked against the signed digest; None when the stored row and the signature
+    disagree (tampered or corrupted) or the JWS doesn't verify. Only `status` (withdrawn/expired) is unsigned state."""
+    if not o:
+        return None
+    core = signing.verify(o.get("jws") or "", TYP)
+    if core is None or core.get("id") != o.get("id") or core.get("targets_sha256") != _targets_digest(o["mandates"]):
+        return None
+    if any(o.get(k) != v for k, v in core.items()):  # the stored row says something else than what was signed
+        return None
+    return {**o, **core}
+
+
 def for_quote(offer_id: str, mandate: Mandate | None) -> dict:
     """The offer a quote request names, after the refusal checks that need no prices."""
     if mandate is None:
         raise _err("offer_requires_mandate", "An offer is quoted under the mandate it was made for: pass mandate_id.",
                    422)
-    o = get(offer_id)
+    stored = get(offer_id)
+    o = verified(stored)
+    if stored and o is None:
+        raise _err("offer_signature_invalid", f"Offer {offer_id} doesn't match its signature (the stored offer differs "
+                   "from what Valio Aimo signed); it can't be quoted.", 409)
     if not o or mandate.id not in o["mandates"]:
         # an offer for another buyer answers like one that doesn't exist: no oracle over other buyers' offers
         raise _err("offer_not_found", f"No offer {offer_id} for mandate {mandate.id} (GET /mandates/{mandate.id}/"
@@ -406,8 +430,6 @@ def for_quote(offer_id: str, mandate: Mandate | None) -> dict:
     if o["status"] != "active" or not _active(o):
         raise _err("offer_expired", f"Offer {offer_id} is {o['status'] if o['status'] != 'active' else 'expired'} "
                    f"(valid until {o['valid_until']}); ask for a quote at the current price instead.", 409)
-    if signing.verify(o["jws"], TYP) is None:
-        raise _err("offer_signature", f"Offer {offer_id} does not verify.", 409)
     return o
 
 
@@ -471,8 +493,13 @@ def findings(q: dict, now: datetime) -> list[Finding]:
         if l.get("offer_id") and l.get("orderable", True):
             by_offer.setdefault(l["offer_id"], []).append(l)
     for oid, ls in by_offer.items():
-        o = _raw(oid)
+        stored = _raw(oid)
+        o = verified(stored)
         first = ls[0]
+        if stored and o is None:
+            out.append(Finding(rule="offer.signature_invalid", outcome="block", product_id=first["product_id"],
+                               message=f"Valio Aimo's offer {oid} no longer matches its signature: ask for a new quote."))
+            continue
         out.append(Finding(rule="offer.applied", outcome="notify", product_id=first["product_id"], message=(
             f"Bought on Valio Aimo's offer {oid} ({first['offer']['reason_text']}): "
             f"€{first['offer']['price_ex_vat']:,.2f} instead of €{first['offer']['live_price_ex_vat']:,.2f} per "

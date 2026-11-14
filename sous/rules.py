@@ -222,6 +222,9 @@ def _build() -> list[dict]:
         _r("offer.expired", "finding", ["block"], "valio",
            "The Valio Aimo offer a quote was priced on has expired or was withdrawn before the order was placed or "
            "approved: ask for a new quote.", None),
+        _r("offer.signature_invalid", "finding", ["block"], "gateway",
+           "The stored Valio Aimo offer a quote was priced on no longer matches its signed JWS (tampered or "
+           "corrupted): the order is refused.", None),
         _r("offer.over_cap", "finding", ["block"], "valio",
            "Orders on the Valio Aimo offer would exceed its quantity cap (all buyers together; orders placed or "
            "waiting for approval count).", None),
@@ -337,6 +340,9 @@ def _build() -> list[dict]:
            None, status=409),
         _r("offer_not_applicable", "refusal", ["block"], "gateway", "None of the offer's products is an orderable "
            "line of the quote.", None, status=422),
+        _r("offer_signature_invalid", "refusal", ["block"], "gateway", "The stored offer differs from what Valio "
+           "Aimo signed (prices, cap, validity, reason or targets): it can't be quoted. Terms are only ever taken from "
+           "the verified JWS.", None, status=409),
         _r("offer_over_cap", "refusal", ["block"], "valio", "The quote asks for more of the offer than is left "
            "under its quantity cap.", None, status=409),
         _r("offer_requires_mandate", "refusal", ["block"], "gateway", "An offer is quoted only under the mandate it "

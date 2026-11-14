@@ -224,3 +224,33 @@ def test_missing_vat_rate_is_derived_or_the_offer_line_refused_never_zero(c, mon
         assert not line["orderable"] and "OFFER_VAT_UNKNOWN" in [i["code"] for i in line["issues"]]
         assert line.get("offer_id") is None and q["mandate_preview"]["outcome"] == "block"
         assert "availability.offer_vat_unknown" in [f["rule"] for f in q["mandate_preview"]["findings"]]
+
+
+def _tamper(offer_id, change):
+    row = offers._raw(offer_id)
+    change(row)
+    offers._put(row)
+
+
+def test_tampered_stored_offer_is_refused_terms_come_from_the_signature(c):
+    """QA blocker (rene-codex-qa, comment 6876858245): a stored offer row whose price differs from its JWS."""
+    o = offer(c).json()
+    q = quote(c, o["id"]).json()["quote"]  # placed later, after the tampering
+    _tamper(o["id"], lambda r: r["products"][0].update(price_ex_vat=0.05))
+    r = quote(c, o["id"])
+    assert r.status_code == 409 and r.json()["error"] == "offer_signature_invalid"
+    assert c.get(f"/mandates/{HOTEL}/offers", headers=VALIO).json()["offers"] == []  # not shown to agents either
+    od = c.post("/orders", json={"agent_id": HOTEL_AGENT, "mandate_id": HOTEL, "quote_id": q["id"]}).json()
+    assert od["status"] == "refused" and "offer.signature_invalid" in [f["rule"] for f in od["decision"]["findings"]]
+
+
+def test_tampered_cap_validity_or_targets_are_refused(c):
+    for change in (lambda r: r.update(quantity_cap=10 ** 6),
+                   lambda r: r.update(valid_until=(NOW + timedelta(days=20)).isoformat()),
+                   lambda r: r["mandates"].update({SCHOOL: {**r["mandates"][HOSPITAL], "buyer": "x"}})):
+        o = offer(c, target={"mandate_ids": [HOSPITAL]}).json()
+        _tamper(o["id"], change)
+        r = quote(c, o["id"], mandate=HOSPITAL, agent="meilahti-kitchen-agent")
+        assert r.status_code == 409 and r.json()["error"] == "offer_signature_invalid", r.text
+        r = quote(c, o["id"], mandate=SCHOOL, agent=SCHOOL_AGENT)
+        assert r.status_code == 409 and r.json()["error"] == "offer_signature_invalid", r.text
