@@ -24,7 +24,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from . import access, autonomy, account, agent_auth, aimo, catalog, clock, config, erp, exposure, holds, lost_demand, oauth, offers, origin as origin_mod, pause, peppol, proof, quote as Q, rules, sandbox, service as S, signing, standing, store
 from .mandate import Mandate
@@ -564,6 +564,12 @@ class OrderRequest(BaseModel):
     quote_id: str
     idempotency_key: str | None = None
     rationale: str | None = Field(None, max_length=500, description=S.RATIONALE_DOC)
+    declared_risks: list[str] | None = Field(None, description=S.controls.RISKS_DOC)
+
+    @field_validator("declared_risks")
+    @classmethod
+    def _risks(cls, v: list[str] | None) -> list[str] | None:
+        return S.controls.check_risks(v)
 
 
 @app.post("/orders", tags=["ordering"])
@@ -573,7 +579,7 @@ def place_order(req: OrderRequest, token: str | None = Depends(agent_token)):
     If the mandate requires agent authentication, send `Authorization: Bearer <agent token>`
     (401 agent_auth_required without it, 403 agent_auth_invalid with a wrong one)."""
     return S.place_order(req.agent_id, req.mandate_id, req.quote_id, req.idempotency_key, agent_token=token,
-                         rationale=req.rationale)
+                         rationale=req.rationale, declared_risks=req.declared_risks)
 
 
 @app.get("/orders", tags=["ordering"])

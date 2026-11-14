@@ -463,6 +463,7 @@ The `receipt_jws` is signed when the order is placed and **re-signed after the h
 | `quote_used` | 409 | The quote already has an order. | no |
 | `quote_expired` | 409 | Past `expires_at`; ask for a new quote. | no |
 | `idempotency_key_reused` | 409 | This agent already used the key for a different order. Use a fresh key. | no |
+| `separate_approver_required` | 403 | The mandate has `separate_approver: true` and the approver is the identity the order was requested by (`order.requested_by`), or gave no name (7.3). Another approver must approve; rejecting still works. | no |
 | `not_pending` | 409 | Approve or reject on an order that isn't `pending_approval`. | no |
 | `standing_paused` | 409 | Renewal of a paused standing order. | no |
 | `already_renewed` | 409 | This standing order already has an ordered or pending renewal for that delivery date. | no |
@@ -551,6 +552,48 @@ proposals[{id, kind: relax|revert, rule, scope, label, from_tier, to_tier, evide
 Audit events: `ramp.proposed` (once per proposal, when first shown), `ramp.accepted`, `ramp.declined`. MCP
 `my_mandates` carries `earned_autonomy {delegated, open_proposals}`; the buyer dashboard (`/ui/buyer.html`, Your rules)
 shows a "Delegate more? / Delegoidaanko lisää?" section per mandate.
+
+### 7.3 Buyer controls (`sous/controls.py`)
+
+Three optional controls a buyer can add on top of the tiers. Each is a rule in `GET /rules` with Finnish text.
+
+**Substitute price premium cap.** *Buyer need: "a stand-in is fine, a pricier one isn't, unless I say so."* Mandate
+field `max_substitute_premium_pct` (e.g. `10`; default off) and `substitute_premium` (`notify` | `ask` | `block`,
+default `ask`). A line with `substitute_for` is compared per comparable unit (Valio's comparison price per L, kg or
+piece) with the product it replaces. The replaced product's price comes from the same quote when it was a candidate,
+else from one batched price/availability lookup, and is signed into the line as `replaced_price {product_id,
+comparison_price, unit_price_ex_vat, sales_unit, source: quote | looked up | unavailable}`, so placing and approving
+decide on the same numbers. Above the cap: finding `substitution.premium` at the chosen tier, e.g. "Substitute Oat
+drink 1 l costs 18 % more per litre than Milk 1 l, the product it replaces (€1.18/L vs €1.00/L; cap 10 %)". Exactly
+the cap passes; a cheaper substitute always passes. When the replaced product's price can't be looked up, or the two
+are priced per different units, the finding says so and asks (whatever tier is set). This is relative to the
+replaced product; `price.comparison_cap` (absolute caps) and `price.changed` / `price.comparison_changed` (vs the
+last price paid) are separate. Option previews use the same check.
+
+**Agent-declared doubt.** *Buyer need: "if my agent isn't sure, I want to hear it before it orders."* Optional
+`declared_risks: [str]` (at most 5 entries of at most 200 characters; more is `422 invalid_request`) on
+`POST /quotes`, `POST /orders` and the MCP tools `request_quote` and `place_order`. Each entry adds finding
+`agent.declared_risk` (ask) with the agent's own words, labelled as unverified. Findings only ever raise the tier
+(the highest wins), so a declared risk can't lower one: a blocked order stays blocked whatever the agent writes. The
+quote's risks are signed into the quote (`declared_risks`), carried into an option re-quote taken from it, and
+joined with the order's own; the order and its signed receipt carry `declared_risks`, and the audit event
+`order.pending_approval` lists them.
+
+**Four-eyes (separate approver).** *Buyer need: "whoever sets the agent to work shouldn't be the one who signs off its
+held orders."* Mandate field `separate_approver: true` (default off). When an order is placed under such a mandate it
+records `requested_by {identity, source}`: the human who minted the agent's current credential (`agent_credential`,
+the `by` of `POST /mandates/{id}/agent-credential` or the mandate's issuer when it minted one), else the mandate's
+issuer (`mandate_issuer`). It is in the signed receipt. Approving (code, sandbox token, passkey, approve-with-changes)
+with `approval.by` equal to that identity (case and spacing ignored), or with no name, is refused:
+`403 separate_approver_required`. For a passkey approval the name compared is the one the passkey was enrolled with.
+Rejecting is always allowed.
+
+What it guarantees, honestly: it compares **identities, not people**. With `approval_method: "any"` the approver's
+name is typed by whoever holds the approver code, so one person can type someone else's name; pair it with
+`approval_method: "passkey"` so the name is bound to an enrolled device (enrolment itself needs the approver code). The
+requester identity is who set up the agent's credential, not a verified login of the person chatting with the agent;
+in a judge sandbox it is `sandbox SBX-...`, which no approver name matches. Production would use the buyer's own
+identity provider (OIDC subject ids) for both sides.
 
 ## 8. Standing orders and drift detection
 

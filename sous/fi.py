@@ -314,6 +314,22 @@ RULES = {
                      "pysäytetään, odottava tilaus saa tämän havainnon, jo lähetetty tilaus merkitään "
                      "tarkistettavaksi, ja nyt vaarallinen muistettu hyväksyntä tai allergeenivarmistus perutaan. "
                      "Mitään ei muuteta tai pudoteta hiljaa; lievennys ei koskaan laajenna mitään itsestään.",
+    "substitution.premium": "Korvaava tuote, joka maksaa vertailuyksikköä kohden (Valion vertailuhinta litralta, "
+                            "kilolta tai kappaleelta) enemmän kuin valtakirjan prosenttiosuus yli korvattavan "
+                            "tuotteen hinnan, saa ostajan valitseman tason (oletuksena hyväksyntä): ostaja hyväksyy "
+                            "korvaavan, ei kalliimpaa. Jos korvattavan tuotteen hintaa ei saada tai se on eri "
+                            "yksikössä, tilaus odottaa hyväksyntää ja kertoo syyn. Absoluuttiset katot "
+                            "(price.comparison_cap) ja muutos viimeksi maksettuun (price.changed) ovat erikseen; tämä "
+                            "vertaa korvattavaan tuotteeseen.",
+    "agent.declared_risk": "Agentti itse ilmoitti epävarmuuden pyynnöstä (declared_risks tarjous- tai tilauskutsussa, "
+                           "enintään 5 lyhyttä lausetta): tilaus odottaa ihmistä, joka näkee agentin omat sanat. "
+                           "Agentin sanat voivat vain nostaa tasoa, eivät koskaan laskea; ne allekirjoitetaan "
+                           "tarjoukseen ja tilauskuittiin.",
+    "separate_approver_required": "Neljän silmän periaate: valtakirja vaatii erillisen hyväksyjän, ja hyväksyntä "
+                                  "tuli samalta tunnisteelta, jonka pyynnöstä tilaus tehtiin (order.requested_by: "
+                                  "agentin tunnisteen luoja, muuten valtakirjan myöntäjä), tai ilman nimeä. Jonkun "
+                                  "muun on hyväksyttävä; hylätä saa yhä. Vertailu koskee tunnisteita (hyväksyjän "
+                                  "nimi tai pääsyavaimen nimi), ei ihmisiä.",
     "substitution.use_sensitive": "Korvaava tuote ei käy siihen, mihin tuotetta käytetään (rivin käyttötarkoitus: "
                                   "pyynnöstä, reseptistä tai ostajan historiasta): toisen merkin kuohukerma "
                                   "jälkiruokaan (stabilointiaineet muuttavat vaahtoutumista), voi kerrostaikinaan, "
@@ -678,6 +694,11 @@ def summary_text(m, rule: str | None, idx: int = 0) -> str | None:
         from .use_sensitivity import USES
         return "korvaavat käyttötarkoituksen mukaan: " + "; ".join(
             f"{k} {USES[u][1]}: {lv[x]}" for k, per in m.substitution_by_use.items() for u, x in per.items())
+    if rule == "substitution.premium":
+        return (f"korvaavat tuotteet, jotka ovat yli {pct(m.max_substitute_premium_pct)} kalliimpia litralta, "
+                f"kilolta tai kappaleelta kuin korvattava tuote, {TIER_SAYS[m.substitute_premium]}")
+    if rule == "separate_approver_required":
+        return "neljän silmän periaate: agentin käyttöön ottanut ei voi hyväksyä sen odottavia tilauksia"
     if rule == "supply.terminal":
         return f"toimittajan varastosta tulevat tuotteet {TIER_SAYS[m.terminal_products]}"
     if rule == "supply.reliability":

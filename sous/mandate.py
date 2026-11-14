@@ -120,6 +120,18 @@ class Mandate(BaseModel):
         "any", description="How a held order may be approved: 'any' (approver code, sandbox approver token or a "
         "passkey) or 'passkey' (only a registered approver's passkey, bound to the exact order; rejecting still "
         "works with the code)")
+    separate_approver: bool = Field(
+        False, description="Four-eyes: a held order may not be approved by the identity recorded as having "
+        "requested it (order.requested_by: who minted the agent's credential, else the mandate's issuer); refused "
+        "with 403 separate_approver_required. Compares identities (approver name / passkey name), not people: "
+        "pair it with approval_method 'passkey' so the approver's name is bound to an enrolled device")
+    max_substitute_premium_pct: float | None = Field(
+        None, gt=0, description="A substitute may cost at most this many percent more per comparable unit (L, kg, "
+        "piece: Valio's comparison price) than the product it replaces; above it, or when the replaced product's "
+        "price can't be compared, rule substitution.premium. None = off")
+    substitute_premium: Literal["notify", "ask", "block"] = Field(
+        "ask", description="Tier for a substitute above max_substitute_premium_pct (an unknown or incomparable "
+        "price of the replaced product always asks)")
     delegated: list[Delegation] = Field(
         default_factory=list, description="Earned autonomy (sous/ramp.py): scopes where the buyer approved enough "
         "held orders unchanged that they accepted Sous's proposal to notify instead of ask. Never allergens, block "

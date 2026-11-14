@@ -49,6 +49,9 @@ def approve_with_changes(order_id: str, req: ChangesIn, authority: str | None) -
         raise S.GatewayError("passkey_required", f"Mandate {o['mandate_id']} requires passkey approval, which approve "
                              f"with changes doesn't take: approve or reject {order_id} on the passkey page, or ask the "
                              "agent for a new quote with the quantities you want.", 403)
+    # four-eyes (sous/controls.py) before anything: a changed order that goes through on its own must not let the
+    # requester approve their own held order
+    S.controls.check_separate_approver(S._mandate(o["mandate_id"]), o, req.by)
     lines = o.get("lines") or []
     qty = {i: float(l.get("quantity") or 0) for i, l in enumerate(lines)}
     for c in req.changes:
@@ -72,6 +75,8 @@ def approve_with_changes(order_id: str, req: ChangesIn, authority: str | None) -
     when = date.fromisoformat(o.get("requested_delivery_date") or o["delivery_date"])
     req_q = S.QuoteRequest(agent_id=o["agent_id"], mandate_id=o["mandate_id"], delivery_date=when, items=items,
                            rationale=o.get("agent_rationale"))  # the agent's own reason stays the agent's
+    if o.get("declared_risks"):  # the agent's doubts stay with the changed order (never validated away)
+        req_q = req_q.model_copy(update={"declared_risks": o["declared_risks"]})
     try:  # the approver's call, so no agent token (S.request_quote would ask for one); same quote path otherwise
         with S.sandbox.metered(mandate):
             q = S._request_quote(req_q, approver=True)["quote"]

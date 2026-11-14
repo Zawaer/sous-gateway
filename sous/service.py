@@ -13,9 +13,10 @@ import threading
 from datetime import date, datetime, timedelta
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from . import use_sensitivity as USE
+from . import controls
 from . import account, agent_auth, aimo, allergen_ai, autonomy, catalog, clearance, clock, config, remembered, credentials, deadline, erp, exposure, fi, carbon, holds, notify, offers as OFFERS, options as OPT, origin, purpose as purposes, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
 from .mandate import Mandate, evaluate, product_refusals, readable_name
 
@@ -408,11 +409,17 @@ class QuoteRequest(BaseModel):
     items: list[QuoteItem] = Field(default_factory=list, max_length=50,
                                    description="Required (at least one) unless option_id is given")
     rationale: str | None = Field(None, max_length=500, description=RATIONALE_DOC)
+    declared_risks: list[str] | None = Field(None, description=controls.RISKS_DOC)
     option_id: str | None = Field(None, description="Re-quote with one of a previous quote's options[] "
                                   "(e.g. 'Q-1A2B3C4D.O2'): that item's lines become the option's, other items stay")
     offer_id: str | None = Field(None, description="Quote under a Valio Aimo offer (GET /mandates/{id}/offers, e.g. "
                                  "'OF-1A2B3C4D'): its products are priced at min(offer price, live price); the "
                                  "mandate decides as always")
+
+    @field_validator("declared_risks")
+    @classmethod
+    def _risks(cls, v: list[str] | None) -> list[str] | None:
+        return controls.check_risks(v)
 
 
 def order_url(order_id: str, sandbox_id: str | None = None) -> str:
@@ -506,7 +513,10 @@ def _apply_option(req: QuoteRequest) -> tuple[QuoteRequest, set[int], dict[int, 
                                    note=f"{opt['id']} ({opt['kind']})"))
     return req.model_copy(update={
         "items": items, "delivery_date": date.fromisoformat(q["requested_delivery_date"]),
-        "rationale": req.rationale or q.get("rationale")}), skip, fetch_on
+        "rationale": req.rationale or q.get("rationale"),
+        # a doubt the agent declared on the quote stays with the option taken from it (sous/controls.py)
+        "declared_risks": controls.clean_risks((q.get("declared_risks") or []) + (req.declared_risks or []))
+        or None}), skip, fetch_on
 
 
 def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), approver: bool = False,
@@ -522,6 +532,7 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
     sized = mandate is not None or exposure.mode() == "exact"
     before = dict(aimo.stats)
     lines: list[dict] = []
+    seen: dict[str, dict] = {}  # every candidate's offer: the replaced product's price (sous/controls.py)
     considered: list[dict] = []
     gaps: list[dict] = []
     troubled: list[tuple[int, QuoteItem, list[dict], list[dict]]] = []
@@ -535,6 +546,7 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
             item = item.model_copy(update={"use": use})  # for options; the signed items keep what was asked
         day = (fetch_on or {}).get(item_index, req.delivery_date)
         offers, now = Q.offers(item.product_ids, day, item.amount, unit)
+        seen.update({o["product_id"]: o for o in offers})
         RES.adjust_offers(offers, mandate.buyer if mandate else None, now, RES.pool_of(mandate), day)  # minus reserved
         if day > req.delivery_date:
             OPT.flag_later(offers, req.delivery_date, f"chosen option {req.option_id}")
@@ -585,6 +597,7 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
         if sized and item_index not in skip_options and OPT.trouble(chosen, uncovered, req.delivery_date):
             troubled.append((item_index, item, [o for o in cands if o["product_id"] not in off_type], chosen))
 
+    controls.annotate_replaced(mandate, lines, seen, req.delivery_date)  # max_substitute_premium_pct
     offer_ref = OFFERS.apply(offer, mandate, lines) if offer else None  # Valio's offer price (sous/offers.py)
     # Lines that can't be ordered are shown for their reasons but never bought, so they cost nothing.
     total_ex = round(sum(l["line_total_ex_vat"] or 0 for l in lines if l["orderable"]), 2)
@@ -613,6 +626,8 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
     }
     if rationale := clean_rationale(req.rationale):
         body["rationale"] = rationale
+    if risks := controls.clean_risks(req.declared_risks):  # the agent's own doubts, signed like the rationale
+        body["declared_risks"] = risks
     if req.option_id:
         body["chosen_option"] = req.option_id
     if offer_ref:
@@ -806,6 +821,7 @@ def _options(body: dict, troubled: list, requested: date, mandate: Mandate | Non
             # preview and the re-quote that takes it see the same restrictions as the quote
             for l in o["_lines"]:
                 _guard_line(l, item, mandate)
+            controls.annotate_replaced(mandate, o["_lines"], {x["product_id"]: x for x in offers}, requested)
             if any(l.get("substitute_for") and l.get("substitution") == "exact" for l in o["_lines"]):
                 continue  # only the locked product will do: never propose another one in its place
             kept.append(o)
@@ -816,6 +832,7 @@ def _options(body: dict, troubled: list, requested: date, mandate: Mandate | Non
         out += opts
 
     def preview(opt: dict):
+        controls.annotate_replaced(mandate, opt["_lines"], {}, requested)
         others = [l for l in body["lines"] if l.get("item_index") != opt["item_index"]]
         if opt["kind"] == "next_date":
             # Its own preview: its lines priced for its own (later) date, next to what the other items would really
@@ -854,7 +871,7 @@ def _evaluate(mandate: Mandate, agent_id: str, q: dict, now: datetime, extra_fin
     subs = {l["product_id"]: l["substitute_for"] for l in q["lines"] if l.get("substitute_for")}
     # Valio's own facts about the customer (credit, payment block, delivery days): sous/account.py
     extra_findings = list(extra_findings or []) + account.findings(mandate, q, now) \
-        + OFFERS.findings(q, now)
+        + OFFERS.findings(q, now) + controls.findings(mandate, q)
     return evaluate(mandate, agent_id, q["lines"], requested_date=date.fromisoformat(q["requested_delivery_date"]),
                     substitute_for=subs, uncovered=uncovered,
                     spent_today_eur=store.spent_today(mandate.id, now.date().isoformat()), now=now,
@@ -900,14 +917,21 @@ def _refresh_cutoffs(q: dict, now: datetime) -> None:
 # --- orders -----------------------------------------------------------------
 
 def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: str | None = None,
-                extra_findings=None, agent_token: str | None = None, rationale: str | None = None) -> dict:
+                extra_findings=None, agent_token: str | None = None, rationale: str | None = None,
+                declared_risks: list[str] | None = None) -> dict:
     """`extra_findings` (list of mandate.Finding) join the mandate's own; standing.py passes drift findings.
     `agent_token` is the agent's bearer credential, needed when the mandate requires agent authentication.
-    `rationale` is the agent's stated reason, kept with the order and in the audit log (see RATIONALE_DOC)."""
+    `rationale` is the agent's stated reason, kept with the order and in the audit log (see RATIONALE_DOC).
+    `declared_risks`: the agent's own doubts (sous/controls.py), joined with the quote's: each one holds the order
+    for a human (agent.declared_risk) and is signed into the receipt."""
+    try:
+        controls.check_risks(declared_risks)
+    except ValueError as e:
+        raise GatewayError("invalid_request", str(e), 422)
     authorize_agent(mandate_id, agent_id, agent_token, "place_order")
     with _order_lock:
         order, mandate = _place_order(agent_id, mandate_id, quote_id, idempotency_key, extra_findings,
-                                      clean_rationale(rationale))
+                                      clean_rationale(rationale), declared_risks)
     if mandate is not None:
         OFFERS.on_order(order)  # audit offer.accepted (sous/offers.py)
     if mandate is not None and order["decision"]["outcome"] in ("notify", "ask", "block"):
@@ -917,7 +941,8 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
 
 
 def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: str | None,
-                 extra_findings=None, rationale: str | None = None) -> tuple[dict, Mandate | None]:
+                 extra_findings=None, rationale: str | None = None,
+                 declared_risks: list[str] | None = None) -> tuple[dict, Mandate | None]:
     if idempotency_key and (prev := store.order_by_idempotency_key(agent_id, idempotency_key)):
         if prev["mandate_id"] != mandate_id or prev["quote_id"] != quote_id:
             raise GatewayError("idempotency_key_reused",
@@ -946,6 +971,8 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
         raise GatewayError("quote_expired", f"Quote {quote_id} expired at {q['expires_at']}; ask for a new one.", 409)
 
     _refresh_cutoffs(q, now)
+    if risks := controls.clean_risks((q.get("declared_risks") or []) + list(declared_risks or [])):
+        q["declared_risks"] = risks  # the quote's and the order's own: each one asks (sous/controls.py)
     short = _mark_allocated(q, RES.check(q["lines"], mandate.buyer, now, RES.pool_of(mandate)))  # reserved by others
     outcome, findings = _evaluate(mandate, agent_id, q, now, extra_findings)
     status = {"silent": "ordered", "notify": "ordered", "ask": "pending_approval", "block": "refused"}[outcome]
@@ -975,6 +1002,10 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
         # unsigned Finnish twins of decision.findings and lines[].unit_note (sous/fi.py); not in the receipt
         "explanations_fi": fi.explanations(findings, q),
     }
+    if risks:
+        order["declared_risks"] = risks
+    if mandate.separate_approver:  # four-eyes: whose request this is, so the approver can't be the same identity
+        order["requested_by"] = controls.requested_by(mandate)
     if status == "pending_approval":  # the human must decide before the cut-off and the mandate's end (deadline.py)
         dl = deadline.compute(order["lines"], deadline.delivery_days(order), now, _approval_limits(mandate))
         order["approve_by"], order["approve_by_detail"] = (dl["at"], dl) if dl else (None, None)
@@ -1012,6 +1043,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
     store.audit(f"order.{status}", "mandate-engine", "system", oid, mandate.buyer,
                 {"order_id": oid, "quote_id": quote_id, "agent_id": agent_id, "outcome": outcome,
                  "total_ex_vat": q["total_ex_vat"], "agent_rationale": order["agent_rationale"],
+                 **({"declared_risks": risks} if risks else {}),
                  **({"approve_by": order.get("approve_by"), "approve_by_detail": order.get("approve_by_detail")}
                     if status == "pending_approval" else {}),
                  "fired": [f.model_dump() for f in findings if f.outcome != "silent"] or [findings[-1].model_dump()]})
@@ -1032,6 +1064,7 @@ def _receipt(order: dict) -> str:
     body = {k: order.get(k) for k in ("id", "quote_id", "mandate_id", "status", "total_ex_vat",
                                       "lines", "decision", "approval", "updated_at", "clock", "approve_by",
                                       "expiry")}
+    body |= {k: order[k] for k in ("declared_risks", "requested_by") if order.get(k)}  # sous/controls.py
     if order.get("amendments"):  # post-order exceptions (sous/amendments.py): new total and credit note lines
         from .amendments import receipt_summary
         body |= {"original_total_ex_vat": order.get("original_total_ex_vat"),
@@ -1234,6 +1267,8 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
         raise GatewayError("passkey_required", f"Mandate {mandate.id} requires passkey approval: approve order "
                            f"{order_id} with a registered passkey (POST /orders/{order_id}/approve/options, then "
                            "/approve/passkey; page /ui/approve.html). The approver code can still reject it.", 403)
+    if approve:  # four-eyes (separate_approver): never the identity the order was requested by
+        controls.check_separate_approver(mandate, o, approver)
     holds.invalidate()  # under _order_lock, like holds.create: _approval_blocker sees every hold made so far
     status = "ordered" if approve else "rejected"
     reason = reason_fi = note  # the human's own note stays in their words

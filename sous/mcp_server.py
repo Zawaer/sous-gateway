@@ -547,6 +547,7 @@ def request_quote(
     offer_id: str | None = None,
     agent_token: str | None = None,
     ctx: Context | None = None,
+    declared_risks: list[str] | None = None,
 ) -> dict:
     """Get a signed, expiring quote with live prices and availability from Valio Aimo. Places no order.
 
@@ -569,6 +570,9 @@ def request_quote(
       (e.g. 'Q-1A2B3C4D.O2'): you get a fresh signed quote with that item's lines replaced; then place_order it.
     rationale: one sentence on the buyer's business need (e.g. "breakfast milk for 400 guests"); it is signed into
       the quote and shown to the humans who audit or approve. State the need, not your reasoning steps.
+    declared_risks: optional, up to 5 short sentences (200 chars each) on what YOU are unsure about (e.g. "not sure
+      10 L covers Saturday"). Each one holds the order for a human (rule agent.declared_risk) with your words; it
+      can never make an order go through more easily. Say it here rather than ordering on a guess.
     offer_id: a Valio Aimo offer from list_offers (e.g. 'OF-1A2B3C4D'), only when the buyer wants it: name the
       offer's product_ids in items; they are priced at min(offer price, live price) and the quote carries `offer`.
       The mandate decides as always (rule offer.applied tells the buyer).
@@ -580,7 +584,7 @@ def request_quote(
     return S.request_quote(S.QuoteRequest(agent_id=agent_id, mandate_id=mandate_id,
                                           delivery_date=_date(delivery_date) if delivery_date else None,
                                           items=items or [], rationale=rationale, option_id=option_id,
-                                          offer_id=offer_id),
+                                          offer_id=offer_id, declared_risks=declared_risks),
                            agent_token=_agent_token(ctx, agent_token),
                            approver=exposure.is_approver(_reader(ctx, agent_token)))
 
@@ -668,7 +672,7 @@ def suggest_substitutes(
                                    open_world_hint=True))
 def place_order(mandate_id: str, quote_id: str, agent_id: str | None = None, idempotency_key: str | None = None,
                 rationale: str | None = None, agent_token: str | None = None,
-                ctx: Context | None = None) -> dict:
+                ctx: Context | None = None, declared_risks: list[str] | None = None) -> dict:
     """Order a quote under a mandate. This is the only call that commits the buyer to a purchase.
 
     The mandate engine decides, not you: status ordered (silent/notify), pending_approval (a human must approve
@@ -680,12 +684,14 @@ def place_order(mandate_id: str, quote_id: str, agent_id: str | None = None, ide
     Valio Aimo's order system). In this demo erp.status is "simulated" with a SIM- confirmation_id: tell the
     buyer the order is placed with Sous and the Valio hand-off is simulated, not that Valio confirmed it.
     rationale: one sentence on why the buyer needs this order; the approver sees it next to the mandate's findings.
+    declared_risks: optional, up to 5 short doubts of your own (as in request_quote); each holds the order for a human.
     agent_id: optional when your credential covers mandate_id (see my_mandates).
     agent_token: only if you can't send the Authorization: Bearer header and the mandate requires agent auth.
     """
     agent_id = _agent_for(agent_id, mandate_id, ctx, agent_token)
     return S.place_order(agent_id, mandate_id, quote_id, idempotency_key,
-                         agent_token=_agent_token(ctx, agent_token), rationale=rationale)
+                         agent_token=_agent_token(ctx, agent_token), rationale=rationale,
+                         declared_risks=declared_risks)
 
 
 @_tool(OrderOut, title="Optional: Order status", annotations=READ_LOCAL)

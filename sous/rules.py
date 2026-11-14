@@ -260,6 +260,19 @@ def _build() -> list[dict]:
            "the mandate lets substitutes through on their own. The table of product types x uses is in "
            "sous/use_sensitivity.py; unknown uses and types keep the ordinary substitution rule. A remembered "
            "substitution never softens it.", "substitution_by_use"),
+        # --- buyer controls (sous/controls.py)
+        _r("substitution.premium", "finding", _field_tiers("substitute_premium"), "buyer",
+           "A substitute that costs more than the mandate's percentage above the product it replaces, per "
+           "comparable unit (Valio's comparison price per litre, kilo or piece), gets the tier the buyer chose (ask "
+           "by default): the buyer accepts a stand-in, not a pricier one. When the replaced product's price can't "
+           "be looked up or is per a different unit, the order asks and says so. Next to the absolute caps "
+           "(price.comparison_cap) and the change since the last price paid (price.changed), this one is relative "
+           "to the product replaced.", ["max_substitute_premium_pct", "substitute_premium"]),
+        _r("agent.declared_risk", "finding", ["ask"], "gateway",
+           "The agent itself declared a doubt about the request (declared_risks on request_quote or place_order, "
+           "at most 5 short sentences): the order waits for a human, who sees the agent's own words. An agent's "
+           "words can only raise the tier, never lower it; they are signed into the quote and the order receipt.",
+           None),
         _r("product.held", "finding", ["block"], "valio",
            "Valio Aimo has put the product on hold (recall, quality hold or sales stop; GET /holds): it can't be "
            "quoted as orderable, ordered, or approved into an order, also on a quote issued before the hold.", None),
@@ -432,6 +445,11 @@ def _build() -> list[dict]:
            "A judge sandbox has used its share of the live Valio key.", None, status=429),
         _r("sandbox_expired", "refusal", ["block"], "gateway",
            "The judge sandbox has expired or was closed.", None, status=410),
+        _r("separate_approver_required", "refusal", ["block"], "buyer", "Four-eyes: the mandate requires a "
+           "separate approver, and the approval came from the identity the order was requested by "
+           "(order.requested_by: who minted the agent's credential, else the mandate's issuer), or gave no name. "
+           "Someone else must approve; rejecting is still allowed. It compares identities (the approver's name or "
+           "passkey name), not people.", "separate_approver", status=403),
         _r("approval_deadline_passed", "refusal", ["block"], "gateway",
            "A held order can be approved only until its approve_by: the earliest order cut-off among its lines "
            f"minus {deadline.MARGIN_MIN:g} minutes (or the start of the delivery day), or the mandate's or sandbox's expiry if that comes "
@@ -509,6 +527,11 @@ def mandate_summary(m: Mandate) -> list[dict]:
     if m.substitution_by_use:
         add("substitution.use_sensitive", "substitutes by use: " + "; ".join(
             f"{k} for {u}: {lv.replace('_', ' ')}" for k, per in m.substitution_by_use.items() for u, lv in per.items()))
+    if m.max_substitute_premium_pct is not None:
+        add("substitution.premium", f"a substitute more than {m.max_substitute_premium_pct:g}% pricier per L, kg or "
+            f"piece than the product it replaces: {_TIER_SAYS[m.substitute_premium].replace('are ', '')}")
+    if m.separate_approver:
+        add("separate_approver_required", "four-eyes: whoever set the agent to work can't approve its held orders")
     if m.terminal_products != "silent":
         add("supply.terminal", f"supplier-shipped products {_TIER_SAYS[m.terminal_products]}")
     if m.min_delivery_reliability is not None:
