@@ -40,6 +40,10 @@ uv run pytest -q tests/test_rush.py      # the same with 20 agents: asserts no o
 | Whole agent (quote, think, order, retry) p50 / p95 | 687 / 781 ms | 750 / 893 ms |
 | Wall time for all 60 | 0.85 s | 0.99 s |
 
+Who gets what varies a little from run to run with thread timing. A rerun after the ERP hooks landed (af01bc6)
+gave first_come 400/400 with 39 buyers getting nothing, and pro_rata 393/400 with nobody left out, order p95
+205 / 360 ms. Over-allocation was 0 in every run.
+
 Per buyer, `pro_rata` follows the 4-week volume (excerpt of the printed table):
 
 ```
