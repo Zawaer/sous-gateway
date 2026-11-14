@@ -564,7 +564,12 @@ substitution (`purpose.*`): a delegated substitution scope never silences a reci
 gateway re-signs the mandate (`sous-mandate+jws`, new version, audit `mandate.updated`) with the scope added to
 `delegated: [{rule, scope, label, tier: notify, since, proposal_id, evidence}]`. From then on that scope's ask is its
 `earned.*` notify twin (`earned.price_changed`, ...; in `GET /rules`), and the buyer is told. A buyer-signed mandate is
-not rewritten: `409 mandate_buyer_signed` with the amended `delegated`, for the buyer to re-sign. **Decline** (`.../decline
+not rewritten: `409 mandate_buyer_signed` with the amended `delegated`, for the buyer to re-sign. Accepting a relax widens autonomy, so it follows the mandate's own approval
+rules: on a passkey-only mandate (`approval_method: passkey`) the approver code can't accept it (`403
+passkey_required`; the buyer re-signs the mandate with the scope delegated, or declines), and with `separate_approver`
+the accepter's `by` must not be the requester identity (`403 separate_approver_required`). A revert only narrows and
+is accepted with the approver code. An agent credential (bearer or as the code) on accept or decline always gets `403
+agent_cannot_approve`, audited as `agent.approval_attempt_refused`. **Decline** (`.../decline
 {by, note?}`) changes nothing and restarts the scope's record.
 
 **Trust can be withdrawn**: one held order carrying a delegated scope's `earned.*` finding that the buyer rejects or

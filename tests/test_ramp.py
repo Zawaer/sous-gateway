@@ -207,3 +207,52 @@ def test_every_earned_rule_is_registered_in_both_languages():
     for rule in ramp.RAMPABLE.values():
         assert reg[rule]["tiers"] == ["notify"] and reg[rule]["text_fi"]
     assert set(ramp.WHAT) == set(ramp.RAMPABLE)
+
+
+# --- accepting widens autonomy: the mandate's own approval rules apply (review2) ------------------------------
+
+def _proposal(**kw):
+    m = mandate(**kw)
+    history()
+    [p] = ramp.status(m)["proposals"]
+    return p
+
+
+def _delegated():
+    return S._mandate("M1").delegated
+
+
+def test_an_agent_credential_can_never_accept_or_decline():
+    from sous import agent_auth
+    p = _proposal()
+    tok = agent_auth.mint(S._mandate("M1"), "owner")["token"]
+    c = TestClient(api.app)
+    for verb in ("accept", "decline"):
+        for h in ({"Authorization": f"Bearer {tok}", **H}, {"x-approver-code": tok}):
+            r = c.post(f"/mandates/M1/autonomy/{p['id']}/{verb}", headers=h, json={"by": "Mikko"})
+            assert r.status_code == 403 and r.json()["error"] == "agent_cannot_approve", r.text
+    assert _delegated() == []
+    assert "agent.approval_attempt_refused" in [e["event"] for e in store.audit_events(subject="M1")]
+    assert "ramp.declined" not in [e["event"] for e in store.audit_events(subject="M1")]
+
+
+def test_a_passkey_only_mandate_is_not_widened_with_the_approver_code():
+    p = _proposal(approval_method="passkey")
+    r = TestClient(api.app).post(f"/mandates/M1/autonomy/{p['id']}/accept", headers=H, json={"by": "Mikko"})
+    assert r.status_code == 403 and r.json()["error"] == "passkey_required", r.text
+    assert "re-signs the mandate" in r.json()["message"] and _delegated() == []
+    r = TestClient(api.app).post(f"/mandates/M1/autonomy/{p['id']}/decline", headers=H, json={"by": "Mikko"})
+    assert r.status_code == 200  # declining widens nothing
+
+
+def test_four_eyes_the_requester_cannot_accept_a_relax():
+    from sous import agent_auth
+    p = _proposal(separate_approver=True)
+    agent_auth.mint(S._mandate("M1"), "Mikko")  # Mikko set the agent to work: its orders are requested by him
+    c = TestClient(api.app)
+    r = c.post(f"/mandates/M1/autonomy/{p['id']}/accept", headers=H, json={"by": " mikko "})
+    assert r.status_code == 403 and r.json()["error"] == "separate_approver_required", r.text
+    assert "proposal" in r.json()["message"] and _delegated() == []
+    r = c.post(f"/mandates/M1/autonomy/{p['id']}/accept", headers=H, json={"by": "Anna"})
+    assert r.status_code == 200, r.text
+    assert [d.rule for d in _delegated()] == ["price.changed"]

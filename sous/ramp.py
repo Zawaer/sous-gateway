@@ -285,6 +285,35 @@ def _find(mandate: Mandate, proposal_id: str) -> dict:
     return p
 
 
+def refuse_agent(mandate_id: str, proposal_id: str, token: str):
+    """An agent credential tried to accept or decline a proposal: audited, and the 403 to raise."""
+    from . import agent_auth
+    from .service import GatewayError
+    who = agent_auth.identify(token) or {}
+    m = store.get_mandate(mandate_id) or {}
+    store.audit("agent.approval_attempt_refused", f"agent credential ...{who.get('last4', '?')}", "agent",
+                mandate_id, m.get("buyer"), {"mandate_id": mandate_id, "proposal_id": proposal_id,
+                                             "action": "autonomy proposal", "credential_last4": who.get("last4"),
+                                             "credential_agent_ids": who.get("agent_ids") or []})
+    return GatewayError("agent_cannot_approve", f"Agents can't accept or decline earned-autonomy proposals: an agent "
+                        f"credential was presented. Proposal {proposal_id} waits for the buyer's human; this attempt "
+                        "is in the audit log.", 403)
+
+
+def _check_approval_rules(m: Mandate, p: dict, by: str) -> None:
+    """A relax lets through orders a human approves today, so it needs what approving them needs: a passkey on a
+    passkey-only mandate (there is no passkey flow for proposals: the buyer re-signs the mandate with the change),
+    and four eyes (the accepter is not the identity the agent's orders are requested by)."""
+    from . import controls
+    from .service import GatewayError
+    if m.approval_method == "passkey":
+        raise GatewayError("passkey_required", f"Mandate {m.id} requires passkey approval, so delegating more can't be "
+                           f"accepted with the approver code: the buyer re-signs the mandate with {p['rule']} on "
+                           f"{p['label']} delegated (POST /mandates/credential), or declines the proposal.", 403)
+    if m.separate_approver:
+        controls.check_separate_approver(m, {"id": p["id"], "kind": "proposal"}, by)
+
+
 def accept(mandate_id: str, proposal_id: str, by: str, authority: str | None = None) -> dict:
     """The buyer's human accepts a proposal: the mandate is re-signed with `delegated` changed (a normal mandate
     update, new version). Returns {proposal, mandate, jws}."""
@@ -293,6 +322,8 @@ def accept(mandate_id: str, proposal_id: str, by: str, authority: str | None = N
         payload = S._signed_mandate(mandate_id)
         m = Mandate(**payload)
         p = _find(m, proposal_id)
+        if p["kind"] == "relax":  # widens autonomy: the mandate's own approval rules apply (a revert only narrows)
+            _check_approval_rules(m, p, by)
         keep = [d for d in m.delegated if (d.rule, d.scope) != (p["rule"], p["scope"])]
         if p["kind"] == "relax":
             keep.append(Delegation(rule=p["rule"], scope=p["scope"], label=p["label"],

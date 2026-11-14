@@ -764,17 +764,33 @@ def earned_autonomy(mandate_id: str):
     return RAMP.status(S._mandate(mandate_id))
 
 
-@app.post("/mandates/{mandate_id}/autonomy/{proposal_id}/accept", tags=["approvals"])
+def _no_agent_ramp(request: Request, x_approver_code: str | None = Header(default=None),
+                   authorization: str | None = Header(default=None, include_in_schema=False)) -> None:
+    """Accepting or declining an earned-autonomy proposal is a human's call: an agent credential (as bearer or as
+    the code) gets 403 agent_cannot_approve and the attempt is audited, before (and whatever) the approver code."""
+    tok = next((t for t in (agent_auth.bearer(authorization), x_approver_code)
+                if t and t.startswith(agent_auth.PREFIX)), None)
+    if tok:
+        raise RAMP.refuse_agent(request.path_params.get("mandate_id", ""),
+                                request.path_params.get("proposal_id", ""), tok)
+
+
+@app.post("/mandates/{mandate_id}/autonomy/{proposal_id}/accept", tags=["approvals"],
+          dependencies=[Depends(_no_agent_ramp)])
 def accept_autonomy(mandate_id: str, proposal_id: str, d: RampDecision,
                     authority: str = Depends(require_global_approver)):
     """Human-only. Accept a proposal: the mandate is re-signed with the scope delegated (relax) or taken back
     (revert), as a new version (GET /mandates/{id}/history; audit mandate.updated + ramp.accepted). 409
     proposal_not_open if it is no longer open; 409 mandate_buyer_signed for a buyer-signed mandate (the buyer
-    re-signs it with the change)."""
+    re-signs it with the change). A relax widens autonomy, so it follows the mandate's own approval rules: 403
+    passkey_required on a passkey-only mandate (the buyer re-signs the mandate with the change instead), 403
+    separate_approver_required when four-eyes is on and `by` is the requester; an agent credential gets 403
+    agent_cannot_approve."""
     return RAMP.accept(mandate_id, proposal_id, d.by, "global approver code")
 
 
-@app.post("/mandates/{mandate_id}/autonomy/{proposal_id}/decline", tags=["approvals"])
+@app.post("/mandates/{mandate_id}/autonomy/{proposal_id}/decline", tags=["approvals"],
+          dependencies=[Depends(_no_agent_ramp)])
 def decline_autonomy(mandate_id: str, proposal_id: str, d: RampDecision,
                      authority: str = Depends(require_global_approver)):
     """Human-only. Decline a proposal: nothing changes, audit ramp.declined, and the scope's record starts over."""

@@ -179,6 +179,6 @@ def check_separate_approver(mandate: Mandate, order: dict, approver: str | None)
                            "requester: give the approver's name.", 403)
     if _norm(approver) == _norm(req):
         raise GatewayError("separate_approver_required",
-                           f"Mandate {mandate.id} requires a separate approver: order {order.get('id')} was "
+                           f"Mandate {mandate.id} requires a separate approver: {order.get('kind', 'order')} {order.get('id')} was "
                            f"requested by '{req}', who can't also approve it. Another approver must approve it "
                            "(rejecting it is still allowed).", 403)
