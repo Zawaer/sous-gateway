@@ -352,6 +352,23 @@ function showOrderAlternatives(gateway, quote, row, container) {
   });
 }
 
+function appendFindings(content, title, findings, gateway) {
+  if (!findings.length) return;
+  const list = element('ul');
+  for (const finding of findings) {
+    const row = element('li', finding.message);
+    if (finding.rule_url && /^[a-z][a-z0-9_.-]*$/.test(finding.rule ?? '')) {
+      const link = element('a', `Rule: ${finding.rule}`);
+      link.href = `${gateway.base}/rules/${encodeURIComponent(finding.rule)}`;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      row.append(' · ', link);
+    }
+    list.append(row);
+  }
+  content.append(element('h3', title), list);
+}
+
 function renderQuote(quote) {
   const preview = quote.mandate_preview;
   const content = $('quote-content');
@@ -387,21 +404,7 @@ function renderQuote(quote) {
     amount: need.amount, unit: need.unit, note: need.query, product_ids: productIds, substitute_for: need.substituteFor,
   }));
   renderCoverage(content, quote, draft, editQuotedItem);
-  if (preview.findings.length) {
-    const findings = element('ul');
-    for (const finding of preview.findings) {
-      const row = element('li', finding.message);
-      if (finding.rule_url && /^[a-z][a-z0-9_.-]*$/.test(finding.rule ?? '')) {
-        const link = element('a', `Rule: ${finding.rule}`);
-        link.href = `${state.quoteContext.gateway.base}/rules/${encodeURIComponent(finding.rule)}`;
-        link.target = '_blank';
-        link.rel = 'noopener';
-        row.append(' · ', link);
-      }
-      findings.append(row);
-    }
-    content.append(element('h3', 'Mandate findings'), findings);
-  }
+  appendFindings(content, 'Mandate findings', preview.findings, state.quoteContext.gateway);
   appendList(content, 'Other products considered', quote.alternatives_considered.map((option) => `${option.name} · ${option.why_not.join(' ')}`));
   $('submit-order').textContent = preview.outcome === 'ask' ? 'Send for approval' : 'Submit order';
   $('quote-panel').hidden = false;
@@ -417,7 +420,7 @@ async function renderOrder(current, order) {
   }
   content.append(outcomeLine(tier, (order.status === 'ordered' && tierLabels[tier]) || statusLabels[order.status] || status, `${order.id} · ${status}`, 'outcome total'));
   renderCoverage(content, quote, [], (_, row, container) => showOrderAlternatives(gateway, quote, row, container));
-  appendList(content, 'Gateway decision', order.decision.findings.map((finding) => finding.message));
+  appendFindings(content, 'Gateway decision', order.decision.findings, gateway);
   try {
     const signed = await gateway.receipt(order, quote);
     const unitNotes = (signed.lines ?? []).filter((line) => line.unit_note)
