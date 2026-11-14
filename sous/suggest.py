@@ -35,7 +35,7 @@ import re
 import threading
 from datetime import date, timedelta
 
-from . import aimo, catalog, config, quote as Q, sandbox, service as S, store
+from . import access, aimo, catalog, config, quote as Q, sandbox, service as S, store
 from .mandate import Mandate, evaluate
 
 SPONSOR = "Valio Aimo"
@@ -211,9 +211,11 @@ def _allergen_phrase(alt: dict, orig: dict) -> str | None:
 # --- the engine -------------------------------------------------------------
 
 def suggestions(mandate_id: str, agent_id: str, delivery_date: date, basis: list[str] | None = None,
-                limit: int = 5, agent_token: str | None = None) -> dict:
+                limit: int = 5, agent_token: str | None = None, reader: access.Reader | None = None) -> dict:
+    access.check_live(reader, mandate_id)  # first: no existence oracle (sous/access.py)
     m = S._mandate(mandate_id)
-    sandbox.authorize(m, agent_id, agent_token, "get_suggestions")
+    if not access.skips_agent_check(reader, m):
+        sandbox.authorize(m, agent_id, agent_token, "get_suggestions")
     if agent_id != m.agent_id:
         raise S.GatewayError("agent_mismatch", f"Agent '{agent_id}' is not the holder of mandate {m.id}.", 403)
     limit = max(1, min(limit, 10))

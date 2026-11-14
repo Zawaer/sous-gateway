@@ -25,7 +25,7 @@ Things that exist on `main` but not on production are features of the code, not 
 - **No real order API.** `ordered` means accepted and signed by Sous; nothing is sent to Valio Aimo's order system (the challenge provides none).
 - **List prices only.** The mock ignores the customer number, so there are no contract prices.
 - **Evals use our own cases.** The scripted and LLM cases, the search-quality queries and the vision pages were written by the team while building; none is a held-out set from Valio Aimo or real kitchens.
-- **Open authorization gap (QA board 02:20Z/02:24Z):** `GET /mandates/{id}/suggestions` and substitute suggestions (REST and MCP) are not covered by the read scopes yet, so a private mandate's suggestions can be read without its token. Being fixed; prod only holds demo mandates.
+- **Fixed: authorization gap (QA board 02:20Z/02:24Z).** `GET /mandates/{id}/suggestions` and substitute suggestions with a `mandate_id` (REST and MCP) are now read-scoped like `GET /mandates/{id}`, checked before any mandate or product lookup: 401 `agent_auth_required` for any non-public id when no credential grants anything, 404 when a credential grants something else, so a private mandate's existence isn't revealed (PROTOCOL section 22, tests/test_read_scopes.py). Not yet deployed to prod or staging.
 - **Vision pages are rendered by us** (`scripts/vision_make_images.py`), not photos from real kitchens.
 - **CI on main is not always green.** Last fully green run with live evals: [43530484114](https://github.com/Zawaer/sous/actions/runs/43530484114) on e84bb41 (test, docker, smoke, eval 45/45, llm-eval). Several later pushes failed the test job (a test needing `data/`, fixed in e1328eb) or were cancelled by newer pushes.
 

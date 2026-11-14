@@ -166,6 +166,37 @@ def check_mandate(r: Reader, mandate_id: str) -> None:
         raise _not_found("mandate_not_found", f"No mandate {mandate_id}.")
 
 
+def check_live(r: Reader | None, mandate_id: str) -> None:
+    """Live lookups under a mandate (GET /mandates/{id}/suggestions, GET /products/{id}/substitutes?mandate_id=,
+    MCP get_suggestions / suggest_substitutes) are scoped like GET /mandates/{id}. Call it before anything else
+    (mandate or product lookup) so the answer never depends on whether the mandate exists:
+
+    - readable (approver code, its agent or sandbox token, or a public demo mandate) -> go on;
+    - the caller's credentials grant nothing (none sent, or none recognised)        -> 401 agent_auth_required, for
+      any id, existing or not: agents keep the error code they already handle (it was the answer for a sandbox
+      mandate before), and the seller UI's code dialog appears on the 401;
+    - the credentials grant some scope, but not this mandate                         -> 404 mandate_not_found,
+      exactly like an id that doesn't exist.
+    r=None: no read scope applies (internal callers)."""
+    if r is None or can_read_mandate(r, mandate_id):
+        return
+    if not r.kinds:
+        from . import service as S
+        raise S.GatewayError(
+            "agent_auth_required",
+            f"Lookups under mandate {mandate_id} need a credential: the agent's 'Authorization: Bearer <token>', "
+            "the sandbox's approver token, or X-Approver-Code. Public demo mandates need none.", 401)
+    raise _not_found("mandate_not_found", f"No mandate {mandate_id}.")
+
+
+def skips_agent_check(r: Reader | None, m) -> bool:
+    """True when the reader is the global approver, or holds the approver token of m's sandbox: the seller UI acts
+    for the buyer then and needs no agent token for live lookups (sandbox.authorize)."""
+    if r is None:
+        return False
+    return "approver" in r.kinds or bool(getattr(m, "sandbox", None) and m.sandbox in r.sandboxes)
+
+
 def check_order(r: Reader, order_id: str) -> None:
     if r.everything:
         return

@@ -447,9 +447,11 @@ def suggest_substitutes(
     Same category, measure and temperature class; keeps the original's dietary claims and the mandate's
     allergen rules (never relaxed). Each option lists its compromises in plain language and has a live offer.
     Tell the buyer the compromises, then request_quote for the chosen one with substitute_for=<original id>.
+    With mandate_id it is read-scoped like get_mandate (send your Authorization: Bearer header or agent_token).
     """
     return S.suggest_substitutes(agent_id, product_id, _date(delivery_date), amount, unit,
-                                 mandate_id, avoid_allergens, limit, agent_token=_agent_token(ctx, agent_token))
+                                 mandate_id, avoid_allergens, limit, agent_token=_agent_token(ctx, agent_token),
+                                 reader=_reader(ctx, agent_token))
 
 
 @_tool(OrderOut, title="Place an order under the mandate",
@@ -506,10 +508,12 @@ def get_suggestions(mandate_id: str, agent_id: str, delivery_date: str, limit: i
     mandate_check (the tier it would get at the usual quantity). Nothing is ordered.
     Present each one to the buyer as "Valio Aimo suggests...", with its reason and disclosure; never as your own
     recommendation, and never order one unless the buyer asks: then request_quote as how_to_accept says.
+    Read-scoped like get_mandate: send your Authorization: Bearer header (or agent_token) unless the mandate is a
+    public demo; without one the error is agent_auth_required.
     """
     from . import suggest
     return suggest.suggestions(mandate_id, agent_id, _date(delivery_date), basis, limit,
-                               agent_token=_agent_token(ctx, agent_token))
+                               agent_token=_agent_token(ctx, agent_token), reader=_reader(ctx, agent_token))
 
 
 @_tool(StandingOrderOut, title="Create a weekly standing order",

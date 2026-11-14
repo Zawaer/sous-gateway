@@ -360,10 +360,11 @@ def test_substitutes_and_suggestions_under_a_sandbox_mandate_need_its_token(c, m
 
     r = subs()
     assert r.status_code == 401 and r.json()["error"] == "agent_auth_required" and not calls
-    assert subs(other["agent_token"]).status_code == 403 and not calls  # another sandbox's token
+    assert subs(other["agent_token"]).status_code == 404 and not calls  # another sandbox's token: read scope
+    assert subs("vka_nope").status_code == 401 and not calls  # a token that grants nothing
     assert subs(s["agent_token"]).status_code == 200
     assert subs(s["approver_token"]).status_code == 200
-    assert subs(other["approver_token"]).status_code == 403
+    assert subs(other["approver_token"]).status_code == 404
     assert len(calls) == 2
     r = c.get(f"/mandates/{m['mandate_id']}/suggestions",
               params={"delivery_date": "2026-11-16", "agent_id": m["agent_id"]})

@@ -228,3 +228,106 @@ def test_seed_marks_previously_seeded_mandates_public_without_new_tokens(capsys)
     assert signing.verify(m["_jws"], "sous-mandate+jws")["demo_public"]
     seed.main()  # idempotent
     assert capsys.readouterr().out.count(f"marked {old.id}") == 1
+
+
+# --- live lookups under a mandate: suggestions and substitutes (QA blockers 02:20Z / 02:24Z) -------------------
+
+def _live(c, monkeypatch):
+    from sous import substitutes, suggest
+    calls = []
+
+    def fake(product_id, *a, **k):
+        calls.append(product_id)
+        if product_id != "OAT":
+            raise KeyError(product_id)
+        return {"constraints": {"avoid_allergens": ["AN"]}, "options": [], "no_safe_substitute": True}
+    monkeypatch.setattr(substitutes, "suggest", fake)
+    monkeypatch.setattr(suggest, "evaluate", lambda *a, **k: ("silent", []))  # the test OAT has no allergen data
+    return calls
+
+
+def _subs(c, mid, headers=None, product="NO-SUCH-SKU", agent="bistro-agent"):
+    return c.get(f"/products/{product}/substitutes", headers=headers or {},
+                 params={"mandate_id": mid, "delivery_date": DAY, "amount": 1, "unit": "L", "agent_id": agent})
+
+
+def _sugg(c, mid, headers=None, agent="bistro-agent"):
+    return c.get(f"/mandates/{mid}/suggestions", headers=headers or {},
+                 params={"delivery_date": DAY, "agent_id": agent, "limit": 3})
+
+
+def test_live_lookups_give_no_existence_oracle(c, monkeypatch):
+    tok, *_ = world(c)
+    calls = _live(c, monkeypatch)
+    other = private_mandate("M-OTHER", buyer="Other Oy", agent="other-agent")
+    for call in (_subs, _sugg):
+        # no credential (or one that grants nothing): the same 401 whether the mandate exists or not
+        for h in ({}, {"Authorization": "Bearer vka_invalid"}, {"X-Approver-Code": "nope"}):
+            a, b = call(c, "M-PRIVATE", h), call(c, "M-DOES-NOT-EXIST", h)
+            assert a.status_code == b.status_code == 401, (call, h)
+            assert a.json() == {**b.json(), "message": a.json()["message"]}
+            assert a.json()["error"] == "agent_auth_required" and "Bistro" not in a.text
+        # a credential for something else: the same 404 as a missing mandate
+        h = {"Authorization": f"Bearer {other}"}
+        a, b = call(c, "M-PRIVATE", h), call(c, "M-DOES-NOT-EXIST", h)
+        assert a.status_code == b.status_code == 404 and a.json()["error"] == b.json()["error"] == "mandate_not_found"
+    assert not calls
+    # the mandate is checked before the product: only a caller who may read it gets as far as product_not_found
+    assert _subs(c, "M-PRIVATE", {"Authorization": f"Bearer {tok}"}).json()["error"] == "product_not_found"
+
+
+def test_live_lookups_accept_agent_token_approver_code_and_public_demo(c, monkeypatch):
+    tok, *_ = world(c)
+    calls = _live(c, monkeypatch)
+    for h in ({"Authorization": f"Bearer {tok}"}, AC):
+        assert _subs(c, "M-PRIVATE", h, product="OAT").status_code == 200, h
+        r = _sugg(c, "M-PRIVATE", h)
+        assert r.status_code == 200 and r.json()["buyer"] == "Private Bistro Oy", h
+    assert len(calls) == 2
+    # public demo mandates stay open, as for GET /mandates/{id}
+    assert _subs(c, "M-HOTEL-AURORA", product="OAT", agent="aurora-purchasing-agent").status_code == 200
+    assert _sugg(c, "M-HOTEL-AURORA", agent="aurora-purchasing-agent").status_code == 200
+    # substitutes without a mandate are catalog data: public
+    assert c.get("/products/OAT/substitutes", params={"delivery_date": DAY, "amount": 1}).status_code == 200
+
+
+def test_seller_ui_reads_sandbox_live_lookups_with_codes(c, monkeypatch):
+    from test_sandbox import new
+    world(c)
+    calls = _live(c, monkeypatch)
+    s, other = new(c, "10.0.0.1"), new(c, "10.0.0.2")
+    m = next(x for x in s["mandates"] if x["scenario"] == "hospital")
+    sbxa = s["approver_token"]
+    ui = {"X-Approver-Code": sbxa, "Authorization": f"Bearer {sbxa}"}  # web/ in ?sandbox= mode
+    assert _subs(c, m["mandate_id"], ui, product="OAT", agent=m["agent_id"]).status_code == 200
+    assert _subs(c, m["mandate_id"], {"X-Approver-Code": sbxa}, product="OAT", agent=m["agent_id"]).status_code == 200
+    assert _sugg(c, m["mandate_id"], ui, agent=m["agent_id"]).status_code == 200
+    # the global approver code alone (no agent token) works for a sandbox mandate too
+    assert _subs(c, m["mandate_id"], AC, product="OAT", agent=m["agent_id"]).status_code == 200
+    assert _sugg(c, m["mandate_id"], AC, agent=m["agent_id"]).status_code == 200
+    # another sandbox's code: 404, as for a missing id
+    h = {"X-Approver-Code": other["approver_token"]}
+    assert _sugg(c, m["mandate_id"], h, agent=m["agent_id"]).status_code == 404
+    assert _sugg(c, "M-NOPE", h, agent=m["agent_id"]).status_code == 404
+    assert len(calls) == 3
+
+
+def test_mcp_live_lookups_are_scoped(c, monkeypatch):
+    tok, *_ = world(c)
+    calls = _live(c, monkeypatch)
+    no = Ctx({})
+    for mid in ("M-PRIVATE", "M-DOES-NOT-EXIST"):
+        e = mcp_server.get_suggestions(mid, "bistro-agent", DAY, ctx=no)
+        assert e.is_error and e.structured_content["error"] == "agent_auth_required"
+        e = mcp_server.suggest_substitutes("bistro-agent", "NO-SUCH-SKU", DAY, 1, "L", mandate_id=mid, ctx=no)
+        assert e.is_error and e.structured_content["error"] == "agent_auth_required"
+    other = private_mandate("M-OTHER", buyer="Other Oy", agent="other-agent")
+    e = mcp_server.get_suggestions("M-PRIVATE", "bistro-agent", DAY, agent_token=other, ctx=no)
+    assert e.is_error and e.structured_content["error"] == "mandate_not_found"
+    assert not calls
+    assert mcp_server.get_suggestions("M-PRIVATE", "bistro-agent", DAY, agent_token=tok, ctx=no)["buyer"] \
+        == "Private Bistro Oy"
+    h = Ctx({"authorization": f"Bearer {tok}"})
+    assert not mcp_server.suggest_substitutes("bistro-agent", "OAT", DAY, 1, "L", mandate_id="M-PRIVATE",
+                                              ctx=h).get("is_error")
+    assert mcp_server.get_suggestions("M-PRIVATE", "bistro-agent", DAY)["buyer"] == "Private Bistro Oy"  # stdio

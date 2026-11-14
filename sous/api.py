@@ -341,10 +341,12 @@ def suggest_substitutes(
     limit: int = Query(3, ge=1, le=6),
     agent_id: str = "anonymous-agent",
     token: str | None = Depends(agent_token),
+    r: access.Reader = Depends(access.reader),
 ):
-    """Good / better / best substitutes with their compromises and live offers."""
+    """Good / better / best substitutes with their compromises and live offers. With mandate_id the call is
+    read-scoped like GET /mandates/{id} (docs/PROTOCOL.md section 22)."""
     return S.suggest_substitutes(agent_id, product_id, delivery_date, amount, unit, mandate_id,
-                                 avoid_allergens or None, limit, agent_token=token)
+                                 avoid_allergens or None, limit, agent_token=token, reader=r)
 
 
 # --- quotes and orders ------------------------------------------------------
@@ -479,11 +481,13 @@ def mandate_history(mandate_id: str):
 
 @app.get("/mandates/{mandate_id}/suggestions", tags=["mandates"])
 def mandate_suggestions(mandate_id: str, delivery_date: date, agent_id: str, limit: int = Query(5, ge=1, le=20),
-                        basis: list[str] = Query(default=[]), token: str | None = Depends(agent_token)):
+                        basis: list[str] = Query(default=[]), token: str | None = Depends(agent_token),
+                        r: access.Reader = Depends(access.reader)):
     """Valio Aimo's own commercial suggestions (sponsored, not neutral advice): better-value alternatives to what
     the buyer orders, seasonal and new products. Offers only, never orders; pre-checked against the mandate."""
     from . import suggest
-    return suggest.suggestions(mandate_id, agent_id, delivery_date, basis or None, limit, agent_token=token)
+    return suggest.suggestions(mandate_id, agent_id, delivery_date, basis or None, limit, agent_token=token,
+                               reader=r)
 
 
 class CredentialAction(BaseModel):
