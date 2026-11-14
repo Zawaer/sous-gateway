@@ -8,6 +8,7 @@ COPY sous ./sous
 COPY scripts ./scripts
 COPY web ./web
 COPY buyer ./buyer
+COPY agent ./agent
 RUN uv sync --frozen --no-dev
 EXPOSE 8000
 # First start downloads Valio Aimo's data with the API key from the environment,

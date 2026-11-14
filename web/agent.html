@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f8f8f3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141412" media="(prefers-color-scheme: dark)">
+  <title>Sous · reference buyer agent</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .banner { font: .78rem/1.5 var(--mono); color: var(--ink-55); padding: 10px 14px; border-radius: 6px;
+      background: var(--panel); margin-bottom: 22px; }
+    .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    @media (max-width: 900px) { .grid3 { grid-template-columns: 1fr; } }
+    .grid3 .card { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+    .grid3 h3, .sbx-card h3 { margin: 0; }
+    .grid3 textarea { min-height: 92px; resize: vertical; }
+    .model { font: .72rem var(--mono); color: var(--ink-55); }
+    .model b { color: var(--ink-80); font-weight: 500; }
+    .model .off { color: var(--block); }
+    .samples { display: flex; gap: 10px; }
+    .sample { border: 1px solid var(--rule); border-radius: 6px; padding: 0; background: none; cursor: pointer;
+      overflow: hidden; width: 50%; text-align: left; }
+    .sample img { display: block; width: 100%; height: 92px; object-fit: cover; object-position: top; }
+    .sample span { display: block; font: .7rem var(--mono); color: var(--ink-55); padding: 6px 8px; }
+    .sample:hover { border-color: var(--ink-55); }
+    input[type=file] { font-size: .84rem; }
+    .step { display: grid; grid-template-columns: 34px 1fr; gap: 14px; padding: 18px 0; border-top: 1px solid var(--rule); }
+    .step .n { font: .74rem var(--mono); color: var(--ink-40); padding-top: 5px; }
+    .step h4 { font: 400 1.15rem/1.3 var(--serif); margin: 0 0 6px; }
+    .by { display: inline-flex; gap: 6px; align-items: center; font: .74rem var(--mono); padding: 2px 8px;
+      border-radius: 3px; background: var(--notify-bg); color: var(--notify); }
+    .by.code { background: var(--pill); color: var(--ink-55); }
+    .meta { font: .72rem var(--mono); color: var(--ink-40); margin-top: 6px; }
+    .conf { font: .74rem var(--mono); }
+    .human { color: var(--ask); }
+    tr.flag td { background: var(--ask-bg); }
+    pre.json { font: .72rem/1.45 var(--mono); background: var(--panel-strong); padding: 10px 12px; border-radius: 6px;
+      overflow: auto; max-height: 280px; margin: 8px 0 0; white-space: pre-wrap; }
+    .tool { font: .78rem var(--mono); padding: 8px 0; border-bottom: 1px solid var(--rule); display: grid;
+      grid-template-columns: 150px 1fr; gap: 10px; }
+    .tool .err { color: var(--block); }
+    .error { color: var(--block); background: var(--block-bg); padding: 12px 14px; border-radius: 6px; }
+    .spin { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--ink-40);
+      border-top-color: transparent; animation: s 0.8s linear infinite; vertical-align: -1px; }
+    @keyframes s { to { transform: rotate(360deg); } }
+    .sbx-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .sbx-row .btn { flex: 0 0 auto; }
+    #result:empty { display: none; }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="top-in">
+      <a class="brand" href="./">
+        <svg class="logo" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 4h4l5 11 5-11h4l-7.5 16h-3z" fill="currentColor"/></svg>
+        <span class="name">Sous</span>
+      </a>
+      <nav class="tabs" aria-label="Sections">
+        <a class="on" href="agent.html">Buyer agent</a>
+        <a href="./">Seller UI</a>
+        <a href="/buyer/">Buyer page</a>
+        <a href="/agent/docs">Agent API</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="head">
+      <div>
+        <h2>The buyer's agent, at work</h2>
+        <div class="muted">A kitchen's menu, a photo of its order list or one sentence becomes one signed basket
+          quote from Valio Aimo, checked against the kitchen's mandate. The models read and interpret; the gateway
+          prices, checks and decides.</div>
+      </div>
+    </div>
+    <div class="banner">Reference buyer agent (runs on the buyer's side; shown here for the demo). It talks to the
+      Sous gateway like any other agent, with your sandbox's agent token. Models never see prices and never decide.</div>
+
+    <section class="card sbx-card" id="sbx">
+      <div class="row">
+        <div>
+          <h3>Your sandbox</h3>
+          <div class="muted small" id="sbx-status">No sandbox yet. A sandbox gives you private copies of three demo
+            kitchens' mandates for 24 h, so you can try everything without any codes.</div>
+        </div>
+        <div class="sbx-row">
+          <button class="btn yes" id="sbx-create" type="button">Create a sandbox</button>
+        </div>
+      </div>
+      <div class="chips" id="scenarios" style="margin-top:12px" hidden></div>
+      <details id="sbx-existing"><summary>Use a sandbox you already have</summary>
+        <div class="sbx-row" style="margin-top:8px">
+          <input type="text" id="sbx-id" placeholder="SBX-7Q2K" style="max-width:140px">
+          <input type="password" id="sbx-token" placeholder="agent_token" style="max-width:360px">
+          <button class="btn plain" id="sbx-use" type="button">Use it</button>
+        </div>
+      </details>
+    </section>
+
+    <div class="grid3">
+      <section class="card">
+        <h3>Plan from a menu</h3>
+        <div class="model" id="m-menu">Gemini 4 Hydrogen</div>
+        <textarea id="menu-text" placeholder="What are you cooking, for how many, when?">Lasagne for 120 on Monday, we have 10 kg flour</textarea>
+        <div class="chips">
+          <button class="chip" type="button" data-menu="Lasagne for 120 on Monday, we have 10 kg flour">Lasagne for 120</button>
+          <button class="chip" type="button" data-menu="Salmon soup for 80 and pancakes for 80 on Tuesday; we have plenty of salt">Salmon soup + pancakes</button>
+          <button class="chip" type="button" data-menu="Vegan chili for 60 next Monday, lactose-free please">Vegan chili for 60</button>
+        </div>
+        <div class="actions"><button class="btn yes" id="menu-go" type="button">Plan the order</button></div>
+      </section>
+
+      <section class="card">
+        <h3>Snap the order list</h3>
+        <div class="model" id="m-photo">NVIDIA Nemotron 3.5 Super VL</div>
+        <div class="samples">
+          <button class="sample" type="button" data-sample="samples/01_order_handwritten_fi.jpg" data-kind="order_list">
+            <img src="samples/01_order_handwritten_fi.jpg" alt="Handwritten Finnish order list"><span>handwritten order list</span></button>
+          <button class="sample" type="button" data-sample="samples/07_delivery_note_printed_fi.jpg" data-kind="delivery_note">
+            <img src="samples/07_delivery_note_printed_fi.jpg" alt="Printed delivery note with shortfalls"><span>delivery note, shortfalls</span></button>
+        </div>
+        <input type="file" id="photo-file" accept="image/jpeg,image/png">
+        <div class="muted small">JPEG or PNG, up to 4 MB. Order list, menu or delivery note.</div>
+      </section>
+
+      <section class="card">
+        <h3>Ask in a sentence</h3>
+        <div class="model" id="m-ask">LLM buyer agent with the gateway's tools</div>
+        <textarea id="ask-text" placeholder="What do you need?">1,000 litres of lactose-free milk by Monday</textarea>
+        <div class="chips">
+          <button class="chip" type="button" data-ask="1,000 litres of lactose-free milk by Monday">1,000 L milk</button>
+          <button class="chip" type="button" data-ask="40 packs of chopped tomatoes 400 g for Monday, find a substitute if ours is out">Tomatoes + substitute</button>
+          <button class="chip" type="button" data-ask="20 kg butter for Monday">20 kg butter</button>
+        </div>
+        <label class="small muted"><input type="checkbox" id="ask-order" checked> the agent may place the order (the mandate decides)</label>
+        <div class="actions"><button class="btn yes" id="ask-go" type="button">Ask the agent</button></div>
+      </section>
+    </div>
+
+    <section class="card" id="result" aria-live="polite" style="margin-top:18px"></section>
+  </main>
+
+  <footer class="foot">
+    <span>Sous · reference buyer agent (buyer side) talking to the Valio Aimo gateway</span>
+    <span><a href="/agent/usage">Model usage</a> · <a href="/agent/docs">Agent API</a> · <a href="/docs">Gateway API</a></span>
+  </footer>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const eur = (n) => n == null ? "" : "€" + Number(n).toLocaleString("en", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const KEY = "sous-agent-sandbox";
+let state = JSON.parse(localStorage.getItem(KEY) || "null");   // {id, token, approver, mandates:[], pick}
+let busy = false;
+
+function save() { localStorage.setItem(KEY, JSON.stringify(state)); renderSandbox(); }
+function mandate() { return state && state.mandates.find((m) => m.scenario === state.pick) || null; }
+
+function renderSandbox() {
+  const box = $("#scenarios");
+  if (!state) { box.hidden = true; return; }
+  $("#sbx-status").innerHTML = `Sandbox <b class="mono">${esc(state.id)}</b>` +
+    (state.expires_at ? ` · until ${esc(state.expires_at.slice(11, 16))}` : "") +
+    ` · approve held orders in the <a href="./?sandbox=${encodeURIComponent(state.id)}#/inbox">seller UI</a>` +
+    (state.approver ? ` with approver token <span class="mono">${esc(state.approver.slice(0, 10))}…</span>` : "") +
+    `. Acting for:`;
+  $("#sbx-create").textContent = "New sandbox";
+  box.hidden = false;
+  box.innerHTML = state.mandates.map((m) =>
+    `<button class="chip ${m.scenario === state.pick ? "on" : ""}" type="button" data-scn="${esc(m.scenario)}" title="${esc(m.rules || m.mandate_id)}">${esc(m.buyer || m.scenario)}</button>`).join("");
+}
+
+$("#scenarios").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-scn]");
+  if (b) { state.pick = b.dataset.scn; save(); }
+});
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, opts);
+  let body;
+  try { body = await r.json(); } catch { body = {error: "http_" + r.status, message: r.statusText}; }
+  if (!r.ok) { const e = new Error(body.message || r.statusText); e.code = body.error; e.status = r.status; throw e; }
+  return body;
+}
+
+$("#sbx-create").addEventListener("click", async () => {
+  const b = $("#sbx-create"); b.disabled = true;
+  try {
+    const s = await api("/sandbox", {method: "POST"});
+    state = {id: s.sandbox.id, expires_at: s.sandbox.expires_at, token: s.agent_token, approver: s.approver_token,
+             mandates: s.mandates, pick: "hotel"};
+    save();
+  } catch (e) { showError(e); } finally { b.disabled = false; }
+});
+
+$("#sbx-use").addEventListener("click", async () => {
+  try {
+    const id = $("#sbx-id").value.trim().toUpperCase(), token = $("#sbx-token").value.trim();
+    const s = await api("/sandbox/" + encodeURIComponent(id));
+    state = {id: s.id, expires_at: s.expires_at, token, approver: null, pick: "hotel",
+             mandates: s.mandates.map((m) => ({...m, buyer: m.scenario}))};
+    save();
+  } catch (e) { showError(e); }
+});
+
+async function loadStatus() {
+  try {
+    const s = await api("/agent/status");
+    const show = (el, m, extra) => { $(el).innerHTML = `<b>${esc(m.display)}</b>` + (m.available ? "" :
+      ` · <span class="off">no key on this server${m.fallback ? ", using the " + esc(m.fallback) : ""}</span>`) + (extra || ""); };
+    show("#m-menu", s.models.menu);
+    show("#m-photo", s.models.photo);
+    show("#m-ask", s.models.ask, " · with the gateway's MCP tools");
+  } catch (e) {
+    $("#result").innerHTML = `<div class="error">The buyer agent is not enabled on this server (SOUS_BUYER_AGENT=1). ${esc(e.message)}</div>`;
+  }
+}
+
+function need() {
+  const m = mandate();
+  if (!m) { showError({message: "Create a sandbox first (top of the page): it gives the agent a mandate and a token."}); return null; }
+  return m;
+}
+function auth() { return {"Authorization": "Bearer " + state.token}; }
+function showError(e) {
+  $("#result").innerHTML = `<div class="error"><b>${esc(e.code || "error")}</b>: ${esc(e.message)}</div>`;
+  $("#result").scrollIntoView({behavior: "smooth", block: "start"});
+}
+function working(what) {
+  $("#result").innerHTML = `<div class="muted"><span class="spin"></span> ${esc(what)}</div>`;
+  $("#result").scrollIntoView({behavior: "smooth", block: "start"});
+}
+async function run(what, fn) {
+  if (busy) return;
+  busy = true; document.querySelectorAll(".grid3 .btn, .sample").forEach((b) => b.disabled = true);
+  working(what);
+  try { await fn(); } catch (e) { showError(e); }
+  finally { busy = false; document.querySelectorAll(".grid3 .btn, .sample").forEach((b) => b.disabled = false); }
+}
+
+// --- rendering ------------------------------------------------------------------------------------
+function step(n, title, body) { return `<div class="step"><div class="n">${n}</div><div><h4>${title}</h4>${body}</div></div>`; }
+function modelMeta(m) {
+  if (!m) return "";
+  return `<div class="meta">${esc(m.provider)}:${esc(m.model)} · ${m.calls} call(s) · ${m.prompt_tokens.toLocaleString()} in / ` +
+    `${m.completion_tokens.toLocaleString()} out tokens · ${(m.latency_ms / 1000).toFixed(1)} s · $${Number(m.cost_usd).toFixed(4)}` +
+    `${m.cost_estimated ? " (estimated)" : ""}</div>`;
+}
+function tier(t) { return `<span class="tier t-${esc(t)}">${esc(String(t).replace("_", " "))}</span>`; }
+function quoteTable(q, uncovered) {
+  if (!q) return `<div class="muted">No quote.</div>`;
+  const rows = q.lines.map((l) => `<tr><td>${esc(l.name)}<div class="rule">${esc(l.product_id)}${l.substitute_for ? " · substitute for " + esc(l.substitute_for) : ""}${l.orderable ? "" : " · not orderable"}</div></td>` +
+    `<td class="num">${esc(l.quantity)} ${esc(l.sales_unit)}</td><td class="num">${eur(l.line_total_ex_vat)}</td></tr>`).join("");
+  const unc = (uncovered || []).map((g) => `<div class="human small">Uncovered: ${esc(g.uncovered)} ${esc(g.unit)} of item ${esc(g.item_index)}</div>`).join("");
+  return `<table class="lines"><tr><th>Product</th><th class="num">Qty</th><th class="num">Ex VAT</th></tr>${rows}` +
+    `<tr><td><b>Total</b> <span class="rule">quote ${esc(q.id)}, expires ${esc((q.expires_at || "").slice(11, 16))}</span></td><td></td>` +
+    `<td class="num"><b>${eur(q.total_ex_vat)}</b></td></tr></table>${unc}`;
+}
+function preview(p) {
+  if (!p) return `<div class="muted">No preview.</div>`;
+  const f = (p.findings || []).filter((x) => x.outcome !== "silent" || x.rule === "mandate.ok");
+  return `<div>${tier(p.outcome)} <span class="muted small">what the gateway would decide if the agent orders now</span></div>` +
+    `<ul class="findings">${f.map((x) => `<li>${tier(x.outcome)}<div>${esc(x.message)}<div class="rule">${esc(x.rule)}</div></div></li>`).join("")}</ul>`;
+}
+function orderBlock(d, n) {
+  if (!d.quote) return "";
+  return step(n, "Order it?", `<div class="muted small">The agent asks the gateway to order quote ${esc(d.quote.id)}. The mandate engine decides: ordered, held for a human, or refused.</div>` +
+    `<div class="actions"><button class="btn yes" type="button" id="order-go" data-q="${esc(d.quote.id)}" style="flex:0 0 auto">Order</button></div><div id="order-out"></div>`);
+}
+function wireOrder() {
+  const b = $("#order-go");
+  if (!b) return;
+  b.addEventListener("click", async () => {
+    b.disabled = true;
+    const m = mandate();
+    try {
+      const r = await api("/agent/order", {method: "POST", headers: {...auth(), "Content-Type": "application/json"},
+        body: JSON.stringify({quote_id: b.dataset.q, mandate_id: m.mandate_id, agent_id: m.agent_id})});
+      $("#order-out").innerHTML = orderResult(r.order);
+    } catch (e) { $("#order-out").innerHTML = `<div class="error">${esc(e.message)}</div>`; b.disabled = false; }
+  });
+}
+function orderResult(o) {
+  const f = (o.findings || []).filter((x) => x.outcome !== "silent");
+  const human = o.status === "pending_approval" ? `<div class="small" style="margin-top:8px">Waiting for a human: approve or reject it in the <a href="./?sandbox=${encodeURIComponent(state.id)}#/inbox">seller UI</a> with your sandbox approver token.</div>` : "";
+  return `<div style="margin-top:12px"><div class="big">${esc(o.id)} ${tier(o.status)}</div>` +
+    `<div class="muted small">tier ${esc(o.tier)} · ${eur(o.total_ex_vat)} ex VAT</div>` +
+    (f.length ? `<ul class="findings">${f.map((x) => `<li>${tier(x.outcome)}<div>${esc(x.message)}<div class="rule">${esc(x.rule)}</div></div></li>`).join("")}</ul>` : "") + human + `</div>`;
+}
+
+function renderMenu(d) {
+  const it = d.interpretation;
+  const byCls = it.used_model ? "by" : "by code";
+  const spec = it.spec;
+  const dishes = spec.dishes.map((x) => `<div><b>${esc(x.name)}</b> × ${esc(x.portions)}: <span class="muted small">${x.ingredients.map((i) => esc(`${i.name_fi} ${i.amount_per_portion} ${i.unit}`)).join(", ")}</span></div>`).join("");
+  const stock = spec.stock_on_hand.length ? `<div class="small muted" style="margin-top:6px">On hand: ${spec.stock_on_hand.map((s) => esc(s.plenty || s.amount == null ? "plenty of " + s.ingredient : `${s.amount} ${s.unit} ${s.ingredient}`)).join(", ")}</div>` : "";
+  const ing = `<table class="lines"><tr><th>Ingredient</th><th class="num">Needed</th><th class="num">On hand</th><th class="num">To buy</th><th>Status</th></tr>` +
+    d.ingredients.map((n) => `<tr><td>${esc(n.name_fi)}<div class="rule">${esc(n.name_en)}</div></td><td class="num">${esc(n.needed)} ${esc(n.unit)}</td>` +
+      `<td class="num">${n.on_hand == null ? "–" : esc(n.on_hand)}</td><td class="num">${esc(n.to_buy)} ${esc(n.unit)}</td><td class="small">${esc(String(n.status).replaceAll("_", " "))}${n.notes && n.notes.length ? `<div class="rule">${esc(n.notes.join("; "))}</div>` : ""}</td></tr>`).join("") + `</table>`;
+  const subs = d.substitutes.map((s) => `<div class="small">Substitute: <b>${esc(s.name)}</b> for ${esc(s.for_name)} ${s.compromises && s.compromises.length ? `<span class="muted">(${esc(s.compromises.join("; "))})</span>` : ""}</div>`).join("");
+  $("#result").innerHTML = `<h3 style="margin-top:0">“${esc(d.request)}”</h3>` +
+    step(1, `<span class="${byCls}">${it.used_model ? "Understood by " : ""}${esc(it.by)}</span>`,
+      (it.note ? `<div class="human small">${esc(it.note)}</div>` : "") + dishes + stock +
+      `<div class="meta">delivery ${esc(spec.delivery_date)} · ${esc(spec.portions)} portions</div>` + modelMeta(it.model) +
+      `<details><summary>The model's JSON (validated)</summary><pre class="json">${esc(JSON.stringify(spec, null, 1))}</pre></details>`) +
+    step(2, "Ingredients <span class='by code'>code: scale, subtract stock, round up</span>", ing) +
+    step(3, "Quote <span class='by code'>Valio Aimo gateway: live price and availability</span>", quoteTable(d.quote, d.uncovered) + subs) +
+    step(4, "Mandate check <span class='by code'>gateway's mandate engine</span>", preview(d.mandate_preview)) +
+    orderBlock(d, 5) +
+    `<div class="meta">${esc(d.summary)} · Valio API calls: ${esc(d.valio_api_calls)} · gateway tool calls: ${esc(d.gateway_calls)}</div>`;
+  wireOrder();
+}
+
+function renderPhoto(d, src) {
+  const rd = d.reading;
+  const lines = d.lines.length ? `<table class="lines"><tr><th>As written</th><th>Read as</th><th class="num">Confidence</th><th>Status</th></tr>` +
+    d.lines.map((l) => `<tr class="${l.needs_human ? "flag" : ""}"><td class="mono">${esc(l.text_as_written)}</td>` +
+      `<td>${esc(l.name_fi)} ${l.quantity == null ? "?" : esc(l.quantity)} ${esc(l.unit_written || "")}${l.delivered_quantity != null ? ` <span class="muted small">(delivered ${esc(l.delivered_quantity)})</span>` : ""}</td>` +
+      `<td class="num conf ${l.needs_human ? "human" : ""}">${Number(l.confidence).toFixed(2)}</td>` +
+      `<td class="small">${l.needs_human ? `<span class="human">needs a human</span>` : esc(String(l.status).replaceAll("_", " "))}${l.reason ? `<div class="rule">${esc(l.reason)}</div>` : ""}</td></tr>`).join("") + `</table>` :
+    (rd.dishes || []).map((x) => `<div><b>${esc(x.name)}</b> × ${esc(x.portions ?? "?")}</div>`).join("");
+  const second = rd.second_look.length ? `<div class="small" style="margin-top:8px">Second look at ${rd.second_look.length} doubtful line(s): ` +
+    rd.second_look.map((c) => esc(`${c.before.quantity} ${c.before.unit} → ${c.after.quantity} ${c.after.unit} (${c.why})`)).join("; ") + `</div>` : "";
+  const confirm = d.to_confirm.length ? `<div class="card ask" style="margin:12px 0 0;padding:12px 16px"><b>Needs a human, not ordered:</b><ul class="small">${d.to_confirm.map((c) => `<li>${esc(c)}</li>`).join("")}</ul></div>` : "";
+  const recipe = d.recipe ? step("2b", `<span class="by">${esc(d.recipe.by)}</span> plans the menu`, modelMeta(d.recipe.model)) : "";
+  $("#result").innerHTML = `<div class="row"><h3 style="margin-top:0">Photo: ${esc(rd.kind ? rd.kind.replace("_", " ") : "?")}</h3>` +
+    (src ? `<img src="${esc(src)}" alt="" style="max-height:120px;border-radius:4px;border:1px solid var(--rule)">` : "") + `</div>` +
+    step(1, `<span class="by">Read by ${esc(rd.by)}</span>`, lines + second + confirm +
+      `<div class="meta">page date ${esc(rd.delivery_date_on_page || "–")} · delivery ${esc(d.delivery_date || "–")} · lines under ${rd.confirm_below} confidence go to a human</div>` + modelMeta(rd.model) +
+      `<details><summary>What the model returned (validated JSON)</summary><pre class="json">${esc(JSON.stringify({kind: rd.kind, items: rd.items, dishes: rd.dishes, unreadable: rd.unreadable, notes: rd.notes}, null, 1))}</pre></details>`) +
+    recipe +
+    step(2, "Quote <span class='by code'>Valio Aimo gateway: live price and availability</span>", quoteTable(d.quote, d.uncovered) +
+      d.substitutes.map((s) => `<div class="small">Substitute: <b>${esc(s.name)}</b> ${s.compromises && s.compromises.length ? `<span class="muted">(${esc(s.compromises.join("; "))})</span>` : ""}</div>`).join("") +
+      (d.error && !d.quote ? `<div class="error">${esc(d.error)}</div>` : "")) +
+    step(3, "Mandate check <span class='by code'>gateway's mandate engine</span>", preview(d.mandate_preview)) +
+    orderBlock(d, 4) + `<div class="meta">${esc(d.summary)}</div>`;
+  wireOrder();
+}
+
+function renderAsk(d) {
+  const tr = d.transcript.map((s) => `<div class="tool"><div>${esc(s.tool)}</div><div class="${s.is_error ? "err" : ""}">` +
+    `${esc(JSON.stringify(s.args))}<div class="rule">→ ${esc(JSON.stringify(s.result))}</div></div></div>`).join("");
+  $("#result").innerHTML = `<h3 style="margin-top:0">“${esc(d.request)}”</h3>` +
+    step(1, `<span class="by">Agent: ${esc(d.by)}</span> with the gateway's tools`,
+      (tr || `<div class="muted">No tool calls.</div>`) + modelMeta(d.model) + `<div class="meta">stop: ${esc(d.stop_reason)} · Valio API calls ${esc(d.valio_api_calls)}</div>`) +
+    step(2, "The agent's answer", `<div style="white-space:pre-wrap">${esc(d.answer || "–")}</div>`) +
+    step(3, "Quote <span class='by code'>Valio Aimo gateway</span>", quoteTable(d.quote, d.quote && d.quote.uncovered)) +
+    step(4, "Mandate check <span class='by code'>gateway's mandate engine</span>", d.order ? orderResult(d.order) : preview(d.mandate_preview)) +
+    (d.order ? "" : orderBlock(d, 5));
+  wireOrder();
+}
+
+// --- actions ---------------------------------------------------------------------------------------
+document.querySelectorAll("[data-menu]").forEach((b) => b.addEventListener("click", () => { $("#menu-text").value = b.dataset.menu; }));
+document.querySelectorAll("[data-ask]").forEach((b) => b.addEventListener("click", () => { $("#ask-text").value = b.dataset.ask; }));
+
+$("#menu-go").addEventListener("click", () => {
+  const m = need(); if (!m) return;
+  run("Gemini is reading the menu, then the gateway prices the basket…", async () => {
+    const d = await api("/agent/plan-menu", {method: "POST", headers: {...auth(), "Content-Type": "application/json"},
+      body: JSON.stringify({text: $("#menu-text").value, mandate_id: m.mandate_id, agent_id: m.agent_id})});
+    renderMenu(d);
+  });
+});
+
+async function sendPhoto(blob, name, kind, preview) {
+  const m = need(); if (!m) return;
+  run("Nemotron is reading the page, then the gateway prices the basket…", async () => {
+    const fd = new FormData();
+    fd.append("image", blob, name); fd.append("mandate_id", m.mandate_id); fd.append("agent_id", m.agent_id);
+    if (kind) fd.append("kind_hint", kind);
+    const d = await api("/agent/read-photo", {method: "POST", headers: auth(), body: fd});
+    renderPhoto(d, preview);
+  });
+}
+document.querySelectorAll("[data-sample]").forEach((b) => b.addEventListener("click", async () => {
+  if (!need()) return;
+  const blob = await (await fetch(b.dataset.sample)).blob();
+  sendPhoto(blob, b.dataset.sample.split("/").pop(), b.dataset.kind, b.dataset.sample);
+}));
+$("#photo-file").addEventListener("change", (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  if (f.size > 4 * 1024 * 1024) { showError({code: "image_too_large", message: "The photo is over 4 MB."}); return; }
+  sendPhoto(f, f.name, null, URL.createObjectURL(f));
+  e.target.value = "";
+});
+
+$("#ask-go").addEventListener("click", () => {
+  const m = need(); if (!m) return;
+  run("The buyer agent is searching, quoting and asking the gateway…", async () => {
+    const d = await api("/agent/ask", {method: "POST", headers: {...auth(), "Content-Type": "application/json"},
+      body: JSON.stringify({text: $("#ask-text").value, mandate_id: m.mandate_id, agent_id: m.agent_id, allow_order: $("#ask-order").checked})});
+    renderAsk(d);
+  });
+});
+
+renderSandbox();
+loadStatus();
+</script>
+</body>
+</html>

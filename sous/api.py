@@ -76,6 +76,11 @@ BUYER_DIR = config.ROOT / "buyer"
 if BUYER_DIR.is_dir():
     app.mount("/buyer", StaticFiles(directory=BUYER_DIR, html=True), name="buyer")
 
+# The reference BUYER agent (agent/server.py) is not part of the gateway; mounted only for the demo page.
+if config.env("BUYER_AGENT") == "1":
+    from agent.server import app as buyer_agent_app
+    app.mount("/agent", buyer_agent_app)
+
 
 @app.get("/", include_in_schema=False)
 def root():
