@@ -103,11 +103,40 @@ def _readings(s: str) -> list[float] | None:
     return [float(f"{head}.{dec}")]
 
 
+_SEP = re.compile(r"\s*(?:[+&,;/]|ja\b|and\b|plus\b|sekä\b|tai\b|or\b|$)", re.I)
+# not product words: articles, fillers, ordering verbs and pronouns around a quantity
+_STOP = {"of", "the", "a", "an", "some", "more", "extra", "lisää", "order", "tilaa", "tilatkaa", "need", "needs",
+         "please", "get", "buy", "osta", "want", "send", "lähetä", "tarvitsemme", "tarvitaan", "keittiöön", "we",
+         "us", "me", "i", "you", "can", "voitko", "could", "and", "ja", "plus", "sekä", "or", "tai"}
+
+
+def _product(before: str, after: str) -> str | None:
+    """The product a quantity names: the first word after it ("25 l milk"), else the word right before it
+    ("milk 25 l and cream 25 l"); None when it names none ("25 l + 25 l milk": it shares the next one's)."""
+    if not _SEP.match(after):
+        for tok in re.findall(r"[^\W_]+", after.lower())[:4]:
+            if tok.isdigit():
+                break
+            if tok not in _STOP:
+                return tok
+    toks = [t for t in re.findall(r"[^\W_]+", re.split(r"[+&,;/]", before)[-1].lower()) if not t.isdigit()]
+    return toks[-1] if toks and toks[-1] not in _STOP else None
+
+
+def _one_product(mentions: list[tuple[float, str | None]]) -> bool:
+    """Several stated quantities may add up to one item only when they name the same product (or none):
+    "25 l + 25 l milk" can be one 50 L item, "25 l milk and 25 l cream" can't."""
+    return len({p for _, p in mentions if p}) <= 1
+
+
 def parse(text: str | None) -> list[dict]:
     """Every quantity with a unit in the buyer's words: {text, family, values (one, or two when ambiguous),
-    ambiguous, packs (the count in "2 x 10 l")}."""
+    ambiguous, packs (the count in "2 x 10 l"), product (the word naming what it is of, or None)}."""
     out = []
-    for m in _QTY.finditer(clean(text) or ""):
+    words = clean(text) or ""
+    prev = 0
+    for m in _QTY.finditer(words):
+        before, prev = words[prev:m.start()], m.end()
         unit = _UNITS[re.sub(r"\s+", " ", m["unit"].lower())]
         if m["num"]:
             vals = _readings(m["num"])
@@ -124,7 +153,7 @@ def parse(text: str | None) -> list[dict]:
         if not any(v > 0 for v in vals):
             continue
         out.append({"text": m.group(0).strip(), "family": unit[0], "values": vals, "ambiguous": len(vals) > 1,
-                    **({"packs": mult} if times else {})})
+                    **({"packs": mult} if times else {}), "product": _product(before, words[m.end():])})
     return out
 
 
@@ -220,6 +249,15 @@ def check(q: dict, text: str | None = None) -> list[dict]:
         else:
             status = "mismatch"  # an ambiguous number too, when neither reading matches
         out.append({**s, "status": status, **({"shared": True} if id(s) in taken and status == "mismatch" else {})})
+    # different products whose amounts only add up to one item ("25 l milk and 25 l cream", one 50 L item):
+    # one finding for the group, naming both
+    for s in out:
+        if s["status"] != "mismatch" or not s.get("product"):
+            continue
+        group = [o for o in out if o["family"] == s["family"] and o.get("product") and o["status"] == "mismatch"]
+        total = sum(o["values"][0] for o in group)
+        if len({o["product"] for o in group}) > 1 and any(_near(total, vs) for vs in slots[s["family"]].values()):
+            s["together_with"] = [f'{o["text"]} {o["product"]}' for o in group]
     return out
 
 
@@ -241,7 +279,7 @@ def _assign(cands: list[dict], slots: dict, fallback: set[int]) -> set[int]:
     def ok(load: dict) -> bool:
         if "ALL" in load and len(load) > 1:
             return False
-        return all(_near(sum(vs), slots[k]) for k, vs in load.items())
+        return all(_near(sum(v for v, _ in vs), slots[k]) and _one_product(vs) for k, vs in load.items())
 
     def walk(k: int, load: dict, got: set) -> None:
         if len(got) + len(cands) - k <= len(best[0]):
@@ -253,9 +291,9 @@ def _assign(cands: list[dict], slots: dict, fallback: set[int]) -> set[int]:
         s = cands[k]
         for key in keys:
             for v in s["values"]:
-                if sum(load.get(key, [])) + v > tops[key]:
+                if sum(x for x, _ in load.get(key, [])) + v > tops[key]:
                     continue
-                load.setdefault(key, []).append(v)
+                load.setdefault(key, []).append((v, s.get("product")))
                 walk(k + 1, load, got | {id(s)})
                 load[key].pop()
                 if not load[key]:
@@ -301,6 +339,20 @@ def findings(q: dict, texts: list[str | None] | None = None) -> list:
             n += 1
             fam = s["family"]
             en, fi_ = _has(q, fam)
+            if grp := s.get("together_with"):  # one finding for "25 l milk and 25 l cream" on one 50 L item
+                if ("together", tuple(grp)) in seen:
+                    continue
+                seen.add(("together", tuple(grp)))
+                names = " and ".join(f'"{g}"' for g in grp)
+                out.append(Finding(
+                    rule="quantity.request_mismatch", outcome="ask",
+                    message=(f"The buyer asked for {names}, different products, but the quote has one amount for "
+                             f"them together (the quote asks for {en}): one product may be missing, so a person "
+                             "checks the quantity."),
+                    message_fi=(f"Ostaja pyysi {' ja '.join(chr(34) + g + chr(34) for g in grp)}, eri tuotteita, "
+                                f"mutta tarjouksessa on niille yksi yhteinen määrä (tarjouksessa {fi_}): yksi "
+                                "tuote voi puuttua, joten ihminen tarkistaa määrän.")))
+                continue
             if s["ambiguous"]:  # "1,539 l": 1,539 L or 1.539 L, and the quote has neither
                 big, small = max(s["values"]), min(s["values"])
                 read_en = f"could mean {_fmt(big)} {FAMILY_EN[fam]} or {_fmt(small)} {FAMILY_EN[fam]}"

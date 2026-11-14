@@ -188,10 +188,31 @@ def test_equal_amounts_need_a_line_each():
     assert q["mandate_preview"]["outcome"] == "ask" and "already taken by another quantity" in f["message"]
     assert sorted(s["status"] for s in q["mandate_preview"]["request_quantities"]) == ["matched", "mismatch"]
     assert not fired(quote_items(TWO_25, ("MILK", 25, "L"), ("CREAM10", 25, "L")))  # a line each
-    assert not fired(quote_items(TWO_25, ("MILK", 50, "L")))  # one line holding their sum
     # different amounts still each need their own: 40 l milk, 20 l cream, quoted 40 L only
     assert fired(quote_items("40 l milk and 20 l cream", ("MILK", 40, "L"), ("MILK", 20, "L"))) == []
     assert fired(quote_items("40 l milk and 30 l cream", ("MILK", 40, "L")))
+
+
+def test_different_products_cant_add_up_to_one_item():
+    """rene-codex-qa (board 18:43Z): '25 l milk and 25 l cream' quoted as ONE 50 L milk item drops the cream."""
+    q = quote_items(TWO_25, ("MILK", 50, "L"))
+    [f] = fired(q)
+    assert q["mandate_preview"]["outcome"] == "ask"
+    assert '"25 l milk" and "25 l cream", different products' in f["message"] and "50 L" in f["message"]
+    assert not fired(quote_items("25 l + 25 l milk", ("MILK", 50, "L")))  # the same product: its sum is fine
+    assert not fired(quote_items("50 l milk", ("MILK", 50, "L")))
+    assert not fired(quote_items("milk 25 l and milk 25 l", ("MILK", 50, "L")))
+    assert fired(quote_items("25 litraa maitoa ja 25 litraa kermaa", ("MILK", 50, "L")))
+    assert fired(quote_items("milk 25 l and cream 25 l", ("MILK", 50, "L")))
+
+
+@pytest.mark.parametrize("text,products", [
+    ("25 l milk and 25 l cream by Monday", ["milk", "cream"]), ("25 l + 25 l milk", [None, "milk"]),
+    ("milk 25 l and cream 25 l", ["milk", "cream"]), ("Order 40 l of milk", ["milk"]),
+    ("25 litraa maitoa ja 25 litraa kermaa", ["maitoa", "kermaa"]), ("Tilaa 10 l", [None]),
+])
+def test_reads_which_product_a_quantity_names(text, products):
+    assert [s["product"] for s in R.parse(text)] == products
 
 
 def test_over_reading_asks_too():
