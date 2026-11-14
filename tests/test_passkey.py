@@ -319,6 +319,29 @@ def test_approval_url_is_on_the_buyer_side_for_every_held_order():
     assert o["order_url"] == f"/ui/#/orders/{o['id']}"  # order_url: Valio Aimo's seller side
 
 
+def test_buyer_dashboard_sends_passkey_only_orders_to_the_passkey_page(client):
+    """Regression (d7ea25a): the buyer dashboard offered the code Approve button and approve-with-changes on a
+    passkey-only mandate's held order; both are refused with 403 passkey_required. web/app.js tells such an order by
+    its approval_url (the passkey page) and offers the passkey page instead."""
+    import re
+    import shutil
+    o, op = held("M"), held("MP")
+    assert client.post(f"/orders/{op['id']}/approve-with-changes",
+                       json={"by": "Mikko", "changes": [{"line": 0, "quantity": 1}]}).status_code == 403
+    js = (config.ROOT / "web" / "app.js").read_text()
+    m = re.search(r"const passkeyOnly = \(o\) => (/.+?/)\.test", js)
+    assert m, "web/app.js: passkeyOnly(o) tests approval_url"
+    for fn in ("function editBox(o) {\n  if (!(o.lines || []).length || passkeyOnly(o)) return",
+               "function approveButton(o) {\n  return passkeyOnly(o)"):
+        assert fn in js
+    assert 'data-act="approve"' not in js.replace('`<button class="btn yes" data-act="approve">', "", 1)
+    if node := shutil.which("node"):
+        got = subprocess.run([node, "-e", f"const r = {m.group(1)}; console.log(JSON.stringify("
+                              f"{json.dumps([op['approval_url'], o['approval_url']])}.map((u) => r.test(u))))"],
+                             capture_output=True, text=True, check=True).stdout
+        assert json.loads(got) == [True, False]
+
+
 def test_approval_page_offers_code_unless_passkey_required():
     page = (config.ROOT / "web" / "approve.html").read_text()
     assert 'requirePk = keys.approval_method === "passkey"' in page and "approveWithCode" in page

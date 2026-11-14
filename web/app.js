@@ -389,7 +389,7 @@ function inboxCard(o, isNew = false) {
     ${editBox(o)}
     <div class="actions">
       <button class="btn no" data-act="reject">Reject</button>
-      <button class="btn yes" data-act="approve">Approve ${eur(o.total_ex_vat)}</button>
+      ${approveButton(o)}
     </div>
     ${passkeyNote(o)}` : waitingForBuyer(o)}
   </article>`;
@@ -402,8 +402,19 @@ function waitingForBuyer(o) {
     <a class="btn plain sm" href="${buyerLink(o.id)}">Open on the buyer side ${ic("arrow_forward")}</a></div>`;
 }
 
+// A mandate that accepts only passkeys: the gateway gives such an order an approval_url on the passkey page
+// (service.approval_url; every other held order gets the buyer dashboard). The approver code can still reject it,
+// but approving (and approve with changes) is refused with 403 passkey_required, so offer the passkey page instead.
+const passkeyOnly = (o) => /\/approve\.html\?/.test(o.approval_url || "");
+function approveButton(o) {
+  return passkeyOnly(o)
+    ? `<a class="btn yes" href="${passkeyLink(o.id)}">Approve with a passkey</a>`
+    : `<button class="btn yes" data-act="approve">Approve ${eur(o.total_ex_vat)}</button>`;
+}
+
 // Buyer side: the passkey page (web/approve.html) approves this exact order with the buyer's own device.
 function passkeyNote(o) {
+  if (passkeyOnly(o)) return `<p class="small muted">This mandate accepts only a passkey for approval; the approver code can still reject.</p>`;
   return `<p class="small muted">Or <a href="${passkeyLink(o.id)}">approve with a passkey</a> on your phone
     (required when the mandate accepts only passkeys).</p>`;
 }
@@ -418,7 +429,7 @@ function rememberBox(o) {
 }
 // Approve with changes (sous/approve_changes.py): edit quantities, re-priced live and re-checked by the gateway.
 function editBox(o) {
-  if (!(o.lines || []).length) return "";
+  if (!(o.lines || []).length || passkeyOnly(o)) return "";  // passkey mandates: approve with changes is refused
   return `<details class="qty-edit"><summary>${ic("edit")} Change quantities</summary>
     <div class="qty-rows">${o.lines.map((l, i) => `<label><span>${esc(pname(l.name))}</span>
       <input type="number" min="0" step="any" inputmode="decimal" data-line="${i}" data-was="${esc(l.quantity)}" value="${esc(l.quantity)}">
@@ -667,7 +678,7 @@ async function openOrder(id) {
       ${editBox(o)}
       <div class="actionbar-buttons">
         <button class="btn no" data-act="reject">Reject</button>
-        <button class="btn yes" data-act="approve">Approve ${eur(o.total_ex_vat)}</button>
+        ${approveButton(o)}
       </div>${passkeyNote(o)}</div>` : ""}
   `);
   const box = $("#sheet-body [data-order]");
