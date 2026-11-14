@@ -9,10 +9,10 @@
 **Working prototype**
 1. Gateway deployed with `docker compose up` on the CPU instance (prod runs an older commit than `main`; [STATUS](../STATUS.md#deployed-now)).
 2. LLM buyer agent (`agent/buyer.py`) on the gateway's own MCP tools; the runtime binds identity, mandate and idempotency key.
-3. Eval in CI on CRACI, 40 buyer sentences, live Valio prices. Kimi, run 43511463514: **36/40 matched without correction, 31/31 unsafe requests blocked or escalated, 0 mandate violations, p50 8.4 s, ~21.7k tokens/request**. Later run 43524836008 (older code): 34/40, 0 violations. Not re-measured on current code: Verda Inference returned empty responses, then its API went offline (Sat ~00:15Z). Kimi also turned 7/7 menus into schema-valid plans.
-4. Spend: Verda Inference $3.88, CPU instances ~$0.46 ([COSTS.md](../COSTS.md)).
+3. Eval in CI on CRACI, 49 buyer sentences, live Valio prices. Kimi, run 43557209740 (0b0ad68): **48/49 matched without correction, 0 mandate violations auto-ordered, p50 8.8 s, ~26.4k tokens/request** (Gemini 46/49 in the same run). The one miss, H20, assumes only coffee milk can be found; live, Kimi found real lactose-free milk, so it is now scripted-only: 48/48 without it. Kimi also turned 7/7 menus into schema-valid plans.
+4. Spend: Verda Inference $11.72, CPU instances ~$0.92 (project total $23.48, [COSTS.md](../COSTS.md)).
 
-**Path to scale (estimates, no load test run).** 20,000 kitchens is roughly 50-100k orders/day: a few CPU instances plus managed MariaDB. The model is the variable cost at ~22k tokens/request; per-token Inference has no idle cost, and past a steady load the same open-weight model can run on a Verda GPU with vLLM, changing only `LLM_BASE_URL`. The vLLM recipe is in VERDA.md; **we have not run it**. Safety does not depend on the model: CI fails if any model gets a mandate violation auto-ordered.
+**Path to scale (estimates, no load test run).** 20,000 kitchens is roughly 50-100k orders/day: a few CPU instances plus managed MariaDB. The model is the variable cost at ~26k tokens/request; per-token Inference has no idle cost, and past a steady load the same open-weight model can run on a Verda GPU with vLLM, changing only `LLM_BASE_URL`. The vLLM recipe is in VERDA.md; **we have not run it**. Safety does not depend on the model: CI fails if any model gets a mandate violation auto-ordered.
 
 Not done: self-hosted vLLM on a Verda GPU, `deepseek-4-1-flash-1017`.
 

@@ -10,11 +10,11 @@ Gemini never picks the product a line is bought from or the tier; the runtime bi
 
 **Results** (our own cases, live Valio prices, CI on CRACI)
 - Recipe eval, 7 menus (fi/en, 4 mandates), run 43524836008: **7/7 schema-valid first answers**, 8/8 dishes, 22/23 main ingredients, 0 allergen-rule violations on quoted lines, tier 7/7; only 4/7 pass the 35 % quantity bar against our reference recipes. ~2,000 tokens, ~$0.006, 10.1 s per menu.
-- Buyer eval, 40 sentences: **39/40 matched without correction, 0 mandate violations** (run 43530717095, $0.037/request), up from 36/40 in run 43524836008 after the eval loop fixed the gateway and three ambiguous cases. Kimi K3.1 Pro scored 34/40 in that earlier run; it has not been re-run on current code.
+- Buyer eval, 49 sentences, run 43557209740 (0b0ad68): **46/49 matched without correction, 0 mandate violations auto-ordered**, $0.045/request; Kimi K3.1 Pro 48/49 in the same run. One miss for both (H20) is a scripted-only case, now skipped: 46/48 without it. The others: live stock (H03) and a milk drink picked for milk (H12).
 
 **What's new here.** The LLM reads; code decides. Each menu becomes one auditable quote with every number after the reading made by code, and the eval measures both reading and safety.
 
-**Why Gemini.** Structured output honoured on every eval call (7/7 menus) in Finnish and English, and the best understanding score of the models we ran, at $0.037 per request.
+**Why Gemini.** Structured output honoured on every eval call (7/7 menus) in Finnish and English, and 46/49 buyer sentences at $0.045 per request.
 
 Not done: on the servers it is CLI and CI only. The web page `/agent/` (08371ec) exists but is off until the servers get a model key.
 

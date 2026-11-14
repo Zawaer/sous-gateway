@@ -270,6 +270,10 @@ def test_llm_eval_applicability_and_need_checks():
     assert E.applicability({"id": "H15", "flow": ["order", "order_again"]})
     assert E.applicability({"id": "X1", "flow": ["order", "requote_order"]})
     assert E.applicability({"id": "H05", "flow": ["order", "reject"]}) is None
+    assert E.applicability({"id": "X2", "scripted_only": "fixed candidates"}) == "fixed candidates"
+    import yaml
+    cases = {c["id"]: c for c in yaml.safe_load((E.ROOT / "evals" / "cases.yaml").read_text())["cases"]}
+    assert E.applicability(cases["H20"]) and E.applicability(cases["H15"]) and E.applicability(cases["H01"]) is None
     case = {"id": "H08", "request": "500 litres of the milk we always buy (464119).", "amount": 500, "unit": "L",
             "expect": {}}
     good = {"_quote": {"requested_delivery_date": "2026-11-16"}, "orders": [], "stop_reason": "answered",

@@ -14,14 +14,14 @@ One file per challenge, each ≤ 2,500 characters, ready to paste. Numbers come 
 ## Checklist
 
 - [ ] Repo is **public** before any link is posted (Discord, form).
-- [ ] **Verda:** post the Discord text below in Verda's challenge channel (Verda's site is down since Sat ~00:15Z; check it is back); paste verda.md in the form.
-- [ ] **Verda:** re-run Kimi when Verda Inference is reachable, then update the numbers here, in verda.md, VERDA.md and STATUS.md.
+- [ ] **Verda:** post the Discord text below in Verda's challenge channel (Verda's site was down Sat ~00:15Z; Verda Inference works again since CI run 43533142451); paste verda.md in the form.
+- [x] **Verda:** Kimi re-run in CI 43557209740 (0b0ad68): 48/49; numbers updated here, in verda.md, VERDA.md and STATUS.md.
 - [ ] **CRACI:** screenshots of CRACI's SBOM/vulnerability view and the `smoke` job's empty trace for run 43530484114.
 - [ ] **Aiven:** set `SOUS_VALKEY_URL` + `SOUS_DEPLOYMENT_ROLE` on prod and staging, redeploy, check `/health` -> `shared_budget.backend == "valkey"`; then update aiven.md ("Where it is live").
 - [ ] **Gemini / Nemotron:** model keys on the servers and `SOUS_BUYER_AGENT=1`, or show the CLI in the video; then update the "Not done" lines.
 - [ ] No secrets in any pasted text (API keys, approver codes, the Valkey URI).
 
-Done since the first draft: CI run 43530484114 green on CRACI with Valkey; Codex lock race fixed (fe41018); Nemotron runs 3-5 committed; LLM eval re-run (Gemini 39/40).
+Done since the first draft: CI run 43530484114 green on CRACI with Valkey; Codex lock race fixed (fe41018); Nemotron runs 3-5 committed; LLM eval re-run with both models in CI 43557209740 (Kimi 48/49, Gemini 46/49).
 
 ## Verda Discord post (paste as is)
 
@@ -29,6 +29,6 @@ Done since the first draft: CI run 43530484114 green on CRACI with Valkey; Codex
 >
 > **On Verda:** the gateway (FastAPI + MCP + MariaDB) runs on a **CPU instance in Finland**: no GPU needed, and orders and the audit log stay next to the Finnish wholesaler. The buyer agent's model is **Kimi K3.1 Pro on Verda Inference** (open weights, EU, prompts not stored), because what a hospital or school kitchen buys is sensitive.
 >
-> **Process:** compose deploy -> LLM agent on the gateway's MCP tools -> per-model eval in CI. Kimi on Verda (CI run 43511463514, 40 buyer sentences we wrote, live Valio prices): 36/40 matched without correction (34/40 in a later run), 31/31 unsafe requests blocked or escalated, 0 mandate violations, p50 8.4 s. Next (not run yet): the same model on a Verda GPU with vLLM; only the base URL changes.
+> **Process:** compose deploy -> LLM agent on the gateway's MCP tools -> per-model eval in CI. Kimi on Verda (CI run 43557209740, 49 buyer sentences we wrote, live Valio prices): 48/49 matched without correction (the one miss, H20, is a scripted-only case: 48/48 without it), 0 mandate violations auto-ordered, p50 8.8 s. Next (not run yet): the same model on a Verda GPU with vLLM; only the base URL changes.
 >
 > Write-up: https://github.com/Zawaer/sous/blob/main/docs/VERDA.md · Repo: https://github.com/Zawaer/sous

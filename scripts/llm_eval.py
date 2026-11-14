@@ -36,16 +36,8 @@ sys.path.insert(0, str(ROOT))
 APPROVER = "llm-eval runner (human stand-in)"
 HUMAN_STEPS = {"approve", "reject", "revoke"}
 
-# Cases that test protocol mechanics, not understanding a buyer: the scripted eval covers them.
-NOT_FOR_LLM = {
-    "H15": "Protocol mechanics: the same quote ordered twice. The agent runtime sends an idempotency key per "
-           "quote, so a repeated place_order returns the same order (unit-tested in tests/test_agent.py).",
-    "H16": "Protocol mechanics: a network retry with the same idempotency key.",
-    "H17": "Protocol mechanics: ordering after the quote expired (shortened TTL and a deliberate wait).",
-    "H19": "Protocol mechanics: another agent replays the hotel's idempotency key.",
-    "A03": "Two requests in sequence on one day (daily budget): a scripted sequence, not one buyer sentence.",
-    "A08": "Protocol mechanics: the agent calling REST approve with its own token (MCP has no approve tool).",
-}
+# Cases that test protocol mechanics or depend on the scripted flow's fixed candidates carry
+# `scripted_only: <reason>` in evals/cases.yaml: the scripted eval covers them, this skips them.
 
 # The buyer's words for cases whose `request` also narrates the test setup in brackets. The setup
 # (which agent, a revoked mandate, the human's later actions) is applied by this harness instead.
@@ -71,8 +63,8 @@ def slug(s: str) -> str:
 
 def applicability(case: dict) -> str | None:
     """None if the case runs through the LLM agent, else the reason it doesn't."""
-    if case["id"] in NOT_FOR_LLM:
-        return NOT_FOR_LLM[case["id"]]
+    if case.get("scripted_only"):
+        return str(case["scripted_only"])
     extra = [s for s in case.get("flow", ["order"]) if s != "order" and s not in HUMAN_STEPS]
     if extra:
         return f"Protocol mechanics: flow steps {extra}."
@@ -459,7 +451,8 @@ def write_report(results_dir: Path, out: Path) -> None:
         if any(x.get("provider") == "oracle" for x in runs):
             L += ["", "`oracle:scripted-plan` is not a model: it replays the scripted eval's plan for each case "
                   "through the same agent runtime and checks, so it validates the harness and is the ceiling a "
-                  "model can reach. *Scripted calls* is `scripts/eval.py` (all 45 cases, `evals/results.json`)."]
+                  "model can reach. *Scripted calls* is `scripts/eval.py` "
+                  f"(all {base['cases_total'] if base else len(runs[0]['cases'])} cases, `evals/results.json`)."]
         L += ["", "Run dates: " + "; ".join(f"`{x['model_label']}` {x['generated_at']}" for x in runs), ""]
 
         ids = [c["id"] for c in runs[0]["cases"]]
