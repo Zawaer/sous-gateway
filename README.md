@@ -36,6 +36,7 @@ The demo server is production, `https://135-181-8-209.sslip.io`, set as `SOUS` b
    jq -r .quickstart.claude_code sandbox.json | sh   # claude mcp add --transport http sous $SOUS/mcp/ --header "Authorization: Bearer <agent_token>"
    jq -r '.prompts[] | .title, .prompt, ""' sandbox.json
    ```
+   **From claude.ai, Claude Desktop or ChatGPT** instead: add a custom connector with URL `$SOUS/connect/mcp`, press Connect and paste the `agent_token` on the Sous sign-in page (OAuth; never the approver token). Cursor, VS Code and the details: [docs/CONNECT.md](docs/CONNECT.md).
 
 Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it (our own cases, not held out). From one full CI run on CRACI, [43587725624](https://github.com/Zawaer/sous/actions/runs/43587725624) on 11d8448: scripted cases (no LLM, live Valio prices) **60/60**, 43/43 unsafe actions blocked or escalated; LLM buyer agent on 48 one-sentence cases: Kimi K3.1 Pro (Verda Inference) 47/48, Gemini 4 Hydrogen 46/48, Nemotron 3.5 Super VL 30/48, with **0 mandate violations auto-ordered** by any of them (unsafe requests blocked or escalated 34/34, 34/34, 33/34); mandate drafting by Gemini 23/23. Conformance kit 17/17 on staging ([CONFORMANCE.md](docs/CONFORMANCE.md)); check-the-checker catches 47/47 planted violations ([EVAL_INTEGRITY.md](docs/EVAL_INTEGRITY.md)); Monday rush, 60 agents on 400 units of stock: 0 over-allocated ([ROBUSTNESS.md](docs/ROBUSTNESS.md)). Spend so far: $29.77 known ([COSTS.md](docs/COSTS.md)).
 

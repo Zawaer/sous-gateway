@@ -146,6 +146,8 @@ def test_create_gives_signed_mandate_copies_tokens_and_quickstarts(c):
     qs = s["quickstart"]
     assert qs["claude_code"] == (f'claude mcp add --transport http sous https://sous.test/mcp/ '
                                  f'--header "Authorization: Bearer {token}"')
+    assert qs["connect"]["url"] == "https://sous.test/connect/mcp"  # OAuth connectors (claude.ai, ChatGPT)
+    assert token not in json.dumps(qs["connect"])
     assert qs["seller_ui"].startswith(f"https://sous.test/ui/?sandbox={sid}")
     assert qs["buyer_ui"].startswith(f"https://sous.test/buyer/?sandbox={sid}&mandate=M-")
     assert token not in qs["buyer_ui"]  # the agent token is pasted separately, never put in a link

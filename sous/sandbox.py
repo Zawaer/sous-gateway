@@ -431,6 +431,14 @@ def quickstart(sid: str, base: str, token: str, approver: str, mandates: list[di
     return {
         "claude_code": f'claude mcp add --transport http sous {base}/mcp/ --header "Authorization: Bearer {token}"',
         "mcp_url": f"{base}/mcp/",
+        # claude.ai / Claude Desktop / ChatGPT connectors can't send a header: they use OAuth (sous/oauth.py)
+        "connect": {
+            "url": f"{base}/connect/mcp",
+            "claude_ai": "Settings > Connectors > Add custom connector, URL above, Connect, paste agent_token",
+            "chatgpt": "Settings > Apps > Advanced settings > Developer mode, Create app, URL above, "
+                       "authentication OAuth, paste agent_token",
+            "docs": "https://github.com/Zawaer/sous/blob/main/docs/CONNECT.md",
+        },
         "curl_quote": (f"curl -s {base}/quotes -H 'Authorization: Bearer {token}' "
                        f"-H 'Content-Type: application/json' -d '{body}'"),
         "curl_order": (f"curl -s {base}/orders -H 'Authorization: Bearer {token}' -H 'Content-Type: application/json' "

@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
-from . import access, autonomy, account, agent_auth, aimo, catalog, clock, config, erp, exposure, holds, offers, origin as origin_mod, pause, peppol, proof, quote as Q, rules, sandbox, service as S, signing, standing, store
+from . import access, autonomy, account, agent_auth, aimo, catalog, clock, config, erp, exposure, holds, oauth, offers, origin as origin_mod, pause, peppol, proof, quote as Q, rules, sandbox, service as S, signing, standing, store
 from .mandate import Mandate
 from .mcp_server import mcp
 
@@ -76,8 +76,12 @@ app = FastAPI(
     ),
     lifespan=lifespan,
 )
+# /connect/mcp (OAuth for claude.ai / ChatGPT connectors, sous/oauth.py). Registered before CORS so CORS wraps it
+# and its 401 carries the CORS headers a browser-based client needs to read WWW-Authenticate.
+app.middleware("http")(oauth.connect_gate)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
-                   expose_headers=["Mcp-Session-Id"])
+                   expose_headers=["Mcp-Session-Id", "Mcp-Protocol-Version", "WWW-Authenticate"])
+app.include_router(oauth.router)
 
 
 @app.middleware("http")
