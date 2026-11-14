@@ -3,7 +3,9 @@
 Served over Streamable HTTP at /mcp by the main app (see api.py), or over stdio:
     uv run python -m sous.mcp_server
 
-Every tool returns a JSON object. On failure the result has isError=true and the object is
+Every tool declares an outputSchema (MCP 2025-06-18 structured output) and returns its JSON object both as
+structuredContent and, for older clients, as one text block with the same JSON. The schemas reuse the documentation
+models served at /schemas/*.json (sous/standards.py). On failure the result has isError=true and the object is
 {"error": <code>, "message": <what went wrong>, "hint": <what to do next>, "retryable": <bool>}.
 """
 
@@ -13,11 +15,17 @@ import functools
 import json
 import logging
 from datetime import date
+from typing import Any, Literal
 
+import pydantic_core
+from jsonschema.validators import validator_for
 from mcp.server.mcpserver import Context, MCPServer
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
+from pydantic import BaseModel, ConfigDict, Field
 
 from . import access, agent_auth, catalog, clock, rules, service as S, standing
+from .mandate import Finding, Mandate
+from .standards import OrderDoc, QuoteDoc
 
 log = logging.getLogger(__name__)
 
@@ -100,22 +108,208 @@ def _error(code: str, message: str, retry_after: int | None = None) -> CallToolR
                           structured_content=body, is_error=True)
 
 
-def _tool(fn):
-    """Turn gateway errors (and anything unexpected) into one structured error result."""
+# --- output schemas -----------------------------------------------------------
+# Each tool's outputSchema. Quotes, orders and mandates reuse the models behind /schemas/*.json
+# (sous/standards.py), so REST and MCP describe one shape. All objects are open (additionalProperties allowed):
+# new fields don't break clients that validate structuredContent.
 
-    @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
-        try:
-            return fn(*args, **kwargs)
-        except S.GatewayError as e:
-            return _error(e.code, e.message, e.retry_after)
-        except ValueError as e:
-            return _error("invalid_argument", str(e))
-        except Exception as e:  # noqa: BLE001 - the agent gets a clean error, the log gets the trace
-            log.exception("MCP tool %s failed", fn.__name__)
-            return _error("internal_error", f"{type(e).__name__} in {fn.__name__}.")
+class _Open(BaseModel):
+    model_config = ConfigDict(extra="allow")
 
-    return wrapper
+
+class ProductCardOut(_Open):
+    """A catalog card: static data only, no price or stock."""
+    id: str
+    name: str
+    brand: str | None = None
+    sales_unit: str | None = None
+    size_from_name: list[Any] | None = Field(None, description="[amount, unit] parsed from the name, e.g. [1.0, 'L']")
+    temperature: str | None = None
+    claims: list[str] = []
+    labels: list[str] = []
+    allergens: dict[str, Any] | None = Field(None, description="{declared, contains[], may_contain[], free_from[]}")
+    allergen_check: Any = Field(None, description="Present when avoid_allergens was given: per-product verdict")
+    delivery_reliability: float | None = None
+    co2_kg_per_kg_group_avg: float | None = None
+    category: str | None = None
+
+
+class SearchOut(_Open):
+    products: list[ProductCardOut]
+    note: str
+
+
+class ProductOut(_Open):
+    """Full static product record (names, units, allergens, claims, labels, reliability, CO2)."""
+    id: str
+    name: str
+
+
+class QuoteOptionOut(_Open):
+    """A complete alternative for one item that can't be covered as asked (take it with option_id)."""
+    id: str = Field(description="Pass as option_id to request_quote, e.g. Q-1A2B3C4D.O2")
+    rank: int
+    item_index: int
+    kind: str
+    tradeoff: str
+    lines: list[dict[str, Any]]
+    total_ex_vat: float
+    mandate_preview: dict[str, Any] | None = Field(None, description="{outcome, rules[]} if a mandate was given")
+
+
+class QuoteBodyOut(QuoteDoc):
+    options: list[QuoteOptionOut] | None = None
+    chosen_option: str | None = None
+
+
+class QuoteOut(_Open):
+    """request_quote: the quote payload and its JWS (typ sous-quote+jws). Schema of `quote`: /schemas/quote.json."""
+    quote: QuoteBodyOut
+    jws: str = Field(description="Compact JWS over `quote`, verifiable with /.well-known/jwks.json")
+
+
+class SubstituteOptionOut(_Open):
+    tier: str = Field(description="good | better | best")
+    product_id: str
+    compromises: list[Any]
+
+
+class SubstitutesOut(_Open):
+    original: dict[str, Any]
+    constraints: dict[str, Any]
+    considered: dict[str, Any]
+    options: list[SubstituteOptionOut]
+    no_safe_substitute: str | None
+    next_step: str | None = None
+
+
+class AgentClaim(_Open):
+    text: str
+    verified: Literal[False]
+    note: str
+    suspicious: bool
+
+
+class OrderOut(OrderDoc):
+    """An order with its signed receipt. Schema: /schemas/order.json."""
+    agent_claim: AgentClaim | None = Field(None, description="get_order: the agent's rationale, labelled unverified")
+
+
+class MandateOut(_Open):
+    """get_mandate: the signed mandate payload, its JWS (typ sous-mandate+jws), issuer and optional W3C VC."""
+    mandate: Mandate
+    jws: str
+    issuer: dict[str, Any]
+    credential: str | None = Field(None, description="vc+jwt credential when the buyer issued one")
+    revocation: str | None = None
+
+
+class MandateCheckOut(_Open):
+    outcome: Literal["silent", "notify", "ask", "block"]
+    findings: list[Finding]
+
+
+class SuggestionOut(_Open):
+    id: str
+    kind: str
+    sponsored_by: str
+    disclosure: str
+    product: ProductCardOut
+    reason: str
+    offer: dict[str, Any]
+    mandate_check: MandateCheckOut
+    how_to_accept: str
+
+
+class SuggestionsOut(_Open):
+    mandate_id: str
+    buyer: str
+    agent_id: str
+    delivery_date: str
+    sponsored_by: str
+    disclosure: str
+    suggestions: list[SuggestionOut]
+    note: str | None = None
+
+
+class StandingOrderOut(_Open):
+    id: str = Field(description="SO-XXXXXXXX")
+    mandate_id: str
+    agent_id: str
+    buyer: str
+    name: str
+    items: list[dict[str, Any]]
+    cadence: dict[str, Any]
+    active: bool
+    created_at: str
+    updated_at: str
+
+
+class RenewalOut(_Open):
+    renewal: dict[str, Any]
+    order: OrderOut
+    drift: dict[str, Any] = Field(description="{findings[], summary, baseline}")
+
+
+class StandingDetailOut(_Open):
+    standing_order: StandingOrderOut
+    renewals: list[dict[str, Any]]
+    baseline: Any
+    next_delivery_date: str
+    versions: list[Any]
+    rules: dict[str, Any]
+
+
+def output_schema(model: type[BaseModel]) -> dict:
+    """The JSON Schema (2020-12) of a tool's structuredContent; $refs stay inside the document ($defs)."""
+    return model.model_json_schema()
+
+
+_validators: dict[str, Any] = {}
+
+
+def _result(name: str, body: Any) -> CallToolResult:
+    """Success: the object as structuredContent plus the same JSON as text (pre-2025-06-18 clients)."""
+    data = pydantic_core.to_jsonable_python(body, fallback=str)
+    if (v := _validators.get(name)) is not None and (err := next(v.iter_errors(data), None)) is not None:
+        # Clients may reject the result; log it so the schema gets fixed, but never hide the result itself.
+        log.warning("MCP tool %s: structuredContent does not match its outputSchema: %s at %s",
+                    name, err.message, "/".join(map(str, err.absolute_path)))
+    return CallToolResult(content=[TextContent(type="text", text=json.dumps(data, ensure_ascii=False, indent=2))],
+                          structured_content=data)
+
+
+def _tool(output: type[BaseModel], *, title: str, annotations: ToolAnnotations):
+    """Register a tool with an outputSchema; gateway errors (and anything unexpected) become one structured error."""
+
+    def decorator(fn):
+        @functools.wraps(fn)
+        def safe(*args, **kwargs):
+            """The tool as a Python function: the object on success, an error CallToolResult on failure."""
+            try:
+                return fn(*args, **kwargs)
+            except S.GatewayError as e:
+                return _error(e.code, e.message, e.retry_after)
+            except ValueError as e:
+                return _error("invalid_argument", str(e))
+            except Exception as e:  # noqa: BLE001 - the agent gets a clean error, the log gets the trace
+                log.exception("MCP tool %s failed", fn.__name__)
+                return _error("internal_error", f"{type(e).__name__} in {fn.__name__}.")
+
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            out = safe(*args, **kwargs)
+            return out if isinstance(out, CallToolResult) else _result(fn.__name__, out)
+
+        # structured_output=False: the SDK neither derives a schema from the annotation nor validates; we publish
+        # our own schema (FuncMetadata.output_schema is read live) and return CallToolResult ourselves.
+        mcp.add_tool(wrapper, title=title, annotations=annotations, structured_output=False)
+        schema = output_schema(output)
+        mcp._tool_manager.get_tool(fn.__name__).fn_metadata.output_schema = schema  # noqa: SLF001
+        _validators[fn.__name__] = validator_for(schema)(schema)
+        return safe
+
+    return decorator
 
 
 def _date(value: str, field: str = "delivery_date") -> date:
@@ -149,14 +343,14 @@ def _reader(ctx: Context | None, agent_token: str | None = None) -> access.Reade
     return access.from_headers(h)
 
 
-READ_LOCAL = ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=False)
-READ_LIVE = ToolAnnotations(read_only_hint=True, idempotent_hint=False, open_world_hint=True)
+# All four hints on every tool. open_world: the call reaches Valio Aimo's live API (prices, stock, orders).
+READ_LOCAL = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
+READ_LIVE = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=False, open_world_hint=True)
 
 
 # --- tools ------------------------------------------------------------------
 
-@mcp.tool(title="Search the catalog", annotations=READ_LOCAL)
-@_tool
+@_tool(SearchOut, title="Search the catalog", annotations=READ_LOCAL)
 def search_products(
     query: str,
     claims: list[str] | None = None,
@@ -178,14 +372,13 @@ def search_products(
     food_only: default ranks food first (equipment first only when the query names it, e.g. "milk jug");
       true drops non-food (tableware, cleaning, disposables); false = no preference.
     Synonyms work across languages: "butter" also finds voi / smör.
-    Returns product cards without price or stock; pass several of the ids to request_quote next.
+    Returns {products: [card], note}: cards without price or stock; pass several of the ids to request_quote next.
     """
     return S.search(agent_id, query, claims=claims, avoid_allergens=avoid_allergens, labels=labels,
                     temperature=temperature, limit=limit, food_only=food_only)
 
 
-@mcp.tool(title="Product details", annotations=READ_LOCAL)
-@_tool
+@_tool(ProductOut, title="Product details", annotations=READ_LOCAL)
 def get_product(product_id: str) -> dict:
     """Full static details of one product: names, pack sizes, allergens, claims, labels, reliability, CO2 estimate.
 
@@ -197,10 +390,9 @@ def get_product(product_id: str) -> dict:
     return p
 
 
-@mcp.tool(title="Request a quote (live price and stock)",
-          annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False,
-                                      open_world_hint=True))
-@_tool
+@_tool(QuoteOut, title="Request a quote (live price and stock)",
+       annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False,
+                                   open_world_hint=True))
 def request_quote(
     agent_id: str,
     delivery_date: str | None = None,
@@ -229,6 +421,7 @@ def request_quote(
     rationale: one sentence on the buyer's business need (e.g. "breakfast milk for 400 guests"); it is signed into
       the quote and shown to the humans who audit or approve. State the need, not your reasoning steps.
     agent_token: only if you can't send the Authorization: Bearer header and the mandate requires agent auth.
+    Returns {quote (schema /schemas/quote.json), jws (sous-quote+jws over quote)}.
     """
     return S.request_quote(S.QuoteRequest(agent_id=agent_id, mandate_id=mandate_id,
                                           delivery_date=_date(delivery_date) if delivery_date else None,
@@ -236,8 +429,7 @@ def request_quote(
                            agent_token=_agent_token(ctx, agent_token))
 
 
-@mcp.tool(title="Suggest substitutes", annotations=READ_LIVE)
-@_tool
+@_tool(SubstitutesOut, title="Suggest substitutes", annotations=READ_LIVE)
 def suggest_substitutes(
     agent_id: str,
     product_id: str,
@@ -260,10 +452,10 @@ def suggest_substitutes(
                                  mandate_id, avoid_allergens, limit, agent_token=_agent_token(ctx, agent_token))
 
 
-@mcp.tool(title="Place an order under the mandate",
-          annotations=ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False,
-                                      open_world_hint=True))
-@_tool
+@_tool(OrderOut, title="Place an order under the mandate",
+       # idempotent: a retry with the same idempotency_key returns the same order instead of ordering again.
+       annotations=ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=True,
+                                   open_world_hint=True))
 def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: str | None = None,
                 rationale: str | None = None, agent_token: str | None = None,
                 ctx: Context | None = None) -> dict:
@@ -271,7 +463,10 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
 
     The mandate engine decides, not you: status ordered (silent/notify), pending_approval (a human must approve
     at approval_url; poll get_order) or refused (decision.findings say which rule fired).
-    Always send an idempotency_key and reuse it on retries: the same key never orders twice.
+    Always send an idempotency_key and reuse it on retries: the same key never orders twice (the retry returns
+    the original order); reusing a key for a different quote fails with idempotency_key_reused.
+    Returns the order (schema /schemas/order.json): id (PO-...), status, decision {outcome, findings}, lines,
+    totals, approval_url when pending, and receipt_jws (signed receipt).
     rationale: one sentence on why the buyer needs this order; the approver sees it next to the mandate's findings.
     agent_token: only if you can't send the Authorization: Bearer header and the mandate requires agent auth.
     """
@@ -279,26 +474,26 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
                          agent_token=_agent_token(ctx, agent_token), rationale=rationale)
 
 
-@mcp.tool(title="Order status", annotations=READ_LOCAL)
-@_tool
+@_tool(OrderOut, title="Order status", annotations=READ_LOCAL)
 def get_order(order_id: str, agent_token: str | None = None, ctx: Context | None = None) -> dict:
     """Current status of an order (ordered, pending_approval, refused, rejected, expired) and any human decision.
-    Only orders under your own mandate: send your Authorization: Bearer header (or agent_token)."""
+    Only orders under your own mandate: send your Authorization: Bearer header (or agent_token).
+    Returns the order (schema /schemas/order.json) with approval {by, approved, note, at} once a human decided,
+    a fresh receipt_jws, and agent_claim (the rationale, labelled unverified)."""
     access.check_order(_reader(ctx, agent_token), order_id)
     return access.label_order(S.get_order(order_id))
 
 
-@mcp.tool(title="Read the mandate", annotations=READ_LOCAL)
-@_tool
+@_tool(MandateOut, title="Read the mandate", annotations=READ_LOCAL)
 def get_mandate(mandate_id: str, agent_token: str | None = None, ctx: Context | None = None) -> dict:
     """The mandate you act under (spend limits, allergen and claim rules, what needs a human), with its signature.
-    Only your own mandate (send your Authorization: Bearer header or agent_token) or a public demo mandate."""
+    Only your own mandate (send your Authorization: Bearer header or agent_token) or a public demo mandate.
+    Returns {mandate (schema /schemas/mandate.json), jws (sous-mandate+jws), issuer, credential?, revocation?}."""
     access.check_mandate(_reader(ctx, agent_token), mandate_id)
     return S.get_mandate(mandate_id)
 
 
-@mcp.tool(title="Valio Aimo's suggestions (sponsored)", annotations=READ_LIVE)
-@_tool
+@_tool(SuggestionsOut, title="Valio Aimo's suggestions (sponsored)", annotations=READ_LIVE)
 def get_suggestions(mandate_id: str, agent_id: str, delivery_date: str, limit: int = 5,
                     basis: list[str] | None = None, agent_token: str | None = None,
                     ctx: Context | None = None) -> dict:
@@ -317,10 +512,9 @@ def get_suggestions(mandate_id: str, agent_id: str, delivery_date: str, limit: i
                                agent_token=_agent_token(ctx, agent_token))
 
 
-@mcp.tool(title="Create a weekly standing order",
-          annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False,
-                                      open_world_hint=False))
-@_tool
+@_tool(StandingOrderOut, title="Create a weekly standing order",
+       annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False,
+                                   open_world_hint=False))
 def create_standing_order(mandate_id: str, agent_id: str, name: str, items: list[standing.StandingItem],
                           weekday: str = "mon") -> dict:
     """Save the buyer's recurring weekly order (e.g. milk + butter + cream every Monday). Places no order.
@@ -332,10 +526,9 @@ def create_standing_order(mandate_id: str, agent_id: str, name: str, items: list
                                                     items=items, weekday=weekday))
 
 
-@mcp.tool(title="Renew a standing order (with drift check)",
-          annotations=ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False,
-                                      open_world_hint=True))
-@_tool
+@_tool(RenewalOut, title="Renew a standing order (with drift check)",
+       annotations=ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False,
+                                   open_world_hint=True))
 def renew_standing_order(standing_id: str, agent_id: str, delivery_date: str | None = None,
                          amounts: list[float] | None = None, rationale: str | None = None,
                          agent_token: str | None = None, ctx: Context | None = None) -> dict:
@@ -352,10 +545,10 @@ def renew_standing_order(standing_id: str, agent_id: str, delivery_date: str | N
                           rationale=rationale)
 
 
-@mcp.tool(title="Standing order, history and drift baseline", annotations=READ_LOCAL)
-@_tool
+@_tool(StandingDetailOut, title="Standing order, history and drift baseline", annotations=READ_LOCAL)
 def get_standing_order(standing_id: str, agent_token: str | None = None, ctx: Context | None = None) -> dict:
-    """A standing order with its renewals (newest first, simulated ones marked) and the drift baseline."""
+    """A standing order with its renewals (newest first, simulated ones marked) and the drift baseline.
+    Returns {standing_order, renewals, baseline, next_delivery_date, versions, rules}."""
     access.check_standing(_reader(ctx, agent_token), standing_id)
     return standing.get(standing_id)
 
