@@ -36,6 +36,7 @@ export class Gateway {
       const detail = typeof data?.message === 'string' ? data.message : data?.detail;
       const error = new Error(typeof detail === 'string' ? detail : `Gateway ${path.split('?')[0]} returned HTTP ${response.status}.`);
       error.status = response.ok ? 502 : response.status;
+      error.code = data?.error;
       throw error;
     }
     return data;

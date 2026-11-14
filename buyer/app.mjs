@@ -100,7 +100,12 @@ async function run(work) {
   try {
     await work();
   } catch (error) {
-    notice($('feedback'), error.message, true);
+    if (['agent_auth_required', 'agent_auth_invalid'].includes(error.code)) {
+      $('agent-token').closest('details').open = true;
+      notice($('feedback'), 'Enter a valid agent token for this mandate under Product filters and gateway, then try again.', true);
+    } else {
+      notice($('feedback'), error.message, true);
+    }
   } finally {
     state.busy = false;
     updateControls();
