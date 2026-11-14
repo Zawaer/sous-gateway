@@ -145,3 +145,29 @@ cases:
     current: {avoid_allergens: [AM]}
     expect: {hard_limit_eur: 1500, substitutions: block}
     absent: [avoid_allergens]
+
+  # rene-codex-qa's findings on 03d40a6 (board 05:44Z / 05:45Z)
+  - id: D20
+    lang: en
+    text: "Never approve any order above 500 euros."
+    current: {auto_approve_limit_eur: 250, hard_limit_eur: 2000}
+    expect: {hard_limit_eur: 500}
+    absent: [auto_approve_limit_eur]
+
+  - id: D21
+    lang: en
+    text: "No peanuts, milk is fine."
+    expect: {avoid_allergens: [AP]}
+
+  - id: D22
+    lang: en
+    trap: unsupported
+    text: "Prefer dairy-free products when possible."
+    absent: [avoid_allergens, required_claims]
+    unsupported: 1
+
+  - id: D23
+    lang: fi
+    text: "Ei pähkinöitä eikä kalaa, maito käy. Älä hyväksy yli 800 € tilauksia."
+    expect: {avoid_allergens: [AN, AF], hard_limit_eur: 800}
+    absent: [auto_approve_limit_eur]

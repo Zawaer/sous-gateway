@@ -200,7 +200,19 @@ CLAIM_WORDS: list[tuple[str, re.Pattern]] = [
     ("FREE_FROM_COLOURING_AGENTS", _rx(r"colouring|coloring|väriaine")),
 ]
 MAY_CONTAIN = _rx(r"may contain|traces|saattaa sisältää|voi sisältää|jäämi")
-OK_WORDS = _rx(r"\b(ok|okay|fine|allowed|accept|acceptable|alright|sallittu|sallitaan|käy|kelpaa|hyväksytään|saa)\b")
+OK_WORDS = _rx(r"\b(ok|okay|fine|allowed|accept|acceptable|alright|sallittu|sallittuja|sallitaan|käy|käyvät|kelpaa|"
+               r"kelpaavat|hyväksytään|saa)\b")
+# "never approve above 500 €" is a refusal, not "alone up to 500 €" (unless it says who approves instead)
+NEG_APPROVE = _rx(r"\b(never|don't|do not|not|no|won't|will not|mustn't|must not)\s+(\w+\s+){0,2}approv|"
+                  r"\bälä\s+(\w+\s+)?hyväksy|\bei\s+(\w+\s+)?hyväksy")
+ASK_ME = _rx(r"\bask\b|check with|confirm with|kysy|without (me|my|asking)|ilman (minua|lupaa)|myself|"
+             r"\bI('ll| will)? approve|minä hyväksyn|hyväksyn itse")
+# allergen stance: "No nuts except almonds" / "everything is fine except fish" / "kaikki käy paitsi kala"
+EXCEPT = _rx(r"\b(except|apart from|other than|but not)\b|\bpaitsi\b|lukuun ottamatta")
+NEG_HARD = _rx(r"\b(no|not|never|without|avoid|exclude|excluding|don't|do not|zero|none|nothing)\b|\bei\b|\beikä\b|"
+               r"\bälä\b|\bilman\b|välttä|\bpois\b|kiell")
+NEG_STRONG = _rx(r"\b(never|no|not|don't|do not|must not|ei|eikä|älä|ikinä|koskaan)\b")
+ALL_WORDS = _rx(r"\b(all|everything|anything|kaikki|muu|muut)\b")
 UNKNOWN_ALLERGEN = _rx(r"(no|missing|unknown|without|lacks?|puuttu\w*|ei ole|tuntemato\w*)\s+(\w+\s+){0,2}"
                        r"(allergen|allergeeni)|(allergen|allergeeni)\w*\s+(data|info|information|tied\w*|tieto)\s+"
                        r"(is |are )?(missing|unknown|puuttuu|ei ole)")
@@ -299,7 +311,8 @@ def parse_rules(text: str, d: Draft | None = None) -> Draft:
         for ca, cb in _clauses(text, a, b):
             c = text[ca:cb]
             amounts = _money(text, ca, cb)
-            cue = ("period" if PERIOD.search(c) else "daily" if DAILY.search(c) else "notify" if NOTIFY.search(c)
+            cue = ("period" if PERIOD.search(c) else "daily" if DAILY.search(c) else "hard" if _neg_approve(c)
+                   else "notify" if NOTIFY.search(c)
                    else "auto" if AUTO.search(c) else "ask" if ASK.search(c) else "hard" if HARD.search(c) else None)
             amounts = [x for x in amounts if x[2] or cue or LIMITISH.search(c)]
             if not amounts:
@@ -377,11 +390,19 @@ def parse_rules(text: str, d: Draft | None = None) -> Draft:
             used = True
             ws, we = _word_bounds(s, m.start())
             word, wspan = s[ws:we], (a + ws, a + we)
-            if NEG_WORD.search(word) or NEG.search(s):
+            stance = _allergen_stance(text, a, b, a + m.start())
+            if stance == "avoid":
                 cur = d.proposed.get("_allergens", [])
                 if code not in [c for c, _ in cur]:
                     cur.append((code, wspan))
                 d.proposed["_allergens"] = cur
+            elif stance == "allow":
+                d.info.append(f"Your text allows {catalog.ALLERGENS[code]} ({code}): not added to the avoided "
+                              "allergens.")
+            elif stance == "prefer":
+                d.cannot(f"A preference ('{word}') can't be a mandate rule: avoiding {catalog.ALLERGENS[code]} "
+                         f"({code}) would refuse every product containing it. Tell your agent to prefer it.", (a, b))
+                d.ask(PREFER_Q.format(name=catalog.ALLERGENS[code], code=code), "avoid_allergens", (a, b))
             else:
                 d.ask(f"You mention {catalog.ALLERGENS[code]}: should products containing it be refused?",
                       "avoid_allergens", (a, b))
@@ -543,12 +564,16 @@ words (Finnish or English). A human reviews your draft and signs it; you decide 
 Mandate fields you may propose (money is EUR excluding VAT, per order unless said):
 - auto_approve_limit_eur: the agent orders alone up to this; above it the order waits for the human ("ask me above X")
 - notify_above_eur: above this the order goes through but the human gets an FYI (must be below auto_approve_limit_eur)
-- hard_limit_eur: orders above this are refused ("max X per order", "never over X")
+- hard_limit_eur: orders above this are refused ("max X per order", "never over X", "never approve any order above
+  X": that is a refusal, NOT auto_approve_limit_eur)
 - daily_limit_eur: today's total above this waits for the human
 - avoid_allergens: codes to add ({allergens}). "X-free" for an allergen is ALWAYS avoid_allergens, never a
   required claim: lactose-free means ML, milk-free / maidoton AM, gluten-free / gluteeniton AW, egg-free AE,
   nut-free / ei pähkinöitä AN (tree nuts). Add only allergens the text names: "nuts" does not name peanuts (AP,
   legumes); if you think the human also means peanuts, ask in open_questions instead of adding AP.
+  An allergen the text allows ("milk is fine", "no nuts except almonds" -> almonds allowed) is not avoided.
+  A preference ("prefer dairy-free", "when possible") is never avoid_allergens or required_claims: mandates are
+  hard rules, so put it in unsupported and ask in open_questions whether it should be refused outright.
 - allow_may_contain: "true" only if the text explicitly accepts "may contain" traces
 - unknown_allergens: ask | block (what to do when a product has no allergen data; never "safe")
 - required_claims: claim codes EVERY line must carry ({claims}). Rarely right: a product without the label
@@ -687,6 +712,139 @@ def _injection_spans(text: str, a: int = 0, b: int | None = None) -> list[tuple[
     """Clauses of text[a:b] (every sentence when b is None) that try to switch the checks off."""
     spans = _sentences(text) if b is None else [(a, b)]
     return [(x, y) for sa, sb in spans for x, y in _clauses(text, sa, sb) if INJECTION.search(text[x:y])]
+
+
+PREFER_Q = ("You prefer products without {name} ({code}). A mandate can only refuse: should every product containing "
+            "{name} be refused? If so, write 'no {name}'; otherwise tell your agent the preference.")
+
+
+def _neg_approve(c: str) -> bool:
+    """'Never approve any order above 500 €' (a refusal), not 'don't approve above 500 € yourself, ask me'."""
+    return bool(NEG_APPROVE.search(c)) and not AUTO.search(c) and not ASK_ME.search(c)
+
+
+def _allergen_stance(text: str, a: int, b: int, pos: int) -> str:
+    """What the sentence text[a:b] says about the allergen word at pos: 'avoid', 'allow' ("milk is fine",
+    "no nuts except almonds"), 'prefer' ("prefer dairy-free") or 'mention'."""
+    s, i = text[a:b], pos - a
+    word = _word_at(s, i)
+    clause = next((text[x:y] for x, y in _clauses(text, a, b) if x <= pos < y), s)
+    exc = [m for m in EXCEPT.finditer(s) if m.end() <= i]
+    if exc:
+        pre = s[:exc[-1].start()]
+        if NEG_HARD.search(pre) or any(NEG_WORD.search(w) for w in re.findall(r"[\w-]+", pre)):
+            return "allow"       # "no nuts except almonds", "ei maitotuotteita paitsi voi"
+        if OK_WORDS.search(pre) or ALL_WORDS.search(pre):
+            return "avoid"       # "everything is fine except fish", "kaikki käy paitsi kala"
+    if PREFERENCE.search(clause) or (PREFERENCE.search(s) and not NEG_STRONG.search(clause)):
+        return "prefer"
+    if NEG_WORD.search(word):
+        return "avoid"
+    if OK_WORDS.search(clause) and not NEG_HARD.search(clause):
+        return "allow"
+    if NEG_HARD.search(clause) or NEG.search(s):
+        return "avoid"
+    return "mention"
+
+
+def allergen_stances(text: str) -> dict[str, set[str]]:
+    """Every allergen the text names -> its stances; family members inherit the head's ('dairy' -> AM and ML)."""
+    out: dict[str, set[str]] = {}
+    for a, b in _sentences(text):
+        for code, r in ALLERGEN_WORDS:
+            for m in r.finditer(text, a, b):
+                out.setdefault(code, set()).add(_allergen_stance(text, a, b, m.start()))
+    for head, members in catalog.ALLERGEN_GROUPS.items():
+        for c in members:
+            if c not in out and head in out:
+                out[c] = set(out[head])
+    return out
+
+
+def _allergen_intent(d: Draft, before: list[str]) -> None:
+    """Whatever the drafter proposed: an allergen the text allows ("milk is fine") is not avoided, and a preference
+    ("prefer dairy-free") is never a hard avoid: it becomes 'unsupported' plus a question."""
+    codes = d.proposed.get("avoid_allergens")
+    if not isinstance(codes, list):
+        return
+    st = allergen_stances(d.text)
+    s = d.sources.get("avoid_allergens")
+    span = (s["start"], s["end"]) if s else None
+    keep = []
+    for c in codes:
+        k = st.get(c, set())
+        if c in before or "avoid" in k or not k & {"allow", "prefer"}:
+            keep.append(c)
+            continue
+        name = catalog.ALLERGENS.get(c, c)
+        if "prefer" in k:
+            d.rejected.append({"field": "avoid_allergens", "value": [c], "by": d.parser,
+                               "why": f"your text prefers products without {name}; a mandate can't prefer, and "
+                                      "avoiding it would refuse every product containing it"})
+            d.cannot(f"A preference can't be a mandate rule: avoiding {name} ({c}) would refuse every product "
+                     "containing it. Tell your agent to prefer it.", span)
+            d.ask(PREFER_Q.format(name=name, code=c), "avoid_allergens", span)
+        else:
+            d.rejected.append({"field": "avoid_allergens", "value": [c], "by": d.parser,
+                               "why": f"your text allows {name}"})
+    for c in keep:   # "no nuts except almonds": the family code refuses almonds too
+        allowed = [m for m in catalog.ALLERGEN_GROUPS.get(c, ()) if m != c and st.get(m) == {"allow"}]
+        if allowed:
+            names = ", ".join(catalog.ALLERGENS[m] for m in allowed)
+            d.ask(f"Avoiding {catalog.ALLERGENS[c]} ({c}) refuses the whole family, {names} too, which your text "
+                  f"allows. Keep {c}, or list the ones to avoid one by one?", "avoid_allergens", span)
+    if keep:
+        d.proposed["avoid_allergens"] = keep
+    else:
+        d.proposed.pop("avoid_allergens")
+        d.sources.pop("avoid_allergens", None)
+        d.notes.pop("avoid_allergens", None)
+
+
+def _never_approve_is_a_refusal(d: Draft) -> None:
+    """'Never approve any order above 500 €' drafted as alone-up-to 500 would RAISE the agent's own authority;
+    it means refuse over 500. Checked on the clause holding the number, whatever the model quoted."""
+    v = d.proposed.get("auto_approve_limit_eur")
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return
+    hits = [(x, y) for sa, sb in _sentences(d.text) for x, y in _clauses(d.text, sa, sb)
+            if grounded(float(v), d.text[x:y]) and _neg_approve(d.text[x:y])]
+    if not hits:
+        return
+    src = d.sources.pop("auto_approve_limit_eur", None) or d.src(hits[0])
+    d.proposed.pop("auto_approve_limit_eur")
+    d.notes.pop("auto_approve_limit_eur", None)
+    hard = d.proposed.get("hard_limit_eur")
+    if hard is None or hard == v:
+        d.proposed["hard_limit_eur"] = v
+        d.sources["hard_limit_eur"] = src
+        d.notes["hard_limit_eur"] = (f"'{src['text']}' means refuse over €{v:g}. It was drafted as 'the agent orders "
+                                     f"alone up to €{v:g}', which would raise its own authority; rewritten.")
+        d.info.append(f"Rewritten by the validator: 'never approve above €{v:g}' is a refuse-over limit, not an "
+                      "auto-approve limit.")
+    else:
+        d.rejected.append({"field": "auto_approve_limit_eur", "value": v, "by": d.parser,
+                           "why": "'never approve above' is a refusal, not an auto-approve limit"})
+        d.ask(f"Refuse orders over €{v:g} or over €{hard:g}?", "hard_limit_eur", (src["start"], src["end"]))
+
+
+def _preference_claims(d: Draft) -> None:
+    """A required claim drafted from a preference ('organic / no additives when possible') is not a rule."""
+    s = d.sources.get("required_claims")
+    if not s or "required_claims" not in d.proposed:
+        return
+    sent = next((d.text[a:b] for a, b in _sentences(d.text) if a <= s["start"] < b), s["text"])
+    if not (PREFERENCE.search(s["text"]) or PREFERENCE.search(sent)):
+        return
+    v = d.proposed.pop("required_claims")
+    d.sources.pop("required_claims", None)
+    d.notes.pop("required_claims", None)
+    d.rejected.append({"field": "required_claims", "value": v, "by": d.parser,
+                       "why": "it comes from a preference; a required claim refuses every line without it"})
+    d.cannot("A preference ('when possible') can't be a mandate rule: rules pass, hold or refuse. Tell your agent; "
+             "the gateway won't check it.", (s["start"], s["end"]))
+    d.ask(f"Should every line without {', '.join(v)} really be refused, or is it only a preference?",
+          "required_claims", (s["start"], s["end"]))
 
 
 # Claim-word aliases for allergen names in sous.catalog.ALLERGENS ("FREE_FROM_DAIRY" -> milk).
@@ -854,6 +1012,8 @@ def validate(d: Draft, current: Mandate | None) -> None:
     inj = _injection_spans(text)
     for a, b in inj:  # the deterministic guard runs on every path, whatever the drafter said
         d.cannot(INJECTION_WHY, (a, b))
+    _never_approve_is_a_refusal(d)
+    _preference_claims(d)
     _claims_to_allergens(d)
     for f in [f for f in d.proposed if _period_sourced(d, f)]:
         s = d.sources.pop(f)
@@ -945,6 +1105,7 @@ def validate(d: Draft, current: Mandate | None) -> None:
 
     # merge with the mandate in force: lists only grow (removing an allergen or claim is done by hand)
     before = before_values(current)
+    _allergen_intent(d, before["avoid_allergens"])
     for f in ("avoid_allergens", "required_claims"):
         if f in d.proposed:
             merged = list(dict.fromkeys([*before[f], *d.proposed[f]]))

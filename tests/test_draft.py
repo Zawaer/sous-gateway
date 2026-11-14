@@ -226,8 +226,9 @@ def test_gemini_recorded_drafts_now_pass_every_case():
     assert GEMINI_RUN["passed"] == 15 and {r["id"] for r in GEMINI_RUN["results"] if not r["pass"]} == \
         {"D01", "D05", "D11", "D18"}
     by_id = {r["id"]: r for r in GEMINI_RUN["results"]}
-    llm = FakeLLM("gemini", "gemini-4-hydrogen", [_recorded_answer(by_id[c["id"]]) for c in CASES])
-    out = E.run("gemini", CASES, llm=llm)
+    run_cases = [c for c in CASES if c["id"] in by_id]   # the 19 cases of that run
+    llm = FakeLLM("gemini", "gemini-4-hydrogen", [_recorded_answer(by_id[c["id"]]) for c in run_cases])
+    out = E.run("gemini", run_cases, llm=llm)
     assert [(r["id"], r["fails"]) for r in out["results"] if not r["pass"]] == []
     res = {r["id"]: r for r in out["results"]}
     assert res["D05"]["proposed"]["avoid_allergens"] == ["AM", "AW"] and "required_claims" not in res["D05"]["proposed"]
@@ -282,3 +283,52 @@ def test_unnamed_allergen_is_kept_but_asked_and_the_eval_needs_the_question():
     assert E.score(case, silent) == ["avoid_allergens: added ['AP'] beyond the text without asking"]
     asked = {**silent, "open_questions": [{"field": "avoid_allergens", "question": "?"}]}
     assert E.score(case, asked) == []
+
+
+# --- rene-codex-qa's rules-parser findings (board 05:44Z / 05:45Z): parser and validator, any drafter ---------
+
+def test_never_approve_above_is_a_refusal_not_a_higher_auto_limit():
+    cur = Mandate(**DR._BASE, auto_approve_limit_eur=250, hard_limit_eur=2000)
+    for t in ("Never approve any order above 500 euros.", "Do not approve orders over 500 €"):
+        d = DR.draft_mandate(t, cur, provider="rules")
+        assert d["proposed"] == {"hard_limit_eur": 500.0}, t
+    # the model making the same mistake is rewritten by the validator
+    t = "Never approve any order above 500 euros."
+    llm = FakeLLM("gemini", "gemini-4-hydrogen", [_answer([
+        {"field": "auto_approve_limit_eur", "number": 500, "quote": "above 500 euros"}])])
+    d = DR.draft_mandate(t, cur, provider="gemini", llm=llm)
+    assert d["proposed"] == {"hard_limit_eur": 500.0} and "raise its own authority" in d["diff"][0]["note"]
+    # ...but "don't approve over 500 € yourself, ask me" still means ask above 500
+    d = DR.draft_mandate("Don't approve orders over 500 € yourself, ask me.", cur, provider="rules")
+    assert d["proposed"] == {"auto_approve_limit_eur": 500.0}
+
+
+def test_an_allowed_allergen_is_not_avoided():
+    assert DR.draft_mandate("No peanuts, milk is fine.", provider="rules")["proposed"] == {"avoid_allergens": ["AP"]}
+    assert DR.draft_mandate("Ei pähkinöitä, maito käy.", provider="rules")["proposed"] == {"avoid_allergens": ["AN"]}
+    assert DR.draft_mandate("Everything is fine except fish.", provider="rules")["proposed"] == \
+        {"avoid_allergens": ["AF"]}
+    llm = FakeLLM("gemini", "gemini-4-hydrogen", [_answer([
+        {"field": "avoid_allergens", "codes": ["AP", "AM", "ML"], "quote": "No peanuts, milk is fine."}])])
+    d = DR.draft_mandate("No peanuts, milk is fine.", provider="gemini", llm=llm)
+    assert d["proposed"] == {"avoid_allergens": ["AP"]}   # ML is milk's family: allowed with it
+    assert {tuple(r["value"]) for r in d["rejected"]} == {("AM",), ("ML",)}
+    # "no nuts except almonds": AN stays, the family clash is asked
+    d = DR.draft_mandate("No nuts except almonds.", provider="rules")
+    assert d["proposed"] == {"avoid_allergens": ["AN"]}
+    assert any("almond" in q["question"] and "family" in q["question"] for q in d["open_questions"])
+
+
+def test_a_preference_is_never_a_hard_avoid():
+    t = "Prefer dairy-free products when possible."
+    d = DR.draft_mandate(t, provider="rules")
+    assert d["proposed"] == {} and d["unsupported"] and d["open_questions"][0]["field"] == "avoid_allergens"
+    llm = FakeLLM("gemini", "gemini-4-hydrogen", [
+        _answer([{"field": "avoid_allergens", "codes": ["AM"], "quote": t}]),
+        _answer([{"field": "required_claims", "codes": ["FREE_FROM_LACTOSE"], "quote": t}])])
+    for _ in range(2):
+        d = DR.draft_mandate(t, provider="gemini", llm=llm)
+        assert d["proposed"] == {} and d["unsupported"] and d["open_questions"], d
+    # a hard rule in its own clause still counts
+    d = DR.draft_mandate("Prefer organic when possible, and never any peanuts.", provider="rules")
+    assert d["proposed"] == {"avoid_allergens": ["AP"]}
