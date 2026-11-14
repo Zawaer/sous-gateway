@@ -4,8 +4,10 @@
 <meta charset="utf-8">
 <title>Sous · pitch deck</title>
 <!--
-  Sous pitch deck. One <section class="slide"> per page, 1920x1080.
-  Facts come from docs/STATUS.md, docs/pitch/submission.md, evals/results.json and docs/LLM_EVAL.md.
+  Sous pitch deck. One <section class="slide"> per page, 1920x1080, 12 slides.
+  Every number comes from docs/STATUS.md (with its run id), except where the small print names another source:
+  docs/CONFORMANCE.md + the agent board (staging 15/15), docs/GEMINI.md (mandate drafting), docs/NEMOTRON.md.
+  Colours and tier badges follow web/tokens.css and docs/UI_PRINCIPLES.md (Valio Aimo petrol as accent only).
   Screenshots in img/ were taken from production with GET requests only.
   Re-render the PDF: uv run --with playwright python scripts/build_deck.py
 -->
@@ -15,18 +17,23 @@
 @font-face { font-family: "Fragment Mono"; src: url(fonts/FragmentMono.woff2) format("woff2"); font-weight: 400; }
 
 :root {
+  /* web/tokens.css */
   --paper: #f8f8f3;
   --panel: rgba(0, 0, 0, .035);
-  --ink: #000;
+  --ink: #111;
   --ink-80: rgba(0, 0, 0, .8);
-  --ink-55: rgba(0, 0, 0, .55);
+  --ink-60: rgba(0, 0, 0, .62);
   --ink-40: rgba(0, 0, 0, .4);
   --rule: rgba(0, 0, 0, .12);
   --pill: rgba(0, 0, 0, .06);
-  --solid: rgba(0, 0, 0, .9);
-  --silent: #2e6b3c; --notify: #2a5c8f; --ask: #9b6200; --block: #a8321f;
-  --silent-bg: rgba(46, 107, 60, .1); --notify-bg: rgba(42, 92, 143, .1);
-  --ask-bg: rgba(155, 98, 0, .11); --block-bg: rgba(168, 50, 31, .1);
+  --solid: #111;
+  --on-solid: #f8f8f3;
+  --aimo: #005670; --aimo-dark: #003747; --aimo-tint: #e6eef1;
+  --silent: #2e6b3c; --silent-line: rgba(46, 107, 60, .55);
+  --notify: #1f5a96; --notify-bg: #e3edf7;
+  --ask: #23282d;    --ask-bg: #fddb32;   --ask-line: #e9c400;
+  --block: #ffffff;  --block-bg: #a8321f;
+  --ask-ink: #8f5600; --block-ink: #a8321f;
   --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --serif: "Newsreader", Georgia, "Times New Roman", serif;
   --mono: "Fragment Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -40,384 +47,334 @@ body { font: 400 34px/1.4 var(--sans); color: var(--ink); -webkit-font-smoothing
 @media print { html, body { background: var(--paper); } }
 
 .slide { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: var(--paper);
-  padding: 92px 120px 120px; page-break-after: always; break-after: page; display: flex; flex-direction: column; }
+  padding: 88px 120px 120px; page-break-after: always; break-after: page; display: flex; flex-direction: column; }
 .slide:last-child { page-break-after: auto; break-after: auto; }
+.slide::before { content: ""; position: absolute; left: 0; top: 0; width: 100%; height: 8px; background: var(--aimo); }
 
-.kicker { font: 24px/1 var(--mono); color: var(--ink-55); letter-spacing: .02em; display: flex; align-items: center; gap: 14px; margin-bottom: 30px; }
+.kicker { font: 24px/1 var(--mono); color: var(--aimo); letter-spacing: .02em; display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
 .kicker::before { content: ""; width: 10px; height: 16px; background: currentColor; border-radius: 1px; }
-h1 { font: 400 84px/1.05 var(--serif); letter-spacing: -.02em; margin: 0 0 22px; max-width: 1600px; }
+h1 { font: 400 80px/1.06 var(--serif); letter-spacing: -.02em; margin: 0 0 22px; max-width: 1640px; }
 h1.xl { font-size: 220px; letter-spacing: -.035em; margin: 0; }
-.lede { font: 400 40px/1.35 var(--serif); color: var(--ink-55); margin: 0 0 40px; max-width: 1500px; }
+.lede { font: 400 38px/1.35 var(--serif); color: var(--ink-60); margin: 0 0 36px; max-width: 1560px; }
 p { margin: 0 0 18px; }
-.muted { color: var(--ink-55); }
+.muted { color: var(--ink-60); }
 .mono { font-family: var(--mono); font-size: .8em; }
-.foot { position: absolute; left: 120px; right: 120px; bottom: 44px; display: flex; justify-content: space-between;
-  font: 20px/1 var(--mono); color: var(--ink-40); border-top: 1px solid var(--rule); padding-top: 18px; }
-.src { font: 22px/1.4 var(--mono); color: var(--ink-55); }
+.foot { position: absolute; left: 120px; right: 120px; bottom: 40px; display: flex; justify-content: space-between; gap: 40px;
+  font: 19px/1.35 var(--mono); color: var(--ink-60); border-top: 1px solid var(--rule); padding-top: 16px; }
+.foot span:last-child { white-space: nowrap; }
+.src { font: 21px/1.45 var(--mono); color: var(--ink-60); }
 
-.tier { display: inline-flex; align-items: center; gap: 10px; font: 26px/1.5 var(--mono); padding: 2px 14px 2px 11px; border-radius: 4px; white-space: nowrap; vertical-align: middle; }
-.tier::before { content: ""; width: 9px; height: 16px; border-radius: 1px; background: currentColor; }
-.t-silent { color: var(--silent); background: var(--silent-bg); }
+/* tier badges, as in web/tokens.css: fill weight + icon, not colour alone */
+.tier { display: inline-flex; align-items: center; gap: 10px; font: 500 25px/1 var(--sans); padding: 8px 18px 8px 14px;
+  border-radius: 999px; border: 2px solid transparent; white-space: nowrap; vertical-align: middle; }
+.tier::before { font: 700 25px/1 var(--sans); }
+.t-silent { color: var(--silent); border-color: var(--silent-line); }
+.t-silent::before { content: "\2713"; }
 .t-notify { color: var(--notify); background: var(--notify-bg); }
-.t-ask { color: var(--ask); background: var(--ask-bg); }
+.t-notify::before { content: "i"; font-style: italic; font-family: var(--serif); }
+.t-ask { color: var(--ask); background: var(--ask-bg); border-color: var(--ask-line); }
+.t-ask::before { content: "\2016"; }
 .t-block { color: var(--block); background: var(--block-bg); }
-.t-grey { color: var(--ink-55); background: var(--pill); }
+.t-block::before { content: "\2715"; }
+.t-grey { color: var(--ink-60); background: var(--pill); }
 
-.card { background: var(--panel); border-radius: 10px; padding: 36px 40px; }
-.card.solid { background: var(--solid); color: var(--paper); }
-.card.solid .muted, .card.solid .label { color: rgba(248, 248, 243, .6); }
-.label { font: 22px/1.2 var(--mono); color: var(--ink-55); text-transform: none; letter-spacing: .02em; margin-bottom: 18px; }
-.big { font: 400 150px/1 var(--serif); letter-spacing: -.03em; font-variant-numeric: lining-nums; }
+.card { background: var(--panel); border-radius: 10px; padding: 34px 38px; }
+.card.solid { background: var(--solid); color: var(--on-solid); }
+.card.solid .muted, .card.solid .label { color: rgba(248, 248, 243, .7); }
+.card.aimo { background: var(--aimo); color: #fff; }
+.card.aimo .label { color: rgba(255, 255, 255, .78); }
+.label { font: 22px/1.25 var(--mono); color: var(--ink-60); letter-spacing: .02em; margin-bottom: 16px; }
+.big { font: 400 140px/1 var(--serif); letter-spacing: -.03em; font-variant-numeric: lining-nums; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 34px; }
 .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px; }
 ul.rules { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--rule); }
-ul.rules li { padding: 18px 0; border-bottom: 1px solid var(--rule); }
+ul.rules li { padding: 16px 0; border-bottom: 1px solid var(--rule); }
 .shot { border-radius: 10px; border: 1px solid var(--rule); display: block; }
-.pill { display: inline-block; background: var(--pill); border-radius: 999px; padding: 6px 22px; font-size: 26px; margin: 0 10px 12px 0; }
-.solidpill { background: var(--solid); color: var(--paper); }
+.pill { display: inline-block; background: var(--pill); border-radius: 999px; padding: 6px 20px; font-size: 25px; margin: 0 10px 12px 0; }
+.solidpill { background: var(--solid); color: var(--on-solid); }
+.aimopill { background: var(--aimo-tint); color: var(--aimo-dark); }
 code, pre { font-family: var(--mono); }
 pre { margin: 0; white-space: pre; }
 svg text { font-family: var(--sans); }
 svg .sf, svg .sf text { font-family: var(--serif); }
 svg .m, svg .m text { font-family: var(--mono); }
-.ph { background: #fff3c4; color: #6b4d00; border: 2px dashed #b38600; border-radius: 6px; padding: 0 10px; font: 24px/1.6 var(--mono); white-space: nowrap; }
+table.t { width: 100%; border-collapse: collapse; font-size: 26px; }
+table.t th { font: 21px/1.2 var(--mono); color: var(--ink-60); text-align: left; padding: 12px 18px 12px 0; vertical-align: bottom; }
+table.t td { padding: 15px 18px 15px 0; border-top: 1px solid var(--rule); vertical-align: top; }
+table.t tr:last-child td { border-bottom: 1px solid var(--rule); }
+.num { font: 400 64px/1 var(--serif); letter-spacing: -.02em; }
 </style>
 </head>
 <body>
 
 <!-- 1 · Title -->
 <section class="slide" style="justify-content:center">
-  <div class="kicker">Junction 2026 · Valio Aimo: Trusted Trade Agents</div>
+  <div class="kicker">Junction 2026 · Valio Aimo: Trusted Trade Agents · team semi-tired finns</div>
   <h1 class="xl">Sous</h1>
-  <p style="font:400 30px/1.3 var(--mono);color:var(--ink-55);margin:6px 0 56px">valtakirja (fi.) · a mandate, a power of attorney</p>
+  <p style="font:400 30px/1.3 var(--mono);color:var(--ink-60);margin:6px 0 56px">valtakirja (fi.) · a mandate, a power of attorney</p>
   <p style="font:400 64px/1.2 var(--serif);max-width:1380px;letter-spacing:-.01em;margin:0">AI purchasing agents carry a signed mandate from their human, and Valio Aimo's gateway enforces it.</p>
   <div style="position:absolute;right:120px;bottom:130px;display:flex;gap:30px;align-items:flex-end">
-    <div style="text-align:right;font:26px/1.6 var(--mono);color:var(--ink-55)">Live demo<br><span style="color:var(--ink)">135-181-8-209.sslip.io</span><br>github.com/Zawaer/sous · MIT</div>
+    <div style="text-align:right;font:26px/1.6 var(--mono);color:var(--ink-60)">Live demo<br><span style="color:var(--aimo)">135-181-8-209.sslip.io</span><br>github.com/Zawaer/sous · MIT</div>
     <img src="img/qr.svg" alt="QR code to the live demo" style="width:190px;height:190px;padding:14px;background:#fff;border-radius:8px">
   </div>
-  <div class="foot"><span>Sous</span><span>1 / 14</span></div>
+  <div class="foot"><span>Sous</span><span>1 / 12</span></div>
 </section>
 
-<!-- 2 · Before / after -->
+<!-- 2 · Problem -->
 <section class="slide">
   <div class="kicker">The problem</div>
   <h1>“1,000 litres of lactose-free milk by Monday.”</h1>
-  <p class="lede">The same request, two agents.</p>
-  <div class="grid2" style="flex:1;margin-bottom:10px">
+  <p class="lede">Same request, two agents. Agents will buy from wholesalers either way; the question is whose rules they follow.</p>
+  <div class="grid2" style="flex:1;margin-bottom:24px">
     <div class="card">
       <div class="label">Before · a general research agent</div>
-      <div class="big" style="color:var(--ink-55)">13 min</div>
-      <p style="font:400 46px/1.25 var(--serif);margin:34px 0 26px">of research. Conclusion: <em>phone wholesalers on Saturday.</em></p>
-      <p class="muted" style="font-size:30px">Prices and stock aren't readable by agents.</p>
+      <div class="big" style="color:var(--ink-60)">13 min</div>
+      <p style="font:400 44px/1.25 var(--serif);margin:30px 0 22px">of research. Conclusion: <em>phone wholesalers on Saturday.</em></p>
+      <p class="muted" style="font-size:29px">Prices and stock aren't readable by agents.</p>
     </div>
     <div class="card solid">
       <div class="label">After · Claude Code over MCP, with Sous</div>
       <div class="big">seconds</div>
-      <p style="font:400 46px/1.25 var(--serif);margin:34px 0 26px">Ordered within the mandate: Valio Eila 1 L × 1000, €1,400 ex VAT.</p>
-      <p style="font-size:30px;color:rgba(248,248,243,.75)"><b style="color:var(--paper)">2</b> Valio API calls · tier <span class="tier" style="color:#8ab8ec;background:rgba(138,184,236,.14)">notify</span> the manager got an FYI.</p>
+      <p style="font:400 44px/1.25 var(--serif);margin:30px 0 22px">Ordered inside the hotel's mandate: Valio Eila 1 L × 1000, €1,400 ex VAT.</p>
+      <p style="font-size:29px;color:rgba(248,248,243,.8)"><b style="color:var(--on-solid)">2</b> Valio API calls · <span class="tier t-notify">Auto + FYI</span> the manager was told.</p>
     </div>
   </div>
-  <div class="foot"><span>Sous</span><span>2 / 14</span></div>
+  <div class="foot"><span>One real external run, by hand (docs/STATUS.md, "Interfaces and agents"). If Valio Aimo doesn't define an open, safe interface, someone else's platform will.</span><span>2 / 12</span></div>
 </section>
 
-<!-- 3 · Who defines the interface -->
-<section class="slide">
-  <div class="kicker">Why Valio Aimo</div>
-  <h1>Agents will buy from wholesalers either way.<br>Whose rules will they follow?</h1>
-  <svg viewBox="0 0 1680 560" width="1680" height="560" style="flex:none;margin-top:10px">
-    <defs>
-      <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#000"/></marker>
-      <marker id="ahg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="rgba(0,0,0,.3)"/></marker>
-    </defs>
-    <g>
-      <rect x="0" y="150" width="330" height="260" rx="10" fill="rgba(0,0,0,.035)"/>
-      <text x="32" y="215" class="sf" font-size="42">Buyers' agents</text>
-      <text x="32" y="270" class="m" font-size="24" fill="rgba(0,0,0,.55)">hotel · hospital</text>
-      <text x="32" y="306" class="m" font-size="24" fill="rgba(0,0,0,.55)">school · caterer</text>
-      <text x="32" y="342" class="m" font-size="24" fill="rgba(0,0,0,.55)">any model</text>
-    </g>
-    <!-- greyed route -->
-    <path d="M330,230 C450,230 470,110 600,110" fill="none" stroke="rgba(0,0,0,.3)" stroke-width="3" stroke-dasharray="10 9" marker-end="url(#ahg)"/>
-    <rect x="610" y="50" width="520" height="120" rx="10" fill="none" stroke="rgba(0,0,0,.25)" stroke-width="2" stroke-dasharray="10 9"/>
-    <text x="640" y="104" class="sf" font-size="38" fill="rgba(0,0,0,.4)">Someone else's platform</text>
-    <text x="640" y="146" class="m" font-size="22" fill="rgba(0,0,0,.4)">their rules, their data, lock-in</text>
-    <path d="M1130,110 C1240,110 1250,250 1340,262" fill="none" stroke="rgba(0,0,0,.3)" stroke-width="3" stroke-dasharray="10 9" marker-end="url(#ahg)"/>
-    <!-- highlighted route -->
-    <path d="M330,330 C450,330 470,440 600,440" fill="none" stroke="#000" stroke-width="4" marker-end="url(#ah)"/>
-    <rect x="610" y="370" width="520" height="140" rx="10" fill="rgba(0,0,0,.9)"/>
-    <text x="640" y="428" class="sf" font-size="38" fill="#f8f8f3">Valio Aimo's own front door</text>
-    <text x="640" y="474" class="m" font-size="22" fill="rgba(248,248,243,.7)">open MCP + OpenAPI, signed</text>
-    <path d="M1130,440 C1240,440 1250,320 1340,300" fill="none" stroke="#000" stroke-width="4" marker-end="url(#ah)"/>
-    <rect x="1350" y="150" width="328" height="260" rx="10" fill="none" stroke="#000" stroke-width="2"/>
-    <text x="1382" y="262" class="sf" font-size="46">Valio Aimo</text>
-    <text x="1382" y="310" class="m" font-size="24" fill="rgba(0,0,0,.55)">catalog · prices</text>
-    <text x="1382" y="346" class="m" font-size="24" fill="rgba(0,0,0,.55)">stock · orders</text>
-  </svg>
-  <p class="lede" style="margin-top:auto;margin-bottom:44px;color:var(--ink)">If Valio Aimo doesn't define an open, safe interface, someone else's platform will.</p>
-  <div class="foot"><span>Sous</span><span>3 / 14</span></div>
-</section>
-
-<!-- 4 · Architecture -->
+<!-- 3 · How it works -->
 <section class="slide">
   <div class="kicker">How it works</div>
-  <h1>One open gateway in front of Valio Aimo</h1>
-  <svg viewBox="0 0 1680 700" width="1680" height="700" style="flex:none;margin-top:10px">
+  <h1>Valio Aimo's own front door for agents</h1>
+  <svg viewBox="0 0 1680 700" width="1680" height="700" style="flex:none;margin-top:6px">
     <defs>
-      <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#000"/></marker>
+      <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker>
     </defs>
-    <!-- agent -->
     <rect x="0" y="170" width="250" height="230" rx="10" fill="rgba(0,0,0,.035)"/>
     <text x="24" y="226" class="sf" font-size="36">Buyer's</text>
     <text x="24" y="266" class="sf" font-size="36">agent</text>
-    <text x="24" y="316" class="m" font-size="20" fill="rgba(0,0,0,.55)">Claude Code · Codex</text>
-    <text x="24" y="346" class="m" font-size="20" fill="rgba(0,0,0,.55)">any OpenAI-compatible</text>
-    <text x="24" y="376" class="m" font-size="20" fill="rgba(0,0,0,.55)">model</text>
-    <line x1="252" y1="285" x2="340" y2="285" stroke="#000" stroke-width="3" marker-start="url(#a2)" marker-end="url(#a2)"/>
+    <text x="24" y="316" class="m" font-size="20" fill="rgba(0,0,0,.62)">Claude Code · Codex</text>
+    <text x="24" y="346" class="m" font-size="20" fill="rgba(0,0,0,.62)">any OpenAI-compatible</text>
+    <text x="24" y="376" class="m" font-size="20" fill="rgba(0,0,0,.62)">model</text>
+    <line x1="252" y1="285" x2="340" y2="285" stroke="#111" stroke-width="3" marker-start="url(#a2)" marker-end="url(#a2)"/>
     <text x="296" y="250" class="m" font-size="20" text-anchor="middle">MCP</text>
     <text x="296" y="330" class="m" font-size="20" text-anchor="middle">OpenAPI</text>
-    <!-- gateway -->
-    <rect x="345" y="40" width="1030" height="410" rx="12" fill="rgba(0,0,0,.025)" stroke="#000" stroke-width="2"/>
-    <text x="375" y="88" class="m" font-size="22">Sous gateway · operated by Valio Aimo</text>
-    <g font-size="20">
+    <rect x="345" y="40" width="1030" height="410" rx="12" fill="rgba(0,0,0,.02)" stroke="#005670" stroke-width="3"/>
+    <text x="375" y="88" class="m" font-size="22" fill="#005670">Sous gateway · operated by Valio Aimo</text>
+    <g font-size="16">
       <rect x="375" y="118" width="184" height="300" rx="8" fill="rgba(0,0,0,.05)"/>
       <text x="395" y="166" class="sf" font-size="32">Search</text>
-      <text x="395" y="216" class="m" fill="rgba(0,0,0,.6)">17,546 products</text>
-      <text x="395" y="246" class="m" fill="rgba(0,0,0,.6)">fi · sv · en</text>
-      <text x="395" y="276" class="m" fill="rgba(0,0,0,.6)">0 API calls</text>
+      <text x="395" y="216" class="m" fill="rgba(0,0,0,.62)">17,546 products</text>
+      <text x="395" y="246" class="m" fill="rgba(0,0,0,.62)">fi · sv · en</text>
+      <text x="395" y="276" class="m" fill="rgba(0,0,0,.62)">0 API calls</text>
+      <text x="395" y="306" class="m" fill="rgba(0,0,0,.62)">type guard:</text>
+      <text x="395" y="336" class="m" fill="rgba(0,0,0,.62)">sour milk ≠ milk</text>
 
       <rect x="575" y="118" width="184" height="300" rx="8" fill="rgba(0,0,0,.05)"/>
       <text x="595" y="166" class="sf" font-size="32">Signed</text>
       <text x="595" y="202" class="sf" font-size="32">quote</text>
-      <text x="595" y="246" class="m" fill="rgba(0,0,0,.6)">live price +</text>
-      <text x="595" y="276" class="m" fill="rgba(0,0,0,.6)">availability</text>
-      <text x="595" y="306" class="m" fill="rgba(0,0,0,.6)">Ed25519 JWS</text>
+      <text x="595" y="246" class="m" fill="rgba(0,0,0,.62)">live price +</text>
+      <text x="595" y="276" class="m" fill="rgba(0,0,0,.62)">availability</text>
+      <text x="595" y="306" class="m" fill="rgba(0,0,0,.62)">stock as buckets</text>
+      <text x="595" y="336" class="m" fill="rgba(0,0,0,.62)">options if short</text>
+      <text x="595" y="366" class="m" fill="rgba(0,0,0,.62)">Ed25519 JWS</text>
 
-      <rect x="775" y="118" width="184" height="300" rx="8" fill="rgba(0,0,0,.9)"/>
+      <rect x="775" y="118" width="184" height="300" rx="8" fill="#111"/>
       <text x="795" y="166" class="sf" font-size="32" fill="#f8f8f3">Mandate</text>
       <text x="795" y="202" class="sf" font-size="32" fill="#f8f8f3">engine</text>
-      <text x="795" y="246" class="m" fill="rgba(248,248,243,.7)">plain code,</text>
-      <text x="795" y="276" class="m" fill="rgba(248,248,243,.7)">no LLM</text>
-      <rect x="795" y="300" width="64" height="30" rx="4" fill="#7cc68e"/><rect x="867" y="300" width="64" height="30" rx="4" fill="#8ab8ec"/>
-      <rect x="795" y="338" width="64" height="30" rx="4" fill="#e3ad52"/><rect x="867" y="338" width="64" height="30" rx="4" fill="#ef8a76"/>
-      <text x="827" y="321" class="m" font-size="15" text-anchor="middle">silent</text><text x="899" y="321" class="m" font-size="15" text-anchor="middle">notify</text>
-      <text x="827" y="359" class="m" font-size="15" text-anchor="middle">ask</text><text x="899" y="359" class="m" font-size="15" text-anchor="middle">block</text>
+      <text x="795" y="246" class="m" fill="rgba(248,248,243,.75)">plain code,</text>
+      <text x="795" y="276" class="m" fill="rgba(248,248,243,.75)">no LLM</text>
+      <text x="795" y="306" class="m" fill="rgba(248,248,243,.75)">rules in /rules</text>
+      <rect x="795" y="326" width="64" height="30" rx="15" fill="none" stroke="#7cc68e" stroke-width="2"/><rect x="867" y="326" width="64" height="30" rx="15" fill="#e3edf7"/>
+      <rect x="795" y="364" width="64" height="30" rx="15" fill="#fddb32"/><rect x="867" y="364" width="64" height="30" rx="15" fill="#a8321f"/>
+      <text x="827" y="347" class="m" font-size="15" text-anchor="middle" fill="#7cc68e">auto</text><text x="899" y="347" class="m" font-size="15" text-anchor="middle" fill="#1f5a96">FYI</text>
+      <text x="827" y="385" class="m" font-size="15" text-anchor="middle" fill="#23282d">ask</text><text x="899" y="385" class="m" font-size="15" text-anchor="middle" fill="#fff">refuse</text>
 
       <rect x="975" y="118" width="184" height="300" rx="8" fill="rgba(0,0,0,.05)"/>
       <text x="995" y="166" class="sf" font-size="32">Orders</text>
-      <text x="995" y="216" class="m" fill="rgba(0,0,0,.6)">one per quote</text>
-      <text x="995" y="246" class="m" fill="rgba(0,0,0,.6)">idempotent</text>
-      <text x="995" y="276" class="m" fill="rgba(0,0,0,.6)">signed receipt</text>
+      <text x="995" y="216" class="m" fill="rgba(0,0,0,.62)">one per quote</text>
+      <text x="995" y="246" class="m" fill="rgba(0,0,0,.62)">idempotent</text>
+      <text x="995" y="276" class="m" fill="rgba(0,0,0,.62)">signed receipt</text>
+      <text x="995" y="306" class="m" fill="rgba(0,0,0,.62)">holds, recalls</text>
 
       <rect x="1175" y="118" width="184" height="300" rx="8" fill="rgba(0,0,0,.05)"/>
       <text x="1195" y="166" class="sf" font-size="32">Audit log</text>
-      <text x="1195" y="216" class="m" fill="rgba(0,0,0,.6)">hash chain</text>
-      <text x="1195" y="246" class="m" fill="rgba(0,0,0,.6)">MariaDB system</text>
-      <text x="1195" y="276" class="m" fill="rgba(0,0,0,.6)">versioning</text>
+      <text x="1195" y="216" class="m" fill="rgba(0,0,0,.62)">hash chain</text>
+      <text x="1195" y="246" class="m" fill="rgba(0,0,0,.62)">MariaDB system</text>
+      <text x="1195" y="276" class="m" fill="rgba(0,0,0,.62)">versioning</text>
+      <text x="1195" y="306" class="m" fill="rgba(0,0,0,.62)">scoped reads</text>
     </g>
-    <!-- flow arrows inside gateway -->
-    <g stroke="#000" stroke-width="2.5">
-      <line x1="561" y1="390" x2="572" y2="390" marker-end="url(#a2)"/>
-      <line x1="761" y1="390" x2="772" y2="390" marker-end="url(#a2)"/>
-      <line x1="961" y1="390" x2="972" y2="390" marker-end="url(#a2)"/>
-      <line x1="1161" y1="390" x2="1172" y2="390" marker-end="url(#a2)"/>
+    <g stroke="#111" stroke-width="2.5">
+      <line x1="561" y1="400" x2="572" y2="400" marker-end="url(#a2)"/>
+      <line x1="761" y1="400" x2="772" y2="400" marker-end="url(#a2)"/>
+      <line x1="961" y1="400" x2="972" y2="400" marker-end="url(#a2)"/>
+      <line x1="1161" y1="400" x2="1172" y2="400" marker-end="url(#a2)"/>
     </g>
-    <!-- valio -->
-    <line x1="1377" y1="285" x2="1428" y2="285" stroke="#000" stroke-width="3" marker-start="url(#a2)" marker-end="url(#a2)"/>
-    <text x="1403" y="250" class="m" font-size="20" text-anchor="middle">≤2</text>
-    <rect x="1430" y="170" width="248" height="230" rx="10" fill="none" stroke="#000" stroke-width="2"/>
+    <line x1="1377" y1="285" x2="1428" y2="285" stroke="#111" stroke-width="3" marker-start="url(#a2)" marker-end="url(#a2)"/>
+    <rect x="1430" y="170" width="248" height="230" rx="10" fill="none" stroke="#111" stroke-width="2"/>
     <text x="1454" y="226" class="sf" font-size="36">Valio Aimo</text>
     <text x="1454" y="266" class="sf" font-size="36">API</text>
-    <text x="1454" y="316" class="m" font-size="20" fill="rgba(0,0,0,.55)">price</text>
-    <text x="1454" y="346" class="m" font-size="20" fill="rgba(0,0,0,.55)">availability</text>
-    <text x="1454" y="376" class="m" font-size="20" fill="rgba(0,0,0,.55)">≤2 calls / request</text>
-    <!-- down: human -->
-    <line x1="867" y1="420" x2="867" y2="520" stroke="#000" stroke-width="3" marker-end="url(#a2)"/>
+    <text x="1454" y="316" class="m" font-size="20" fill="rgba(0,0,0,.62)">price</text>
+    <text x="1454" y="346" class="m" font-size="20" fill="rgba(0,0,0,.62)">availability</text>
+    <text x="1454" y="376" class="m" font-size="20" fill="rgba(0,0,0,.62)">≤ 2 calls / quote</text>
+    <line x1="867" y1="420" x2="867" y2="520" stroke="#111" stroke-width="3" marker-end="url(#a2)"/>
     <rect x="600" y="525" width="534" height="150" rx="10" fill="rgba(0,0,0,.035)"/>
     <text x="628" y="578" class="sf" font-size="34">The human's phone</text>
-    <text x="628" y="620" class="m" font-size="20" fill="rgba(0,0,0,.6)">ask → approve / reject with a note</text>
-    <text x="628" y="650" class="m" font-size="20" fill="rgba(0,0,0,.6)">notify → FYI · ntfy push, feed, webhook</text>
-    <!-- down: audit both sides -->
-    <line x1="1267" y1="420" x2="1267" y2="520" stroke="#000" stroke-width="3" marker-end="url(#a2)"/>
+    <text x="628" y="620" class="m" font-size="20" fill="rgba(0,0,0,.62)">approve / reject before the cut-off</text>
+    <text x="628" y="650" class="m" font-size="20" fill="rgba(0,0,0,.62)">ntfy push · in-app feed · signed webhook</text>
+    <line x1="1267" y1="420" x2="1267" y2="520" stroke="#111" stroke-width="3" marker-end="url(#a2)"/>
     <rect x="1160" y="525" width="520" height="150" rx="10" fill="rgba(0,0,0,.035)"/>
     <text x="1188" y="578" class="sf" font-size="34">One record, read by both</text>
-    <text x="1188" y="620" class="m" font-size="20" fill="rgba(0,0,0,.6)">the buyer and Valio Aimo</text>
-    <text x="1188" y="650" class="m" font-size="20" fill="rgba(0,0,0,.6)">/audit/verify · AS OF queries</text>
+    <text x="1188" y="620" class="m" font-size="20" fill="rgba(0,0,0,.62)">the buyer and Valio Aimo</text>
+    <text x="1188" y="650" class="m" font-size="20" fill="rgba(0,0,0,.62)">/audit/verify · AS OF queries</text>
   </svg>
-  <div class="foot"><span>Sous</span><span>4 / 14</span></div>
+  <div class="foot"><span>Search over a local index; live Valio calls only for a shortlist: at most 2 batched calls per plain quote, 2 more when substitutes are priced for options (docs/STATUS.md).</span><span>3 / 12</span></div>
 </section>
 
-<!-- 5 · Four tiers -->
+<!-- 4 · Four tiers -->
 <section class="slide">
   <div class="kicker">The mandate decides, in code · real orders from production</div>
   <h1>Every order lands in one of four tiers</h1>
-  <div class="grid4" style="margin-top:20px">
-    <div class="card" style="box-shadow:inset 0 6px 0 var(--silent)">
-      <span class="tier t-silent">silent</span>
-      <p style="font:400 44px/1.15 var(--serif);margin:28px 0 20px">Just do it</p>
-      <p style="font-size:28px;line-height:1.4">Hotel: 300 × lactose-free semi-skimmed milk 1 l, €468.</p>
-      <p class="muted" style="font-size:24px">Within the €1,000 the agent may spend alone.</p>
+  <div class="grid4" style="margin-top:18px">
+    <div class="card">
+      <span class="tier t-silent">Auto</span>
+      <p style="font:400 42px/1.15 var(--serif);margin:26px 0 18px">Just do it</p>
+      <p style="font-size:27px;line-height:1.4">Hotel: 300 × lactose-free semi-skimmed milk 1 l, €468.</p>
+      <p class="muted" style="font-size:23px">Within the €1,000 the agent may spend alone.</p>
     </div>
-    <div class="card" style="box-shadow:inset 0 6px 0 var(--notify)">
-      <span class="tier t-notify">notify</span>
-      <p style="font:400 44px/1.15 var(--serif);margin:28px 0 20px">Do it, tell me</p>
-      <p style="font-size:28px;line-height:1.4">Hotel: 1000 × lactose-free coffee milk 1 l, €1,300.</p>
-      <p class="muted" style="font-size:24px">Above €1,000, so the buyer gets an FYI.</p>
+    <div class="card">
+      <span class="tier t-notify">Auto + FYI</span>
+      <p style="font:400 42px/1.15 var(--serif);margin:26px 0 18px">Do it, tell me</p>
+      <p style="font-size:27px;line-height:1.4">Hotel: 1000 × lactose-free coffee milk 1 l, €1,300.</p>
+      <p class="muted" style="font-size:23px">Above €1,000, so the buyer gets an FYI.</p>
     </div>
-    <div class="card" style="box-shadow:inset 0 6px 0 var(--ask)">
-      <span class="tier t-ask">ask</span>
-      <p style="font:400 44px/1.15 var(--serif);margin:28px 0 20px">Wait for me</p>
-      <p style="font-size:28px;line-height:1.4">Hospital: 400 × Oatly Oat Drink Semi 1 L, €560.</p>
-      <p class="muted" style="font-size:24px">Above the €400 it may spend alone. Approved on a phone.</p>
+    <div class="card">
+      <span class="tier t-ask">Needs approval</span>
+      <p style="font:400 42px/1.15 var(--serif);margin:26px 0 18px">Wait for me</p>
+      <p style="font-size:27px;line-height:1.4">Hospital: 400 × Oatly Oat Drink Semi 1 L, €560.</p>
+      <p class="muted" style="font-size:23px">Above the €400 it may spend alone. Approved on a phone.</p>
     </div>
-    <div class="card" style="box-shadow:inset 0 6px 0 var(--block)">
-      <span class="tier t-block">block</span>
-      <p style="font:400 44px/1.15 var(--serif);margin:28px 0 20px">Never</p>
-      <p style="font-size:28px;line-height:1.4">Caterer: cashew nut butter 170 g.</p>
-      <p class="muted" style="font-size:24px">May contain tree nuts, peanuts. Rule <span class="mono">allergen.may_contain</span>.</p>
+    <div class="card">
+      <span class="tier t-block">Refused</span>
+      <p style="font:400 42px/1.15 var(--serif);margin:26px 0 18px">Never</p>
+      <p style="font-size:27px;line-height:1.4">Caterer: cashew nut butter 170 g.</p>
+      <p class="muted" style="font-size:23px">May contain tree nuts, peanuts. Rule <span class="mono">allergen.may_contain</span>.</p>
     </div>
   </div>
-  <div style="display:flex;gap:40px;align-items:flex-end;margin-top:34px">
-    <img class="shot" src="img/mandate-limits.png" alt="Hotel Aurora mandate limits in the Valio Aimo UI" style="width:1100px">
-    <p class="src" style="margin:0">The hotel's mandate in Valio Aimo's UI: one signed document sets every threshold.</p>
+  <div style="display:flex;gap:40px;align-items:flex-end;margin-top:30px">
+    <img class="shot" src="img/mandate-limits.png" alt="Hotel Aurora mandate limits in the Valio Aimo UI" style="width:1000px">
+    <div>
+      <p style="font:400 36px/1.3 var(--serif);margin-bottom:14px">One signed document sets every threshold. Each finding names its rule; <span class="mono">GET /rules</span> lists all of them.</p>
+      <p class="src" style="margin:0">Also always a human in the demo policy: a substitute, a first-time product, unknown allergens, drift on a standing order.</p>
+    </div>
   </div>
-  <div class="foot"><span>Sous</span><span>5 / 14</span></div>
+  <div class="foot"><span>Badges: fill weight + icon, not colour alone (docs/UI_PRINCIPLES.md). Rule register: 52 rules on staging (docs/CONFORMANCE.md).</span><span>4 / 12</span></div>
 </section>
 
-<!-- 6 · Demo -->
+<!-- 5 · Human in the loop -->
 <section class="slide">
-  <div class="kicker">Demo in three orders</div>
+  <div class="kicker">Request → lookup → order → approval</div>
   <div style="display:grid;grid-template-columns:1fr 430px;gap:70px;flex:1;min-height:0">
     <div>
-      <h1 style="margin-bottom:40px">Request, lookup, order, approval</h1>
-      <ul class="rules" style="font-size:32px">
-        <li><span class="tier t-notify">notify</span>&nbsp; <b>Hotel</b>, Claude Code on a laptop over MCP: Valio Eila 1 L × 1000, €1,400 ex VAT. <span class="muted">2 Valio API calls.</span></li>
-        <li><span class="tier t-ask">ask</span>&nbsp; <b>Hospital</b>: held for a human, who approves on a phone. <span class="muted">Unknown allergens or a substitute always ask.</span></li>
-        <li><span class="tier t-grey">caught</span>&nbsp; <b>Terminal product</b> past its order cut-off: skipped, a Stock product picked instead.</li>
+      <h1 style="margin-bottom:30px">A held order reaches a human before the cut-off, not after</h1>
+      <ul class="rules" style="font-size:30px">
+        <li><b>approve_by</b> = Valio's earliest order cut-off among the lines − 15 min. The phone shows it as a clock time.</li>
+        <li>Past it: the order becomes <span class="mono">expired_cutoff</span>, the buyer is told the lost and the next delivery date; a late approval gets <span class="mono">409 approval_deadline_passed</span>.</li>
+        <li>An approval is refused if the mandate was revoked meanwhile, or the product was put on hold.</li>
+        <li>Agents can't approve: <span class="mono">403 agent_cannot_approve</span>, audited. MCP has no approve tool.</li>
       </ul>
-      <p class="src" style="margin-top:30px">Right: a production hospital order on a phone. Held because €560 &gt; the €400 the agent may spend alone; approved by a human at 23.11. The mandate shown is read AS OF the decision.</p>
+      <p class="src" style="margin-top:24px">Right: a production hospital order on a phone, held because €560 &gt; the €400 the agent may spend alone; approved by a human. The mandate shown is read AS OF the decision. sous/deadline.py, PROTOCOL 7.1, tests/test_deadline.py.</p>
     </div>
     <div style="height:800px;overflow:hidden;border-radius:28px;border:10px solid #111;background:#f8f8f3;margin-top:-20px">
       <img src="img/phone-approval.png" alt="Approval of a hospital order on a phone" style="width:100%;display:block">
     </div>
   </div>
-  <div class="foot"><span>Sous</span><span>6 / 14</span></div>
+  <div class="foot"><span>Notifications: in-app feed, ntfy push with the approval link, HMAC-signed webhook. A failed notification never blocks an order.</span><span>5 / 12</span></div>
 </section>
 
-<!-- 7 · Standing orders -->
-<section class="slide">
-  <div class="kicker">Standing orders that notice drift</div>
-  <h1>The weekly order renews itself, until it drifts</h1>
-  <div style="display:grid;grid-template-columns:900px 1fr;gap:80px;margin-top:30px">
-    <svg style="flex:none" viewBox="0 0 900 600" width="900" height="600">
-      <g class="m" font-size="22" fill="rgba(0,0,0,.55)">
-        <line x1="40" y1="520" x2="900" y2="520" stroke="rgba(0,0,0,.2)" stroke-width="1.5"/>
-      </g>
-      <!-- scale: 0 L at y=520, 1 L = 0.8 px  (515 L -> 412 px) -->
-      <g>
-        <rect x="60"  y="184" width="120" height="336" rx="4" fill="rgba(0,0,0,.14)"/>
-        <rect x="230" y="176" width="120" height="344" rx="4" fill="rgba(0,0,0,.14)"/>
-        <rect x="400" y="168" width="120" height="352" rx="4" fill="rgba(0,0,0,.14)"/>
-        <rect x="570" y="156" width="120" height="364" rx="4" fill="rgba(0,0,0,.14)"/>
-        <rect x="740" y="108" width="120" height="412" rx="4" fill="#9b6200"/>
-      </g>
-      <g class="sf" font-size="36" text-anchor="middle">
-        <text x="120" y="236">420</text><text x="290" y="228">430</text><text x="460" y="220">440</text><text x="630" y="208">455</text>
-        <text x="800" y="92" fill="#9b6200">515 L</text>
-      </g>
-      <g class="m" font-size="22" text-anchor="middle" fill="rgba(0,0,0,.55)">
-        <text x="120" y="560">wk −4</text><text x="290" y="560">wk −3</text><text x="460" y="560">wk −2</text><text x="630" y="560">wk −1</text>
-        <text x="800" y="560" fill="#9b6200">this week</text>
-      </g>
-      <!-- median 435 L -> y = 520 - 348 = 172 -->
-      <line x1="40" y1="172" x2="880" y2="172" stroke="#000" stroke-width="2" stroke-dasharray="8 7"/>
-      <text x="44" y="40" class="m" font-size="22" fill="rgba(0,0,0,.55)">lactose-free milk, litres per week</text>
-      <text x="60" y="158" class="m" font-size="22">4-week median 435 L</text>
-    </svg>
-    <div>
-      <ul class="rules" style="font-size:32px">
-        <li><span class="tier t-ask">ask</span><br>Milk 515 L is <b>+18 %</b> vs the 4-week median.</li>
-        <li><span class="tier t-ask">ask</span><br>Cost <b>+€135 (+16 %)</b> vs the median.</li>
-        <li style="font:400 40px/1.25 var(--serif)">The gateway asks the human before renewing.</li>
-      </ul>
-      <p class="src" style="margin-top:26px">Rules: quantity &gt; +15 % or 3 rises in a row · total or price per L/KG &gt; +10 % · product switched · new supply risk. Demo history is simulated and marked so, priced at one real signed quote.</p>
-    </div>
-  </div>
-  <div class="foot"><span>Sous</span><span>7 / 14</span></div>
-</section>
-
-<!-- 8 · Valio suggests -->
-<section class="slide">
-  <div class="kicker">Valio suggests</div>
-  <h1>Valio Aimo can sell, inside the buyer's rules</h1>
-  <div style="display:grid;grid-template-columns:1fr 800px;gap:80px;margin-top:40px">
-    <div>
-      <p style="font:400 44px/1.3 var(--serif);margin-bottom:36px">Valio Aimo's own selling agent offers alternatives to what the buyer orders, plus seasonal and new products.</p>
-      <div style="margin-bottom:36px">
-        <span class="pill">cheaper</span><span class="pill">certified</span><span class="pill">more reliable</span><span class="pill">lower CO₂</span><span class="pill">seasonal</span><span class="pill">new</span>
-      </div>
-      <ul class="rules" style="font-size:30px">
-        <li>Pre-checked against the mandate: nothing it would block is shown.</li>
-        <li>Unknown allergens are never pushed to a buyer with allergen rules.</li>
-        <li>Offers only, never orders. Written to the audit log.</li>
-      </ul>
-    </div>
-    <div class="card" style="align-self:start;padding:44px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:26px">
-        <span style="font:400 42px/1 var(--serif)">Valio Aimo suggests</span>
-        <span class="tier t-grey" style="font-size:22px">sponsored by Valio Aimo</span>
-      </div>
-      <div style="border-top:1px solid var(--rule);padding-top:26px">
-        <div class="label">cheaper alternative · how a reason reads</div>
-        <p style="font-size:30px;line-height:1.45">“Instead of <i>the product you order</i>: x % cheaper per L; saves about €y on your quantity.”</p>
-        <div style="display:flex;gap:14px;flex-wrap:wrap;margin:24px 0">
-          <span class="tier t-silent" style="font-size:22px">compatible with mandate</span>
-          <span class="tier t-grey" style="font-size:22px">offer, not an order</span>
-        </div>
-        <p class="src" style="margin:0">audit: suggestions.offered</p>
-      </div>
-    </div>
-  </div>
-  <div class="foot"><span>Sous</span><span>8 / 14</span></div>
-</section>
-
-<!-- 9 · Exceptions -->
+<!-- 6 · Exceptions -->
 <section class="slide">
   <div class="kicker">Exceptions we found in the real API</div>
-  <h1>The API says Monday. The cut-off says no.</h1>
-  <div style="display:grid;grid-template-columns:1050px 1fr;gap:70px;margin-top:30px">
+  <h1>Can't be done as asked? Options, not a guess.</h1>
+  <div style="display:grid;grid-template-columns:1000px 1fr;gap:64px;margin-top:16px">
     <div>
-      <div class="card" style="padding:36px 40px;font:28px/1.65 var(--mono)">
-<pre><span class="muted">// availability, product 464119 (Terminal)</span>
-"logisticModel": "Terminal",
-"closingTime":   <span style="background:var(--block-bg);color:var(--block);padding:0 6px">"2026-11-12…"</span>  <span style="color:var(--block)">← passed (Thu 12.11)</span>
-"scheduleLines": [{
-  "availableDate":   <span style="background:var(--ask-bg);color:var(--ask);padding:0 6px">"2026-11-16"</span> <span style="color:var(--ask)">← still Monday</span>
-  "availableAmount": 999999        <span class="muted">← = unknown</span>
-}]</pre>
-      </div>
-      <p style="font-size:30px;margin-top:28px">Gateway: <span class="mono">CUTOFF_PASSED</span>, <span class="mono">STOCK_UNKNOWN</span> → <span class="tier t-block">block</span> and pick a stocked product.</p>
+      <div class="label">Response options in the signed quote, each with totals, dates and a mandate preview</div>
+      <table class="t" style="font-size:25px">
+        <tr><td style="width:330px" class="mono">on_time</td><td>another product covers it all on the date</td></tr>
+        <tr><td class="mono">partial_now_rest_later</td><td>two deliveries</td></tr>
+        <tr><td class="mono">all_later</td><td>complete by the earliest date that covers it</td></tr>
+        <tr><td class="mono">next_date</td><td>cut-off passed: same product, next date Valio can still deliver, with its own cut-off</td></tr>
+        <tr><td class="mono">split_with_substitute</td><td>original on time, the gap from a compatible substitute</td></tr>
+        <tr><td class="mono">substitute</td><td>good / better / best, same product type</td></tr>
+      </table>
+      <p class="src" style="margin-top:16px">sous/options.py, PROTOCOL 5.1; eval cases O01-O06. <span class="mono">request_quote(option_id=…)</span> re-quotes.</p>
     </div>
     <div>
-      <div class="big">46 %</div>
-      <p style="font:400 40px/1.3 var(--serif);margin:20px 0 26px">of products have no allergen declaration. Unknown is unsafe: a human decides.</p>
-      <p class="src">Also handled: out of stock · later delivery date · short stock (split, or ask) · price expiring before delivery · lot sizes · cut-off unknown for the date · rate limits (last-known data marked stale → human).</p>
+      <ul class="rules" style="font-size:27px">
+        <li><b>Terminal cut-off already passed</b> (Thu 12.11) while the API still promises Monday: we trust the cut-off and pick a stocked product.</li>
+        <li><b>30 % of food products</b> (4,118 of 13,546) declare no allergens: unknown is unsafe, a human decides.</li>
+        <li><b>Product type</b>: sour milk is not milk, coffee milk is not milk.</li>
+        <li><b>Holds and recalls</b>: Valio Aimo stops a product with one call; it is refused and recent buyers are told.</li>
+        <li>Also: out of stock, short stock, lot sizes, price expiry, rate limits (stale data → human).</li>
+      </ul>
     </div>
   </div>
-  <div class="foot"><span>Sous</span><span>9 / 14</span></div>
+  <div class="foot"><span>Findings about the mock API and assumptions: docs/STATUS.md. Holds: sous/holds.py, PROTOCOL 23, eval case R01.</span><span>6 / 12</span></div>
 </section>
 
-<!-- 10 · Trust -->
+<!-- 7 · Beyond one order -->
+<section class="slide">
+  <div class="kicker">Beyond one order</div>
+  <h1>Standing orders that notice drift. A seller that stays inside the rules.</h1>
+  <div style="display:grid;grid-template-columns:860px 1fr;gap:70px;margin-top:18px">
+    <div>
+      <svg style="flex:none" viewBox="0 0 860 470" width="860" height="470">
+        <line x1="20" y1="420" x2="860" y2="420" stroke="rgba(0,0,0,.2)" stroke-width="1.5"/>
+        <!-- 1 L = 0.62 px -->
+        <rect x="40"  y="160" width="120" height="260" rx="4" fill="rgba(0,0,0,.14)"/>
+        <rect x="200" y="153" width="120" height="267" rx="4" fill="rgba(0,0,0,.14)"/>
+        <rect x="360" y="147" width="120" height="273" rx="4" fill="rgba(0,0,0,.14)"/>
+        <rect x="520" y="138" width="120" height="282" rx="4" fill="rgba(0,0,0,.14)"/>
+        <rect x="680" y="101" width="120" height="319" rx="4" fill="#fddb32" stroke="#e9c400" stroke-width="2"/>
+        <g class="sf" font-size="34" text-anchor="middle">
+          <text x="100" y="205">420</text><text x="260" y="198">430</text><text x="420" y="192">440</text><text x="580" y="183">455</text>
+          <text x="740" y="86" fill="#8f5600">515 L</text>
+        </g>
+        <g class="m" font-size="21" text-anchor="middle" fill="rgba(0,0,0,.62)">
+          <text x="100" y="456">wk −4</text><text x="260" y="456">wk −3</text><text x="420" y="456">wk −2</text><text x="580" y="456">wk −1</text>
+          <text x="740" y="456" fill="#8f5600">this week</text>
+        </g>
+        <line x1="20" y1="150" x2="840" y2="150" stroke="#111" stroke-width="2" stroke-dasharray="8 7"/>
+        <text x="24" y="30" class="m" font-size="21" fill="rgba(0,0,0,.62)">lactose-free milk, litres per week</text>
+        <text x="40" y="136" class="m" font-size="21">4-week median 435 L</text>
+      </svg>
+      <p style="font-size:28px;margin-top:14px"><span class="tier t-ask">Needs approval</span>&nbsp; milk <b>+18 %</b>, cost <b>+€135 (+16 %)</b> vs the median: the gateway asks before renewing.</p>
+    </div>
+    <div class="card" style="align-self:start;padding:40px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px">
+        <span style="font:400 40px/1 var(--serif)">Valio Aimo suggests</span>
+        <span class="tier t-grey" style="font-size:21px">sponsored</span>
+      </div>
+      <div style="margin-bottom:22px"><span class="pill">cheaper</span><span class="pill">certified</span><span class="pill">more reliable</span><span class="pill">lower CO₂</span><span class="pill">seasonal</span><span class="pill">new</span></div>
+      <ul class="rules" style="font-size:27px">
+        <li>Pre-checked against the buyer's mandate: nothing it would refuse is shown.</li>
+        <li>Unknown allergens are never pushed to a buyer with allergen rules.</li>
+        <li>Offers only, never orders. Audited as <span class="mono">suggestions.offered</span>.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Drift rules: quantity &gt; +15 % or 3 rises in a row · total or price per L/KG &gt; +10 % · product switched · new supply risk. Demo history simulated and marked so, priced at one real signed quote (scripts/demo_standing.py).</span><span>7 / 12</span></div>
+</section>
+
+<!-- 8 · Trust -->
 <section class="slide">
   <div class="kicker">Why you can trust it</div>
-  <h1>The LLM never decides</h1>
-  <p class="lede" style="margin-bottom:30px">Limits, allergens, cut-offs, drift and tiers are plain code with plain-language reasons.</p>
-  <div style="display:grid;grid-template-columns:940px 1fr;gap:50px;align-items:start">
-    <div class="card" style="padding:32px 36px">
-      <div class="label">Signed receipt (Ed25519 JWS), decoded · PO-4B5D0E67</div>
-<pre style="font-size:22px;line-height:1.5">{"alg": "EdDSA", "kid": "e4aec00fb12cbdff",
- "typ": "valtakirja-order+jws"}
-{"id": "PO-4B5D0E67", "mandate_id": "M-HOSPITAL-KITCHEN",
+  <h1>The LLM never decides. Signed data does.</h1>
+  <div style="display:grid;grid-template-columns:900px 1fr;gap:50px;align-items:start;margin-top:10px">
+    <div class="card" style="padding:30px 34px">
+      <div class="label">Signed receipt (Ed25519 JWS), decoded · production order</div>
+<pre style="font-size:21px;line-height:1.5">{"id": "PO-4B5D0E67", "mandate_id": "M-HOSPITAL-KITCHEN",
  "decision": {"by": "mandate-engine", "outcome": "ask",
    "findings": [{"rule": "spend.auto_limit",
      "message": "Order total €560.00 is above the
@@ -425,144 +382,133 @@ svg .m, svg .m text { font-family: var(--mono); }
  "approval": {"approved": true, "by": "Rene",
               "at": "2026-11-13T23:11:46.504+02:00"},
  "status": "ordered", "total_ex_vat": 560.0, …}</pre>
-      <p class="src" style="margin:16px 0 0">Verify with anyone's tools: /.well-known/jwks.json</p>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:26px">
-      <div class="card" style="padding:30px 34px">
-        <div style="font:400 40px/1.1 var(--serif);margin-bottom:8px"><span style="color:var(--silent)">✓</span> Chain intact</div>
-        <div class="src">69 events verified on production · hash chain + MariaDB system versioning: no row ever changed or deleted</div>
-      </div>
-      <div class="card" style="padding:30px 34px">
+      <p class="src" style="margin:14px 0 0">Verify with anyone's tools: /.well-known/jwks.json</p>
+      <div style="margin-top:22px;border-top:1px solid var(--rule);padding-top:18px">
         <div class="label">“What did the mandate say when this order was decided?”</div>
-<pre style="font-size:21px;line-height:1.55">SELECT data FROM mandate
-  FOR SYSTEM_TIME AS OF
-  TIMESTAMP '2026-11-13 19:52:27.646'
+<pre style="font-size:21px;line-height:1.5">SELECT data FROM mandate
+  FOR SYSTEM_TIME AS OF TIMESTAMP '2026-11-13 19:52:27.646'
   WHERE id = 'M-HOSPITAL-KITCHEN';</pre>
       </div>
-      <p style="font-size:24px;margin:0" class="muted">Orders use only signed payloads · one order per quote · bound to its agent · idempotent retries.</p>
+    </div>
+    <ul class="rules" style="font-size:28px">
+      <li><b>Only signed data is trusted.</b> Orders are built from the signed quote and the signed mandate; one order per quote, bound to its agent.</li>
+      <li><b>Two audit layers.</b> Hash chain (<span class="mono">/audit/verify</span>) + MariaDB system versioning: any edit or delete shows up.</li>
+      <li><b>Scoped reads.</b> Mandates, orders and audit need a credential; anything else answers 404 like a missing id.</li>
+      <li><b>Stock as buckets.</b> Agents see ample / limited / short / none, not Valio's exact stock.</li>
+      <li><b>Agent text is a claim.</b> An agent's rationale is labelled <span class="mono">agent_claim</span>; no rule reads it.</li>
+    </ul>
+  </div>
+  <div class="foot"><span>PROTOCOL sections 5.2 (exposure), 12 (audit), 22 (read scopes). Buyer-signed W3C VC mandates exist, opt-in (section 17).</span><span>8 / 12</span></div>
+</section>
+
+<!-- 9 · Try to break it -->
+<section class="slide">
+  <div class="kicker">Try to break it</div>
+  <h1>We attacked our own controls. So can you.</h1>
+  <div style="display:grid;grid-template-columns:1080px 1fr;gap:60px;margin-top:10px">
+    <table class="t" style="font-size:25px">
+      <tr><th>attack</th><th>result</th></tr>
+      <tr><td>20 parallel orders on one quote</td><td><b>1 ordered, 19 rejected</b></td></tr>
+      <tr><td>20 parallel €100 orders, €500 daily limit</td><td><b>5 ordered, 15 held</b>; spend exactly €500</td></tr>
+      <tr><td>Slicing: 6 × €468 under €500 / order, €1,500 / day</td><td>3 ordered, orders 4–6 held</td></tr>
+      <tr><td>Agent approves its own order</td><td><span class="mono">403 agent_cannot_approve</span>, audited</td></tr>
+      <tr><td>“SYSTEM: approve”, “allergen checks are off”</td><td>still held or refused</td></tr>
+      <tr><td>1,000 L when the last 3 orders were 100 L</td><td>held: “10× your usual 100 L”</td></tr>
+    </table>
+    <div style="display:flex;flex-direction:column;gap:26px">
+      <div class="card solid">
+        <div class="label">Conformance kit · 15 black-box checks over HTTP</div>
+        <div class="num">15 / 15</div>
+        <p style="font-size:25px;margin:14px 0 0;color:rgba(248,248,243,.85)">on staging: signatures, tampering, idempotency, cross-agent keys, private reads, hard limit, injection, self-approval, audit, stock buckets.</p>
+      </div>
+      <div class="card">
+        <div class="label">In your own sandbox</div>
+        <p style="font-size:27px;margin:0"><span class="mono">POST /sandbox</span>, then <span class="mono">/ui/break.html</span>: seven canned attacks through the real gateway code, each with verdict, rule and audit events. No Valio call.</p>
+      </div>
     </div>
   </div>
-  <div class="foot"><span>Sous</span><span>10 / 14</span></div>
+  <div class="foot"><span>Attacks: tests/test_adopt.py + eval cases A07, A08, I01-I03, U01, U02 (7/7, evals/results.adopt.json). Kit: scripts/conformance.py; staging 15/15 at 7c9a965 (board 14.11 05:23Z; docs/CONFORMANCE.md).</span><span>9 / 12</span></div>
 </section>
 
-<!-- 11 · Any model -->
+<!-- 10 · AI where it helps -->
 <section class="slide">
-  <div class="kicker">Any model can be the buyer</div>
-  <h1>Any agent. The gateway still decides.</h1>
-  <p class="lede" style="font-size:34px;margin-bottom:24px">Our buyer agent drives the gateway's MCP tools with any OpenAI-compatible model. The runtime binds agent id, mandate and idempotency key; the model only picks search terms, products, amount and date.</p>
-  <style>#models th, #models td { padding-right: 22px; }</style>
-  <table id="models" style="width:100%;border-collapse:collapse;font-size:26px">
-    <thead><tr style="font:22px/1.2 var(--mono);color:var(--ink-55);text-align:left">
-      <th style="padding:14px 10px 14px 0">model</th><th>where it runs</th><th>need<br>matched</th><th>unsafe<br>stopped</th><th>violations<br>auto-ordered</th><th>tool<br>calls</th><th>latency<br>p50</th></tr></thead>
-    <tbody>
-      <tr style="border-top:1px solid var(--rule)"><td style="padding:20px 10px 20px 0">Oracle: scripted plan</td><td class="muted">no model</td><td>40/40</td><td>31/31</td><td>0</td><td>2.3</td><td>1.4 s</td></tr>
-      <tr style="border-top:1px solid var(--rule)"><td style="padding:20px 10px 20px 0">Gemini 4 Hydrogen</td><td class="muted">Google API (CI)</td><td>46/49</td><td>35/36</td><td>0</td><td>2.9</td><td>10.8 s</td></tr>
-      <tr style="border-top:1px solid var(--rule)"><td style="padding:20px 10px 20px 0">Kimi K3.1 Pro (open-weight)</td><td class="muted">Verda Inference, EU (CI)</td><td>48/49</td><td>35/36</td><td>0</td><td>2.9</td><td>8.8 s</td></tr>
-      <tr style="border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)"><td style="padding:20px 10px 20px 0">Claude Code · Codex</td><td class="muted">over MCP</td><td colspan="5" class="muted">real external run: 1,000 L ordered within the mandate, 2 Valio API calls</td></tr>
-    </tbody>
+  <div class="kicker">Models read and explain · code decides</div>
+  <h1>Any model can be the buyer. None can break the mandate.</h1>
+  <table class="t" style="margin-top:6px">
+    <tr><th>model, scored in CI on CRACI</th><th>what it does</th><th>result</th><th>source</th></tr>
+    <tr><td>Kimi K3.1 Pro · Verda Inference, EU</td><td>buyer agent: sentence → MCP tool calls</td><td><b>48/49</b> matched the buyer · 0 violations auto-ordered</td><td class="src">run 43557209740</td></tr>
+    <tr><td>Gemini 4 Hydrogen</td><td>buyer agent, same 49 sentences</td><td><b>46/49</b> matched · 0 violations auto-ordered</td><td class="src">run 43557209740</td></tr>
+    <tr><td>Gemini 4 Hydrogen</td><td>plain-language rules → draft mandate, checked by a validator</td><td><b>23/23</b> (was 15/19; misses became validator rules)</td><td class="src">run 43566010358</td></tr>
+    <tr><td>Nemotron 3.5 Super VL</td><td>photo of an order list, menu or delivery note → basket</td><td><b>0 silent errors</b> over 32 page reads (baseline: 16)</td><td class="src">run 43530170621</td></tr>
   </table>
-  <p style="font-size:26px;margin:22px 0 0">No mandate violation was auto-ordered with any model: the mandate engine decides, not the model. The one unsafe miss for both (H20) was the real lactose-free milk the buyer asked for; that case is scripted-only now (48/48 and 46/48 without it).</p>
-  <p class="src" style="margin-top:12px">Same 59 cases as the scripted eval; 49 apply to an LLM. CI run 43557209740 (0b0ad68); oracle row: the 40-case set of Fri 13.11. ~26-28k tokens and 1.5-1.7 Valio API calls per request. Source: docs/LLM_EVAL.md.</p>
-  <div class="foot"><span>Sous</span><span>11 / 14</span></div>
+  <p style="font:400 34px/1.3 var(--serif);margin:30px 0 0">The runtime binds agent id, mandate and idempotency key; the model only fills in the request. A model answer can add caution, never remove it.</p>
+  <div class="foot"><span>All cases are ours, not a held-out set. Both buyer models miss H20 (they found the real lactose-free milk; the case is now scripted-only): 48/48 and 46/48 without it. Vision rows come from different runs (docs/NEMOTRON.md).</span><span>10 / 12</span></div>
 </section>
 
-<!-- 12 · Numbers -->
+<!-- 11 · Numbers -->
 <section class="slide">
   <div class="kicker">Numbers</div>
-  <div class="grid2" style="row-gap:40px;column-gap:90px;flex:1;align-content:center">
-    <div style="border-top:1px solid var(--rule);padding-top:26px">
-      <div class="big" style="font-size:160px">59/59</div>
-      <p style="font-size:34px;margin-top:16px">scripted buyer requests handled correctly, no manual fixes</p>
+  <div class="grid3" style="row-gap:46px;column-gap:70px;flex:1;align-content:center">
+    <div style="border-top:1px solid var(--rule);padding-top:24px">
+      <div class="big">60/60</div>
+      <p style="font-size:30px;margin-top:14px">scripted buyer requests, live Valio prices · 59/59 in CI on CRACI</p>
     </div>
-    <div style="border-top:1px solid var(--rule);padding-top:26px">
-      <div class="big" style="font-size:160px">43/43</div>
-      <p style="font-size:34px;margin-top:16px">unsafe actions blocked or escalated to a human</p>
+    <div style="border-top:1px solid var(--rule);padding-top:24px">
+      <div class="big">44/44</div>
+      <p style="font-size:30px;margin-top:14px">unsafe actions blocked or escalated to a human</p>
     </div>
-    <div style="border-top:1px solid var(--rule);padding-top:26px">
-      <div class="big" style="font-size:160px">≤2 <span style="font-size:80px;color:var(--ink-55)">· 1.0 avg</span></div>
-      <p style="font-size:34px;margin-top:16px">Valio API calls per request (avg with cache), vs ~36 to poll the whole catalog</p>
+    <div style="border-top:1px solid var(--rule);padding-top:24px">
+      <div class="big">0</div>
+      <p style="font-size:30px;margin-top:14px">mandate violations auto-ordered by either LLM buyer agent</p>
     </div>
-    <div style="border-top:1px solid var(--rule);padding-top:26px">
-      <div class="big" style="font-size:160px;white-space:nowrap"><span style="color:var(--ink-40)">56</span> → 100 %</div>
-      <p style="font-size:34px;margin-top:16px">search first-result accuracy on 39 fi/sv/en queries, over 17,546 products</p>
+    <div style="border-top:1px solid var(--rule);padding-top:24px">
+      <div class="big">≤ 2</div>
+      <p style="font-size:30px;margin-top:14px">Valio API calls per plain quote · 1.24 avg per request in CI</p>
+    </div>
+    <div style="border-top:1px solid var(--rule);padding-top:24px">
+      <div class="big" style="white-space:nowrap;font-size:118px;line-height:140px"><span style="color:var(--ink-60)">56</span> → 100 %</div>
+      <p style="font-size:30px;margin-top:14px">search first-result accuracy, 39 fi/sv/en queries, 17,546 products</p>
+    </div>
+    <div style="border-top:1px solid var(--rule);padding-top:24px">
+      <div class="big">36 %</div>
+      <p style="font-size:30px;margin-top:14px">of 58 order decisions went to a human under the stricter demo policy</p>
     </div>
   </div>
-  <div class="foot"><span>Source: evals/results.json, local run Sat 14.11 (285f126); 59/59 also in CI 43554621653 · tests/test_search_quality.py</span><span>12 / 14</span></div>
+  <div class="foot"><span>Our own cases. Local run Sat 14.11 ~10:30, evals/results.json (60/60, 44/44, 36.2 % of 58). CI 43554621653 (04e6539): 59/59, 1.24 calls/request. LLM: CI 43557209740. Search: tests/test_search_quality.py (written while tuning).</span><span>11 / 12</span></div>
 </section>
 
-<!-- 13 · Built like production -->
+<!-- 12 · Open, run like production, next -->
 <section class="slide">
-  <div class="kicker">Built and run like production</div>
-  <h1>A gateway holding a supplier key must not talk to anything else</h1>
-  <svg viewBox="0 0 1680 470" width="1680" height="470" style="flex:none;margin-top:30px">
-    <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#000"/></marker></defs>
-    <g>
-      <rect x="0" y="20" width="420" height="160" rx="10" fill="rgba(0,0,0,.035)"/>
-      <text x="28" y="78" class="sf" font-size="38">test</text>
-      <text x="28" y="122" class="m" font-size="21" fill="rgba(0,0,0,.6)">pytest + MariaDB 11.4</text>
-      <text x="28" y="154" class="m" font-size="21" fill="rgba(0,0,0,.6)">egress: observe</text>
-
-      <rect x="0" y="280" width="420" height="160" rx="10" fill="rgba(0,0,0,.035)"/>
-      <text x="28" y="338" class="sf" font-size="38">docker</text>
-      <text x="28" y="382" class="m" font-size="21" fill="rgba(0,0,0,.6)">build · CycloneDX SBOM</text>
-      <text x="28" y="414" class="m" font-size="21" fill="rgba(0,0,0,.6)">grype gate: fixable criticals</text>
-
-      <line x1="422" y1="100" x2="560" y2="60" stroke="#000" stroke-width="2.5" marker-end="url(#a3)"/>
-      <line x1="422" y1="100" x2="560" y2="190" stroke="#000" stroke-width="2.5" marker-end="url(#a3)"/>
-      <line x1="422" y1="360" x2="560" y2="360" stroke="#000" stroke-width="2.5" marker-end="url(#a3)"/>
-
-      <rect x="565" y="0" width="560" height="120" rx="10" fill="rgba(0,0,0,.035)"/>
-      <text x="593" y="52" class="sf" font-size="36">eval</text>
-      <text x="593" y="94" class="m" font-size="21" fill="rgba(0,0,0,.6)">59 cases, live Valio API</text>
-      <rect x="565" y="140" width="560" height="120" rx="10" fill="rgba(0,0,0,.035)"/>
-      <text x="593" y="192" class="sf" font-size="36">llm-eval</text>
-      <text x="593" y="234" class="m" font-size="21" fill="rgba(0,0,0,.6)">same cases through the LLM agent</text>
-      <rect x="565" y="300" width="560" height="120" rx="10" fill="rgba(0,0,0,.035)"/>
-      <text x="593" y="352" class="sf" font-size="36">smoke</text>
-      <text x="593" y="394" class="m" font-size="21" fill="rgba(0,0,0,.6)">real compose stack, MCP + JWKS</text>
-
-      <g class="m" font-size="21">
-        <rect x="1160" y="22" width="520" height="76" rx="6" fill="rgba(168,50,31,.08)"/>
-        <text x="1180" y="54" fill="#a8321f">deny by default · allow</text>
-        <text x="1180" y="84">pypi, junction26.valioaimo.fi</text>
-        <rect x="1160" y="162" width="520" height="76" rx="6" fill="rgba(168,50,31,.08)"/>
-        <text x="1180" y="194" fill="#a8321f">deny by default · allow</text>
-        <text x="1180" y="224">pypi, Valio, model APIs only</text>
-        <rect x="1160" y="322" width="520" height="76" rx="6" fill="rgba(168,50,31,.08)"/>
-        <text x="1180" y="354" fill="#a8321f">deny by default · allow</text>
-        <text x="1180" y="384">dockerhub only, no API key</text>
-      </g>
-    </g>
-  </svg>
-  <div style="display:flex;gap:16px;margin-top:auto;margin-bottom:10px;flex-wrap:wrap">
-    <span class="pill solidpill">CI on CRACI runners</span><span class="pill">actions pinned to commit SHAs</span><span class="pill">live on Verda, Finland: production + staging</span><span class="pill">MariaDB · Caddy + TLS</span>
-  </div>
-  <div class="foot"><span>Sous</span><span>13 / 14</span></div>
-</section>
-
-<!-- 14 · Path to production -->
-<section class="slide">
-  <div class="kicker">Path to production</div>
-  <h1>Three steps to production</h1>
-  <div class="grid3" style="margin-top:40px">
+  <div class="kicker">Open, run like production, and what's next</div>
+  <h1>Open standards today. A short list before production.</h1>
+  <div class="grid3" style="margin-top:14px;align-items:start">
     <div class="card">
-      <div class="label">1 · Pilot</div>
-      <p style="font:400 46px/1.15 var(--serif);margin-bottom:24px">One customer, one mandate</p>
-      <p style="font-size:28px" class="muted">Buyer login via OIDC instead of the approver code. Bearer agent credentials (opt-in today).</p>
+      <div class="label">Open</div>
+      <ul class="rules" style="font-size:25px">
+        <li>MCP + OpenAPI, same operations; MCP tools return typed <span class="mono">structuredContent</span></li>
+        <li>Exports: AP2 v0.2 claim sets (unsigned views), A2A agent card, MCP server card, schema.org Offer/Order</li>
+        <li>Conformance kit any gateway can run · MIT</li>
+      </ul>
     </div>
     <div class="card">
-      <div class="label">2 · Real orders</div>
-      <p style="font:400 46px/1.15 var(--serif);margin-bottom:24px">Valio Aimo's order API, bound keys</p>
-      <p style="font-size:28px" class="muted">Per-customer prices and contracts. Agent keys bound to the mandate (mTLS, DPoP or VC-bound). Key rotation via JWKS kid; audit head anchored outside.</p>
+      <div class="label">Run like production</div>
+      <ul class="rules" style="font-size:25px">
+        <li><b>CRACI</b> CI: MariaDB tests, SBOM (694 packages), grype 0 critical, deny-by-default egress per job</li>
+        <li><b>Verda</b> CPU instances in Finland: production + staging</li>
+        <li><b>Aiven</b> Valkey: one Valio call budget across deployments, live in CI; not yet on the servers</li>
+      </ul>
     </div>
     <div class="card solid">
-      <div class="label">3 · Standard mandates</div>
-      <p style="font:400 46px/1.15 var(--serif);margin-bottom:24px">W3C Verifiable Credentials / AP2</p>
-      <p style="font-size:28px;color:rgba(248,248,243,.75)">Signed by the buyer, so any wallet or agent platform can carry them.</p>
+      <div class="label">Next, honestly</div>
+      <ul class="rules" style="font-size:25px;border-color:rgba(248,248,243,.2)">
+        <li style="border-color:rgba(248,248,243,.2)">Buyer login (OIDC) instead of one approver code; agent keys bound to the mandate</li>
+        <li style="border-color:rgba(248,248,243,.2)">Valio Aimo's real order API and contract prices (mock: list prices, no order API)</li>
+        <li style="border-color:rgba(248,248,243,.2)">Key rotation via JWKS; signed AP2 / VC mandates by default</li>
+      </ul>
     </div>
   </div>
-  <p style="font:400 48px/1.25 var(--serif);margin-top:auto;margin-bottom:30px">Open today: MCP + OpenAPI + JWS, MIT-licensed. Any agent works, no lock-in.</p>
-  <div class="foot"><span>Sous · 135-181-8-209.sslip.io · github.com/Zawaer/sous</span><span>14 / 14</span></div>
+  <p class="src" style="margin-top:22px">CRACI evidence: a per-job network trace checked against each job's declared egress allowlist and a signed evidence bundle are being added (docs/CI.md); not claimed here until a run is green.</p>
+  <div class="foot"><span>Sous · 135-181-8-209.sslip.io · github.com/Zawaer/sous · docs/STATUS.md, STANDARDS.md, CI.md, AIVEN.md, VERDA.md</span><span>12 / 12</span></div>
 </section>
 
 </body>
