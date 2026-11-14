@@ -412,7 +412,8 @@ def request_quote(
 
     delivery_date: YYYY-MM-DD.
     items: one per need: {product_ids: [...], amount, unit: 'L' | 'KG' | 'SALES_UNIT', substitute_for?}
-    (ST, PCS, KPL, pack, packs also mean SALES_UNIT).
+    (pack, packs mean SALES_UNIT = cartons/packs as sold; 'ST' (PCS, KPL) counts pieces when the product has
+    them: 20 ST of a carton of 6 = 4 cartons, rounded up, and the line says so in unit_note).
       Give several candidate ids per need and an amount in L or KG: the gateway picks the cheapest orderable
       one per L/KG, splitting across products when stock is short. Mark substitutes with substitute_for.
     Always pass mandate_id: the quote then includes mandate_preview (silent | notify | ask | block, and why).

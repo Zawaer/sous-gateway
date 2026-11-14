@@ -370,7 +370,7 @@ def test_mcp_live_lookups_are_scoped(c, monkeypatch):
 
 
 def test_rest_substitutes_accept_pack_unit_aliases(c, monkeypatch):
-    """'ST', 'pcs', 'kpl' mean SALES_UNIT on REST too (one normaliser: sous/quote.py); unknown units are a 422."""
+    """'ST', 'pcs', 'kpl', 'packs' are accepted on REST too (one normaliser: sous/quote.py); unknown units are a 422."""
     _live(c, monkeypatch)
     for unit in ("ST", "pcs", "kpl", "packs", "kg"):
         r = c.get("/products/OAT/substitutes", params={"delivery_date": DAY, "amount": 2, "unit": unit})

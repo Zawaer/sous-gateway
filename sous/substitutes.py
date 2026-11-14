@@ -612,14 +612,20 @@ def _fmt_amount(v: float, unit: str) -> str:
 
 
 def _asked(amount: float, unit: str | None, orig: dict, opack: dict | None, content: tuple | None,
-           need: float) -> str:
-    """The need as asked, with the pack structure: '20 x KI (6 x 190 g) = 22.8 kg' (20 sales units of the
-    original, each a carton of six 190 g jars), so a human sees why 20 packs became 22.8 kg."""
-    if unit is not None:
+           need: float, per: float = 1.0) -> str:
+    """The need as asked, with the pack structure, so a human sees where the content came from:
+    '20 x KI (6 x 190 g) = 22.8 kg' for 20 sales units (cartons of six 190 g jars), and
+    '20 ST x 190 g = 3.8 kg (sold per KI (6 x 190 g))' for 20 pieces of the same product."""
+    if not Q.is_packs(unit):
         return f"{amount:g} {unit}"
     one = sales_unit_pack(orig, opack, content)
     if not one:
-        return f"{amount:g} SALES_UNIT"
+        return f"{amount:g} {unit or 'SALES_UNIT'}"
+    if per != 1:
+        each = content[0] / per
+        each_text = (opack["text"] if opack and opack["measure"] == content[1] and abs(opack["total"] - each) < 0.05 * each
+                     else _fmt_amount(each, content[1]))
+        return f"{amount:g} {unit} x {each_text} = {_fmt_amount(need, content[1])} (sold per {one})"
     return f"{amount:g} x {one} = {_fmt_amount(need, content[1])}"
 
 
@@ -756,10 +762,12 @@ def suggest(
     # 2. live price and availability for the original + shortlist (two batched calls). A need in packs is
     # turned into what those packs hold (40 x 400 g -> 16 KG), so each option is priced for the same amount
     # (2 x 10 kg or 16 x 1 kg), not for 40 of its own packs.
-    need, need_unit = amount, unit
-    content = Q.content_per_sales_unit(orig, None) if unit is None else None
+    # A Valio unit code the original defines is counted literally (20 ST of a carton of 6 jars = 20 jars).
+    need, need_unit = amount, None if unit == "SALES_UNIT" else unit
+    per = Q.packs_per_sales_unit(orig, need_unit) if Q.is_packs(need_unit) else 1.0
+    content = Q.content_per_sales_unit(orig, None) if Q.is_packs(need_unit) else None
     if content:
-        need, need_unit = round(amount * content[0], 3), content[1]
+        need, need_unit = round(amount / per * content[0], 3), content[1]
     offers, _ = Q.offers([orig["id"]] + [e["p"]["id"] for e in shortlist], delivery_date, need, need_unit)
     by_id = {o["product_id"]: o for o in offers}
     o_orig = by_id.get(orig["id"])
@@ -850,7 +858,7 @@ def suggest(
                      "comparison_price": ref_price, "pack": opack and opack["text"],
                      "total_ex_vat": ref_total},
         "need": {"amount": need, "unit": need_unit or "SALES_UNIT",
-                 "asked": _asked(amount, unit, orig, opack, content, need)},
+                 "asked": _asked(amount, unit, orig, opack, content, need, per)},
         "constraints": {"required_claims": sorted(required_claims), "avoid_allergens": avoid,
                         "same_category": orig["category"], "measure": measure, "temperature": orig["temperature"],
                         "type": _public_type(otype)},

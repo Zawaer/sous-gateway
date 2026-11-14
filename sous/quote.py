@@ -13,29 +13,61 @@ from datetime import date, datetime, timedelta
 
 from typing import Annotated, Literal
 
-from pydantic import BeforeValidator
+from pydantic import BeforeValidator, WithJsonSchema
 
 from . import aimo, catalog, clock, config, exposure
 
 # --- need units: the one place they are normalised -----------------------------------------------------------
-# Needs are in litres, kilos or sales units (packs). Valio's own sales-unit codes (ST, KPL) and common pack words
-# mean "packs": every entry point (QuoteItem, standing orders, substitutes over REST and MCP) maps them here, so
-# content-equivalent sizing (substitutes, options) sees one spelling.
-UNIT_ALIASES = {"SALES_UNIT": "SALES_UNIT", "ST": "SALES_UNIT", "PCS": "SALES_UNIT", "PC": "SALES_UNIT",
-                "KPL": "SALES_UNIT", "PACK": "SALES_UNIT", "PACKS": "SALES_UNIT",
-                "L": "L", "KG": "KG"}
-UNIT_DOC = "L or KG for volume/weight; SALES_UNIT for packs (ST, PCS, KPL, pack, packs mean the same; any case)"
+# Needs are in litres, kilos, sales units (SALES_UNIT, 'pack(s)') or one of Valio's own unit codes (ST = piece,
+# KI = carton, ...). A unit code is taken literally when the product defines it: '20 ST' of a pesto sold per
+# KI of 6 jars is 20 jars, i.e. 4 KI (24 ST) after rounding up to whole cartons. Only for a product without that
+# code does it fall back to meaning its sales units. PCS / PC / KPL are spellings of ST. Every entry point
+# (QuoteItem, standing orders, substitutes over REST and MCP) normalises here; build_offer, plan, options and
+# substitutes convert with packs_per_sales_unit.
+PACK_CODES = ("ST", "KI", "PAL", "KRS", "PAK", "BAG", "BOT", "PRK", "RAS", "CS", "SK", "KRT", "KLE", "ZML", "DOL",
+              "KAN", "DSP", "KOR", "NIP", "PNT", "DZ", "MDO")
+UNIT_ALIASES = {"SALES_UNIT": "SALES_UNIT", "PACK": "SALES_UNIT", "PACKS": "SALES_UNIT",
+                "PCS": "ST", "PC": "ST", "KPL": "ST", "L": "L", "KG": "KG", **{c: c for c in PACK_CODES}}
+UNIT_DOC = ("L or KG for volume/weight; SALES_UNIT (or pack, packs) for the product's sales units; a Valio unit code "
+            "(ST = piece, also PCS / KPL; KI = carton, ...) counts that unit when the product has it (20 ST of a "
+            "carton of 6 = 4 cartons, rounded up) and means sales units when it doesn't; any case")
+NEED_UNITS = ("L", "KG", "SALES_UNIT") + PACK_CODES
 
 
 def normalize_unit(unit):
-    """'st' / 'PCS' / 'KPL' / 'pack(s)' -> 'SALES_UNIT', 'l' -> 'L', 'kg' -> 'KG'; anything else unchanged (and then
-    rejected by the Unit type)."""
+    """'st' / 'PCS' / 'KPL' -> 'ST', 'pack(s)' -> 'SALES_UNIT', 'l' -> 'L', 'kg' -> 'KG', 'ki' -> 'KI'; anything else
+    unchanged (and then rejected by the Unit type)."""
     if isinstance(unit, str):
         return UNIT_ALIASES.get(unit.strip().upper(), unit)
     return unit
 
 
-Unit = Annotated[Literal["L", "KG", "SALES_UNIT"], BeforeValidator(normalize_unit)]
+def is_packs(unit: str | None) -> bool:
+    """A need counted in packs (sales units or a Valio unit code), not in L or KG."""
+    return unit is None or unit == "SALES_UNIT" or unit in PACK_CODES
+
+
+def packs_per_sales_unit(product: dict | None, unit: str | None) -> float:
+    """How many `unit` one sales unit of the product is: 6 for ST on a KI of 6 jars. 1 for SALES_UNIT, the sales
+    unit itself, or a code the product doesn't define (then it means the sales unit)."""
+    if not product or unit in (None, "SALES_UNIT") or unit not in PACK_CODES:
+        return 1.0
+    units, su = product.get("units") or {}, product.get("sales_unit")
+    if unit == su or not units.get(unit) or not units.get(su):
+        return 1.0
+    return units[su] / units[unit]
+
+
+def unit_note(asked: float, unit: str, qty: float, sales_unit: str, per: float) -> str:
+    """'20 ST asked -> 4 KI (24 ST) ordered, rounded up to whole KI'."""
+    got = round(qty * per, 3)
+    return (f"{round(asked, 3):g} {unit} asked -> {qty:g} {sales_unit} ({got:g} {unit}) ordered"
+            + (f", rounded up to whole {sales_unit}" if got > asked + 1e-9 else ""))
+
+
+# The schema lists the common choices (agents and LLMs see a short enum); the other Valio codes are accepted too.
+Unit = Annotated[Literal[NEED_UNITS], BeforeValidator(normalize_unit),
+                 WithJsonSchema({"type": "string", "enum": ["L", "KG", "SALES_UNIT", "ST"], "description": UNIT_DOC})]
 
 STOCK_PLENTY = 1e9  # Stock lines report 9999999999 when there is effectively no limit
 TERMINAL_UNKNOWN = 999999  # Terminal (supplier-shipped) lines always report 999999 = unknown
@@ -130,9 +162,13 @@ def build_offer(
     # --- content and quantity
     content = content_per_sales_unit(product, price)
     qty = None
+    per = packs_per_sales_unit(product, need_unit)  # need_unit per sales unit when the need is in packs
+    note = None
     if need is not None:
-        if need_unit in (None, su, "SALES_UNIT"):
-            qty = round_to_lot(need, su, product["allowed_lot_size"])
+        if is_packs(need_unit):
+            qty = round_to_lot(need / per, su, product["allowed_lot_size"])
+            if per != 1:
+                note = unit_note(need, need_unit, qty, su, per)
         elif content and content[1] == need_unit:
             qty = round_to_lot(need / content[0], su, product["allowed_lot_size"])
         elif content:
@@ -227,6 +263,8 @@ def build_offer(
     if product["co2_kg_per_kg_group_avg"] is not None and covered is not None:
         # L of a drink ~ 1 kg; flagged as a product-group estimate either way.
         co2 = round(product["co2_kg_per_kg_group_avg"] * covered, 1)
+    if qty is not None and need_unit in PACK_CODES:
+        covered = qty * per  # in the unit asked for: 4 KI cover 24 ST
 
     return {
         "product_id": product["id"],
@@ -237,6 +275,7 @@ def build_offer(
         "content_per_sales_unit": {"amount": content[0], "unit": content[1], "source": content[2]} if content else None,
         "quantity": qty,
         "covers": {"amount": round(covered, 2), "unit": need_unit} if covered is not None else None,
+        **({"unit_note": note} if note else {}),
         "unit_price_ex_vat": unit_ex,
         "unit_price_inc_vat": unit_inc,
         "vat_rate": vat,
@@ -323,7 +362,8 @@ def plan(need: float, need_unit: str | None, candidates: list[dict], sized: bool
     for o in sorted(candidates, key=rank_key):
         if remaining <= 1e-9 or not o["orderable"] or o["quantity"] is None:
             continue
-        content = (o["content_per_sales_unit"] or {}).get("amount") if need_unit else 1.0
+        content = (packs_per_sales_unit(catalog.get(o["product_id"]), need_unit) if is_packs(need_unit)
+                   else (o["content_per_sales_unit"] or {}).get("amount"))
         if not content:
             continue
         lot = o.get("allowed_lot_size")
@@ -337,6 +377,9 @@ def plan(need: float, need_unit: str | None, candidates: list[dict], sized: bool
         line["line_total_ex_vat"] = round(o["unit_price_ex_vat"] * want, 2)
         line["line_total_inc_vat"] = round(o["unit_price_inc_vat"] * want, 2)
         line["covers"] = {"amount": round(want * content, 2), "unit": need_unit}
+        line.pop("unit_note", None)
+        if need_unit in PACK_CODES and content != 1:
+            line["unit_note"] = unit_note(min(remaining, want * content), need_unit, want, o["sales_unit"], content)
         if sized:
             line["issues"] = [i for i in o["issues"] if i["code"] != "PARTIAL_STOCK"]
         else:

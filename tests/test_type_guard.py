@@ -212,7 +212,8 @@ def test_substitutes_cover_the_same_kilos_not_the_same_pack_count(monkeypatch):
 @pytest.mark.parametrize("unit", ["ST", "st", "PCS", "KPL", "pack", "packs", "SALES_UNIT"])
 def test_pack_units_are_one_unit_everywhere_and_substitutes_size_by_content(gw, monkeypatch, unit):
     """Judge audit: suggest_substitutes took unit 'ST' as a measure and kept 40 packs of 10 kg for a 40 x 400 g need
-    (covers null), while request_quote rejected 'ST'. Pack words now all mean SALES_UNIT (sous/quote.py)."""
+    (covers null), while request_quote rejected 'ST'. Pack words now all count packs (sous/quote.py); these
+    products are sold per ST, so ST and SALES_UNIT mean the same here."""
     monkeypatch.setattr(catalog, "get", lambda pid: TOMS.get(pid))
     monkeypatch.setattr(Sub, "_same_category", lambda cat: list(TOMS.values()))
     monkeypatch.setattr(Q, "offers", lambda ids, d, n=None, u=None, **k: (
@@ -222,9 +223,10 @@ def test_pack_units_are_one_unit_everywhere_and_substitutes_size_by_content(gw, 
     by = {o["product_id"]: o for o in r["options"]}
     assert by["21"]["quantity"] == 2 and by["21"]["covers"] == {"amount": 20.0, "unit": "KG"}
     assert by["22"]["quantity"] == 16 and by["22"]["covers"] == {"amount": 16.0, "unit": "KG"}
-    assert S.QuoteItem(product_ids=["20"], amount=40, unit=unit).unit == "SALES_UNIT"
+    want = "SALES_UNIT" if unit.upper() in ("PACK", "PACKS", "SALES_UNIT") else "ST"  # PCS / KPL spell ST
+    assert S.QuoteItem(product_ids=["20"], amount=40, unit=unit).unit == want
     from sous import standing
-    assert standing.StandingItem(product_ids=["20"], amount=40, unit=unit).unit == "SALES_UNIT"
+    assert standing.StandingItem(product_ids=["20"], amount=40, unit=unit).unit == want
 
 
 def test_measure_units_any_case_and_unknown_units_are_refused(gw):
@@ -235,6 +237,69 @@ def test_measure_units_any_case_and_unknown_units_are_refused(gw):
     with pytest.raises(S.GatewayError) as e:
         S.suggest_substitutes("a", "10", DAY, 1, "crate")
     assert e.value.code == "invalid_unit" and e.value.status == 422
+
+
+# --- Valio unit codes are literal when the product defines them (judge audit, 473479) ----------------------
+# Saclá garlic pesto 190 g, sold per KI (carton) of 6 jars (ST). '20 ST' = 20 jars, not 20 cartons.
+PESTO = product("40", "Saclà Villi Valkosipuli Pesto 190 g", "Saclá 190g Garlic Pesto", size=(0.19, "KG"),
+                category="P", temperature="ambient", claims=[], sales_unit="KI", base_unit="ST",
+                units={"KRS": 216.0, "PAL": 1944.0, "KI": 6.0, "ST": 1.0})
+NO_ST = product("41", "Pesto 1 kg", "Pesto 1 kg", size=(1.0, "KG"), category="P", temperature="ambient", claims=[],
+                sales_unit="KI", base_unit="KI", units={"KI": 1.0, "PAL": 100.0})
+PESTOS = {p["id"]: p for p in (PESTO, NO_ST)}
+
+
+def pprice(pid):
+    return {"catalogPrice": {"value": 12.0, "valueWithTax": 13.68, "validTo": "2026-12-31T00:00:00+0200"},
+            "comparisonPrice": {"value": 12.0 / PESTOS[pid]["units"]["KI"] / 0.19 if pid == "40" else 12.0},
+            "comparisonUnit": "KG", "tax": {"taxRate": 14}, "error": False}
+
+
+def test_unit_code_the_product_defines_is_counted_literally(monkeypatch):
+    monkeypatch.setattr(catalog, "get", lambda pid: PESTOS.get(pid))
+    assert S.QuoteItem(product_ids=["40"], amount=20, unit="st").unit == "ST"
+    o = Q.build_offer(PESTO, pprice("40"), avail(), DAY, 20, "ST", NOW)
+    assert o["quantity"] == 4 and o["sales_unit"] == "KI"  # 20 jars -> 4 cartons of 6, rounded up
+    assert o["covers"] == {"amount": 24.0, "unit": "ST"}
+    assert o["unit_note"] == "20 ST asked -> 4 KI (24 ST) ordered, rounded up to whole KI"
+    [line], left = Q.plan(20, "ST", [o])
+    assert line["quantity"] == 4 and line["covers"] == {"amount": 24.0, "unit": "ST"} and left == 0
+    # SALES_UNIT stays explicit for callers who mean cartons
+    assert Q.build_offer(PESTO, pprice("40"), avail(), DAY, 20, None, NOW)["quantity"] == 20
+    assert Q.build_offer(PESTO, pprice("40"), avail(), DAY, 2, "KI", NOW)["quantity"] == 2
+
+
+def test_unit_code_the_product_lacks_means_its_sales_units(monkeypatch):
+    monkeypatch.setattr(catalog, "get", lambda pid: PESTOS.get(pid))
+    o = Q.build_offer(NO_ST, pprice("41"), avail(), DAY, 20, "ST", NOW)
+    assert o["quantity"] == 20 and "unit_note" not in o
+    [line], left = Q.plan(20, "ST", [o])
+    assert line["quantity"] == 20 and left == 0
+
+
+def test_quote_in_pieces_orders_whole_cartons(gw):
+    CATALOG["16"] = product("16", "Valio kevytmaito 1 l laktoositon UHT", "", sales_unit="KI", units={"KI": 6.0, "ST": 1.0})
+    PRICE_PER_L["16"] = 1.30
+    try:
+        q = gw(["16"], amount=20, unit="ST")
+        [line] = q["lines"]
+        assert line["quantity"] == 4 and line["covers"] == {"amount": 24.0, "unit": "ST"}
+        assert line["unit_note"] == "20 ST asked -> 4 KI (24 ST) ordered, rounded up to whole KI"
+        assert gw(["16"], amount=20, unit="SALES_UNIT")["lines"][0]["quantity"] == 20
+        assert gw(["10"], amount=20, unit="ST")["lines"][0]["quantity"] == 20  # sold per ST: same as before
+    finally:
+        CATALOG.pop("16"), PRICE_PER_L.pop("16")
+
+
+def test_substitutes_for_pieces_size_by_the_pieces_content(monkeypatch):
+    monkeypatch.setattr(catalog, "get", lambda pid: PESTOS.get(pid))
+    monkeypatch.setattr(Sub, "_same_category", lambda cat: list(PESTOS.values()))
+    monkeypatch.setattr(Q, "offers", lambda ids, d, n=None, u=None, **k: (
+        [Q.build_offer(PESTOS[i], pprice(i), avail(i != "40"), d, n, u, NOW) for i in ids], NOW))
+    r = Sub.suggest("40", DAY, 20, "ST")
+    assert r["need"]["amount"] == 3.8 and r["need"]["unit"] == "KG"  # 20 x 190 g, not 20 cartons
+    assert r["need"]["asked"] == "20 ST x 190 g = 3.8 kg (sold per KI (6 x 190 g))"
+    assert Sub.suggest("40", DAY, 20, None)["need"]["asked"] == "20 x KI (6 x 190 g) = 22.8 kg"
 
 
 # --- false mismatches reported by QA (board 02:09Z oat milk, 03:00Z cashew butter) ------------

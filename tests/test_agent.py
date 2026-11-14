@@ -122,7 +122,7 @@ def test_tool_schemas_hide_runtime_bound_arguments(gw):
         assert not set(props) & {"agent_id", "mandate_id", "idempotency_key", "agent_token", "rationale"}, f["name"]
         assert "$ref" not in json.dumps(f) and "anyOf" not in json.dumps(f)
     item = tools["request_quote"]["parameters"]["properties"]["items"]["items"]
-    assert item["properties"]["unit"]["enum"] == ["L", "KG", "SALES_UNIT"]
+    assert item["properties"]["unit"]["enum"] == ["L", "KG", "SALES_UNIT", "ST"]
     assert tools["get_mandate"]["parameters"]["properties"] == {}
     assert "Place an order" in tools["place_order"]["description"] or "commits" in tools["place_order"]["description"]
 

@@ -212,10 +212,12 @@ def build(
     # 4. substitutes: fill the gap next to the original, or replace it outright. A need in the original's
     # packs becomes what those packs hold, so a substitute in other packs covers the same content.
     subs = [s for s in substitutes or [] if s["offer"]["orderable"] and s["offer"]["quantity"] is not None]
-    per_pack = _content_of(original_id, offers) if unit is None and subs else None
+    per_pack = _content_of(original_id, offers) if Q.is_packs(unit) and subs else None
+    if per_pack and unit is not None:  # a Valio unit code (20 ST): what one of those holds, not one sales unit
+        per_pack = (per_pack[0] / Q.packs_per_sales_unit(catalog.get(original_id), unit), per_pack[1])
     if per_pack:
         subs = [s for s in subs if (s["offer"].get("content_per_sales_unit") or {}).get("unit") == per_pack[1]]
-    elif unit is None:
+    elif Q.is_packs(unit):
         # What one original pack holds is unknown, so no substitute amount can be shown to be equivalent:
         # N of the substitute's own packs could be far more or less. No substitute options rather than a
         # quantity a mandate could auto-approve (substitutions=notify) on an unverified claim.

@@ -829,7 +829,7 @@ def suggest_substitutes(agent_id: str, product_id: str, delivery_date: date | No
     if mandate_id:
         access.check_live(reader, mandate_id)  # before the mandate and product lookups: no existence oracle
     unit = Q.normalize_unit(unit)  # MCP passes any string; REST already normalised
-    if unit not in ("L", "KG", "SALES_UNIT"):
+    if unit not in Q.NEED_UNITS:
         raise GatewayError("invalid_unit", f"Unit '{unit}' is not known. {Q.UNIT_DOC}.", 422)
     mandate = _mandate(mandate_id) if mandate_id else None
     if not access.skips_agent_check(reader, mandate):
