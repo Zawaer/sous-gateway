@@ -56,6 +56,8 @@
           <label>Product ID being replaced<input id="substitute" placeholder="Original SKU" maxlength="100"></label>
           <label>Gateway URL<input id="gateway" type="url" spellcheck="false"></label>
           <label>Agent token (if required)<input id="agent-token" type="password" autocomplete="off" spellcheck="false" aria-describedby="agent-token-hint"></label>
+          <button id="load-mandates" type="button" class="secondary">Load available mandates</button>
+          <label id="available-mandates-label" hidden>Choose a mandate<select id="available-mandates"></select></label>
           <p id="agent-token-hint" class="muted" hidden>Paste the agent token from your sandbox setup.</p>
         </div>
         <p class="muted" id="allergen-help">Use gateway allergen codes, for example AM for milk, AN for tree nuts, and AP for peanuts.</p>

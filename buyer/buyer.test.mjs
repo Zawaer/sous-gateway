@@ -401,3 +401,18 @@ test('accepts omitted or null optional purpose fields while binding explicit per
   await assert.rejects(client.quoteBasket(need.deliveryDate, mandate,
     [{ need: explicit, productIds: ['sku'] }]), /signed quote does not match/);
 });
+
+test('discovers readable mandates using the credential and verifies the selected signed mandate', async () => {
+  const client = new Gateway('https://example.test', async (url, init) => {
+    if (url.endsWith('jwks.json')) return Response.json(jwks);
+    assert.equal(init.headers.Authorization, 'Bearer discovery-secret');
+    if (url.endsWith('/mandates')) return Response.json({ mandates: [
+      { id: mandate.id, buyer: 'Hotel', yours: true }, { id: 'revoked', revoked: true }, { buyer: 'No ID' },
+    ] });
+    return Response.json({ mandate, jws: token(mandate, 'mandate') });
+  }, 'discovery-secret');
+  assert.deepEqual(await client.listMandates(), [{ id: mandate.id, buyer: 'Hotel', yours: true }]);
+  assert.deepEqual(await client.mandate(mandate.id), mandate);
+  const malformed = new Gateway('https://example.test', async () => Response.json({ mandates: {} }));
+  await assert.rejects(malformed.listMandates(), /invalid mandate list/);
+});

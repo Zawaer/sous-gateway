@@ -49,6 +49,12 @@ export class Gateway {
     return payload;
   }
 
+  async listMandates() {
+    const response = await this.request('/mandates');
+    if (!Array.isArray(response.mandates)) throw new Error('The gateway returned an invalid mandate list.');
+    return response.mandates.filter(mandate => typeof mandate.id === 'string' && !mandate.revoked);
+  }
+
   async mandate(id) {
     const mandate = await this.signed(await this.request(`/mandates/${encodeURIComponent(id)}`), 'mandate');
     if (mandate.id !== id || !mandate.agent_id) throw new Error('The signed mandate does not match this request.');

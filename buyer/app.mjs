@@ -97,7 +97,7 @@ function updateControls() {
   const quoteExpiryNotice = $('quote-expired');
   if (quoteExpiryNotice) quoteExpiryNotice.hidden = !expired;
   $('refresh').disabled = busy;
-  if (state.basket) for (const id of ['gateway', 'mandate', 'delivery', 'agent-token']) $(id).disabled = true;
+  if (state.basket) for (const id of ['gateway', 'mandate', 'delivery', 'agent-token', 'load-mandates', 'available-mandates']) $(id).disabled = true;
   $('open-linked-order').disabled = busy || retry;
 }
 
@@ -645,8 +645,42 @@ $('intent').addEventListener('keydown', (event) => {
 });
 requestForm.addEventListener('input', (event) => {
   if (event.target === $('gateway') || event.target === $('mandate')) $('agent-token').value = '';
+  if (['gateway', 'agent-token', 'mandate'].some(id => event.target === $(id))) {
+    $('available-mandates-label').hidden = true;
+    $('available-mandates').replaceChildren();
+  }
   if (event.target !== $('intent')) clearSearch();
 });
+$('load-mandates').addEventListener('click', () => run(async () => {
+  $('available-mandates-label').hidden = true;
+  $('available-mandates').replaceChildren();
+  const gateway = new Gateway($('gateway').value, undefined, $('agent-token').value.trim());
+  const mandates = await gateway.listMandates();
+  if (!mandates.length) {
+    notice($('feedback'), 'No readable mandates found. Check the gateway and agent token.');
+    return;
+  }
+  const placeholder = element('option', 'Choose your buyer mandate');
+  placeholder.value = '';
+  placeholder.disabled = true;
+  placeholder.selected = true;
+  $('available-mandates').append(placeholder, ...mandates.map(mandate => {
+    const option = element('option', `${mandate.buyer || mandate.id} · ${mandate.id}${mandate.yours ? ' · your credential' : ''}`);
+    option.value = mandate.id;
+    return option;
+  }));
+  $('available-mandates-label').hidden = false;
+}));
+
+$('available-mandates').addEventListener('change', () => run(async () => {
+  const gateway = new Gateway($('gateway').value, undefined, $('agent-token').value.trim());
+  const mandate = await gateway.mandate($('available-mandates').value);
+  $('mandate').value = mandate.id;
+  clearSearch();
+  renderMandate(mandate);
+  notice($('feedback'), `Selected ${mandate.buyer}. Review your request, then find products.`);
+}));
+
 shortlistForm.addEventListener('change', () => {
   if (state.basket) updateControls();
   else clearQuote();
