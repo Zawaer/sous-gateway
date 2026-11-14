@@ -599,8 +599,16 @@ const linkedOrder = pageParams.get('order');
 if (linkedOrder) {
   run(async () => {
     const gateway = new Gateway($('gateway').value);
-    const order = await gateway.getOrder(linkedOrder);
-    const quote = await gateway.getQuote(order.quote_id);
+    let order, quote;
+    try {
+      order = await gateway.getOrder(linkedOrder);
+      quote = await gateway.getQuote(order.quote_id);
+    } catch (error) {
+      if (error.status === 404) {
+        throw new Error('This order is unavailable. Check the order link and gateway, or open the order from the account that placed it.');
+      }
+      throw error;
+    }
     await showOrder(gateway, order, quote);
     $('api-link').href = `${gateway.base}/docs`;
     $('order-panel').scrollIntoView({ block: 'start' });
