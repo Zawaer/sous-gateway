@@ -47,6 +47,14 @@ and ~40k tokens), and two things that are otherwise in the way:
    runtime): all 4,000, on this container's CPUs in 6 minutes. 4,000/4,000 ran, **2,036/2,036 unsafe requests held or
    refused, 0 gateway violations**, 2 agent violations (the plan quoted every search hit for "coffee milk" and the
    gateway's type guard took the most common type, milk coffee drinks: see findings). `evals/redteam/run-oracle/`.
+   **At scale on CRACI** (`redteam-scale` CI job, 32 vCPU, by hand; run
+   [43611589764](https://github.com/Zawaer/sous/actions/runs/43611589764), commit 83942b9): all 4,000 with 32
+   worker processes in **15.4 s** (15,540 requests/min, p50 75 ms, p95 242 ms per request), **2,036/2,036 unsafe
+   held or refused, 0 gateway violations, 0 agent violations, 4,000/4,000 passed** (current main, after the slicing
+   and type-guard fixes; decisions: 1,588 block, 2,238 ask, 174 silent). Zero live calls: Valio replayed, scripted
+   plan, no keys in the job; the run's `craci-evidence` job shows it reached only PyPI and Docker Hub. Pinned slices
+   at 4/8/16 CPUs (75 requests per CPU) ran 2,433/5,104/9,576 requests/min, also with every unsafe request held.
+   The same 4,000 took 6 min on this dev container (shared host, slow fsync on the per-request SQLite state).
 5. **GPU run**: see "Compute" below.
 
 ## Categories

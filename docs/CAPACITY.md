@@ -55,6 +55,30 @@ ms (23 after) and at 16 agents 92 ms (70 after). The order ceiling did not move.
 **SQLite** (the dev default, file on this host's disk) is far slower: 6.5 req/s with 1 agent and 9.1 with 8.
 Every statement is its own transaction, and an fsync here costs ~19 ms. Use MariaDB for any real load.
 
+## Throughput vs CPUs on a 32-vCPU CRACI runner
+
+The `redteam-scale` CI job (by hand: `gh workflow run ci.yml -f redteam_scale=true`; `scripts/craci_scale.py`) reran
+this test on a dedicated CRACI VM (`size: 32`, NVMe), Valio replayed, MariaDB 11.4 as a service container. For
+each CPU count the gateway was pinned with `taskset` and MariaDB with `docker update --cpuset-cpus` to the same
+CPUs; the load generator had the last 2 vCPUs. Stages of 15 s. Run
+[43611589764](https://github.com/Zawaer/sous/actions/runs/43611589764) (commit 83942b9), egress proved by its
+`craci-evidence` job (PyPI and Docker Hub only).
+
+| gateway + DB CPUs | 1 agent | 4 agents | 16 agents | 64 agents | peak orders/s | gateway CPU at peak | errors |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 4 | 20.1 req/s | 21.9 | **28.4** | 27.4 | 3.9 | 1.25 cores | 0 |
+| 8 | 20.6 | 19.6 | 24.8 | **28.9** | 3.3 | 1.45 | 0 |
+| 16 | 20.7 | 21.0 | **24.8** | 23.8 | 3.6 | 1.30 | 0 |
+| 30 | 19.1 | **23.8** | 23.4 | 21.3 | 3.7 | 1.09 | 0 |
+
+**One process does not get faster with more CPUs**: 24-29 req/s and 3-4 orders/s from 4 to 30 CPUs, at about one
+core (the extra 0.1-0.6 cores is uvicorn's I/O and MariaDB driver threads). This confirms the GIL + order-lock
+diagnosis below on clean hardware, and the dedicated VM is ~20 % above the shared dev host (23.5 req/s). At 64
+agents p95 is 7-8 s for every CPU count. More throughput needs more processes, sharded by buyer (scale-out plan,
+step 2). The same job shows what processes do: the scripted red team, one process per CPU, ran **2,433 requests/min
+on 4 CPUs, 5,104 on 8, 9,576 on 16 and 15,540 on 32** (all 4,000 requests in 15.4 s; docs/REDTEAM.md). That is
+~600 per CPU up to 16 and ~490 per CPU at 32, where nothing is left for the OS.
+
 ## The bottleneck
 
 py-spy ran on the server at 8 agents (`--profile`, 25 s). It shows three things:

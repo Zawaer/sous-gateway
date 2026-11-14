@@ -85,6 +85,59 @@ SBOMs (run 43580565490):
 Signature check (both bundles above): `uv run python scripts/craci_evidence.py --verify <artifact dir>` prints
 `signature valid ...; evidence.json matches the signed payload`.
 
+## Vulnerability management on CRACI's own SBOMs
+
+CRACI's API has no vulnerability, advisory, finding or AI-fix route. The public
+[openapi.json](https://api.craci.com/openapi.json) (14.11) lists only `sbom`, `sbom/oci_manifest`,
+`network-trace`, `artifact-provenance/*`, `job-logs`, `jobs` and `usage`. Unauthenticated, the real routes answer 401,
+while `/v1preview1/{vulnerabilities,findings,advisories,vulnerability-report,fixes,ai-fix,vex,remediations}` and
+`/v1experimental1/{vulnerabilities,findings,advisories,vex}` answer 404. docs.craci.com and its agent skill
+(`skills/craci/SKILL.md`) don't mention vulnerability data either. The evidence job probes 5 of those routes with
+our token **on every run** and records the status codes in the bundle. If one starts answering, the summary says so.
+So CRACI's vulnerability view is web-only for now. **For the write-up: take screenshots of CRACI's vulnerability
+view and any AI-fix suggestion for run 43611583279.**
+
+What the job does with what the API does give:
+- It merges every PyPI package and GitHub Action that CRACI's job SBOMs say a job downloaded (or restored from a
+  cache) into one CycloneDX file. grype (`anchore/scan-action/download-grype`, the same action and version as the
+  docker job) scans it. Each finding is attributed back to the jobs that downloaded the package.
+- It cross-checks that scan with the docker job's grype scan of the image (from syft's SBOM). Each finding is put
+  in one of three groups: in both scans; only in what CI jobs downloaded (build tools, test dependencies, Actions:
+  CI exposure that an image scan never sees); or a PyPI finding in the image on a package that no job downloaded
+  (it came inside a base-image layer).
+- **Gate:** the run fails on any Critical finding with a fix available, in either scan. The finding counts, the
+  three groups, the blocking list and the probe results all go into `evidence.json`, so they are signed with the
+  egress verdict (`summary.vuln_verdict`), and into the job summary.
+
+**Run [43611583279](https://github.com/Zawaer/sous/actions/runs/43611583279)** (push of 83942b9, everything green):
+- CRACI SBOMs: 201 PyPI packages and Actions refs from 7 jobs, **0 findings**.
+- Image: 218 findings, 0 Critical. 61 High with 2 fixable, 73 Medium with 12 fixable; nearly all are Debian packages
+  in the base image.
+- The 6 PyPI findings in the image are all `pip 25.0.1`, which ships inside the `python` base image. No job
+  downloaded it, so CRACI records only the image digest for it. That is the gap between a download SBOM and an
+  image SBOM, made visible.
+- Vulnerability verdict: **PASS**; egress: **PASS**; signature verified.
+
+## Creative use of compute: the 32-vCPU red team
+
+`redteam-scale` (manual, `-f redteam_scale=true`) asks CRACI for `size: "32"` and runs, offline, with no Valio
+or model key:
+- the **full 4,000-request scripted red team**, one gateway process per vCPU;
+- the red team pinned to 4/8/16 CPUs;
+- the one-process load test with gateway and MariaDB pinned to 4/8/16/30 CPUs (`scripts/craci_scale.py`).
+
+**Run [43611589764](https://github.com/Zawaer/sous/actions/runs/43611589764)** took 6 minutes for the whole job:
+- All 4,000 red-team requests ran in **15.4 s**: 2,036/2,036 unsafe held, 0 gateway violations.
+- The red team scales linearly: 2.4k, 5.1k, 9.6k and 15.5k requests/min at 4, 8, 16 and 32 CPUs.
+- One gateway process stays flat at 24-29 req/s from 4 to 30 CPUs, which is the GIL bottleneck in docs/CAPACITY.md.
+- Its `craci-evidence` job proves the job reached only PyPI and Docker Hub.
+
+The first attempt found a gap in CRACI's `dockerhub` preset (run 43611050520). Docker Hub now serves blobs from
+`production.cloudfront.docker.com`. The preset doesn't cover that host, so CRACI blocked 31 fetches and the MariaDB
+service pull failed with "denied: Forbidden". The trace named the host, and the job now declares it explicitly
+(100.9 MiB in). If the snapshot or the cached catalog is missing, the job skips with a notice; the public copy has
+neither.
+
 ## Why it runs on a GitHub-hosted runner
 
 From inside a CRACI VM, `api.craci.com` answers `403 Access denied`. That happened with it in the TLS
@@ -117,6 +170,11 @@ the image is built, so the image can't contain its own evidence. We did not add 
   `metadata.properties` has only `craci:job:*`.
 - Image provenance covers artifacts a CRACI job **pushed**. Pulled base images return 404, and our image is
   `load`ed, not pushed, so the built image has no CRACI provenance.
-- No AI-fix endpoint, so no AI fix is shown here.
+- No vulnerability, advisory, finding, VEX or AI-fix endpoint (see "Vulnerability management" above). To
+  cross-check CRACI's own vulnerability results and AI fixes against grype, we would need at least
+  `GET /v1preview1/vulnerabilities?provider=github&repo=&job_id=` (findings per job: id, purl, severity, fix
+  state and versions) and the AI-fix text or patch per finding.
+- The `dockerhub` preset misses `production.cloudfront.docker.com`, where Docker Hub now serves blobs (run
+  43611050520).
 - A job's own trace is unavailable while it runs (409), so the evidence job can't audit itself.
 - Allowed traffic without a `matchedRule` under `default: deny` (the `/_dns` probes in `smoke`, run 43582172396): the trace says "allowed" but not why.
