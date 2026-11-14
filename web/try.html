@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f8f8f3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141412" media="(prefers-color-scheme: dark)">
+  <title>Try it · Sous</title>
+  <meta name="description" content="Try Sous in five minutes: a private sandbox, an agent that orders from Valio Aimo under a signed mandate, and you as the human who approves.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Fragment+Mono&display=swap">
+  <link rel="stylesheet" href="tokens.css">
+  <style>
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.5 var(--sans); }
+    a { color: var(--aimo); text-underline-offset: 2px; }
+    .mono { font-family: var(--mono); font-size: .86em; }
+    .muted { color: var(--ink-60); }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 0 20px; }
+
+    header.top { border-bottom: 1px solid var(--rule); }
+    header.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; }
+    .brand { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); text-decoration: none; font: 400 1.25rem/1 var(--serif); }
+    .sbx { font-size: .82rem; color: var(--ink-60); text-align: right; }
+    .sbx b { color: var(--ink); font-weight: 500; }
+
+    h1 { font: 400 clamp(2rem, 6vw, 2.9rem)/1.08 var(--serif); letter-spacing: -.015em; margin: 44px 0 12px; text-wrap: balance; }
+    .lede { font-size: 1.08rem; color: var(--ink-80); max-width: 34rem; margin: 0 0 26px; }
+    h2 { font: 400 1.45rem/1.2 var(--serif); margin: 0 0 6px; }
+    h3 { font: 500 .95rem/1.3 var(--sans); margin: 0 0 4px; }
+
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: var(--tap); padding: 0 20px;
+      border-radius: 999px; border: 1px solid transparent; font: 500 .98rem/1 var(--sans); cursor: pointer; text-decoration: none;
+      background: var(--pill); color: var(--ink); }
+    .btn:hover { background: var(--pill-hover); }
+    .btn.solid { background: var(--solid); color: var(--on-solid); }
+    .btn.solid:hover { opacity: .88; background: var(--solid); }
+    .btn.small { min-height: 34px; padding: 0 14px; font-size: .86rem; }
+    .btn:disabled { opacity: .5; cursor: wait; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+    .doors { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+    .door { background: var(--panel); border-radius: var(--radius); padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+    .door p { margin: 0; color: var(--ink-60); font-size: .92rem; flex: 1; }
+    .promise { display: flex; gap: 18px; flex-wrap: wrap; font-size: .88rem; color: var(--ink-60); margin: 0 0 40px; padding: 0; list-style: none; }
+    .promise li::before { content: "\2713"; margin-right: 6px; color: var(--silent); font-weight: 700; }
+
+    .progress { display: flex; gap: 6px; margin: 34px 0 6px; }
+    .progress i { flex: 1; height: 4px; border-radius: 2px; background: var(--rule); }
+    .progress i.done { background: var(--ink); }
+    .progress-label { font-size: .82rem; color: var(--ink-60); margin-bottom: 18px; }
+
+    .step { border: 1px solid var(--rule); border-radius: var(--radius); padding: 22px; margin-bottom: 14px; }
+    .step.locked { opacity: .5; }
+    .step.locked .body { display: none; }
+    .step .n { font: .72rem var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-60); margin-bottom: 6px; display: flex; justify-content: space-between; }
+    .step .n .ok { color: var(--silent); }
+    .step p { margin: 0 0 14px; color: var(--ink-80); }
+    .status { font-size: .9rem; color: var(--ink-60); min-height: 1.4em; margin: 10px 0 0; }
+    .result { background: var(--panel); border-radius: 8px; padding: 16px; margin-top: 14px; }
+    .result .big { font: 400 1.9rem/1.1 var(--serif); margin: 8px 0 4px; font-variant-numeric: tabular-nums; }
+    .result p { margin: 0 0 8px; }
+    .result p:last-child { margin: 0; }
+    .err { border-left: 3px solid var(--block-ink); }
+    .tag { display: inline-block; font: 500 .78rem/1 var(--sans); padding: .4em .7em; border-radius: 999px; background: var(--pill); }
+    .deadline { color: var(--ask-ink); font-weight: 500; }
+    details { margin-top: 10px; font-size: .88rem; }
+    summary { cursor: pointer; color: var(--ink-60); width: fit-content; padding: 4px 0; }
+    details ul { margin: 8px 0 0; padding-left: 18px; color: var(--ink-80); }
+    details dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 8px 0 0; }
+    details dt { color: var(--ink-60); } details dd { margin: 0; overflow-wrap: anywhere; }
+
+    .more { margin: 44px 0 20px; }
+    .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .tile { display: block; background: var(--panel); border-radius: var(--radius); padding: 16px; color: var(--ink); text-decoration: none; }
+    a.tile:hover { background: var(--panel-strong); }
+    .tile span { display: block; color: var(--ink-60); font-size: .88rem; margin-top: 2px; }
+
+    .claude { border: 1px solid var(--rule); border-radius: var(--radius); padding: 22px; margin-bottom: 14px; scroll-margin-top: 16px; }
+    .claude ol { margin: 12px 0 0; padding-left: 20px; }
+    .claude li { margin-bottom: 12px; }
+    .copy { display: flex; gap: 8px; align-items: center; background: var(--panel); border-radius: 8px; padding: 6px 6px 6px 12px; margin-top: 6px; }
+    .copy code { flex: 1; font: .82rem var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .prompts { display: grid; gap: 8px; margin-top: 8px; }
+    .prompt { text-align: left; background: var(--panel); border: 0; border-radius: 8px; padding: 12px; font: inherit; color: inherit; cursor: pointer; }
+    .prompt:hover { background: var(--panel-strong); }
+    .prompt b { font-weight: 500; display: block; }
+    .prompt span { color: var(--ink-60); font-size: .86rem; }
+
+    .orders { list-style: none; margin: 10px 0 0; padding: 0; }
+    .orders li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--rule); font-size: .9rem; }
+    .orders .what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .orders .eur { font-variant-numeric: tabular-nums; }
+
+    footer { border-top: 1px solid var(--rule); margin-top: 48px; padding: 20px 0 40px; font-size: .84rem; color: var(--ink-60); }
+    footer .wrap { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    [hidden] { display: none !important; }
+    @media (max-width: 600px) { .doors, .tiles { grid-template-columns: 1fr; } h1 { margin-top: 28px; } }
+  </style>
+</head>
+<body>
+  <header class="top"><div class="wrap">
+    <a class="brand" href="/"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 4h4l5 11 5-11h4l-7.5 16h-3z" fill="currentColor"/></svg>Sous</a>
+    <div class="sbx" id="sbx" hidden></div>
+  </div></header>
+
+  <main class="wrap">
+    <!-- Before a sandbox exists: one sentence, two doors. -->
+    <section id="start">
+      <h1>Try Sous in five minutes.</h1>
+      <p class="lede">An AI agent orders from Valio Aimo for a hotel. A mandate the hotel's human signed decides what it may buy alone. You play both parts.</p>
+      <div class="doors">
+        <div class="door">
+          <h3>In this browser</h3>
+          <p>Three clicks: the agent orders, you approve, you check the proof. Nothing to install or copy.</p>
+          <button class="btn solid" id="go" type="button">Start</button>
+        </div>
+        <div class="door">
+          <h3>With your own Claude</h3>
+          <p>Add Sous as a connector in claude.ai and let your assistant do the buying, under the same mandate.</p>
+          <button class="btn" id="go-claude" type="button">Connect Claude</button>
+        </div>
+      </div>
+      <ul class="promise">
+        <li>A private sandbox, yours for 24 hours</li>
+        <li>Live Valio Aimo prices and stock</li>
+        <li>No real delivery, no sign-up</li>
+      </ul>
+      <p class="status" id="start-status" role="status" aria-live="polite"></p>
+    </section>
+
+    <!-- The guided path: two examples and the proof. -->
+    <section id="path" hidden>
+      <div class="progress" id="progress" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="progress-label" id="progress-label" role="status" aria-live="polite"></div>
+
+      <article class="step" id="s1">
+        <div class="n"><span>1 · The agent</span><span class="ok" hidden>Done</span></div>
+        <h2>The agent orders on its own</h2>
+        <div class="body">
+          <p>Hotel Aurora's mandate lets its agent spend up to €2,500 an order without asking anyone.</p>
+          <button class="btn solid" id="s1-go" type="button">Order 100 L of lactose-free milk</button>
+          <p class="status" id="s1-status" role="status" aria-live="polite"></p>
+          <div id="s1-out"></div>
+        </div>
+      </article>
+
+      <article class="step" id="s2">
+        <div class="n"><span>2 · The human</span><span class="ok" hidden>Done</span></div>
+        <h2>An order waits for you</h2>
+        <div class="body">
+          <p>The agent wanted to renew the hotel's weekly order, but the amounts had crept up. The mandate stopped it and asked the human: you.</p>
+          <div id="s2-out"></div>
+          <p class="status" id="s2-status" role="status" aria-live="polite"></p>
+        </div>
+      </article>
+
+      <article class="step" id="s3">
+        <div class="n"><span>3 · The proof</span><span class="ok" hidden>Done</span></div>
+        <h2>Check that nobody can rewrite it</h2>
+        <div class="body">
+          <p>Every step above went into a log where each entry is chained to the one before. Your browser can check the chain.</p>
+          <button class="btn solid" id="s3-go" type="button">Verify the log</button>
+          <p class="status" id="s3-status" role="status" aria-live="polite"></p>
+          <div id="s3-out"></div>
+        </div>
+      </article>
+    </section>
+
+    <!-- After the path, or straight away for the connector door. -->
+    <section id="explore" hidden>
+      <div class="more"><h2 id="more-h">Keep going</h2><p class="muted" id="more-p" style="margin:0">Same sandbox, no new tokens.</p></div>
+
+      <div class="claude" id="claude">
+        <h2>Use your own Claude</h2>
+        <p class="muted" style="margin:0">Your assistant gets the agent's token only. The approval stays with you, here.</p>
+        <ol>
+          <li>In claude.ai open <b>Settings → Connectors → Add custom connector</b> and paste this URL:
+            <div class="copy"><code id="c-url"></code><button class="btn small" data-copy="c-url" type="button">Copy</button></div></li>
+          <li>Press <b>Connect</b>. On the Sous page that opens, paste the agent token:
+            <div class="copy"><code id="c-tok"></code><button class="btn small" data-copy-token type="button">Copy token</button></div></li>
+          <li>Ask it to buy something. Press a prompt to copy it:
+            <div class="prompts" id="prompts"></div></li>
+        </ol>
+        <details><summary>Claude Code, ChatGPT and other clients</summary>
+          <div class="copy"><code id="c-cc"></code><button class="btn small" data-copy-cc type="button">Copy</button></div>
+          <p class="muted">Every client: <a href="https://github.com/Zawaer/sous/blob/main/docs/CONNECT.md" target="_blank" rel="noopener">docs/CONNECT.md</a>. Plain REST: <a href="/docs" target="_blank" rel="noopener">API reference</a>.</p>
+        </details>
+      </div>
+
+      <div class="claude">
+        <h2>Your sandbox's orders</h2>
+        <p class="muted" style="margin:0" id="orders-note">Orders from this page and from your assistant appear here.</p>
+        <ul class="orders" id="orders"></ul>
+      </div>
+
+      <div class="tiles">
+        <a class="tile" id="t-break" href="break.html"><b>Try to break it</b><span>Seven attacks: self-approval, order slicing, a tampered quote…</span></a>
+        <a class="tile" id="t-buyer" href="buyer.html"><b>The buyer's inbox</b><span>Where the hotel's human approves, also on a phone.</span></a>
+        <a class="tile" id="t-seller" href="./"><b>Valio Aimo's view</b><span>Orders, audit log and mandates as the seller sees them.</span></a>
+        <a class="tile" id="t-agent" href="agent.html"><b>The reference agent</b><span>Order from a menu, a photo or one sentence.</span></a>
+      </div>
+      <p class="muted" style="font-size:.86rem;margin-top:16px"><span id="left"></span> <button class="btn small" id="reset" type="button">Start over with a new sandbox</button></p>
+    </section>
+  </main>
+
+  <footer><div class="wrap">
+    <span>Sous · built at Junction 2026 for Valio Aimo's challenge. Orders here are simulated.</span>
+    <span><a href="/proof">Evidence</a> · <a href="/rules">Rules</a> · <a href="/docs">API</a></span>
+  </div></footer>
+
+<script>
+"use strict";
+// The judge path. One sandbox per browser, shared with agent.html (same localStorage key), the seller and buyer
+// pages (approver code per sandbox) and the trust board (agent token for this tab), so no page asks for a token.
+const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const KEY = "sous-agent-sandbox";
+const ls = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
+             del(k) { try { localStorage.removeItem(k); } catch { /* private mode */ } } };
+let state = null;
+try { state = JSON.parse(ls.get(KEY) || "null"); } catch { state = null; }
+
+const eur = (n) => "€" + Number(n).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const day = (iso) => new Date(iso.length === 10 ? iso + "T12:00:00" : iso).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "numeric" }).replace(",", "").replace("/", ".") + ".";
+const clock = (iso) => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+const TIER = { silent: ["tier-silent", "Auto"], notify: ["tier-notify", "Auto + FYI"], ask: ["tier-ask", "Needs approval"], block: ["tier-block", "Refused"] };
+const tier = (o) => { const [c, l] = TIER[o] || ["", o]; return `<span class="tier ${c}">${esc(l)}</span>`; };
+const STATUS = { ordered: "Ordered", pending_approval: "Waiting for you", refused: "Refused by the mandate", rejected: "Rejected by you", expired: "Expired", expired_cutoff: "Expired" };
+const sentence = (s) => { s = String(s || "").trim(); return s ? s[0].toUpperCase() + s.slice(1) + (/[.!?]$/.test(s) ? "" : ".") : ""; };
+const name = (s) => { s = String(s || ""); return s === s.toUpperCase() ? s[0] + s.slice(1).toLowerCase() : s; };
+
+function save() {
+  ls.set(KEY, JSON.stringify(state));
+  ls.set("vk-approver-code:" + state.id, state.approver || "");
+  try { sessionStorage.setItem("sous-trace-token", state.token); } catch { /* private mode */ }
+}
+
+async function call(path, { method = "GET", body, as = "agent" } = {}) {
+  const headers = { "content-type": "application/json" };
+  if (state && as === "agent") headers.authorization = "Bearer " + state.token;
+  if (state && as === "human") headers["x-approver-code"] = state.approver;
+  const r = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  let d = null;
+  try { d = await r.json(); } catch { d = { message: r.statusText }; }
+  if (!r.ok) {
+    const m = d?.message || d?.detail?.message || (typeof d?.detail === "string" ? d.detail : "") || r.statusText;
+    const e = new Error(m); e.status = r.status; throw e;
+  }
+  return d;
+}
+
+// --- sandbox ----------------------------------------------------------------------------------------------------------
+async function createSandbox() {
+  const s = await call("/sandbox", { method: "POST", as: "none" });
+  const m = /-d '(\{.*\})'\s*$/.exec(s.quickstart?.curl_quote || "");
+  state = { id: s.sandbox.id, expires_at: s.sandbox.expires_at, token: s.agent_token, approver: s.approver_token,
+            mandates: s.mandates, pick: "hotel", quote_body: m ? JSON.parse(m[1]) : null, held: s.seeded?.held_order_id || null,
+            why: s.seeded?.reasons || [], prompts: s.prompts || [], done: {}, started: Date.now() };
+  save();
+}
+
+async function start(door) {
+  const st = $("#start-status");
+  $("#go").disabled = $("#go-claude").disabled = true;
+  st.textContent = "Creating your sandbox…";
+  try {
+    await createSandbox();
+    state.door = door; save();
+    render();
+    boot();
+    if (door === "claude") $("#claude").scrollIntoView({ behavior: "smooth" });
+  } catch (e) {
+    st.textContent = e.status === 429 ? `Sandboxes are limited per network and this one has made a few already. ${sentence(e.message)}`
+      : `The sandbox could not be created: ${e.message}. Try again in a moment.`;
+  } finally { $("#go").disabled = $("#go-claude").disabled = false; }
+}
+$("#go").addEventListener("click", () => start("browser"));
+$("#go-claude").addEventListener("click", () => start("claude"));
+$("#reset").addEventListener("click", () => {
+  if (!confirm("Leave this sandbox and start with a new one? Its orders stay in the log but this browser forgets its tokens.")) return;
+  ls.del(KEY); state = null; location.reload();
+});
+
+// --- step 1: the agent orders -----------------------------------------------------------------------------------------
+async function step1() {
+  const btn = $("#s1-go"), st = $("#s1-status");
+  btn.disabled = true; $("#s1-out").innerHTML = "";
+  try {
+    if (!state.quote_body) throw new Error("this sandbox has no ready-made request");
+    st.textContent = "The agent asks Valio Aimo for today's price and stock…";
+    const q = await call("/quotes", { method: "POST", body: state.quote_body });
+    if (!q.quote?.id) throw new Error(q.message || "no quote came back");
+    st.textContent = "Sous signed the quote. The agent places the order…";
+    const o = await call("/orders", { method: "POST", body: { agent_id: state.quote_body.agent_id, mandate_id: state.quote_body.mandate_id,
+      quote_id: q.quote.id, idempotency_key: `${state.id.toLowerCase()}-${q.quote.id}` } });
+    state.done[1] = { id: o.id }; save();
+    st.textContent = "";
+    showOrder1(o);
+    render(); loadOrders();
+  } catch (e) {
+    st.textContent = "";
+    $("#s1-out").innerHTML = `<div class="result err"><p><b>The live order did not go through.</b> ${esc(sentence(e.message))}</p>
+      <p class="muted">This step needs Valio Aimo's live price service. Try again, or go on: step 2 does not need it.</p>
+      <div class="row"><button class="btn small" type="button" id="s1-skip">Skip to step 2</button></div></div>`;
+    $("#s1-skip").addEventListener("click", () => { state.done[1] = { skipped: true }; save(); render(); });
+  } finally { btn.disabled = false; }
+}
+$("#s1-go").addEventListener("click", step1);
+
+function showOrder1(o) {
+  const d = o.decision || {}, fs = d.findings || [];
+  const line = (o.lines || [])[0];
+  const top = fs.find((f) => f.outcome === d.outcome) || fs[0];
+  const verdict = o.status === "ordered" ? (d.outcome === "notify" ? "Ordered, and the hotel got an FYI." : "Ordered. No human was needed.")
+    : o.status === "pending_approval" ? "Held for a human." : "Refused by the mandate.";
+  $("#s1-out").innerHTML = `<div class="result">
+    ${tier(d.outcome)}
+    <div class="big">${esc(eur(o.total_ex_vat))}</div>
+    <p><b>${esc(verdict)}</b> ${line ? esc(name(line.name)) + (o.lines.length > 1 ? ` and ${o.lines.length - 1} more` : "") + ", delivery " + esc(day(o.delivery_date)) : ""}</p>
+    <p class="muted">${esc(top?.rule === "mandate.ok" ? "Within the hotel's mandate: every check passed." : sentence(top?.message || ""))} Decided by the mandate rules in plain code. No AI in this step.</p>
+    <div class="row"><a class="btn small" target="_blank" rel="noopener" href="trace.html?order=${encodeURIComponent(o.id)}&sandbox=${encodeURIComponent(state.id)}">See every step of this order</a></div>
+    <details><summary>Show details</summary><dl>
+      <dt>Order</dt><dd class="mono">${esc(o.id)}</dd><dt>Signed quote</dt><dd class="mono">${esc(o.quote_id)}</dd>
+      <dt>Rules</dt><dd class="mono">${fs.map((f) => esc(f.rule)).join(", ")}</dd><dt>Price</dt><dd>live from Valio Aimo, ex VAT</dd></dl></details>
+  </div>`;
+}
+
+// --- step 2: the human decides ----------------------------------------------------------------------------------------
+async function loadHeld() {
+  const out = $("#s2-out");
+  if (!state.held) { out.innerHTML = `<div class="result"><p>This sandbox has no order waiting. Ask your assistant for something over the limit, or try an attack.</p></div>`; return; }
+  let o;
+  try { o = await call("/orders/" + encodeURIComponent(state.held)); }
+  catch (e) { out.innerHTML = `<div class="result err"><p>The waiting order could not be loaded: ${esc(e.message)}</p></div>`; return; }
+  const why = state.why.filter((w) => !/^also:/.test(w));
+  if (o.status !== "pending_approval") {
+    out.innerHTML = `<div class="result"><span class="tag">${o.status === "ordered" ? "Approved by you" : o.status === "rejected" ? "Rejected by you" : esc(STATUS[o.status] || o.status)}</span>
+      <div class="big">${esc(eur(o.total_ex_vat))}</div>
+      <p><b>${o.status === "ordered" ? "You approved it. Valio Aimo has the order." : o.status === "rejected" ? "You rejected it. Nothing was ordered." : esc(STATUS[o.status] || o.status) + "."}</b></p>
+      <p class="muted">Your decision is in the log with your name and the time. The agent could not have made it: it never had your approver token.</p></div>`;
+    if (!state.done[2]) { state.done[2] = { status: o.status }; save(); render(); }
+    return;
+  }
+  out.innerHTML = `<div class="result">
+    ${tier("ask")}
+    <div class="big">${esc(eur(o.total_ex_vat))}</div>
+    <p><b>${esc(sentence(why[0] || "The mandate asks a human for this order"))}</b></p>
+    ${o.approve_by ? `<p class="deadline">Decide by ${esc(day(o.approve_by))} ${esc(clock(o.approve_by))}</p>` : ""}
+    <div class="row" style="margin-top:12px">
+      <button class="btn solid" type="button" data-decide="approve">Approve ${esc(eur(o.total_ex_vat))}</button>
+      <button class="btn" type="button" data-decide="reject">Reject</button>
+    </div>
+    <details><summary>Show details</summary>
+      <ul>${state.why.map((w) => `<li>${esc(sentence(w.replace(/^also:\s*/, "")))}</li>`).join("")}</ul>
+      <ul>${(o.lines || []).map((l) => `<li>${esc(name(l.name))} × ${esc(l.quantity)} · ${esc(eur(l.line_total_ex_vat))}</li>`).join("")}</ul>
+      <p class="muted">Priced from reference prices stored in the gateway, so creating your sandbox made no Valio Aimo call. Order <span class="mono">${esc(o.id)}</span>.</p>
+    </details></div>`;
+  out.querySelectorAll("[data-decide]").forEach((b) => b.addEventListener("click", () => decide(b.dataset.decide, out)));
+}
+
+async function decide(what, out) {
+  const st = $("#s2-status");
+  out.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+  st.textContent = what === "approve" ? "Approving…" : "Rejecting…";
+  try {
+    await call(`/orders/${encodeURIComponent(state.held)}/${what}`, { method: "POST", as: "human", body: { by: "Sandbox judge" } });
+    st.textContent = "";
+    await loadHeld(); loadOrders();
+  } catch (e) {
+    st.textContent = `That did not go through: ${e.message}`;
+    out.querySelectorAll("button").forEach((b) => { b.disabled = false; });
+  }
+}
+
+// --- step 3: the proof ------------------------------------------------------------------------------------------------
+async function step3() {
+  const btn = $("#s3-go"), st = $("#s3-status");
+  btn.disabled = true; st.textContent = "Checking every entry against the one before it…";
+  try {
+    const v = await call("/audit/verify", { as: "none" });
+    let mine = [];
+    try { mine = (await call(`/audit?sandbox=${encodeURIComponent(state.id)}&limit=50`)).events || []; } catch { /* the count is a nicety */ }
+    st.textContent = "";
+    const oid = state.done[1]?.id || state.held;
+    $("#s3-out").innerHTML = `<div class="result ${v.ok ? "" : "err"}">
+      <div class="big">${v.ok ? "Intact" : "Broken"}</div>
+      <p><b>${v.ok ? `${Number(v.events).toLocaleString("en-GB")} entries, none changed or removed.` : "The chain does not verify."}</b>
+        ${mine.length ? `${mine.length} of them are from your sandbox.` : ""}</p>
+      <p class="muted">The buyer and Valio Aimo read the same log, so neither side can later claim something else was agreed.</p>
+      <div class="row">${oid ? `<a class="btn small" target="_blank" rel="noopener" href="trace.html?order=${encodeURIComponent(oid)}&sandbox=${encodeURIComponent(state.id)}">Open the trust board</a>` : ""}
+        <a class="btn small" target="_blank" rel="noopener" href="./?sandbox=${encodeURIComponent(state.id)}#/audit">Read your log</a></div>
+      <details><summary>Show details</summary><dl><dt>Chain head</dt><dd class="mono">${esc(v.head || "")}</dd>
+        <dt>Check it yourself</dt><dd><a href="/audit/verify" target="_blank" rel="noopener">/audit/verify</a> · <a href="/.well-known/jwks.json" target="_blank" rel="noopener">signing key</a></dd></dl></details>
+    </div>`;
+    if (v.ok) { state.done[3] = true; state.finished ||= Date.now(); save(); render(); }
+  } catch (e) { st.textContent = `The check did not run: ${e.message}`; }
+  finally { btn.disabled = false; }
+}
+$("#s3-go").addEventListener("click", step3);
+
+// --- explore ----------------------------------------------------------------------------------------------------------
+async function copy(text, btn) {
+  try { await navigator.clipboard.writeText(text); } catch { prompt("Copy this:", text); return; }
+  const was = btn.textContent; btn.textContent = "Copied"; setTimeout(() => { btn.textContent = was; }, 1400);
+}
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("button"); if (!b || !state) return;
+  if (b.dataset.copy) copy($("#" + b.dataset.copy).textContent, b);
+  else if ("copyToken" in b.dataset) copy(state.token, b);
+  else if ("copyCc" in b.dataset) copy(`claude mcp add --transport http sous ${location.origin}/mcp --header "Authorization: Bearer ${state.token}"`, b);
+  else if (b.dataset.prompt != null) copy(state.prompts[+b.dataset.prompt].prompt, b.querySelector("i") || b);
+});
+
+async function loadOrders() {
+  if (!state) return;
+  try {
+    const d = await call(`/orders?sandbox=${encodeURIComponent(state.id)}`);
+    const os = (d.orders || []).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, 8);
+    $("#orders").innerHTML = os.map((o) => {
+      const out = o.decision?.outcome || (o.status === "pending_approval" ? "ask" : o.status === "ordered" ? "silent" : "block");
+      const href = o.status === "pending_approval" ? `buyer.html?sandbox=${encodeURIComponent(state.id)}#/orders/${encodeURIComponent(o.id)}`
+        : `trace.html?order=${encodeURIComponent(o.id)}&sandbox=${encodeURIComponent(state.id)}`;
+      return `<li>${tier(out)}<a class="what" href="${href}">${esc(name((o.lines || [])[0]?.name || o.id))}${o.status === "pending_approval" ? " · decide" : o.status === "ordered" && out === "ask" ? " · approved" : o.status === "rejected" ? " · rejected" : ""}</a><span class="eur">${esc(eur(o.total_ex_vat))}</span></li>`;
+    }).join("");
+    const s = await call("/sandbox/" + encodeURIComponent(state.id), { as: "none" });
+    $("#left").textContent = `${s.quotes_left} of ${s.quotes_limit} live Valio Aimo lookups left.`;
+  } catch { /* the list is a nicety; the steps report their own errors */ }
+}
+
+// Once a sandbox exists: fill the steps and keep the order list fresh (orders from an assistant arrive on their own).
+let timer = null;
+function boot() {
+  if (state.done[1]?.id) call("/orders/" + encodeURIComponent(state.done[1].id)).then(showOrder1).catch(() => {});
+  loadHeld();
+  loadOrders();
+  timer ||= setInterval(() => { if (!document.hidden && state) loadOrders(); }, 5000);
+}
+
+// --- render -----------------------------------------------------------------------------------------------------------
+function render() {
+  const has = !!state;
+  $("#start").hidden = has; $("#path").hidden = !has; $("#explore").hidden = !has;
+  if (!has) return;
+  const q = "?sandbox=" + encodeURIComponent(state.id);
+  $("#sbx").hidden = false;
+  $("#sbx").innerHTML = `Your sandbox <b class="mono">${esc(state.id)}</b>` + (state.expires_at ? `<br>until ${esc(day(state.expires_at))} ${esc(clock(state.expires_at))}` : "");
+  const done = state.done || (state.done = {});
+  const n = [1, 2, 3].filter((i) => done[i]).length;
+  document.querySelectorAll("#progress i").forEach((el, i) => el.classList.toggle("done", !!done[i + 1]));
+  const mins = state.finished && state.started ? Math.max(1, Math.round((state.finished - state.started) / 60000)) : null;
+  $("#progress-label").textContent = n === 3 ? `All three done${mins ? ` in about ${mins} min` : ""}. That is the whole idea; the rest is yours to explore.` : `Step ${n + 1} of 3`;
+  [1, 2, 3].forEach((i) => {
+    const el = $("#s" + i);
+    el.classList.toggle("locked", i > 1 && !done[i - 1] && !done[i]);
+    el.querySelector(".ok").hidden = !done[i];
+  });
+  if (done[1] && !done[1].skipped) { $("#s1-go").hidden = true; $("#s1-status").hidden = true; }
+  if (done[3]) $("#s3-go").textContent = "Verify again";
+  $("#more-h").textContent = n === 3 ? "Keep going" : "Or explore on your own";
+  $("#c-url").textContent = location.origin + "/connect/mcp";
+  $("#c-tok").textContent = state.token.slice(0, 12) + "…";
+  $("#c-cc").textContent = `claude mcp add --transport http sous ${location.origin}/mcp --header "Authorization: Bearer ${state.token.slice(0, 8)}…"`;
+  $("#prompts").innerHTML = (state.prompts || []).map((p, i) => `<button class="prompt" type="button" data-prompt="${i}"><b>${esc(p.title)} <i class="muted" style="font-style:normal;font-weight:400;font-size:.82rem">· copy</i></b><span>${esc(p.prompt.replace(/^Using the sous MCP tools, as agent \S+ under mandate \S+:\s*/, ""))}</span></button>`).join("");
+  $("#t-break").href = "break.html" + q; $("#t-buyer").href = "buyer.html" + q + "#/inbox"; $("#t-seller").href = "./" + q + "#/today";
+}
+
+(async () => {
+  if (state) {
+    try { const s = await call("/sandbox/" + encodeURIComponent(state.id), { as: "none" }); if (s.status !== "active") throw new Error(s.status); save(); }
+    catch (e) { if (e.status !== undefined || /expired|deleted/.test(e.message)) { ls.del(KEY); state = null; } }
+  }
+  render();
+  if (!state) { if (location.hash === "#claude") $("#go-claude").focus(); return; }
+  boot();
+})();
+</script>
+</body>
+</html>
