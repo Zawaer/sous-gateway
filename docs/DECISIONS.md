@@ -27,8 +27,8 @@ For a hospital or school kitchen a false "safe" is the one error that can't be u
 
 ## 5. Shortlist first, then live calls
 Valio Aimo asked teams not to poll the whole catalog. Search runs against a local index of the static product file and costs zero live calls.
-Only the products the agent asks to quote are priced: one batched `/price` and one `/availability` call per quote item (up to 1000 ids each), price cached 10 min, availability 60 s.
-A typical request (search, then a one-item quote over a few candidates) costs 2 live calls. Substitute suggestions price the top 25 candidates, also in 2 calls. Every quote reports its `valio_api_calls`.
+Only the products the agent asks to quote are priced: one batched `/price` and one `/availability` call per quote, covering every item (up to 1000 ids each), price cached 10 min, availability 60 s.
+A typical request costs 2 live calls. Substitute suggestions price the top 25 candidates, also in 2 calls; a quote that can't be met as asked also prices substitutes for its options, so it costs up to 4 (avg 1.16 per request in `evals/results.json`, with the cache). Every quote reports its `valio_api_calls`.
 A global per-minute cap (`SOUS_AIMO_CALLS_PER_MIN`) protects Valio Aimo's systems from a runaway agent.
 
 ## 6. SQLite FTS5 trigram index for the catalog
@@ -49,7 +49,7 @@ Buyer and Valio Aimo read the same log (`/audit?buyer=`), so there's one version
 Production: periodically anchor the chain head somewhere neither party controls (signed and sent to the buyer, or a transparency log).
 
 ## 9. What we'd change for production
-- **Identity.** Replace the shared `X-Approver-Code` with the buyer's own login (OIDC from their identity provider). Today agents can be required to send a per-mandate bearer token (stored hashed, rotatable; PROTOCOL.md section 16); in production they would prove possession of their own key (mTLS or DPoP), bound to the mandate's `agent_id`.
+- **Identity.** Replace the shared `X-Approver-Code` with the buyer's own login (OIDC from their identity provider). Reads are already scoped (approver code, sandbox token or the agent's own token; PROTOCOL.md section 22), but the approver code is still one shared secret. Today agents can be required to send a per-mandate bearer token (stored hashed, rotatable; PROTOCOL.md section 16); in production they would prove possession of their own key (mTLS or DPoP), bound to the mandate's `agent_id`.
 - **Mandate signed by the human.** Built opt-in (section 10); production makes it the default, with passkeys and organisation keys from onboarding instead of trust on first use.
 - **Per-customer prices.** Use the real customer number so quotes carry the buyer's contract prices. The mock ignores it.
 - **Valio Aimo's real order API.** `ordered` would submit to the order system, with its confirmation id in the receipt and the audit log.

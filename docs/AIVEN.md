@@ -93,11 +93,17 @@ another deployment is served when Valio fails; a broken Valkey (and a real clien
 falls back to local limits, logs once and never leaks the URL. Also checked by hand against a local
 `redis-server`.
 
+## Where it is live (Sat 14.11 ~00:20Z)
+
+- **CI:** yes. The `eval` and `llm-eval` jobs log `backend: valkey, role: ci, role_limit: 25` (run 43530484114). Before the CRACI TLS rule (run 43524836008) they fell back to local limits, as designed.
+- **Prod and staging:** not yet. `/health` shows `backend: local, configured: false`. Until `SOUS_VALKEY_URL` is set there, the prod-first share protects nothing in production; it is tested offline only.
+- **Impact:** not measured (no before/after count of 429s).
+
 ## Submission summary (Aiven: Best Use of Aiven)
 
 Sous lets AI buyer agents order from Valio Aimo under a mandate signed by their human. All our
 deployments (prod, staging, CI evals, demos) share one Valio API key with undisclosed rate limits, and
-parallel jobs got HTTP 429. **Aiven for Valkey** turns the per-process rate limiting into one
+parallel jobs got HTTP 429. (Live in CI today; prod and staging still to be connected.) **Aiven for Valkey** turns the per-process rate limiting into one
 coordinated budget for the key: a sliding-window counter with prod-first priority (CI and staging can
 use at most half, so they can never starve prod during judging), a circuit breaker that pauses every
 deployment when any one of them is rate-limited, and a shared offer cache with stale copies that lets

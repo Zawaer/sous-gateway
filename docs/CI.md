@@ -1,8 +1,7 @@
 # CI
 
 One workflow, [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), runs on every push to
-`main`, every pull request and on demand (`workflow_dispatch`). It runs on GitHub-hosted runners
-today (`ubuntu-24.04`, the same base as CRACI Slim) and on [CRACI](https://docs.craci.com) runners once one repo variable is set.
+`main`, every pull request and on demand (`workflow_dispatch`). It runs on [CRACI](https://docs.craci.com) runners: the repo variable `CI_RUNNER=craci` is set (without it, GitHub-hosted `ubuntu-24.04`). Last run with every job green, including the live evals: [43530484114](https://github.com/Zawaer/sous/actions/runs/43530484114) (e84bb41).
 
 ```
 test ──────────► eval (main / manual only; needs VALIO_AIMO_API_KEY + scripts/eval.py)
@@ -12,11 +11,11 @@ docker ────────► smoke
 
 | Job | What it does | CRACI size | CRACI egress policy |
 |---|---|---|---|
-| `test` | `uv sync --frozen` + `pytest` against a MariaDB 11.4 service (system-versioned tables). uv cache keyed on `uv.lock`. | 4 | default (observe: all presets, unmatched allowed) |
+| `test` | `uv sync --frozen` + `pytest` against a MariaDB 11.4 service (system-versioned tables). uv cache keyed on `uv.lock`. | 8 | default (observe: all presets, unmatched allowed) |
 | `docker` | Builds the [Dockerfile](../Dockerfile) with buildx (layer cache in the Actions cache), writes a CycloneDX SBOM with syft, scans it with grype, fails only on **critical vulnerabilities that have a fix**. Uploads `sbom-and-vulns` (SBOM, grype JSON, TSV) and the image. Severity table in the job summary. | 8 | default (observe) |
 | `smoke` | Loads that image and starts the real [compose.yaml](../compose.yaml) (MariaDB + gateway) with the override [tests/fixtures/compose.smoke.yaml](../tests/fixtures/compose.smoke.yaml): a 20-product fixture catalog instead of Valio's data, no API key. [tests/fixtures/smoke.sh](../tests/fixtures/smoke.sh) checks `/health` (storage = mariadb), `/docs`, `/openapi.json`, `/.well-known/jwks.json` (Ed25519 key), a catalog search, and MCP `initialize` + `tools/list` at `/mcp/`. | 2 (default) | **deny**, no exceptions (the MariaDB image comes from the docker job's artifact) |
-| `eval` | Runs `scripts/eval.py` (the scripted buyer requests in `evals/cases.yaml`) against the live Valio Aimo API and uploads `evals/results.json` as `eval-results`. Skips itself (with a notice) when the `VALIO_AIMO_API_KEY` secret or `scripts/eval.py` is missing. Never runs on pull requests. Valio data files are cached between runs. | 2 (default) | **deny**, only `pypi` + `junction26.valioaimo.fi:443` + Aiven Valkey (`*.aivencloud.com:23770`, TLS) |
-| `llm-eval` | Runs the same cases' natural-language requests through the LLM buyer agent (`agent/`, `scripts/llm_eval.py`), once per model in `LLM_EVAL_MODELS` (default `gemini:gemini-4-hydrogen verda:kimi-k3-1-pro verda:deepseek-4-1-flash-1017`; repo variable overrides). Uploads `evals/llm_results.*.json` + `docs/LLM_EVAL.md` as `llm-eval-results` and puts the comparison table in the job summary. Skips with a notice when the Valio key or both model keys are missing, and on pushes that don't touch the agent, its tools or the cases. Fails only if an auto-approved order violates its mandate. See [LLM_EVAL.md](LLM_EVAL.md). | 2 (default) | **deny**, only `pypi` + `junction26.valioaimo.fi`, `generativelanguage.googleapis.com`, `inference.verda.com` (443) + Aiven Valkey (`*.aivencloud.com:23770`, TLS) |
+| `eval` | Runs `scripts/eval.py` (the scripted buyer requests in `evals/cases.yaml`) against the live Valio Aimo API and uploads `evals/results.json` as `eval-results`. Skips itself (with a notice) when the `VALIO_AIMO_API_KEY` secret or `scripts/eval.py` is missing. Never runs on pull requests. Valio data files are cached between runs. | 8 | **deny**, only `pypi` + `junction26.valioaimo.fi:443` + Aiven Valkey (`*.aivencloud.com:23770`, TLS) |
+| `llm-eval` | Runs the same cases' natural-language requests through the LLM buyer agent (`agent/`, `scripts/llm_eval.py`), once per model in `LLM_EVAL_MODELS` (default includes `verda:deepseek-4-1-flash-1017`, but the repo variable sets `gemini:gemini-4-hydrogen verda:kimi-k3-1-pro`, so DeepSeek has never run). Uploads `evals/llm_results.*.json` + `docs/LLM_EVAL.md` as `llm-eval-results` and puts the comparison table in the job summary. Skips with a notice when the Valio key or both model keys are missing, and on pushes that don't touch the agent, its tools or the cases. Fails only if an auto-approved order violates its mandate. See [LLM_EVAL.md](LLM_EVAL.md). | 8 | **deny**, only `pypi` + `junction26.valioaimo.fi`, `generativelanguage.googleapis.com`, `inference.verda.com`, `integrate.api.nvidia.com` (443) + Aiven Valkey (`*.aivencloud.com:23770`, TLS) |
 
 All actions are pinned to full commit SHAs (version in a comment).
 
@@ -69,19 +68,19 @@ add e.g. `api.anthropic.com` as a second `tls` connection, and say so in the eva
 
 ## What to show the CRACI judges
 
-1. **Compute sized per job, in parallel.** `test` (4 vCPU) and `docker` (8 vCPU) start together;
+1. **Compute sized per job, in parallel.** `test` and `docker` (8 vCPU each) start together;
    `smoke` and `eval` fan out after them. Cold vs warm run times show the uv cache and the buildx
    layer cache (NVMe-backed on CRACI).
 2. **Two SBOMs that should agree.** CRACI's own job SBOM (built from the packages it saw each job
    download through its proxy) next to our syft CycloneDX SBOM of the final image
    (`sbom-and-vulns` artifact). The Python packages in both come from `uv.lock`; differences are
-   worth explaining. syft's image SBOM has ~90 PyPI packages (uv.lock), ~90 Debian packages from the
-   `python:3.12-slim` base, and ~500 Rust crates embedded in the `uv` binary copied from
+   worth explaining (we have not done this comparison yet). syft's image SBOM in run 43530484114 has 694 packages: 94 PyPI (uv.lock), 87 Debian from the
+   `python:3.12-slim` base, and 513 Rust crates embedded in the `uv` binary copied from
    `ghcr.io/astral-sh/uv` (read from its cargo-auditable metadata); CRACI sees the image pulls and
    the PyPI downloads it proxied.
 3. **Vulnerability management with a sane gate.** The grype report keeps everything; the build fails
    only on critical + fix-available, so CI stays actionable instead of permanently red on unfixable
-   base-image CVEs. Compare with CRACI's vulnerability view for the same run.
+   base-image CVEs. Run 43530484114: 0 critical, 61 high (2 fixable), 73 medium (12 fixable). Compare with CRACI's vulnerability view for the same run.
 4. **Network trace as a security property of the gateway.** This is the point of the product: a
    purchasing gateway that holds a supplier API key must not talk to anything else.
    - `smoke`: the gateway boots, serves REST and MCP, signs with its Ed25519 key and talks to
