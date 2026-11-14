@@ -20,6 +20,14 @@ After a submission, the buyer URL keeps the order ID in the `order` query parame
 
 When the current receipt verifies, **Download verification bundle** exports a JSON file with the original signed quote, current signed receipt, signed amendments and gateway public keys. Each JWS must verify with the expected document type. The receipt binds amendment hashes and the original quote ID and total. Establish the gateway key's trust independently when checking a shared bundle. The bundle excludes the agent token.
 
+To verify a bundle offline with Node 22 or newer, supply public keys obtained independently from the trusted gateway:
+
+```sh
+node scripts/verify_buyer_bundle.mjs order-proof.json trusted-jwks.json
+```
+
+The verifier checks signatures, document types, quote binding and amendment hashes using the supplied keys. It prints the signed status and total on success and exits with a nonzero status on failure. It makes no network requests and ignores the keys embedded in the bundle for trust.
+
 **Download signed receipt** saves its compact JWS. For offline verification, keep the public key set from the trusted gateway's `/.well-known/jwks.json` alongside the receipt and use the key matching its `kid` to verify the Ed25519 signature. The receipt includes order details, so share it only with its intended recipients.
 
 For a multi-item request, select candidates for each product and click **Add to basket**. The basket shares one mandate and delivery date. **Get signed basket quote** shows requested and quoted quantities per item. Use **Find alternatives** on a shortage row to replace that basket item and request a fresh quote. On an existing order, the same action looks up alternatives for the missing quantity.

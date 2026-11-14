@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import test from 'node:test';
 
-import { Gateway, gatewayUrl, verifyJws } from './gateway.mjs';
+import { Gateway, gatewayUrl, verifyJws, verifyProofBundle } from './gateway.mjs';
 import { helsinkiDate, parseIntent } from './intent.mjs';
 import { quoteCoverage } from './coverage.mjs';
 
@@ -302,6 +302,8 @@ test('reopens a short-pick order and verifies its original price, amended receip
   await assert.rejects(client.receipt({ ...order, amendments: [] }, quote), /amendment/);
   const proof = await client.proofBundle(order, quote);
   assert.deepEqual(proof.amendment_jws, [amendmentJws]);
+  assert.deepEqual(await verifyProofBundle(proof, jwks), payload);
+  await assert.rejects(verifyProofBundle({ ...proof, amendment_jws: [] }, jwks), /amendment/);
   await assert.rejects(client.receipt({ ...order, original_total_ex_vat: 999 }, quote), /amendment/);
   const badDigest = { ...payload, amendments: [{ ...summary, jws_sha256: '0'.repeat(64) }] };
   await assert.rejects(client.receipt({ ...order, receipt_jws: token(badDigest, 'order', 'sous') }, quote), /amendment/);
@@ -336,6 +338,10 @@ test('exports signed verification material without buyer credentials and refuses
   }, 'private-agent-credential');
   const bundle = await client.proofBundle(order, quote);
   assert.equal(bundle.format, 'sous-order-proof/v1');
+  assert.deepEqual(await verifyProofBundle(bundle, jwks), payload);
+  await assert.rejects(verifyProofBundle(bundle, { keys: [] }));
+  await assert.rejects(verifyProofBundle({ ...bundle, format: 'other' }, jwks), /Unsupported/);
+  await assert.rejects(verifyProofBundle({ ...bundle, receipt_jws: receipt + 'changed' }, jwks));
   assert.deepEqual(bundle.jwks, jwks);
   assert.equal(bundle.receipt_jws, receipt);
   assert.deepEqual(bundle.amendment_jws, []);

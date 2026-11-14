@@ -214,6 +214,25 @@ export class Gateway {
   }
 }
 
+export async function verifyProofBundle(bundle, trustedKeys) {
+  if (bundle.format !== 'sous-order-proof/v1' || !Array.isArray(bundle.amendment_jws)) {
+    throw new Error('Unsupported buyer proof bundle.');
+  }
+  const quote = await verifyJws(bundle.quote_jws, trustedKeys, documentTypes('quote'));
+  const receipt = await verifyJws(bundle.receipt_jws, trustedKeys, documentTypes('order'));
+  const amendments = [];
+  for (const jws of bundle.amendment_jws) {
+    amendments.push({ ...await verifyJws(jws, trustedKeys, 'sous-amendment+jws'), jws });
+  }
+  const gateway = new Gateway(bundle.gateway, async path => {
+    if (!path.endsWith('/.well-known/jwks.json')) throw new Error('Offline verification cannot fetch gateway data.');
+    return Response.json(trustedKeys);
+  });
+  return gateway.receipt({
+    ...receipt, agent_id: quote.agent_id, amendments, receipt_jws: bundle.receipt_jws,
+  }, quote);
+}
+
 function decode(segment) {
   if (!/^[\w-]+$/.test(segment)) throw new Error('Invalid base64url in JWS.');
   return Uint8Array.from(atob(segment.replace(/-/g, '+').replace(/_/g, '/')), (char) => char.charCodeAt(0));
