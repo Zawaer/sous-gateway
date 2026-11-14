@@ -1290,7 +1290,10 @@ def _requote_after_recheck(o: dict, q: dict) -> dict | None:
             return None
         day = date.fromisoformat(q.get("requested_delivery_date") or o["requested_delivery_date"])
         r = _request_quote(QuoteRequest(agent_id=o["agent_id"], mandate_id=o["mandate_id"], delivery_date=day,
-                                        items=items, rationale="Re-quote after the live check at approval"))
+                                        items=items, rationale="Re-quote after the live check at approval",
+                                        buyer_request=o.get("buyer_request") or q.get("buyer_request"),
+                                        declared_risks=controls.clean_risks(
+                                            (q.get("declared_risks") or []) + (o.get("declared_risks") or []))))
         nq = r["quote"]
         return {"quote_id": nq["id"], "total_ex_vat": nq["total_ex_vat"], "expires_at": nq["expires_at"],
                 "would_be": (nq.get("mandate_preview") or {}).get("outcome"),
