@@ -38,7 +38,6 @@ Static filtering first; live price and availability only for the top ~25.
 
 from __future__ import annotations
 
-import json
 import re
 from datetime import date
 
@@ -705,9 +704,7 @@ def _words(p: dict) -> set[str]:
 
 
 def _same_category(category: str) -> list[dict]:
-    rows = catalog._db().execute(
-        "SELECT data FROM product WHERE json_extract(data, '$.category') = ?", (category,)).fetchall()
-    return [json.loads(d) for (d,) in rows]
+    return catalog.in_category(category)
 
 
 # Free-from claims that stand for an allergen (GS1 codes in catalog.ALLERGENS): losing one is a major compromise,

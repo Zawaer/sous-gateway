@@ -9,6 +9,7 @@ called later, for a shortlist.
 from __future__ import annotations
 
 import csv
+import functools
 import json
 import re
 import sqlite3
@@ -157,6 +158,37 @@ def _db() -> sqlite3.Connection:
                 build()
         conn = _local.conn = sqlite3.connect(config.CATALOG_DB)
     return conn
+
+
+_categories: tuple[tuple, dict[str, list[int]]] | None = None  # ((path, mtime), category -> rowids)
+
+
+def in_category(category: str) -> list[dict]:
+    """Every product (deleted ones too) in one category, in catalog order. The catalog is static, so the category
+    -> rows index is built once per catalog file (one scan) instead of a json_extract scan of all ~17.5k product
+    rows on every substitute search (docs/CAPACITY.md)."""
+    global _categories
+    if category is None:
+        return []  # as before: SQL '= NULL' matched nothing
+    db = _db()
+    try:
+        st = config.CATALOG_DB.stat()
+        key = (str(config.CATALOG_DB), st.st_mtime_ns, st.st_size)
+    except OSError:
+        key = (str(config.CATALOG_DB), None, None)
+    idx = _categories
+    if idx is None or idx[0] != key:
+        by_cat: dict[str, list[int]] = {}
+        for rowid, cat in db.execute("SELECT rowid, json_extract(data, '$.category') FROM product ORDER BY rowid"):
+            by_cat.setdefault(cat, []).append(rowid)
+        idx = _categories = (key, by_cat)
+    rowids = idx[1].get(category, [])
+    out: list[dict] = []
+    for i in range(0, len(rowids), 500):
+        chunk = rowids[i : i + 500]
+        out += [json.loads(d) for (d,) in db.execute(
+            f"SELECT data FROM product WHERE rowid IN ({','.join('?' * len(chunk))}) ORDER BY rowid", chunk)]
+    return out
 
 
 def get(product_id: str) -> dict | None:
@@ -383,18 +415,28 @@ def _fts_query(text: str, op: str = "AND") -> str:
     return f" {op} ".join(groups)
 
 
+@functools.lru_cache(maxsize=8192)
+def _term_patterns(t: str) -> tuple[re.Pattern, re.Pattern, re.Pattern]:
+    """_term_score's three patterns for one term, compiled once (re's own cache holds 512 and thrashed under
+    search load: docs/CAPACITY.md)."""
+    e = re.escape(t)
+    return re.compile(rf"\b{e}\b(?!-)"), re.compile(rf"{e}\b(?!-)"), re.compile(rf"\b{e}")
+
+
 def _term_score(t: str, name: str) -> float:
     """Whole word 3; a compound ending in the term (its head: 'kasvivoi') 2.5;
     a word starting with it, or 'term-' (a modifier: 'maitosuklaa',
     'muna-riisipasteija') 1; any substring 0.5."""
-    e = re.escape(t)
-    if re.search(rf"\b{e}\b(?!-)", name):
+    if t not in name:  # every pattern below contains the term itself
+        return 0.0
+    whole, head, start = _term_patterns(t)
+    if whole.search(name):
         return 3.0
-    if re.search(rf"{e}\b(?!-)", name):
+    if head.search(name):
         return 2.5
-    if re.search(rf"\b{e}", name):
+    if start.search(name):
         return 1.0
-    return 0.5 if t in name else 0.0
+    return 0.5
 
 
 def _concept_score(c: Concept, lang: str, name: str) -> float:
