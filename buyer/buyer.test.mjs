@@ -71,6 +71,20 @@ test('accepts both gateway namespaces without accepting a different signed docum
   }
 });
 
+test('sends an agent token to the selected gateway and omits it from key discovery', async () => {
+  const requests = [];
+  const client = new Gateway('https://example.test', async (url, init) => {
+    requests.push({ url, init });
+    return Response.json({});
+  }, 'test-token');
+  await client.request('/orders/PO-1');
+  await client.request('/quotes', {});
+  await client.request('/.well-known/jwks.json');
+  assert.deepEqual(requests.map(({ init }) => init.headers.Authorization), ['Bearer test-token', 'Bearer test-token', undefined]);
+  assert.ok(requests.every(({ url, init }) => new URL(url).origin === 'https://example.test' && init.redirect === 'error'));
+  assert.throws(() => new Gateway('http://example.test', undefined, 'test-token'), /HTTPS gateway/);
+});
+
 test('uses signed request identities, selected SKUs, catalog filters and one idempotency key', async () => {
   const requests = [];
   const client = new Gateway('https://example.test', async (url, init) => {

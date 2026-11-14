@@ -88,7 +88,8 @@ function updateControls() {
   const quoteExpiryNotice = $('quote-expired');
   if (quoteExpiryNotice) quoteExpiryNotice.hidden = !expired;
   $('refresh').disabled = busy;
-  if (state.basket) for (const id of ['gateway', 'mandate', 'delivery']) $(id).disabled = true;
+  if (state.basket) for (const id of ['gateway', 'mandate', 'delivery', 'agent-token']) $(id).disabled = true;
+  $('open-linked-order').disabled = busy || retry;
 }
 
 async function run(work) {
@@ -461,6 +462,7 @@ $('intent').addEventListener('keydown', (event) => {
   fillRequest();
 });
 requestForm.addEventListener('input', (event) => {
+  if (event.target === $('gateway') || event.target === $('mandate')) $('agent-token').value = '';
   if (event.target !== $('intent')) clearSearch();
 });
 shortlistForm.addEventListener('change', () => {
@@ -473,7 +475,7 @@ requestForm.addEventListener('submit', (event) => {
   const findSubstitutes = event.submitter?.id === 'find-substitutes';
   run(async () => {
     const need = readNeed(findSubstitutes);
-    const gateway = new Gateway($('gateway').value);
+    const gateway = new Gateway($('gateway').value, undefined, $('agent-token').value.trim());
     clearSearch();
     const mandate = await gateway.mandate($('mandate').value.trim());
     let original;
@@ -597,15 +599,15 @@ $('refresh').addEventListener('click', () => {
 
 const linkedOrder = pageParams.get('order');
 if (linkedOrder) {
-  run(async () => {
-    const gateway = new Gateway($('gateway').value);
+  const openLinkedOrder = () => run(async () => {
+    const gateway = new Gateway($('gateway').value, undefined, $('agent-token').value.trim());
     let order, quote;
     try {
       order = await gateway.getOrder(linkedOrder);
       quote = await gateway.getQuote(order.quote_id);
     } catch (error) {
       if (error.status === 404) {
-        throw new Error('This order is unavailable. Check the order link and gateway, or ask the person who shared the link for access.');
+        throw new Error('This order is unavailable. Check the link and gateway. If you have an agent token, enter it under Product filters and gateway, then choose Open linked order.');
       }
       if (error.status >= 500 || error instanceof TypeError || error.name === 'TimeoutError') {
         throw new Error('Could not load this order from the gateway. Check your connection and reload this page to retry.');
@@ -616,4 +618,7 @@ if (linkedOrder) {
     $('api-link').href = `${gateway.base}/docs`;
     $('order-panel').scrollIntoView({ block: 'start' });
   });
+  $('open-linked-order').hidden = false;
+  $('open-linked-order').addEventListener('click', openLinkedOrder);
+  openLinkedOrder();
 }

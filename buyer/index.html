@@ -53,6 +53,7 @@
           <label>Temperature<select id="temperature"><option value="">Any</option><option>ambient</option><option>chilled</option><option>frozen</option></select></label>
           <label>Product ID being replaced<input id="substitute" placeholder="Original SKU" maxlength="100"></label>
           <label>Gateway URL<input id="gateway" type="url" spellcheck="false"></label>
+          <label>Agent token (if required)<input id="agent-token" type="password" autocomplete="off" spellcheck="false"></label>
         </div>
         <p class="muted" id="allergen-help">Use gateway allergen codes, for example AM for milk, AN for tree nuts, and AP for peanuts.</p>
       </details>
@@ -60,6 +61,7 @@
       <button type="submit" id="find-substitutes" class="secondary" formnovalidate>Find substitutes</button>
     </form>
     <p id="feedback" class="notice" role="status" hidden></p>
+    <button id="open-linked-order" class="secondary" type="button" hidden>Open linked order</button>
     <section id="candidates" class="panel" aria-labelledby="candidates-title" hidden>
       <h2 id="candidates-title">Product shortlist</h2>
       <p id="search-context" class="muted"></p>

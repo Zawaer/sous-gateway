@@ -9,15 +9,21 @@ export function gatewayUrl(value) {
 }
 
 export class Gateway {
-  constructor(base, fetcher = globalThis.fetch.bind(globalThis)) {
+  constructor(base, fetcher = globalThis.fetch.bind(globalThis), agentToken = '') {
     this.base = gatewayUrl(base);
     this.fetch = fetcher;
+    this.agentToken = agentToken;
+    if (agentToken && !this.base.startsWith('https://') && !['localhost', '127.0.0.1', '[::1]'].includes(new URL(this.base).hostname)) {
+      throw new Error('Use an HTTPS gateway with an agent token.');
+    }
   }
 
   async request(path, body) {
     const response = await this.fetch(`${this.base}${path}`, {
-      headers: body === undefined ? { Accept: 'application/json' } : {
-        Accept: 'application/json', 'Content-Type': 'application/json',
+      headers: {
+        Accept: 'application/json',
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...(this.agentToken && path !== '/.well-known/jwks.json' ? { Authorization: `Bearer ${this.agentToken}` } : {}),
       },
       method: body === undefined ? 'GET' : 'POST',
       cache: body === undefined ? 'no-store' : 'default',
