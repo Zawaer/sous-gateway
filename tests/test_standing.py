@@ -244,11 +244,12 @@ def test_rest_routes(monkeypatch):
     body = {"mandate_id": "M", "agent_id": "a", "name": "Weekly dairy",
             "items": [{"product_ids": ["MILK"], "amount": 400, "unit": "L", "label": "milk"}]}
     so = c.post("/standing-orders", json=body).json()
-    assert c.get("/standing-orders", params={"mandate_id": "M"}).json()["standing_orders"][0]["id"] == so["id"]
+    assert c.get("/standing-orders", params={"mandate_id": "M"}).json()["standing_orders"] == []  # not public
+    assert c.get("/standing-orders", params={"mandate_id": "M"}, headers={"X-Approver-Code": "1234"}).json()["standing_orders"][0]["id"] == so["id"]
     r = c.post(f"/standing-orders/{so['id']}/renew", json={"delivery_date": "2026-11-16", "agent_id": "a"})
     assert r.status_code == 200 and r.json()["order"]["status"] == "ordered"
     assert c.post(f"/standing-orders/{so['id']}/renew", json={"delivery_date": "2026-11-16"}).status_code == 409
-    g = c.get(f"/standing-orders/{so['id']}").json()
+    g = c.get(f"/standing-orders/{so['id']}", headers={"X-Approver-Code": "1234"}).json()
     assert len(g["renewals"]) == 1 and g["baseline"]["weeks"] == 1
     assert c.post(f"/standing-orders/{so['id']}/pause", json={"by": "chef"}).status_code == 401
     p = c.post(f"/standing-orders/{so['id']}/pause", json={"by": "chef"}, headers={"X-Approver-Code": "1234"})

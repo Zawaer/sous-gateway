@@ -167,12 +167,13 @@ def test_rest_bearer_header_and_approver_only_rotation(monkeypatch):
 
     from sous import api
     monkeypatch.setattr(config, "APPROVER_CODE", "1234")
+    AC = {"X-Approver-Code": "1234"}
     c = TestClient(api.app)
     m = {"id": "M", "buyer": "Hotel", "agent_id": "a", "issued_by": "chef", "auto_approve_limit_eur": 5000,
          "min_delivery_reliability": None, "require_agent_auth": True}
     r = c.post("/mandates", json=m, headers={"X-Approver-Code": "1234"}).json()
     token = r["agent_credential"]["token"]
-    assert token not in c.get("/mandates").text and token not in c.get("/audit").text
+    assert token not in c.get("/mandates", headers=AC).text and token not in c.get("/audit", headers=AC).text
     body = {"agent_id": "a", "mandate_id": "M", "delivery_date": "2026-11-16",
             "items": [{"product_ids": ["MILK"], "amount": 10, "unit": "L"}]}
     r = c.post("/quotes", json=body)
@@ -186,7 +187,8 @@ def test_rest_bearer_header_and_approver_only_rotation(monkeypatch):
     assert c.post("/mandates/M/agent-credential", json={"by": "x"}).status_code == 401
     r = c.post("/mandates/M/agent-credential", json={"by": "chef"}, headers={"X-Approver-Code": "1234"}).json()
     assert r["agent_credential"]["token"] != token
-    st = c.get("/mandates/M/agent-credential").json()
+    assert c.get("/mandates/M/agent-credential").status_code == 404  # not public
+    st = c.get("/mandates/M/agent-credential", headers=AC).json()
     assert st["required"] and st["credential"]["last4"] == r["agent_credential"]["last4"] and "token" not in st
     assert "agentToken" in c.get("/openapi.json").json()["components"]["securitySchemes"]
 

@@ -179,6 +179,7 @@ def test_rest_routes(env, monkeypatch):
     assert c.post("/notifications/test", json={"mandate_id": "M"}).status_code == 401
     r = c.post("/notifications/test", json={"mandate_id": "M"}, headers={"X-Approver-Code": "1234"})
     assert r.status_code == 200 and r.json()["channels"] == ["feed"]
-    feed = c.get("/notifications", params={"buyer": "Hotel"}).json()["notifications"]
+    assert c.get("/notifications", params={"buyer": "Hotel"}).json() == {"notifications": []}  # not public
+    feed = c.get("/notifications", params={"buyer": "Hotel"}, headers={"X-Approver-Code": "1234"}).json()["notifications"]
     assert feed[0]["event"] == "test" and c.get("/notifications", params={"buyer": "Other"}).json() == {
         "notifications": []}

@@ -258,7 +258,7 @@ All steps run under one lock, so concurrent requests can't double order, overrun
 
 Order fields: `id (PO-XXXXXXXX), quote_id, mandate_id, agent_id, buyer, status, total_ex_vat, total_inc_vat, delivery_date, lines[], decision {outcome, findings[], by: "mandate-engine", at}, approval, order_url, approval_url, idempotency_key, agent_rationale, created_at, updated_at, receipt_jws`.
 
-**Rationale.** `POST /quotes`, `POST /orders` and `POST /standing-orders/{id}/renew` (and the MCP tools `request_quote`, `place_order`, `renew_standing_order`) take an optional `rationale`: the agent's business reason in one sentence, at most 500 characters, whitespace collapsed. It is stated, not verified, and **no rule reads it**: the tier comes only from the signed quote and mandate. It is signed into the quote (`quote.rationale`), kept on the order as `agent_rationale` (the order's own, else the quote's), and written to the audit events `quote.issued`, `order.<status>` and `order.rejected`, so an approver sees why the agent asked next to which rule fired. The reference LLM agent (`agent/buyer.py`) does not let the model write it: the runtime sends the buyer's own request text. A renewal without one records `Weekly renewal of standing order <name>`.
+**Rationale.** `POST /quotes`, `POST /orders` and `POST /standing-orders/{id}/renew` (and the MCP tools `request_quote`, `place_order`, `renew_standing_order`) take an optional `rationale`: the agent's business reason in one sentence, at most 500 characters, whitespace collapsed. It is stated, not verified, and **no rule reads it**: the tier comes only from the signed quote and mandate. It is signed into the quote (`quote.rationale`), kept on the order as `agent_rationale` (the order's own, else the quote's), and written to the audit events `quote.issued`, `order.<status>` and `order.rejected`, so an approver sees why the agent asked next to which rule fired. Reads label it: `GET /orders`, `GET /orders/{id}` (and MCP `get_order`) add `agent_claim: {text, verified: false, note: "The agent's own words; not used by any rule.", suspicious, suspicious_terms?}` and `GET /quotes/{id}` adds the same for the quote's rationale. `suspicious: true` flags approval- or instruction-like phrasing ("approved", "SYSTEM", "ignore", "override", "authorised", ...), i.e. an agent trying to talk the approver round; it is a hint for the human and changes nothing in the decision (`tests/test_read_scopes.py`). UIs should show it as "Agent's own words, unverified". The reference LLM agent (`agent/buyer.py`) does not let the model write it: the runtime sends the buyer's own request text. A renewal without one records `Weekly renewal of standing order <name>`.
 
 ### Statuses
 
@@ -487,7 +487,7 @@ The reference buyer in `buyer/` does the same in the browser with Web Crypto.
 
 `agent_id` on its own is a name, and `GET /mandates` lists every mandate's `agent_id`. So a mandate can require the agent to prove it is that agent. Source: `sous/agent_auth.py`.
 
-**When it applies.** A mandate with `require_agent_auth: true`, or every mandate when the gateway runs with `SOUS_REQUIRE_AGENT_AUTH=1`. Both default to off, so existing mandates and clients are unchanged. Then these calls need the credential: `request_quote` with that `mandate_id`, `place_order`, and `renew_standing_order`. Search, product details, substitutes, suggestions and every read stay open. On a mandate that doesn't require it, a presented token is ignored (so one MCP connection with a header can also use open mandates).
+**When it applies.** A mandate with `require_agent_auth: true`, or every mandate when the gateway runs with `SOUS_REQUIRE_AGENT_AUTH=1`. Both default to off, so existing mandates and clients are unchanged. Then these calls need the credential: `request_quote` with that `mandate_id`, `place_order`, and `renew_standing_order`. Search, product details, substitutes and suggestions stay open; reads are scoped by section 22 (an agent's token also reads its own mandate, quotes and orders). On a mandate that doesn't require it, a presented token is ignored (so one MCP connection with a header can also use open mandates).
 
 **The credential.** When a mandate is issued with `require_agent_auth` (or `POST /mandates?mint_agent_credential=true`), the response has:
 
@@ -695,3 +695,32 @@ real time, and so do the audit log's `ts` and storage timestamps.
 - `GET /health` has `clock` at the top level; the web UI shows a banner when `clock.mode == "demo"`.
 - Every REST response has the header `X-Sous-Clock: demo <iso>` while demo mode is on (absent in real mode).
 - The MCP server's instructions say the gateway runs on a demo clock and ask agents to tell the user.
+
+## 22. Read access
+
+Writes always needed a credential; reads now do too, except for curated demo data. Source: `sous/access.py`; tests: `tests/test_read_scopes.py`.
+
+| Caller presents | May read |
+|---|---|
+| `X-Approver-Code: <global approver code>` | everything |
+| a judge sandbox's approver token `sbxa_...` (as `X-Approver-Code` or `Authorization: Bearer`) | that sandbox's mandates and everything under them |
+| an agent token `Authorization: Bearer vka_...` | the mandate(s) it was minted for, their quotes, orders and standing orders (a sandbox's agent token: its 3 mandates) |
+| nothing (or a wrong code) | public demo data only: mandates with `demo_public: true` and everything under them |
+
+Credentials add up (an agent token plus `X-Approver-Code: sbxa_...` reads both). `demo_public` is an optional mandate field (default false), set on the five curated mandates in `scripts/seed.py` so judges can browse `/ui/` read-only; seeding re-signs an earlier copy once with the flag (no new agent token). Sandbox copies never carry it.
+
+**Scoped routes.** `GET /mandates`, `/mandates/{id}`, `/mandates/{id}/history`, `/mandates/{id}/verify`, `/mandates/{id}/agent-credential`, `/mandates/{id}/ap2`, `GET /quotes/{id}`, `/quotes/{id}/ap2`, `/quotes/{id}/schema-org`, `GET /orders`, `/orders/{id}`, `/orders/{id}/history`, `/orders/{id}/ap2`, `/orders/{id}/schema-org`, `GET /standing-orders`, `/standing-orders/{id}`, `GET /notifications`, `GET /audit`, and the MCP tools `get_order`, `get_mandate`, `get_standing_order` and resource `sous://mandates/{id}` (they read `X-Approver-Code` / `Authorization` from the HTTP request; `get_order`, `get_mandate` and `get_standing_order` also take `agent_token`).
+
+- A detail you may not read answers **404** with the same error as an id that doesn't exist (`order_not_found`, ...), so ids are never confirmed.
+- Lists are filtered silently. Every scoped response has the header `X-Sous-Read-Scope`: `all`, `public_demo`, `agent+public_demo`, `sandbox:SBX-XXXX+public_demo`.
+- Notifications and audit events are filtered by buyer: a buyer's events are visible when every mandate with that buyer name is readable, so a real mandate that shares a demo buyer's name never leaks. Buyer-less events (anonymous catalog searches) need the approver code; a sandbox token also sees its sandbox's lifecycle events.
+- `?sandbox=SBX-XXXX` still narrows lists to one sandbox; it no longer grants anything by itself.
+- `/mandates/{id}/verify` is scoped like the mandate: for buyer-signed mandates it returns the VC, which contains the whole mandate.
+- `GET /sandbox/{id}` stays public (status, lookups left, order counts); its `orders.recent` list needs one of the sandbox's tokens.
+- Quotes requested without a mandate are readable by id: they hold catalog prices any caller may request.
+
+**Public on purpose.** `/products*`, `/allergens`, `/.well-known/*` (JWKS, agent and server cards), `/schemas/*`, `/health`, `/docs`, `/openapi.json`, `/audit/verify` (only `ok`, event count and head hash; no event bodies), `/buyers/{buyer}/keys` (public did:keys).
+
+**Development.** With no approver code configured (`SOUS_APPROVER_CODE` unset) everything is readable, as writes are unguarded then too; MCP over stdio is the local operator and reads everything.
+
+**Production path.** The approver code stands in for the buyer's login (OIDC): reads would be scoped per buyer organisation from the login's claims, with Valio Aimo staff roles for cross-buyer views.

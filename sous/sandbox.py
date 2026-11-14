@@ -241,7 +241,8 @@ def create(ip: str, base_url: str = "") -> dict:
         t = tpl[base]
         m = Mandate(**{**t.model_dump(), "id": mandates[name], "agent_id": data["agents"][name],
                        "buyer": data["buyers"][name], "valid_until": valid_until, "revoked": False,
-                       "require_agent_auth": True, "sandbox": sid})
+                       "require_agent_auth": True, "sandbox": sid,
+                       "demo_public": False})  # private to the sandbox's token holders (sous/access.py)
         S.issue_mandate(m, False)
         token = agent_auth.mint(m, f"sandbox {sid}", token=token)["token"]
         out_mandates.append({"scenario": name, "mandate_id": m.id, "agent_id": m.agent_id, "buyer": m.buyer,

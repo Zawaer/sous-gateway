@@ -17,7 +17,7 @@ from datetime import date
 from mcp.server.mcpserver import Context, MCPServer
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
 
-from . import agent_auth, catalog, clock, service as S, standing
+from . import access, agent_auth, catalog, clock, service as S, standing
 
 log = logging.getLogger(__name__)
 
@@ -132,6 +132,21 @@ def _agent_token(ctx: Context | None, agent_token: str | None) -> str | None:
     except ValueError:  # no request context (e.g. called outside a request)
         headers = None
     return agent_auth.bearer((headers or {}).get("authorization")) or agent_token or None
+
+
+def _reader(ctx: Context | None, agent_token: str | None = None) -> access.Reader:
+    """Read scope (sous/access.py) from the HTTP request's X-Approver-Code / Authorization headers. Over stdio
+    there is no request: the local operator reads everything."""
+    try:
+        headers = ctx.headers if ctx is not None else None
+    except ValueError:
+        headers = None
+    if headers is None:
+        return access.from_headers(None)
+    h = {k.lower(): v for k, v in headers.items()}
+    if agent_token and not agent_auth.bearer(h.get("authorization")):
+        h["authorization"] = f"Bearer {agent_token}"
+    return access.from_headers(h)
 
 
 READ_LOCAL = ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=False)
@@ -266,15 +281,19 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
 
 @mcp.tool(title="Order status", annotations=READ_LOCAL)
 @_tool
-def get_order(order_id: str) -> dict:
-    """Current status of an order (ordered, pending_approval, refused, rejected, expired) and any human decision."""
-    return S.get_order(order_id)
+def get_order(order_id: str, agent_token: str | None = None, ctx: Context | None = None) -> dict:
+    """Current status of an order (ordered, pending_approval, refused, rejected, expired) and any human decision.
+    Only orders under your own mandate: send your Authorization: Bearer header (or agent_token)."""
+    access.check_order(_reader(ctx, agent_token), order_id)
+    return access.label_order(S.get_order(order_id))
 
 
 @mcp.tool(title="Read the mandate", annotations=READ_LOCAL)
 @_tool
-def get_mandate(mandate_id: str) -> dict:
-    """The mandate you act under (spend limits, allergen and claim rules, what needs a human), with its signature."""
+def get_mandate(mandate_id: str, agent_token: str | None = None, ctx: Context | None = None) -> dict:
+    """The mandate you act under (spend limits, allergen and claim rules, what needs a human), with its signature.
+    Only your own mandate (send your Authorization: Bearer header or agent_token) or a public demo mandate."""
+    access.check_mandate(_reader(ctx, agent_token), mandate_id)
     return S.get_mandate(mandate_id)
 
 
@@ -335,8 +354,9 @@ def renew_standing_order(standing_id: str, agent_id: str, delivery_date: str | N
 
 @mcp.tool(title="Standing order, history and drift baseline", annotations=READ_LOCAL)
 @_tool
-def get_standing_order(standing_id: str) -> dict:
+def get_standing_order(standing_id: str, agent_token: str | None = None, ctx: Context | None = None) -> dict:
     """A standing order with its renewals (newest first, simulated ones marked) and the drift baseline."""
+    access.check_standing(_reader(ctx, agent_token), standing_id)
     return standing.get(standing_id)
 
 
@@ -351,8 +371,9 @@ def allergens() -> dict:
 
 
 @mcp.resource("sous://mandates/{mandate_id}", title="Mandate", mime_type="application/json")
-def mandate_resource(mandate_id: str) -> dict:
-    """A mandate (sous): limits and rules the agent acts under, with its JWS signature."""
+def mandate_resource(mandate_id: str, ctx: Context | None = None) -> dict:
+    """A mandate (sous): limits and rules the agent acts under, with its JWS signature (yours or a public demo one)."""
+    access.check_mandate(_reader(ctx), mandate_id)
     return S.get_mandate(mandate_id)
 
 

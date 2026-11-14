@@ -179,6 +179,7 @@ def test_disabled(c, monkeypatch):
 
 def test_lists_hide_sandboxes_by_default_and_show_one_with_the_param(c):
     seed_curated()
+    c.headers["X-Approver-Code"] = CODE  # the global approver reads everything; sandboxes still hidden by default
     a, b = new(c, "10.0.0.1"), new(c, "10.0.0.2")
     sa, sb = a["sandbox"]["id"], b["sandbox"]["id"]
     curated = c.post("/quotes", json={"agent_id": "aurora-purchasing-agent", "mandate_id": "M-HOTEL-AURORA",
@@ -377,6 +378,7 @@ def test_substitutes_and_suggestions_under_a_sandbox_mandate_need_its_token(c, m
 
 def test_hiding_follows_the_sandbox_registry_not_names(c):
     from sous.mandate import Mandate
+    c.headers["X-Approver-Code"] = CODE
     s = new(c)
     sid = s["sandbox"]["id"]
     # an approver-issued mandate that only looks like a sandbox, and one claiming an unregistered sandbox

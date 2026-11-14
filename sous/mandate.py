@@ -45,6 +45,8 @@ class Mandate(BaseModel):
     min_delivery_reliability: float | None = 0.9
     later_delivery: Literal["notify", "ask", "block"] = "ask"
     max_comparison_price_eur: dict[str, float] = Field(default_factory=dict, description="e.g. {'L': 2.5}")
+    demo_public: bool = Field(False, description="Curated demo data: readable without credentials (see sous/access.py). "
+                              "Real buyers' mandates leave this off.")
     sandbox: str | None = Field(None, description="Judge sandbox id (e.g. SBX-7Q2K) for a visitor's copy; see sous/sandbox.py")
 
     @field_validator("valid_until")

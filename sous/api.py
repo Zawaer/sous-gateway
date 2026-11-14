@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
-from . import aimo, catalog, clock, config, sandbox, service as S, signing, standing, store
+from . import access, aimo, catalog, clock, config, sandbox, service as S, signing, standing, store
 from .mandate import Mandate
 from .mcp_server import mcp
 
@@ -149,6 +149,25 @@ def agent_token(cred: HTTPAuthorizationCredentials | None = Depends(_agent_beare
     return cred.credentials if cred else None
 
 
+# --- read scopes (sous/access.py) --------------------------------------------
+# Detail routes answer 404 for what the caller may not read, the same as for what does not exist.
+
+def _read_mandate(mandate_id: str, r: access.Reader = Depends(access.reader)):
+    access.check_mandate(r, mandate_id)
+
+
+def _read_order(order_id: str, r: access.Reader = Depends(access.reader)):
+    access.check_order(r, order_id)
+
+
+def _read_quote(quote_id: str, r: access.Reader = Depends(access.reader)):
+    access.check_quote(r, quote_id)
+
+
+def _read_standing(standing_id: str, r: access.Reader = Depends(access.reader)):
+    access.check_standing(r, standing_id)
+
+
 _HTTP_CODES = {400: "bad_request", 401: "unauthorized", 403: "forbidden", 404: "not_found",
                405: "method_not_allowed", 409: "conflict", 429: "rate_limited"}
 
@@ -226,32 +245,32 @@ def json_schema(name: Literal["mandate", "quote", "order", "receipt"], request: 
                         media_type="application/schema+json")
 
 
-@app.get("/mandates/{mandate_id}/ap2", tags=["standards"])
+@app.get("/mandates/{mandate_id}/ap2", tags=["standards"], dependencies=[Depends(_read_mandate)])
 def mandate_ap2(mandate_id: str):
     """The mandate as AP2 v0.2 open checkout/payment mandate claims, a v0.1 IntentMandate and a W3C VC."""
     return STD.ap2_mandate(mandate_id)
 
 
-@app.get("/quotes/{quote_id}/ap2", tags=["standards"])
+@app.get("/quotes/{quote_id}/ap2", tags=["standards"], dependencies=[Depends(_read_quote)])
 def quote_ap2(quote_id: str, request: Request):
     """The quote as a gateway(merchant)-signed UCP checkout for an AP2 v0.2 checkout mandate, and a v0.1 CartMandate."""
     return STD.ap2_quote(quote_id, STD.base_url(str(request.base_url)))
 
 
-@app.get("/quotes/{quote_id}/schema-org", tags=["standards"])
+@app.get("/quotes/{quote_id}/schema-org", tags=["standards"], dependencies=[Depends(_read_quote)])
 def quote_schema_org(quote_id: str, request: Request):
     """The quote as schema.org Offer JSON-LD."""
     return JSONResponse(STD.schema_org_quote(quote_id, STD.base_url(str(request.base_url))),
                         media_type="application/ld+json")
 
 
-@app.get("/orders/{order_id}/ap2", tags=["standards"])
+@app.get("/orders/{order_id}/ap2", tags=["standards"], dependencies=[Depends(_read_order)])
 def order_ap2(order_id: str, request: Request):
     """The order as a signed AP2 v0.2 CheckoutReceipt (final states only)."""
     return STD.ap2_receipt(order_id, STD.base_url(str(request.base_url)))
 
 
-@app.get("/orders/{order_id}/schema-org", tags=["standards"])
+@app.get("/orders/{order_id}/schema-org", tags=["standards"], dependencies=[Depends(_read_order)])
 def order_schema_org(order_id: str, request: Request):
     """The order as schema.org Order JSON-LD with OrderItems."""
     return JSONResponse(STD.schema_org_order(order_id, STD.base_url(str(request.base_url))),
@@ -328,14 +347,14 @@ def request_quote(req: S.QuoteRequest, token: str | None = Depends(agent_token))
     return S.request_quote(req, agent_token=token)
 
 
-@app.get("/quotes/{quote_id}", tags=["ordering"])
+@app.get("/quotes/{quote_id}", tags=["ordering"], dependencies=[Depends(_read_quote)])
 def get_quote(quote_id: str):
     q = store.get_quote(quote_id)
     if not q:
         raise HTTPException(404, f"No quote {quote_id}")
     jws = q.pop("_jws")
     q.pop("_order_id")
-    return {"quote": q, "jws": jws}
+    return {"quote": q, "jws": jws, "agent_claim": access.agent_claim(q.get("rationale"))}
 
 
 class OrderRequest(BaseModel):
@@ -358,21 +377,25 @@ def place_order(req: OrderRequest, token: str | None = Depends(agent_token)):
 
 @app.get("/orders", tags=["ordering"])
 def list_orders(status: Literal["ordered", "pending_approval", "refused", "rejected", "expired"] | None = None,
-                mandate_id: str | None = None, sandbox_id: str | None = _SANDBOX_Q):
+                mandate_id: str | None = None, sandbox_id: str | None = _SANDBOX_Q,
+                r: access.Reader = Depends(access.reader)):
+    """Orders you may read (see docs/PROTOCOL.md "Read access"), newest first."""
     scope = sandbox.list_scope(sandbox_id)
     if scope is None:
         return {"orders": []}
-    idx = sandbox.index()
-    return {"orders": [o for o in store.list_orders(status, mandate_id)
-                       if (mandate_id and not sandbox_id) or sandbox.keep(scope, o["mandate_id"], idx)]}
+    idx, ok = sandbox.index(), access.readable_mandates(r)
+    return {"orders": [access.label_order(o) for o in store.list_orders(status, mandate_id)
+                       if ((mandate_id and not sandbox_id) or sandbox.keep(scope, o["mandate_id"], idx))
+                       and (ok is None or o["mandate_id"] in ok)]}
 
 
-@app.get("/orders/{order_id}", tags=["ordering"])
+@app.get("/orders/{order_id}", tags=["ordering"], dependencies=[Depends(_read_order)])
 def get_order(order_id: str):
-    return S.get_order(order_id)
+    """The order. agent_claim labels the agent's rationale: its own words, unverified, never used by a rule."""
+    return access.label_order(S.get_order(order_id))
 
 
-@app.get("/orders/{order_id}/history", tags=["audit"])
+@app.get("/orders/{order_id}/history", tags=["audit"], dependencies=[Depends(_read_order)])
 def order_history(order_id: str):
     """Every version of the order and the mandate AS OF each decision (MariaDB system-versioned tables)."""
     return S.order_history(order_id)
@@ -405,20 +428,23 @@ def issue_mandate(m: Mandate, mint_agent_credential: bool | None = None):
 
 
 @app.get("/mandates", tags=["mandates"])
-def list_mandates(sandbox_id: str | None = _SANDBOX_Q):
+def list_mandates(sandbox_id: str | None = _SANDBOX_Q, r: access.Reader = Depends(access.reader)):
+    """Mandates you may read: all with the approver code, a sandbox's with its token, an agent's own with its
+    bearer token, and the public demo mandates (demo_public) without credentials."""
     scope = sandbox.list_scope(sandbox_id)
     if scope is None:
         return {"mandates": []}
     idx = sandbox.index()
-    return {"mandates": [m for m in store.list_mandates() if sandbox.keep(scope, m["id"], idx)]}
+    return {"mandates": [m for m in store.list_mandates()
+                         if sandbox.keep(scope, m["id"], idx) and access.can_read_mandate(r, m["id"], m)]}
 
 
-@app.get("/mandates/{mandate_id}", tags=["mandates"])
+@app.get("/mandates/{mandate_id}", tags=["mandates"], dependencies=[Depends(_read_mandate)])
 def get_mandate(mandate_id: str):
     return S.get_mandate(mandate_id)
 
 
-@app.get("/mandates/{mandate_id}/history", tags=["mandates"])
+@app.get("/mandates/{mandate_id}/history", tags=["mandates"], dependencies=[Depends(_read_mandate)])
 def mandate_history(mandate_id: str):
     """Every version of the mandate with its validity period."""
     return S.mandate_history(mandate_id)
@@ -438,7 +464,7 @@ class CredentialAction(BaseModel):
     action: Literal["rotate", "revoke"] = "rotate"
 
 
-@app.get("/mandates/{mandate_id}/agent-credential", tags=["mandates"])
+@app.get("/mandates/{mandate_id}/agent-credential", tags=["mandates"], dependencies=[Depends(_read_mandate)])
 def agent_credential_status(mandate_id: str):
     """Whether the mandate's agent must authenticate, and which credential is active (last 4 chars; no secret)."""
     return S.agent_credential_status(mandate_id)
@@ -481,7 +507,7 @@ def issue_credential_mandate(c: CredentialIn, mint_agent_credential: bool | None
     return S.issue_credential_mandate(c.credential, mint_agent_credential)
 
 
-@app.get("/mandates/{mandate_id}/verify", tags=["mandates", "trust"])
+@app.get("/mandates/{mandate_id}/verify", tags=["mandates", "trust"], dependencies=[Depends(_read_mandate)])
 def verify_mandate(mandate_id: str):
     """Who authorised this mandate, and does it still hold: the buyer's VC signature (if buyer-signed), the gateway's
     countersignature, whether the issuer key may speak for the buyer, the validity window and revocation."""
@@ -545,16 +571,18 @@ def create_standing_order(req: standing.StandingOrderIn):
 
 
 @app.get("/standing-orders", tags=["standing orders"])
-def list_standing_orders(mandate_id: str | None = None, sandbox_id: str | None = _SANDBOX_Q):
+def list_standing_orders(mandate_id: str | None = None, sandbox_id: str | None = _SANDBOX_Q,
+                         r: access.Reader = Depends(access.reader)):
     scope = sandbox.list_scope(sandbox_id)
     if scope is None:
         return {"standing_orders": []}
-    idx = sandbox.index()
+    idx, ok = sandbox.index(), access.readable_mandates(r)
     return {"standing_orders": [so for so in standing.list_(mandate_id)
-                                if (mandate_id and not sandbox_id) or sandbox.keep(scope, so["mandate_id"], idx)]}
+                                if ((mandate_id and not sandbox_id) or sandbox.keep(scope, so["mandate_id"], idx))
+                                and (ok is None or so["mandate_id"] in ok)]}
 
 
-@app.get("/standing-orders/{standing_id}", tags=["standing orders"])
+@app.get("/standing-orders/{standing_id}", tags=["standing orders"], dependencies=[Depends(_read_standing)])
 def get_standing_order(standing_id: str):
     """The standing order with its renewal history and the drift baseline (medians of the last renewals)."""
     return standing.get(standing_id)
@@ -590,13 +618,15 @@ def simulate_standing_history(standing_id: str, req: SimulateHistory):
 
 @app.get("/notifications", tags=["notifications"])
 def list_notifications(buyer: str | None = None, order_id: str | None = None, limit: int = Query(50, ge=1, le=500),
-                       sandbox_id: str | None = _SANDBOX_Q):
-    """In-app feed of FYIs (notify tier), approval requests (ask tier) and decisions, newest first."""
+                       sandbox_id: str | None = _SANDBOX_Q, r: access.Reader = Depends(access.reader)):
+    """In-app feed of FYIs (notify tier), approval requests (ask tier) and decisions, newest first.
+    Only buyers you may read (see GET /mandates)."""
     from . import notifications_store
     scope = sandbox.list_scope(sandbox_id)
     if scope is None:
         return {"notifications": []}
     where = None if order_id and not sandbox_id else sandbox.where(scope, {"buyer": "buyer"})
+    where = access.and_where(where, access.buyer_where(r))
     return {"notifications": notifications_store.list_(buyer, limit, order_id, where=where)}
 
 
@@ -626,9 +656,13 @@ def create_sandbox(request: Request):
 
 
 @app.get("/sandbox/{sandbox_id}", tags=["sandbox"])
-def get_sandbox(sandbox_id: str):
-    """A sandbox's status: active / expired / deleted, live lookups used, its mandates and orders."""
-    return sandbox.get(sandbox_id)
+def get_sandbox(sandbox_id: str, r: access.Reader = Depends(access.reader)):
+    """A sandbox's status: active / expired / deleted, live lookups used, its mandates and order counts.
+    The recent orders list needs the sandbox's approver token (or agent token, or the approver code)."""
+    out = sandbox.get(sandbox_id)
+    if not r.everything and not set(m["mandate_id"] for m in out["mandates"]) & r.mandates:
+        out["orders"].pop("recent", None)
+    return out
 
 
 @app.delete("/sandbox/{sandbox_id}", tags=["sandbox"], dependencies=[Depends(require_global_approver)])
@@ -641,14 +675,16 @@ def delete_sandbox(sandbox_id: str, by: str = "approver"):
 
 @app.get("/audit", tags=["audit"])
 def audit(subject: str | None = None, buyer: str | None = None, limit: int = Query(200, ge=1, le=20000),
-          sandbox_id: str | None = _SANDBOX_Q):
+          sandbox_id: str | None = _SANDBOX_Q, r: access.Reader = Depends(access.reader)):
     """The audit log, newest first. Both the buyer and Valio Aimo read the same record.
 
-    Judge-sandbox events are in the same hash chain but hidden here unless ?sandbox=<id> (or a subject) is given."""
+    Judge-sandbox events are in the same hash chain but hidden here unless ?sandbox=<id> (or a subject) is given.
+    Only buyers you may read (see GET /mandates); the approver code reads everything. GET /audit/verify is public."""
     scope = sandbox.list_scope(sandbox_id)
     if scope is None:
         return {"events": []}
     where = None if subject and not sandbox_id else sandbox.where(scope, {"buyer": "buyer", "subject": "subject"})
+    where = access.and_where(where, access.buyer_where(r, subject_col="subject"))
     return {"events": store.audit_events(subject, buyer, limit, where=where)}
 
 

@@ -3,6 +3,9 @@
 M-HOTEL-AURORA-SECURE requires agent authentication: its bearer token is minted at runtime and printed
 once, the first time it is issued. Lost it? `uv run python -m scripts.seed --rotate-agent-credential`
 prints a new one (the old one stops working). Tokens are never stored in plain text or committed.
+
+All five are curated demo data (demo_public=True): readable without credentials, so judges can browse /ui/
+read-only (sous/access.py). A mandate seeded before that flag existed is re-signed once with it set.
 """
 
 import sys
@@ -15,6 +18,7 @@ MANDATES = [
         id="M-HOTEL-AURORA",
         buyer="Hotel Aurora, Helsinki",
         agent_id="aurora-purchasing-agent",
+        demo_public=True,
         issued_by="Anna Virtanen, F&B manager",
         notify_above_eur=1000,
         auto_approve_limit_eur=2500,
@@ -30,6 +34,7 @@ MANDATES = [
         id="M-HOSPITAL-KITCHEN",
         buyer="Meilahti hospital central kitchen",
         agent_id="meilahti-kitchen-agent",
+        demo_public=True,
         issued_by="Mikko Laine, head of catering",
         auto_approve_limit_eur=400,
         hard_limit_eur=3000,
@@ -45,6 +50,7 @@ MANDATES = [
         id="M-SCHOOL-ESPOO",
         buyer="Espoo school kitchens",
         agent_id="espoo-school-agent",
+        demo_public=True,
         issued_by="Liisa Korhonen, food services",
         auto_approve_limit_eur=300,
         hard_limit_eur=1500,
@@ -57,6 +63,7 @@ MANDATES = [
         id="M-KAARNA-CATERING",
         buyer="Kaarna Catering Oy, Espoo",
         agent_id="kaarna-event-agent",
+        demo_public=True,
         issued_by="Laura Niemi, kitchen manager",
         notify_above_eur=300,
         auto_approve_limit_eur=600,
@@ -76,6 +83,7 @@ MANDATES = [
         id="M-HOTEL-AURORA-SECURE",
         buyer="Hotel Aurora, Helsinki",
         agent_id="aurora-secure-agent",
+        demo_public=True,
         issued_by="Anna Virtanen, F&B manager",
         require_agent_auth=True,
         notify_above_eur=1000,
@@ -99,6 +107,13 @@ def _print_credential(mid: str, cred: dict) -> None:
 def main(rotate: bool = False):
     for m in MANDATES:
         existing = store.get_mandate(m.id)
+        if existing and signing.verify(existing["_jws"], typ="sous-mandate+jws") and \
+                bool(existing.get("demo_public")) != m.demo_public and not existing.get("credential_sha256"):
+            # same mandate, only the public-demo flag is new: re-sign it as it is (keeps revoked, limits; no new token)
+            data = {k: v for k, v in existing.items() if not k.startswith("_")}
+            S.issue_mandate(Mandate(**{**data, "demo_public": m.demo_public}), False)
+            print("marked", m.id, "demo_public" if m.demo_public else "private")
+            existing = store.get_mandate(m.id)
         if existing and signing.verify(existing["_jws"], typ="sous-mandate+jws"):
             # keep existing mandates (and their audit history) across restarts; mint a credential only if
             # the mandate needs one and has none (e.g. SOUS_REQUIRE_AGENT_AUTH was just turned on)

@@ -240,13 +240,15 @@ def test_rest_endpoints(monkeypatch):
     from sous import api
     monkeypatch.setattr(config, "APPROVER_CODE", "1234")
     c = TestClient(api.app)
+    AC = {"X-Approver-Code": "1234"}
     key = C.new_key()
     token = vc(key)
     r = c.post("/mandates/credential", json={"credential": token})  # no approver code: the key is the authority
     assert r.status_code == 200, r.text
     assert r.json()["issuer"]["kind"] == "buyer" and r.json()["countersigned_by"] == C.gateway_did()
-    assert c.get("/mandates/M-VC").json()["credential"] == token
-    assert c.get("/mandates/M-VC/verify").json()["verdict"] == "valid"
+    assert c.get("/mandates/M-VC").status_code == 404  # reads need a credential
+    assert c.get("/mandates/M-VC", headers=AC).json()["credential"] == token
+    assert c.get("/mandates/M-VC/verify", headers=AC).json()["verdict"] == "valid"
     assert c.get("/buyers/Kahvila Kide/keys").json()["keys"][0]["source"] == "tofu"
     bad = c.post("/mandates/credential", json={"credential": "a.b.c"})
     assert bad.status_code == 400 and bad.json()["error"] == "credential_malformed"
@@ -256,4 +258,4 @@ def test_rest_endpoints(monkeypatch):
     assert r.status_code == 200 and len(r.json()["keys"]) == 2
     r = c.post("/mandates/M-VC/revoke-credential", json={"revocation": C.sign_revocation(key, "M-VC", token)})
     assert r.status_code == 200 and r.json()["mandate"]["revoked"]
-    assert c.get("/mandates/M-VC/verify").json()["verdict"] == "revoked"
+    assert c.get("/mandates/M-VC/verify", headers=AC).json()["verdict"] == "revoked"
