@@ -2,6 +2,8 @@
 
 The reference buyer runs in a browser and speaks to a Sous gateway over its documented REST API. It needs a running gateway with catalog data and an issued mandate. The browser needs HTTPS or localhost and Web Crypto support for Ed25519. The buyer needs no model API key, build step, browser extensions, or seller credentials.
 
+The reference page supports public demo reads and quote submission on gateways that allow it without agent authentication. If your gateway requires a buyer agent bearer token, use the authenticated REST API for quotes and orders. The reference page currently has no token field.
+
 Open `/buyer/` on a gateway that serves this directory. To run the buyer separately from the gateway, start a static server from the repo root and pass the gateway URL as a query parameter or enter it under **Product filters and gateway**.
 
 ```sh
