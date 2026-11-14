@@ -6,8 +6,10 @@ the mandate in plain code and puts every order into one of four tiers: silent, n
 block.
 
 Gemini is the default brain of the **buyer side**: the reference buyer agent (`agent/buyer.py`) and the recipe
-planner (`agent/recipe.py`) use `gemini-4-hydrogen` whenever `GEMINI_API_KEY` is set. It is never on the gateway
-side, and it never decides policy.
+planner (`agent/recipe.py`) use `gemini-4-hydrogen` whenever `GEMINI_API_KEY` is set. On the gateway side there
+is exactly one use, the **Gemini Decisions API** (`gemini-decision-1`), and it can only add caution: it reads
+products that declare no allergens and refuses the ones that very likely contain what a buyer avoids (section
+"Decisions API on undeclared allergens" below). It never relaxes a rule or decides an order on its own.
 
 ## What Gemini does
 
@@ -183,6 +185,44 @@ key; the gateway only ever sees that signed credential.
 
   [Run 43566010358](https://github.com/Zawaer/sous/actions/runs/43566010358) (d158f4c): rules 23/23 and
   **Gemini 23/23** (23 calls, 41,773 tokens in, 2,808 out, about $0.08).
+
+## Decisions API on undeclared allergens (gateway side, `sous/allergen_ai.py`)
+
+About 30 % of Valio Aimo's food products (4,118 of 13,546) declare no allergens. The mandate engine treats them
+as unknown: never safe, a human decides (rule `allergen.unknown`). Many still say what they are in their name or
+key ingredients, e.g. *Hasselpähkinä-suklaalevite*. For such a product under a mandate that avoids allergens, the
+gateway sends one request to the Decisions API (`POST /v1beta/decisions`, model `gemini-decision-1`): the
+product's names, brand and key ingredients as the shared input, and one yes/no (`noul`) question per avoided
+allergen ("Does this food product contain tree nuts (almond, hazelnut, ...) as an ingredient?").
+
+| Probability of "contains" | What the gateway does |
+|---|---|
+| ≥ 0.8 | rule `allergen.likely`: **refused**, with the probability in the reason; a human can't approve it |
+| < 0.8 | nothing changes: still `allergen.unknown` (ask or block per the mandate). A low probability never makes a product safe |
+
+Why the Decisions API and not a chat model: it scores a closed yes/no question in one forward pass and returns a
+calibrated probability and confidence (about 200 ms, $0.10 per 1M input tokens, no output tokens), so the gateway
+applies a fixed threshold in code instead of parsing free text. Answers are cached per product, allergen and model
+(table `allergen_ai`), so quote, order and approval see the same answer; a failed or slow call means today's
+behaviour. Off without `GEMINI_API_KEY` or with `SOUS_ALLERGEN_AI=0`.
+
+**Measured where the answer is known** (`scripts/allergen_ai_eval.py`, results in `evals/allergen_ai_results.json`
+and on `/proof`): food products that do declare allergens, read from the same name/brand/ingredient text only.
+Precision of "likely contains" at 0.8 (a miss would refuse a safe product), recall, per allergen family, and how
+many undeclared food products would be refused for a buyer avoiding each family.
+
+Run of Sat 14.11 (local, 600 declared food products, 11 families, seed 14, 0 failed requests, 241 s for this and
+the 4,118 undeclared products):
+
+| | Result |
+|---|---|
+| "Likely contains" (p ≥ 0.8) confirmed by the declaration | **483 of 488 = 99.0 %** (5 not confirmed: 4 soy, 1 egg) |
+| Declared allergens caught from name and ingredients alone | 483 of 502 = 96.2 % (weakest: tree nuts 20/26, crustaceans 1/3) |
+| Undeclared food products that very likely contain at least one main allergen | **468 of 4,118** (milk 176, gluten cereals 138, soy 87, egg 62, fish 60, mustard 45, crustaceans 34, tree nuts 27) |
+
+The 5 unconfirmed ones (e.g. a breaded chicken fillet and a pizza dough read as containing soy) may just as well be
+gaps in the declaration; either way the cost is a refusal the buyer can see the reason for, never a risky order.
+Without this check those 468 products would each wait for a human who has no more information than the name.
 
 ## Run it
 

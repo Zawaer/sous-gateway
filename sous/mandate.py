@@ -97,6 +97,12 @@ def _cents(eur: float) -> int:
     return round(Decimal(str(eur)) * 100)
 
 
+def _likely(assessment: dict[str, dict] | None) -> list[tuple[str, dict]]:
+    """Avoided allergens the Decisions API puts at or above allergen_ai.LIKELY, highest first."""
+    from .allergen_ai import likely
+    return likely(assessment) if assessment else []
+
+
 def _over_pct(now: float, was: float, pct: float) -> bool:
     """|now - was| / was > pct %, decided in exact decimals (a change of exactly the limit passes)."""
     n, w = Decimal(str(now)), Decimal(str(was))
@@ -131,6 +137,7 @@ def evaluate(
     last_prices: dict[str, dict] | None = None,
     families: dict[str, tuple[str, str]] | None = None,
     last_comparison_prices: dict[tuple[str, str], dict] | None = None,
+    allergen_ai: dict[str, dict[str, dict]] | None = None,
 ) -> tuple[Tier, list[Finding]]:
     """`extra_findings` are checks made outside the mandate (e.g. standing-order drift); they count like any rule.
     `quantities` is this order's amount per (product family, unit), `usual_quantities` the same buyer's past
@@ -140,7 +147,9 @@ def evaluate(
     every product id ever ordered under the mandate (product.first_time), `last_prices` the last unit price paid
     per product under the mandate as {product_id: {unit_price_ex_vat, order_id, at}} (price.changed), `families`
     each line's product family and `last_comparison_prices` the last price per L/KG paid per (family, per) unit
-    (price.comparison_changed). Times are when orders went through (store.ordered_at)."""
+    (price.comparison_changed). Times are when orders went through (store.ordered_at).
+    `allergen_ai` is the Gemini Decisions API's {product_id: {code: {p, confidence, model}}} for products that
+    declare no allergens (sous/allergen_ai.py): it can turn allergen.unknown into allergen.likely, never into safe."""
     f: list[Finding] = []
 
     def add(rule, outcome, message, pid=None):
@@ -282,6 +291,12 @@ def evaluate(
                 add("allergen.contains", "block", f"{name} contains {names}.", pid)
             elif st["status"] == "may_contain":
                 add("allergen.may_contain", "block", f"{name} may contain {names}.", pid)
+            elif st["status"] == "unknown" and (hits := _likely((allergen_ai or {}).get(pid))):
+                said = ", ".join(f"{catalog.ALLERGENS.get(c, c)} ({a['p']:.0%})" for c, a in hits)
+                add("allergen.likely", "block",
+                    f"{name} declares no allergens, but from its name and ingredients it very likely contains "
+                    f"{said}, by Gemini Decisions ({hits[0][1].get('model', 'gemini-decision-1')}). Refused: an "
+                    "avoided allergen is too likely to approve.", pid)
             elif st["status"] == "unknown":
                 avoid = ", ".join(catalog.ALLERGENS.get(c, c) for c in mandate.avoid_allergens)
                 add("allergen.unknown", mandate.unknown_allergens,

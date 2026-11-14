@@ -133,6 +133,11 @@ def _build() -> list[dict]:
         _r("allergen.may_contain", "finding", ["block"], "buyer",
            "The product may contain (traces of) an avoided allergen, and the mandate doesn't allow that.",
            ["avoid_allergens", "allow_may_contain"]),
+        _r("allergen.likely", "finding", ["block"], "gateway",
+           "The product declares no allergens, but the Gemini Decisions API (gemini-decision-1), asked one yes/no "
+           "question per avoided allergen from the product's names, brand and key ingredients, puts one at 80 % or "
+           "more: refused, and a human can't approve it into an order. Below 80 % the product stays "
+           "allergen.unknown; a model answer never makes a product safe.", "avoid_allergens"),
         _r("allergen.unknown", "finding", _field_tiers("unknown_allergens"), "buyer",
            "The product has no allergen data, so it can't be confirmed free of an avoided allergen. Unknown "
            "is never treated as safe.", "unknown_allergens"),

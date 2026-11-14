@@ -201,6 +201,20 @@ def recipe_eval(path: Path) -> dict:
             "source": _source(path, None, run_date=next((r["today"] for r in runs if r.get("today")), None))}
 
 
+# --- Gemini Decisions API on undeclared allergens -------------------------------
+
+def allergen_ai_eval(path: Path) -> dict:
+    doc = _load(path)
+    if not isinstance(doc, dict) or "ground_truth" not in doc:
+        return _missing(path)
+    gt = doc["ground_truth"]
+    return {"available": True, "model": doc.get("model"), "threshold": doc.get("threshold"),
+            "families": doc.get("families"), "products_scored": gt.get("products_scored"),
+            "total": gt.get("total"), "per_family": gt.get("per_family"),
+            "false_likely": (gt.get("false_likely") or [])[:10], "undeclared": doc.get("undeclared"),
+            "definitions": doc.get("definitions"), "source": _source(path, doc)}
+
+
 # --- vision ---------------------------------------------------------------------
 
 def vision_eval(path: Path) -> dict:
@@ -373,6 +387,8 @@ REPRODUCE = [
     {"what": "Mandate drafting eval", "cmd": "uv run python scripts/draft_eval.py"},
     {"what": "Recipe planner eval", "cmd": "uv run python scripts/recipe_eval.py --providers table gemini"},
     {"what": "Vision eval (needs NVIDIA_API_KEY)", "cmd": "uv run python scripts/vision_eval.py"},
+    {"what": "Gemini Decisions API on allergens (needs data/ and GEMINI_API_KEY)",
+     "cmd": "uv run python scripts/allergen_ai_eval.py --sample 600"},
     {"what": "Conformance kit against any gateway",
      "cmd": "uv run python scripts/conformance.py --base https://<gateway> --json"},
     {"what": "Search quality report (needs data/products.json)", "cmd": "uv run python tests/test_search_quality.py"},
@@ -413,6 +429,7 @@ def collect() -> dict:
             "drafting": draft_evals(evals),
             "recipe": recipe_eval(evals / "recipe_results.json"),
             "vision": vision_eval(evals / "vision" / "results.json"),
+            "allergen_ai": allergen_ai_eval(evals / "allergen_ai_results.json"),
             "conformance": conformance(evals / "conformance.json", ROOT / "docs" / "CONFORMANCE.md",
                                        ROOT / "scripts" / "conformance.py"),
             "search_quality": search_quality(ROOT / "tests" / "test_search_quality.py"),

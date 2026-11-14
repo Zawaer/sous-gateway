@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import agent_auth, aimo, catalog, clock, config, credentials, deadline, exposure, holds, notify, options as OPT, quote as Q, sandbox, signing, store, substitutes, usual
+from . import agent_auth, aimo, allergen_ai, catalog, clock, config, credentials, deadline, exposure, holds, notify, options as OPT, quote as Q, sandbox, signing, store, substitutes, usual
 from .mandate import Mandate, evaluate
 
 
@@ -648,6 +648,7 @@ def _evaluate(mandate: Mandate, agent_id: str, q: dict, now: datetime, extra_fin
                     usual_quantities=usual.history(mandate.id, now) if mandate.unusual_quantity_factor else None,
                     families={l["product_id"]: usual.family(l["product_id"]) for l in q["lines"]}
                     if mandate.max_price_change_pct else None,
+                    allergen_ai=allergen_ai.assess_lines(q["lines"], mandate.avoid_allergens),
                     **_spend_context(mandate, now))
 
 

@@ -1,0 +1,366 @@
+{
+ "generated_at": "2026-11-14T10:41:45+02:00",
+ "model": "gemini-decision-1",
+ "threshold": 0.8,
+ "families": [
+  "AM",
+  "AN",
+  "AW",
+  "AE",
+  "AP",
+  "AF",
+  "AC",
+  "AY",
+  "AS",
+  "BC",
+  "BM"
+ ],
+ "ground_truth": {
+  "products_scored": 600,
+  "products_failed": 0,
+  "eligible_declared_food_products": 6908,
+  "seed": 14,
+  "total": {
+   "tp": 483,
+   "fp": 5,
+   "fn": 19,
+   "tn": 6093,
+   "precision": 0.99,
+   "recall": 0.962
+  },
+  "per_family": {
+   "AM": {
+    "tp": 146,
+    "fp": 0,
+    "fn": 2,
+    "tn": 452,
+    "precision": 1.0,
+    "recall": 0.986
+   },
+   "AN": {
+    "tp": 20,
+    "fp": 0,
+    "fn": 6,
+    "tn": 574,
+    "precision": 1.0,
+    "recall": 0.769
+   },
+   "AW": {
+    "tp": 140,
+    "fp": 0,
+    "fn": 3,
+    "tn": 457,
+    "precision": 1.0,
+    "recall": 0.979
+   },
+   "AE": {
+    "tp": 63,
+    "fp": 1,
+    "fn": 0,
+    "tn": 536,
+    "precision": 0.984,
+    "recall": 1.0
+   },
+   "AP": {
+    "tp": 2,
+    "fp": 0,
+    "fn": 0,
+    "tn": 598,
+    "precision": 1.0,
+    "recall": 1.0
+   },
+   "AF": {
+    "tp": 24,
+    "fp": 0,
+    "fn": 0,
+    "tn": 576,
+    "precision": 1.0,
+    "recall": 1.0
+   },
+   "AC": {
+    "tp": 1,
+    "fp": 0,
+    "fn": 2,
+    "tn": 597,
+    "precision": 1.0,
+    "recall": 0.333
+   },
+   "AY": {
+    "tp": 52,
+    "fp": 4,
+    "fn": 3,
+    "tn": 541,
+    "precision": 0.929,
+    "recall": 0.945
+   },
+   "AS": {
+    "tp": 5,
+    "fp": 0,
+    "fn": 1,
+    "tn": 594,
+    "precision": 1.0,
+    "recall": 0.833
+   },
+   "BC": {
+    "tp": 8,
+    "fp": 0,
+    "fn": 0,
+    "tn": 592,
+    "precision": 1.0,
+    "recall": 1.0
+   },
+   "BM": {
+    "tp": 22,
+    "fp": 0,
+    "fn": 2,
+    "tn": 576,
+    "precision": 1.0,
+    "recall": 0.917
+   }
+  },
+  "false_likely": [
+   {
+    "product_id": "467267",
+    "name": "2x Fresh Hetki Flatbread with cheddar and ham 130g",
+    "code": "AE",
+    "p": 0.981
+   },
+   {
+    "product_id": "473321",
+    "name": "Piazzola American Style Pizza Dough 66x225g",
+    "code": "AY",
+    "p": 0.979
+   },
+   {
+    "product_id": "467031",
+    "name": "6 x Filos 200g greek melitzano aubergine salad",
+    "code": "AY",
+    "p": 0.972
+   },
+   {
+    "product_id": "471207",
+    "name": "Tyson Homestyle Chicken Tenders 35g/3x1kg breaded chicken inner fillet",
+    "code": "AY",
+    "p": 0.976
+   },
+   {
+    "product_id": "470920",
+    "name": "Filos giant beans in tomato sauce 2kg",
+    "code": "AY",
+    "p": 0.984
+   }
+  ]
+ },
+ "definitions": {
+  "positive": "the product's declaration says it contains the family (catalog.allergen_status 'contains')",
+  "negative": "the product has an allergen list without the family (status 'safe'); may-contain skipped",
+  "precision": "of 'likely contains' (p >= threshold), the share the declaration confirms; a miss here would refuse a safe product",
+  "recall": "of declared contains, the share the API marks likely from names and ingredients alone"
+ },
+ "provenance": {
+  "origin": "local",
+  "ci_run_id": null,
+  "commit": "bb39f61"
+ },
+ "undeclared": {
+  "products": 4118,
+  "products_failed": 0,
+  "likely_any_family": 468,
+  "likely_per_family": {
+   "AM": 176,
+   "AN": 27,
+   "AW": 138,
+   "AE": 62,
+   "AP": 10,
+   "AF": 60,
+   "AC": 34,
+   "AY": 87,
+   "AS": 19,
+   "BC": 19,
+   "BM": 45
+  },
+  "examples": [
+   {
+    "product_id": "460224",
+    "name": "CELERY WASHED FI",
+    "likely": {
+     "BC": 0.98
+    }
+   },
+   {
+    "product_id": "460392",
+    "name": "SHISO MIXED 4X4",
+    "likely": {
+     "BM": 0.95
+    }
+   },
+   {
+    "product_id": "460518",
+    "name": "BERGADER 600G CHEESE PLATE",
+    "likely": {
+     "AM": 0.97
+    }
+   },
+   {
+    "product_id": "460597",
+    "name": "BIRKKALAN 800G ORGANIC SPELTFLOUR",
+    "likely": {
+     "AW": 0.98
+    }
+   },
+   {
+    "product_id": "460772",
+    "name": "CELERY STALK ES/NL",
+    "likely": {
+     "BC": 0.99
+    }
+   },
+   {
+    "product_id": "460800",
+    "name": "VÖRLÖ CELERY PEELED",
+    "likely": {
+     "BC": 0.98
+    }
+   },
+   {
+    "product_id": "460806",
+    "name": "CELERY FI",
+    "likely": {
+     "BC": 0.99
+    }
+   },
+   {
+    "product_id": "460817",
+    "name": "CELERIAC NETHERLANDS",
+    "likely": {
+     "BC": 0.95
+    }
+   },
+   {
+    "product_id": "460929",
+    "name": "LAND LEBEN CROUTONS ONION/GARL 500G",
+    "likely": {
+     "AW": 0.97,
+     "BC": 0.91
+    }
+   },
+   {
+    "product_id": "460960",
+    "name": "GRAY'S 1200G PECAN PIE",
+    "likely": {
+     "AN": 0.98,
+     "AE": 0.99
+    }
+   },
+   {
+    "product_id": "461547",
+    "name": "MAUSTEAITTA 5KG HOMESTYLE MUSTARD",
+    "likely": {
+     "BM": 0.98
+    }
+   },
+   {
+    "product_id": "461661",
+    "name": "BIRKKALAN 900G ORGANIC SPELT KERNE",
+    "likely": {
+     "AW": 0.99
+    }
+   },
+   {
+    "product_id": "461776",
+    "name": "PK 40X80G BUN WITH RASPBERRY FROZEN",
+    "likely": {
+     "AW": 0.98,
+     "AE": 0.98
+    }
+   },
+   {
+    "product_id": "461796",
+    "name": "ARGAL 100G SALAMISLICE",
+    "likely": {
+     "AM": 0.98,
+     "AY": 0.99
+    }
+   },
+   {
+    "product_id": "461814",
+    "name": "SALMON FILLET C-CUT DEBONED A10KG NORWAY",
+    "likely": {
+     "AF": 0.99
+    }
+   },
+   {
+    "product_id": "461829",
+    "name": "MIMIS CRESS MIX BOX",
+    "likely": {
+     "BM": 0.89
+    }
+   },
+   {
+    "product_id": "461838",
+    "name": "ARGAL 100G CHORIZO SALAMI",
+    "likely": {
+     "AM": 0.99,
+     "AY": 0.98
+    }
+   },
+   {
+    "product_id": "461879",
+    "name": "MSC COD FILLET 200-400G SF BENFRI",
+    "likely": {
+     "AF": 0.98
+    }
+   },
+   {
+    "product_id": "461880",
+    "name": "TUNA LOINS SHASHIMI AA",
+    "likely": {
+     "AF": 0.99
+    }
+   },
+   {
+    "product_id": "461892",
+    "name": "CARP GUTTED 1-2",
+    "likely": {
+     "AF": 0.98
+    }
+   },
+   {
+    "product_id": "461912",
+    "name": "SEA BREAM GUTTED 400-600",
+    "likely": {
+     "AF": 0.98
+    }
+   },
+   {
+    "product_id": "461917",
+    "name": "MSC SAITHE FILLET 200-400G SKIN OFF",
+    "likely": {
+     "AF": 0.97
+    }
+   },
+   {
+    "product_id": "461938",
+    "name": "FISHBONES",
+    "likely": {
+     "AF": 0.87
+    }
+   },
+   {
+    "product_id": "461939",
+    "name": "BALTIC HERRING GUTTED MSC FI**)",
+    "likely": {
+     "AF": 0.99
+    }
+   },
+   {
+    "product_id": "461973",
+    "name": "FARMIMUNA CRUMBLED 2KG",
+    "likely": {
+     "AE": 0.98
+    }
+   }
+  ]
+ },
+ "seconds": 241.2
+}

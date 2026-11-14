@@ -277,6 +277,7 @@ If the tier is `silent` or `notify`, a final `mandate.ok` finding is added with 
 | `product.claims` | block | Line lacks a `required_claims` claim. |
 | `allergen.contains` | block | Line contains an avoided allergen. |
 | `allergen.may_contain` | block | Line may contain one and `allow_may_contain` is false. |
+| `allergen.likely` | block | The product declares no allergens, but the Gemini Decisions API puts an avoided allergen at p ≥ 0.8 from its names, brand and key ingredients (section 25). |
 | `allergen.unknown` | mandate's `unknown_allergens` (ask or block) | Mandate has allergen rules and the product has no allergen declaration. |
 | `substitution` | mandate's `substitutions` | Line is marked `substitute_for`. |
 | `supply.terminal` | mandate's `terminal_products` | Terminal product (only emitted when that setting isn't `silent`). |
@@ -878,3 +879,7 @@ Product holds stop one product; a pause stops a buyer's agents, or every buyer's
 - Audit events `ordering.paused` and `ordering.resumed`. Table `agent_pause`, SYSTEM VERSIONED on MariaDB.
 
 **When an order counts.** Period totals (`spend.daily_limit`, `spend.weekly_limit`), `spend.split_orders` and last-paid prices (`price.changed`, `price.comparison_changed`) count an order from when it went through: the human's approval time for an approved order, else when it was placed (`store.ordered_at`). An order held on Sunday and approved on Monday is Monday's spend and the newest price paid. `spend.split_orders` sums only orders the agent placed alone (an approved order already had a human). Money is compared in whole cents and percentages in exact decimals, so an order that reaches a limit exactly, or a price change of exactly the limit, passes.
+
+## 25. Undeclared allergens: Gemini Decisions API (`sous/allergen_ai.py`)
+
+For a quote line whose product has no allergen data (`allergen_status` = unknown) under a mandate with `avoid_allergens`, the gateway asks `POST https://generativelanguage.googleapis.com/v1beta/decisions` (model `gemini-decision-1`) one `noul` question per avoided code, with the product's names, brand and key ingredients as input. An answer `noul` ≥ 0.8 fires `allergen.likely` (block, owner gateway) instead of `allergen.unknown`; anything lower leaves `allergen.unknown` as it was. Answers are cached in table `allergen_ai` (product, code, model, p, confidence), so the approval re-check sees the same answer. Calls are capped at `SOUS_ALLERGEN_AI_PER_MIN` (60) per minute with a `SOUS_ALLERGEN_AI_TIMEOUT_S` (4 s) timeout; an error, timeout or cap means no answer, i.e. `allergen.unknown`. Off without `GEMINI_API_KEY` or with `SOUS_ALLERGEN_AI=0`. Accuracy on declared products: `evals/allergen_ai_results.json`, shown on `/proof`.
