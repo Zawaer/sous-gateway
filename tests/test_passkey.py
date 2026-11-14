@@ -309,3 +309,10 @@ def test_offline_script_verifies_saved_event(client, tmp_path):
     assert r.returncode == 0 and "VERIFIED" in r.stdout, r.stdout + r.stderr
     r = run(S.get_order(held()["id"]))
     assert r.returncode == 1 and "FAIL order_id" in r.stdout
+
+
+def test_approval_url_points_to_passkey_page_when_mandate_requires_it():
+    o, op = held("M"), held("MP")
+    assert op["approval_url"] == f"/ui/approve.html?order={op['id']}"
+    assert op["order_url"] != op["approval_url"]
+    assert o["approval_url"] == o["order_url"]  # code-approvable mandates keep the seller inbox link

@@ -373,6 +373,15 @@ def order_url(order_id: str, sandbox_id: str | None = None) -> str:
     return f"{config.PUBLIC_BASE_URL}/ui/{q}#/orders/{order_id}"
 
 
+def approval_url(order_id: str, mandate) -> str:
+    """Where the human decides a held order: the passkey page (web/approve.html) when the mandate requires a
+    passkey, else the order in the seller UI (approver code)."""
+    sid = getattr(mandate, "sandbox", None)
+    if getattr(mandate, "approval_method", "any") == "passkey":
+        return f"{config.PUBLIC_BASE_URL}/ui/approve.html?order={order_id}" + (f"&sandbox={sid}" if sid else "")
+    return order_url(order_id, sid)
+
+
 def request_quote(req: QuoteRequest, agent_token: str | None = None, approver: bool = False) -> dict:
     """`approver`: the caller proved the global approver code (exact stock under SOUS_STOCK_EXPOSURE=approver_exact)."""
     m = authorize_agent(req.mandate_id, req.agent_id, agent_token, "request_quote") if req.mandate_id else None
@@ -804,7 +813,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
                      "at": now.isoformat(timespec="milliseconds")},
         "approval": None,
         "order_url": order_url(oid, getattr(mandate, "sandbox", None)),
-        "approval_url": order_url(oid, getattr(mandate, "sandbox", None)) if status == "pending_approval" else None,
+        "approval_url": approval_url(oid, mandate) if status == "pending_approval" else None,
         "idempotency_key": idempotency_key,
         "agent_rationale": rationale or q.get("rationale"),
         "created_at": now.isoformat(timespec="milliseconds"), "updated_at": now.isoformat(timespec="milliseconds"),
