@@ -63,6 +63,12 @@ class AimoError(RuntimeError):
         self.rate_limited = rate_limited
 
 
+class SharedBudgetLimit(AimoError):
+    """This deployment's share of the budget every deployment shares in Valkey is used up for this minute.
+    A short self-imposed wait, not a Valio outage: never served from a stale copy (a copy another deployment
+    left in Valkey would otherwise turn a routine order into DATA_STALE -> ask)."""
+
+
 class SandboxLimit(AimoError):
     """A judge sandbox (sandbox.py) is out of its share of live calls; never served from a stale copy."""
 
@@ -122,7 +128,7 @@ def _take_budget() -> None:
                 if now in _sandbox_calls:
                     _sandbox_calls.remove(now)
                 m.live = was_live
-        raise AimoError(f"The shared budget of live Valio Aimo calls for this minute is used up "
+        raise SharedBudgetLimit(f"The shared budget of live Valio Aimo calls for this minute is used up "
                         f"({shared.ROLE} may use {e.limit} of {shared.GLOBAL_CALLS_PER_MIN}); retry shortly.",
                         retry_after=e.retry_after, rate_limited=True) from None
 
@@ -323,7 +329,7 @@ def _post(kind: str, requested: date, ids: list[str], ttl: int, stale_max: int) 
             for item in _fetch_shared(kind, day, chunk):
                 out[item["productId"]] = item
         except AimoError as e:
-            if isinstance(e, SandboxLimit):
+            if isinstance(e, (SandboxLimit, SharedBudgetLimit)):
                 raise
             stale = _stale(kind, day, chunk, stale_max, e)
             if not stale:

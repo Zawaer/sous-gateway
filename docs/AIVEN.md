@@ -29,7 +29,9 @@ All keys start with `sous:valio:`.
 1. **Global call budget, sliding window.** Every live Valio call first does, in one `MULTI`:
    `INCR budget:<minute>`, `EXPIRE`, `GET budget:<minute-1>`. Usage is the sliding-window estimate
    `prev × (1 − elapsed fraction of this minute) + cur`. Over the limit: `DECR` and refuse with a
-   `Retry-After`; the agent gets the usual retryable `valio_unavailable` (503). A per-role counter
+   `Retry-After`; the agent gets the usual retryable `valio_unavailable` (503). This refusal is a short wait, not an outage, so it is never answered
+   with a stale copy (that would turn a routine order into `DATA_STALE` → ask); the per-process cap and
+   real Valio failures still fall back to last-known copies. A per-role counter
    `budget:<minute>:<role>` is kept for visibility.
 2. **Prod first.** `SOUS_DEPLOYMENT_ROLE` = `prod`, `staging`, `ci`, `demo` or `dev`. The cap compares
    *everybody's* usage with the role's share: prod may use 100 % of

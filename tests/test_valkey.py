@@ -178,3 +178,19 @@ def test_unreachable_url_fails_open_quickly(monkeypatch):
     use(monkeypatch, Api())
     assert set(aimo.prices(["1", "2"], DAY)) == {"1", "2"}
     assert aimo.health()["shared_budget"]["backend"] == "local"
+
+
+def test_shared_budget_refusal_is_a_wait_not_a_stale_copy(monkeypatch, server):
+    # staging leaves a copy in Valkey; later ci is over its share: it gets a retryable error, not DATA_STALE.
+    deployment(server, "staging", limit=2)
+    use(monkeypatch, Api())
+    aimo.availability(["1"], DAY)
+    r = fakeredis.FakeRedis(server=server, decode_responses=True)
+    key = f"sous:valio:offer:availability:{DAY.isoformat()}:1"
+    d = json.loads(r.get(key))
+    d["t"] -= aimo.AVAILABILITY_TTL + 30
+    r.set(key, json.dumps(d), keepttl=True)
+    deployment(server, "ci", limit=2)  # ci may use 1, staging already used it
+    with pytest.raises(aimo.SharedBudgetLimit) as e:
+        aimo.availability(["1"], DAY)
+    assert e.value.rate_limited and e.value.retry_after >= 1
