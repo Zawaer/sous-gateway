@@ -416,3 +416,13 @@ test('discovers readable mandates using the credential and verifies the selected
   const malformed = new Gateway('https://example.test', async () => Response.json({ mandates: {} }));
   await assert.rejects(malformed.listMandates(), /invalid mandate list/);
 });
+
+test('single-item form parsing explains how to enter a second quantified product without losing it', () => {
+  for (const input of [
+    '2 kg strawberries and 3 kg carrots by Tuesday',
+    '2 kg strawberries, 3 kg carrots by Tuesday',
+    '2 kg strawberries plus 3 packs of carrots by Tuesday',
+  ]) assert.throws(() => parseIntent(input, '2026-11-14'), /Add to basket/);
+  assert.equal(parseIntent('2 kg salt and pepper by Tuesday', '2026-11-14').query, 'salt and pepper');
+  assert.equal(parseIntent('2 packs olive oil 1 L by Tuesday', '2026-11-14').query, 'olive oil 1 L');
+});

@@ -30,6 +30,9 @@ export function parseIntent(text, today = helsinkiDate()) {
   const match = input.match(/^(?:(?:i need|we need|find|quote)\s+)?(\d[\d,.]*)\s*(litres?|liters?|l|ml|kilograms?|kg|grams?|g|packs?|cases?)\s+(?:of\s+)?(.+?)\s+(?:by|on|for)\s+(\S+)$/i);
   if (!match) throw new Error('Try “1,000 litres of lactose-free milk by Monday”, or enter the fields below.');
   const [, quantity, name, product, when] = match;
+  if (/(?:\band\b|\bplus\b|[,;])\s*\d[\d,.]*\s*(?:litres?|liters?|l|ml|kilograms?|kg|grams?|g|packs?|cases?)\b/i.test(product)) {
+    throw new Error('Fill one product at a time. Use Add to basket to build a multi-item order.');
+  }
   if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?$/.test(quantity)) {
     throw new Error('Use a decimal point or comma-separated thousands, or enter the quantity below.');
   }
