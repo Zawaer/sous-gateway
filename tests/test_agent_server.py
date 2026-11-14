@@ -324,6 +324,29 @@ def test_ask_runs_the_buyer_agent_with_the_gateway_tools(c, sbx):
     assert d["answer"].startswith("Ordered") and d["stop_reason"] == "answered"
 
 
+def test_ask_follow_up_answers_the_agents_question_in_place(c, sbx):
+    seen = []
+
+    def quote_after_reply(messages):
+        seen.append([(m["role"], m.get("content")) for m in messages[1:]])
+        return _tool("request_quote", {"delivery_date": "2026-11-16", "items": [
+            {"product_ids": ["MILK"], "amount": 40, "unit": "L", "purpose": "dessert"}]})(messages)
+
+    LLMS["gemini"] = FakeLLM("gemini", "gemini-4-hydrogen", ["Which fat level do you want for the dessert?"])
+    body = {"text": "40 L lactose-free milk for a dessert", "mandate_id": sbx["mandate_id"],
+            "agent_id": sbx["agent_id"], "allow_order": False}
+    d = c.post("/ask", headers=sbx["headers"], json=body).json()
+    assert d["needs_reply"] is True and d["quote"] is None and d["follow_up"] == []
+    LLMS["gemini"] = FakeLLM("gemini", "gemini-4-hydrogen", [quote_after_reply, "Quoted 40 L for the dessert."])
+    turn = [{"question": d["answer"], "answer": "Full-fat, please"}]
+    r = c.post("/ask", headers=sbx["headers"], json={**body, "follow_up": turn})
+    assert r.status_code == 200, r.text
+    d2 = r.json()
+    assert seen[0] == [("user", body["text"]), ("assistant", d["answer"]), ("user", "Full-fat, please")]
+    assert d2["needs_reply"] is False and d2["quote"]["lines"][0]["product_id"] == "MILK"
+    assert d2["follow_up"] == turn and d2["request"] == body["text"]
+
+
 def test_ask_needs_a_model_key(c, sbx):
     r = c.post("/ask", headers=sbx["headers"], json={"text": "100 l milk", "mandate_id": sbx["mandate_id"],
                                                       "agent_id": sbx["agent_id"]})

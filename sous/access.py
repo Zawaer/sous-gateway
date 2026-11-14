@@ -301,8 +301,16 @@ def agent_claim(text: str | None) -> dict | None:
             **({"suspicious_terms": hits} if hits else {})}
 
 
+_SYSTEM_NOTE = "Written by Sous when it seeded this demo sandbox, not by an agent; not used by any rule."
+
+
 def label_order(o: dict) -> dict:
-    """An order for display: adds agent_claim next to the stored agent_rationale."""
+    """An order for display: adds agent_claim next to the stored agent_rationale. A sandbox's seeded demo order
+    (sous/sandbox.py marks it `seeded`) carries Sous's own text there, so it is labelled source=system instead."""
     if isinstance(o, dict) and "agent_rationale" in o:
-        o = {**o, "agent_claim": agent_claim(o.get("agent_rationale"))}
+        claim = agent_claim(o.get("agent_rationale"))
+        if claim and o.get("seeded"):
+            claim = {"text": claim["text"], "verified": False, "note": _SYSTEM_NOTE, "suspicious": False,
+                     "source": "system"}
+        o = {**o, "agent_claim": claim}
     return o

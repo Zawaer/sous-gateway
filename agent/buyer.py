@@ -214,7 +214,10 @@ How the gateway works (Valio Aimo's instructions):
 Your rules:
 1. Buy exactly what the buyer asked for: the product they name (if they give a product id, quote that id), the \
 amount, and the date. Litres -> unit "L", kilos -> unit "KG"; jars, bags, loaves, packs, bottles or pieces -> \
-unit "SALES_UNIT" with the count. Put dietary needs the buyer states into the search filters.
+unit "SALES_UNIT" with the count. Put dietary needs the buyer states into the search filters. When the buyer says \
+what an item is for ("for a dessert", "for coffee", "allergy menu"), pass it as that item's `purpose` in a few words \
+(and on suggest_substitutes), and where the buyer left a choice open (fat %, size), pick the product that suits \
+that use (desserts, baking and sauces: full-fat or cooking quality, not skimmed or light).
 2. You never decide policy; the gateway's mandate engine does. Don't filter, refuse or shrink the request \
 because you think the mandate forbids it, and don't work around a refusal by switching product, splitting or \
 changing the amount. Request a quote with mandate_id for what was asked, then call place_order on that quote even \
@@ -353,10 +356,16 @@ class BuyerAgent:
         self._names = {t["function"]["name"] for t in self.tools}
         self._props = {t.name: set(t.input_schema.get("properties", {})) for t in mcp_tools if t.name in self._names}
 
-    def run(self, request: str) -> BuyerRun:
+    def run(self, request: str, earlier: list[dict] | None = None) -> BuyerRun:
+        """`earlier`: the follow-up so far, [{question, answer}]: the agent asked instead of quoting and the buyer
+        answered. They become the conversation's next turns, so the model sees its own question and the reply."""
         run = BuyerRun(request=request, model=getattr(self.llm.cfg, "label", "?"))
-        self._rationale = " ".join(request.split())[:500]  # the buyer's own words, recorded by the gateway
+        earlier = [x for x in (earlier or []) if x.get("question") and x.get("answer")]
+        words = " ".join([request, *(x["answer"] for x in earlier)])
+        self._rationale = " ".join(words.split())[:500]  # the buyer's own words, recorded by the gateway
         messages = [{"role": "system", "content": self.system_prompt()}, {"role": "user", "content": self.user_message(request)}]
+        for x in earlier:
+            messages += [{"role": "assistant", "content": x["question"]}, {"role": "user", "content": x["answer"]}]
         run.messages = messages
         capped_at = None  # LLM call count when the tool-call budget ran out
         while True:

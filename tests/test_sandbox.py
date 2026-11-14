@@ -475,6 +475,10 @@ def test_new_sandbox_is_seeded_with_a_drifted_standing_order_and_a_held_order_wi
     rules = {f["rule"] for f in o["decision"]["findings"]}
     assert {"standing.quantity_creep", "standing.quantity_trend", "standing.cost_drift"} <= rules, rules
     assert o["decision"]["outcome"] == "ask" and "Seeded demo data" in o["agent_rationale"]
+    # that note is Sous's own text, so the order view labels it as a system note, not "the agent's own words"
+    from sous import access
+    claim = access.label_order(o)["agent_claim"]
+    assert claim["source"] == "system" and "not by an agent" in claim["note"] and not claim["suspicious"]
     # the reasons that held it come first; FYI-level ones (the €1,000 notify line) follow as "also: ..."
     by_msg = {f["message"]: f for f in o["decision"]["findings"]}
     held = [by_msg[m] for m in seeded["reasons"] if m in by_msg]

@@ -120,7 +120,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
 // UI review S4/S6/S7: display-only clean-ups of gateway text.
 // Buyer names without the "(sandbox SBX-…)" suffix (the banner already says it).
 const bn = (b) => String(b ?? "").replace(/\s*\(sandbox SBX-[A-Z0-9]+\)$/i, "");
-// Engine messages say "€1,560.00"; show money the same way as the rest of the UI ("1 560,00 €").
+// Engine messages say "€1,560.00"; show money the same way as the rest of the UI (eur() below).
 // ... and ALL-CAPS catalogue names inside them ("BRAVO CHEF 10KG CRUSHED TOMATOES") in sentence case:
 // a run of 3+ upper-case words, at least two of them real words, so codes like "UHT" or "AM, AN" stay.
 const CAPS_RUN = /\b[A-ZÅÄÖ0-9][A-ZÅÄÖ0-9.,%/&'-]*(?:\s+[A-ZÅÄÖ0-9][A-ZÅÄÖ0-9.,%/&'-]*){2,}\b/g;
@@ -135,8 +135,16 @@ const pname = (n) => { n = String(n ?? ""); return /[a-zåäö]/.test(n) ? n : n
 // Event names: known labels, otherwise "sandbox.created" -> "Sandbox created".
 const evLabel = (e) => EVENT_LABEL[e] || (e.charAt(0).toUpperCase() + e.slice(1)).replace(/[._]/g, " ");
 
-const eur = (n) => n == null ? "–" :
-  new Intl.NumberFormat("fi-FI", { style: "currency", currency: "EUR" }).format(n);
+// One money format per language, the same as I18N.money on the agent/approve/break pages
+// (en: €88.26, fi: 88,26 €). Language is picked like i18n.js does: ?lang=, then the saved sous-lang.
+const LANG = (() => {
+  const q = (new URLSearchParams(location.search).get("lang") || "").toLowerCase();
+  if (q === "fi" || q === "en") return q;
+  try { const s = localStorage.getItem("sous-lang"); if (s === "fi" || s === "en") return s; } catch { /* private mode */ }
+  return /^fi\b/i.test((navigator.languages && navigator.languages[0]) || navigator.language || "") ? "fi" : "en";
+})();
+const eur = (n) => n == null ? "–" : window.I18N ? I18N.money(n) :
+  new Intl.NumberFormat(LANG === "fi" ? "fi-FI" : "en-GB", { style: "currency", currency: "EUR" }).format(n);
 
 const when = (iso) => {
   if (!iso) return "–";
@@ -604,6 +612,8 @@ views.orders = {
 function claimBlock(o) {
   const c = o.agent_claim || (o.agent_rationale ? { text: o.agent_rationale } : null);
   if (!c?.text) return "";
+  if (c.source === "system") return `<div class="claim"><span class="rationale">${esc(c.text)}</span>
+    <div class="small muted">Note from Sous (demo sandbox setup), not from an agent · not used by any rule</div></div>`;
   return `<div class="claim${c.suspicious ? " sus" : ""}"><span class="rationale">“${esc(c.text)}”</span>
     <div class="small muted">Agent's own words, unverified · not used by any rule</div>
     ${c.suspicious ? `<div class="small claim-warn">⚠ Reads like an instruction to you (${esc((c.suspicious_terms || []).join(", "))}).
@@ -619,6 +629,14 @@ function orderStory(o) {
 }
 function orderBadge(o) {
   if (o.status === "ordered") return o.approval?.approved ? `<span class="tier tier-silent">Approved</span>` : tier(o.decision?.outcome || "silent");
+  return tier(o.status);
+}
+
+// A line the mandate held keeps its "Needs approval" badge only while the order is still waiting;
+// once a human decided (or it expired) the badge shows that outcome instead.
+function lineFlag(outcome, o) {
+  if (outcome !== "ask" || o.status === "pending_approval") return tier(outcome);
+  if (o.approval) return o.approval.approved ? `<span class="tier tier-silent">Approved</span>` : tier("rejected");
   return tier(o.status);
 }
 
@@ -661,10 +679,10 @@ async function openOrder(id) {
     <p class="small muted">Alternatives from Valio Aimo's own assortment that keep the mandate's hard rules
       (allergens, claims, category, unit). Ranked best (no compromises), better (minor) and good (a real trade-off).</p>
     <div id="subs">${(o.lines || []).map((l) => {
-      const flagged = (d.findings || []).some((f) => f.product_id === l.product_id && (f.outcome === "ask" || f.outcome === "block"));
+      const flag = (d.findings || []).find((f) => f.product_id === l.product_id && (f.outcome === "ask" || f.outcome === "block"));
       return `<div class="sub-line" data-pid="${esc(l.product_id)}">
         <div class="row"><div>${esc(pname(l.name))} <span class="muted mono">${esc(l.product_id)}</span>
-          ${flagged ? ` ${tier(d.findings.find((f) => f.product_id === l.product_id && (f.outcome === "ask" || f.outcome === "block")).outcome)}` : ""}</div>
+          ${flag ? ` ${lineFlag(flag.outcome, o)}` : ""}</div>
           <button class="btn plain" data-subs="${esc(l.product_id)}" data-qty="${esc(l.quantity)}"
             data-date="${esc(l.delivery_date || o.delivery_date)}">Find substitutes</button></div>
         <div class="sub-out"></div></div>`;

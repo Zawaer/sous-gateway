@@ -436,14 +436,40 @@ function renderAsk(d) {
   lastView = () => renderAsk(d);
   const tr = d.transcript.map((s) => `<div class="tool"><div>${esc(s.tool)}</div><div class="${s.is_error ? "err" : ""}">` +
     `${esc(JSON.stringify(s.args))}<div class="rule">→ ${esc(JSON.stringify(s.result))}</div></div></div>`).join("");
-  $("#result").innerHTML = `<h3 style="margin-top:0">“${esc(d.request)}”</h3>` +
-    step(1, `<span class="by">${esc(t("agent.agent_by", { by: d.by }))}</span> ${esc(t("agent.with_tools"))}`,
-      (tr || `<div class="muted">${esc(t("agent.no_tools"))}</div>`) + modelMeta(d.model) + `<div class="meta">${esc(t("agent.stop_meta", { reason: d.stop_reason, n: d.valio_api_calls }))}</div>`) +
-    step(2, esc(t("agent.answer")), `<div style="white-space:pre-wrap">${esc(d.answer || "–")}</div>`) +
-    step(3, stepTitle("agent.s_quote", "agent.s_quote_by_short"), quoteTable(d.quote, d.quote && d.quote.uncovered)) +
-    step(4, stepTitle("agent.s_check", "agent.s_check_by"), d.order ? orderResult(d.order) : preview(d.mandate_preview)) +
-    (d.order ? "" : orderBlock(d, 5));
+  // Earlier rounds of a follow-up (the agent asked, the buyer answered), then this round.
+  const thread = (d.follow_up || []).map((f) => `<div class="small" style="margin:6px 0"><b>${esc(t("agent.agent_by", { by: d.by }))}:</b> ` +
+    `<span style="white-space:pre-wrap">${esc(f.question)}</span><br><b>${esc(t("agent.you"))}:</b> ${esc(f.answer)}</div>`).join("");
+  const steps = [
+    [`<span class="by">${esc(t("agent.agent_by", { by: d.by }))}</span> ${esc(t("agent.with_tools"))}`,
+      (tr || `<div class="muted">${esc(t("agent.no_tools"))}</div>`) + modelMeta(d.model) + `<div class="meta">${esc(t("agent.stop_meta", { reason: d.stop_reason, n: d.valio_api_calls }))}</div>`],
+  ];
+  if (d.needs_reply) {
+    // The agent asked instead of quoting: its question up front, answered in place (POST /agent/ask with follow_up).
+    steps.push([esc(t("agent.asks")), `<div class="card ask" style="margin:0;padding:12px 16px"><div style="white-space:pre-wrap;font-size:1.05rem">${esc(d.answer)}</div>` +
+      `<div class="muted small" style="margin-top:6px">${esc(t("agent.asks_note"))}</div>` +
+      `<textarea id="reply-text" rows="2" maxlength="600" style="margin-top:8px" placeholder="${esc(t("agent.reply_ph"))}" aria-label="${esc(t("agent.reply_ph"))}"></textarea>` +
+      `<div class="actions"><button class="btn yes" type="button" id="reply-go" style="flex:0 0 auto">${esc(t("agent.reply_go"))}</button></div></div>`]);
+  } else {
+    steps.push([esc(t("agent.answer")), `<div style="white-space:pre-wrap">${esc(d.answer || "–")}</div>`]);
+    if (d.quote) steps.push([stepTitle("agent.s_quote", "agent.s_quote_by_short"), quoteTable(d.quote, d.quote.uncovered)]);
+    if (d.order || d.mandate_preview) steps.push([stepTitle("agent.s_check", "agent.s_check_by"), d.order ? orderResult(d.order) : preview(d.mandate_preview)]);
+  }
+  $("#result").innerHTML = `<h3 style="margin-top:0">“${esc(d.request)}”</h3>` + thread +
+    steps.map(([title, body], i) => step(i + 1, title, body)).join("") +
+    (d.order || d.needs_reply ? "" : orderBlock(d, steps.length + 1));
   wireOrder();
+  const go = $("#reply-go");
+  if (go) {
+    const box = $("#reply-text");
+    const send = () => {
+      const answer = box.value.trim();
+      if (!answer) { box.focus(); return; }
+      ask(d.request, [...(d.follow_up || []), { question: String(d.answer).slice(0, 2000), answer }]);
+    };
+    go.addEventListener("click", send);
+    box.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+    box.focus({preventScroll: true});
+  }
 }
 
 // --- actions ---------------------------------------------------------------------------------------
@@ -481,14 +507,17 @@ $("#photo-file").addEventListener("change", (e) => {
   e.target.value = "";
 });
 
-$("#ask-go").addEventListener("click", () => {
+// follow_up: [{question, answer}] when the buyer answers a question the agent asked (renderAsk's reply box).
+function ask(text, follow_up) {
   const m = need(); if (!m) return;
   run(t("agent.run_ask"), async () => {
     const d = await api("/agent/ask", {method: "POST", headers: {...auth(), "Content-Type": "application/json"},
-      body: JSON.stringify({text: $("#ask-text").value, mandate_id: m.mandate_id, agent_id: m.agent_id, allow_order: $("#ask-order").checked})});
+      body: JSON.stringify({text, mandate_id: m.mandate_id, agent_id: m.agent_id, allow_order: $("#ask-order").checked,
+                            follow_up: (follow_up || []).slice(-4)})});
     renderAsk(d);
   });
-});
+}
+$("#ask-go").addEventListener("click", () => ask($("#ask-text").value, []));
 
 // --- plain-language rules -> proposed mandate (agent/draft.py) -----------------------------------------
 function val(v) {

@@ -397,6 +397,13 @@ def seed(sid: str, mandate_id: str, token: str) -> dict | None:
         log.exception("sandbox %s: seeding failed", sid)
         return None
     o = r["order"]
+    try:  # display only, not in the signed receipt: its rationale is Sous's text, not an agent's (access.label_order)
+        cur = store.get_order(o["id"])
+        if cur and not cur.get("seeded"):
+            cur["seeded"] = {"sandbox": sid, "note": SEED_NOTE}
+            store.update_order(cur, expected_status=cur["status"])
+    except Exception:  # noqa: BLE001 - only the label is lost
+        log.exception("sandbox %s: marking the seeded order failed", sid)
     return {"note": SEED_NOTE, "standing_order_id": so["id"], "held_order_id": o["id"], "status": o["status"],
             "why": r["drift"]["summary"],
             "reasons": hold_reasons(o["decision"]["findings"]), "order_url": o["order_url"],

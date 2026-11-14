@@ -473,6 +473,11 @@ def _read_photo(data: bytes, mandate_id: str, agent_id: str, kind_hint: str | No
     }
 
 
+class FollowUp(BaseModel):
+    question: str = Field(..., min_length=1, max_length=2000, description="What the agent asked")
+    answer: str = Field(..., min_length=1, max_length=600, description="The buyer's reply")
+
+
 class AskIn(BaseModel):
     text: str = Field(..., min_length=3, max_length=600, examples=["1,000 litres of lactose-free milk by Monday"])
     mandate_id: str
@@ -481,6 +486,10 @@ class AskIn(BaseModel):
         "auto", description="gemini (Gemini 4 Hydrogen), verda (Kimi K3.1 Pro on Verda Inference), verda-selfhosted "
                             "(our own open-weight model on a Verda GPU) or auto (Gemini if configured, else Verda)")
     allow_order: bool = Field(True, description="false: the agent may quote but not call place_order")
+    follow_up: list[FollowUp] = Field(
+        default_factory=list, max_length=4,
+        description="When the agent asked a question instead of quoting: its earlier questions (`answer` of the "
+                    "previous response) with the buyer's replies, oldest first. `text` stays the original request.")
 
 
 @app.post("/ask", tags=["buyer agent"])
@@ -507,13 +516,16 @@ def ask(req: AskIn, request: Request, token: str | None = Depends(_token)):
         with gateway(token) as gw:
             agent = BuyerAgent(meter, gw, BuyerConfig(req.mandate_id, req.agent_id, helsinki_today(), buyer=m.buyer,
                                                       max_tool_calls=10, max_llm_calls=12, tools=tools))
-            run = agent.run(req.text)
+            run = agent.run(req.text, [f.model_dump() for f in req.follow_up])
         status = "ok" if run.stop_reason == "answered" else run.stop_reason[:16]
     finally:
         _finish(rid, meter, status)
     summary = run.summary()
     q = run.quotes[-1][1] if run.quotes else None
-    return {"banner": BANNER, "request": req.text, "mandate_id": req.mandate_id, "agent_id": req.agent_id,
+    # Answered with no quote and no order: the agent is asking the buyer something (agent.html shows a reply box).
+    asks = run.stop_reason == "answered" and not run.quotes and not run.orders
+    return {"banner": BANNER, "request": req.text, "follow_up": [f.model_dump() for f in req.follow_up],
+            "needs_reply": asks, "mandate_id": req.mandate_id, "agent_id": req.agent_id,
             "by": _display(llm.cfg.model), "model": meter.info(), "allow_order": req.allow_order,
             "transcript": run.transcript(), "answer": run.final_text, "stop_reason": run.stop_reason,
             "quote": _quote_view(q), "mandate_preview": _preview(q),

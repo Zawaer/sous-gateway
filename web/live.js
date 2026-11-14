@@ -6,7 +6,13 @@
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const eur = (x) => (Number(x) || 0).toLocaleString("fi-FI", { style: "currency", currency: "EUR" });
+// Same money format as the other pages (en: €88.26, fi: 88,26 €); this page is English unless ?lang=fi / sous-lang=fi.
+const EUR_LOCALE = (() => {
+  const q = (new URLSearchParams(location.search).get("lang") || "").toLowerCase();
+  let s = ""; try { s = localStorage.getItem("sous-lang") || ""; } catch { /* private mode */ }
+  return (q || s) === "fi" ? "fi-FI" : "en-GB";
+})();
+const eur = (x) => (Number(x) || 0).toLocaleString(EUR_LOCALE, { style: "currency", currency: "EUR" });
 const pname = (n) => { n = String(n ?? ""); return /[a-zåäö]/.test(n) ? n : n.charAt(0) + n.slice(1).toLowerCase(); };
 const UNIT = { ST: "pcs", PRK: "packs", KI: "cartons", PAK: "packs", KG: "kg", L: "l", BOT: "bottles", RS: "boxes" };
 const COLOR = { auto: "#7cc68e", fyi: "#8ab8ec", ask: "#f2c14e", block: "#ef8a76" };
