@@ -243,6 +243,9 @@ def _live(c, monkeypatch):
         return {"constraints": {"avoid_allergens": ["AN"]}, "options": [], "no_safe_substitute": True}
     monkeypatch.setattr(substitutes, "suggest", fake)
     monkeypatch.setattr(suggest, "evaluate", lambda *a, **k: ("silent", []))  # the test OAT has no allergen data
+    for f in ("_in_category", "_name_matches"):  # no catalog database offline (SOUS_DATA_DIR empty)
+        monkeypatch.setattr(suggest, f, lambda *a, **k: [])
+    monkeypatch.setattr(suggest, "_new_ids", lambda: set())
     return calls
 
 
