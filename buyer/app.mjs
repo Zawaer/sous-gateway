@@ -605,7 +605,7 @@ if (linkedOrder) {
       quote = await gateway.getQuote(order.quote_id);
     } catch (error) {
       if (error.status === 404) {
-        throw new Error('This order is unavailable. Check the order link and gateway, or open the order from the account that placed it.');
+        throw new Error('This order is unavailable. Check the order link and gateway, or ask the person who shared the link for access.');
       }
       throw error;
     }
