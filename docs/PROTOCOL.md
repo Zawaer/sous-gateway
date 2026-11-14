@@ -123,7 +123,7 @@ Issuing (`POST /mandates`) re-signs and stores the mandate and writes `mandate.i
 }
 ```
 
-- `unit` is `L`, `KG` or `SALES_UNIT` (packs). With L or KG the gateway converts to packs and rounds up to the allowed lot size.
+- `unit` is `L`, `KG` or `SALES_UNIT` (packs); `ST`, `PCS`, `KPL`, `pack` and `packs` (any case) mean `SALES_UNIT`, the same in quotes, standing orders and substitutes (REST and MCP; one normaliser, `sous/quote.py`). Unknown units: 422. With L or KG the gateway converts to packs and rounds up to the allowed lot size.
 - Several `product_ids` for one item means "these are candidates". The gateway prices all of them, ranks orderable ones by comparison price (EUR per L or KG), and fills the need cheapest first, splitting across products when stock is short.
 - Lines are sized to known stock, also for a single named product: 200 L asked with 131 in stock gives a 131 line and 69 in `uncovered` (rule `need.partial`, ask), never a 200 line a human could approve for stock that doesn't exist. The quote's `options[]` then offer ways to cover the rest.
 - When none of an item's candidates can be ordered (one `product_id` or several), they are kept in the quote as unorderable lines (`orderable: false`, with no `uncovered` gap), so the reasons are visible and the mandate blocks them with the real rule (e.g. `availability.undeliverable`, `allergen.contains`). Unorderable lines count €0 towards the total and the spend limits.

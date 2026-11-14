@@ -334,7 +334,7 @@ def search(agent_id: str, query: str, *, claims=None, avoid_allergens=None, labe
 class QuoteItem(BaseModel):
     product_ids: list[str] = Field(min_length=1, description="One product, or several candidates for the gateway to choose and split across")
     amount: float = Field(gt=0, description="How much is needed")
-    unit: Literal["L", "KG", "SALES_UNIT"] = Field("SALES_UNIT", description="L or KG for volume/weight, SALES_UNIT for packs")
+    unit: Q.Unit = Field("SALES_UNIT", description=Q.UNIT_DOC)
     substitute_for: str | None = Field(None, description="Product id this item replaces, if it is a substitute")
     product_type: str | None = Field(None, description="The kind of product the buyer asked for, e.g. 'milk' or "
                                      "'maito'. Candidates of another type (coffee milk for milk) are never chosen "
@@ -784,6 +784,9 @@ def suggest_substitutes(agent_id: str, product_id: str, delivery_date: date, amo
     from . import access
     if mandate_id:
         access.check_live(reader, mandate_id)  # before the mandate and product lookups: no existence oracle
+    unit = Q.normalize_unit(unit)  # MCP passes any string; REST already normalised
+    if unit not in ("L", "KG", "SALES_UNIT"):
+        raise GatewayError("invalid_unit", f"Unit '{unit}' is not known. {Q.UNIT_DOC}.", 422)
     mandate = _mandate(mandate_id) if mandate_id else None
     if not access.skips_agent_check(reader, mandate):
         sandbox.authorize(mandate, agent_id, agent_token, "suggest_substitutes")

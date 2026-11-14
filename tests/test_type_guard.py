@@ -209,6 +209,34 @@ def test_substitutes_cover_the_same_kilos_not_the_same_pack_count(monkeypatch):
     assert by["22"]["total_change_ex_vat"] == round(35.2 - 2.5 * 16, 2)  # vs the original, like for like
 
 
+@pytest.mark.parametrize("unit", ["ST", "st", "PCS", "KPL", "pack", "packs", "SALES_UNIT"])
+def test_pack_units_are_one_unit_everywhere_and_substitutes_size_by_content(gw, monkeypatch, unit):
+    """Judge audit: suggest_substitutes took unit 'ST' as a measure and kept 40 packs of 10 kg for a 40 x 400 g need
+    (covers null), while request_quote rejected 'ST'. Pack words now all mean SALES_UNIT (sous/quote.py)."""
+    monkeypatch.setattr(catalog, "get", lambda pid: TOMS.get(pid))
+    monkeypatch.setattr(Sub, "_same_category", lambda cat: list(TOMS.values()))
+    monkeypatch.setattr(Q, "offers", lambda ids, d, n=None, u=None, **k: (
+        [Q.build_offer(TOMS[i], tprice(i), avail(i != "20"), d, n, u, NOW) for i in ids], NOW))
+    r = S.suggest_substitutes("a", "20", DAY, 40, unit, limit=6)
+    assert r["need"]["amount"] == 16.0 and r["need"]["unit"] == "KG"
+    by = {o["product_id"]: o for o in r["options"]}
+    assert by["21"]["quantity"] == 2 and by["21"]["covers"] == {"amount": 20.0, "unit": "KG"}
+    assert by["22"]["quantity"] == 16 and by["22"]["covers"] == {"amount": 16.0, "unit": "KG"}
+    assert S.QuoteItem(product_ids=["20"], amount=40, unit=unit).unit == "SALES_UNIT"
+    from sous import standing
+    assert standing.StandingItem(product_ids=["20"], amount=40, unit=unit).unit == "SALES_UNIT"
+
+
+def test_measure_units_any_case_and_unknown_units_are_refused(gw):
+    assert S.QuoteItem(product_ids=["10"], amount=1, unit="kg").unit == "KG"
+    assert S.QuoteItem(product_ids=["10"], amount=1, unit=" l ").unit == "L"
+    with pytest.raises(ValueError):
+        S.QuoteItem(product_ids=["10"], amount=1, unit="crate")
+    with pytest.raises(S.GatewayError) as e:
+        S.suggest_substitutes("a", "10", DAY, 1, "crate")
+    assert e.value.code == "invalid_unit" and e.value.status == 422
+
+
 # --- false mismatches reported by QA (board 02:09Z oat milk, 03:00Z cashew butter) ------------
 
 OAT = product("30", "Oatly Kaurajuoma Kevyt 1L", "Oatly Oat Drink Semi 1L", brand="Oatly", claims=[],

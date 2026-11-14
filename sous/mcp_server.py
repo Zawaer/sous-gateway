@@ -406,7 +406,8 @@ def request_quote(
     """Get a signed, expiring quote with live prices and availability from Valio Aimo. Places no order.
 
     delivery_date: YYYY-MM-DD.
-    items: one per need: {product_ids: [...], amount, unit: 'L' | 'KG' | 'SALES_UNIT', substitute_for?}.
+    items: one per need: {product_ids: [...], amount, unit: 'L' | 'KG' | 'SALES_UNIT', substitute_for?}
+    (ST, PCS, KPL, pack, packs also mean SALES_UNIT).
       Give several candidate ids per need and an amount in L or KG: the gateway picks the cheapest orderable
       one per L/KG, splitting across products when stock is short. Mark substitutes with substitute_for.
     Always pass mandate_id: the quote then includes mandate_preview (silent | notify | ask | block, and why).

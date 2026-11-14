@@ -367,3 +367,13 @@ def test_mcp_live_lookups_are_scoped(c, monkeypatch):
     assert not mcp_server.suggest_substitutes("bistro-agent", "OAT", DAY, 1, "L", mandate_id="M-PRIVATE",
                                               ctx=h).get("is_error")
     assert mcp_server.get_suggestions("M-PRIVATE", "bistro-agent", DAY)["buyer"] == "Private Bistro Oy"  # stdio
+
+
+def test_rest_substitutes_accept_pack_unit_aliases(c, monkeypatch):
+    """'ST', 'pcs', 'kpl' mean SALES_UNIT on REST too (one normaliser: sous/quote.py); unknown units are a 422."""
+    _live(c, monkeypatch)
+    for unit in ("ST", "pcs", "kpl", "packs", "kg"):
+        r = c.get("/products/OAT/substitutes", params={"delivery_date": DAY, "amount": 2, "unit": unit})
+        assert r.status_code == 200, (unit, r.text)
+    r = c.get("/products/OAT/substitutes", params={"delivery_date": DAY, "amount": 2, "unit": "crate"})
+    assert r.status_code == 422

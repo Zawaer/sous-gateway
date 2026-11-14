@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import os
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 
 import time
 from collections import defaultdict, deque
@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
-from . import access, agent_auth, aimo, catalog, clock, config, exposure, rules, sandbox, service as S, signing, standing, store
+from . import access, agent_auth, aimo, catalog, clock, config, exposure, quote as Q, rules, sandbox, service as S, signing, standing, store
 from .mandate import Mandate
 from .mcp_server import mcp
 
@@ -336,7 +336,7 @@ def suggest_substitutes(
     product_id: str,
     delivery_date: date,
     amount: float = 1,
-    unit: Literal["L", "KG", "SALES_UNIT"] = "SALES_UNIT",
+    unit: Annotated[Q.Unit, Query(description=Q.UNIT_DOC)] = "SALES_UNIT",
     mandate_id: str | None = None,
     avoid_allergens: list[str] = Query(default=[]),
     limit: int = Query(3, ge=1, le=6),

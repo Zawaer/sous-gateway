@@ -26,7 +26,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import catalog, service as S, signing, standing_store as SS, store
+from . import catalog, quote as Q, service as S, signing, standing_store as SS, store
 from .mandate import Finding
 
 HISTORY_WEEKS = 4        # baseline = median of this many past renewals
@@ -40,7 +40,7 @@ class StandingItem(BaseModel):
     product_ids: list[str] = Field(min_length=1, max_length=20,
                                    description="Candidate products; the gateway picks the cheapest orderable each week")
     amount: float = Field(gt=0, description="Usual weekly amount")
-    unit: Literal["L", "KG", "SALES_UNIT"] = "SALES_UNIT"
+    unit: Q.Unit = Field("SALES_UNIT", description=Q.UNIT_DOC)
     label: str | None = Field(None, description="Short name for messages, e.g. 'milk'")
 
 

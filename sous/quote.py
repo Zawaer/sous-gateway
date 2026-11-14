@@ -11,7 +11,31 @@ import math
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta
 
+from typing import Annotated, Literal
+
+from pydantic import BeforeValidator
+
 from . import aimo, catalog, clock, config, exposure
+
+# --- need units: the one place they are normalised -----------------------------------------------------------
+# Needs are in litres, kilos or sales units (packs). Valio's own sales-unit codes (ST, KPL) and common pack words
+# mean "packs": every entry point (QuoteItem, standing orders, substitutes over REST and MCP) maps them here, so
+# content-equivalent sizing (substitutes, options) sees one spelling.
+UNIT_ALIASES = {"SALES_UNIT": "SALES_UNIT", "ST": "SALES_UNIT", "PCS": "SALES_UNIT", "PC": "SALES_UNIT",
+                "KPL": "SALES_UNIT", "PACK": "SALES_UNIT", "PACKS": "SALES_UNIT",
+                "L": "L", "KG": "KG"}
+UNIT_DOC = "L or KG for volume/weight; SALES_UNIT for packs (ST, PCS, KPL, pack, packs mean the same; any case)"
+
+
+def normalize_unit(unit):
+    """'st' / 'PCS' / 'KPL' / 'pack(s)' -> 'SALES_UNIT', 'l' -> 'L', 'kg' -> 'KG'; anything else unchanged (and then
+    rejected by the Unit type)."""
+    if isinstance(unit, str):
+        return UNIT_ALIASES.get(unit.strip().upper(), unit)
+    return unit
+
+
+Unit = Annotated[Literal["L", "KG", "SALES_UNIT"], BeforeValidator(normalize_unit)]
 
 STOCK_PLENTY = 1e9  # Stock lines report 9999999999 when there is effectively no limit
 TERMINAL_UNKNOWN = 999999  # Terminal (supplier-shipped) lines always report 999999 = unknown
