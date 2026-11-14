@@ -17,6 +17,7 @@ same schema minus versioning; history then comes from the audit log.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import sqlite3
@@ -158,6 +159,39 @@ def _exec(sql: str, args: tuple | list = ()) -> tuple[list[dict], int, int | Non
                 return list(c.fetchall()), c.rowcount, c.lastrowid
         cur = conn.execute(sql, args)
         return [dict(r) for r in cur.fetchall()], cur.rowcount, cur.lastrowid
+
+
+_tx_depth = 0
+
+
+@contextlib.contextmanager
+def transaction():
+    """Run several statements as one database transaction (both backends): all commit or none do. Holds the store
+    lock throughout, so other threads' statements can't interleave on the shared connection. Nested use joins the
+    outer transaction. No DDL inside (MariaDB commits implicitly on CREATE TABLE)."""
+    global _tx_depth
+    with _lock:
+        conn = db()
+        if _tx_depth:
+            _tx_depth += 1
+            try:
+                yield
+            finally:
+                _tx_depth -= 1
+            return
+        if config.DB_URL:
+            conn.begin()
+        else:
+            conn.execute("BEGIN IMMEDIATE")
+        _tx_depth = 1
+        try:
+            yield
+        except BaseException:
+            _tx_depth = 0
+            conn.rollback() if config.DB_URL else conn.execute("ROLLBACK")
+            raise
+        _tx_depth = 0
+        conn.commit() if config.DB_URL else conn.execute("COMMIT")
 
 
 def _upsert(table: str, cols: list[str], values: tuple) -> None:

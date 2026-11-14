@@ -12,6 +12,12 @@ then sent. A failed send stays in the outbox and is retried with backoff by the 
 customer's purchase order number (E1EDK02 qualifier 001, BELNR) and as the Idempotency-Key header, so the ERP
 can drop a duplicate.
 
+Durability: the outbox row is written in the same database transaction as the order (service._place_order and
+_decide; standing renewals and attack demos go through _place_order), so an order is never stored as `ordered`
+without its row. As a second net, every sweep runs reconcile(): any ordered order without a row is queued
+(order.erp_reconciled). Orders already `ordered` when the adapter was first activated (erp_meta.activated_at) get
+a `legacy` row and are never sent.
+
 State: erp_outbox row -> `erp` on the order (GET /orders/{id}): {status: pending|sent|confirmed|failed,
 confirmation_id, payload_hash, endpoint, attempts, last_error, next_retry_at, sent_at, confirmed_at}. It is
 unsigned operational metadata: signed receipts are never re-issued for it. Audit events: order.erp_sent,
@@ -54,14 +60,36 @@ _send_lock = threading.Lock()  # one send per order at a time (a retry and the s
 _clock = time.time  # patched in tests
 
 
+_META_SQLITE = "CREATE TABLE IF NOT EXISTS erp_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)"
+_META_MARIADB = "CREATE TABLE IF NOT EXISTS erp_meta (k VARCHAR(64) PRIMARY KEY, v TEXT NOT NULL)"
+
+
 def _ensure() -> None:
+    """Create the tables, then activate once: the activation time is stored in erp_meta, and every order already
+    `ordered` at that moment is marked `legacy` in the outbox (never sent: it was ordered before the adapter).
+    From then on every ordered order must have an outbox row; reconcile() queues any that doesn't."""
     global _ready_for
     with store._lock:
         conn = store.db()
         if _ready_for is conn:
             return
         store._exec(_MARIADB if config.DB_URL else _SQLITE)
+        store._exec(_META_MARIADB if config.DB_URL else _META_SQLITE)
+        if not store._exec("SELECT v FROM erp_meta WHERE k = 'activated_at'")[0]:
+            now = store.now_iso()
+            with store.transaction():
+                store._exec("INSERT INTO erp_meta (k, v) VALUES ('activated_at', ?)", (now,))
+                store._exec("INSERT INTO erp_outbox (order_id, status, attempts, next_ts, payload, payload_hash, data, "
+                            "created_at, updated_at) SELECT id, 'legacy', 0, 0, '{}', '', '{}', ?, ? "
+                            "FROM purchase_order WHERE status = 'ordered' "
+                            "AND id NOT IN (SELECT order_id FROM erp_outbox)", (now, now))
         _ready_for = conn
+
+
+def activated_at() -> str | None:
+    _ensure()
+    r = store._exec("SELECT v FROM erp_meta WHERE k = 'activated_at'")[0]
+    return r[0]["v"] if r else None
 
 
 # --- mapping: Sous order -> ORDERS05-shaped JSON -------------------------------------------------------------
@@ -182,40 +210,72 @@ def _iso(ts: float) -> str:
     return datetime.fromtimestamp(ts, config.TZ).isoformat(timespec="seconds")
 
 
+def prepare(order: dict, mandate=None) -> tuple | None:
+    """The outbox row for an ordered order, built BEFORE the transaction that stores the order (it reads the
+    customer account, which may seed a mock row: no writes of its own inside that transaction). None if the
+    order isn't ordered."""
+    if order.get("status") != "ordered":
+        return None
+    _ensure()
+    from . import account, service as S
+    try:
+        acct = account.for_mandate(mandate or S._mandate(order["mandate_id"]))
+    except S.GatewayError:
+        acct = None
+    num = acct.customer_number if acct else None
+    payload = to_orders05(order, num)
+    endpoint = endpoint_for(order)
+    data = {"endpoint": "stub" if endpoint.startswith("stub") else "http", "customer_number": num,
+            "confirmation_id": None, "last_error": None, "sent_at": None, "confirmed_at": None,
+            "buyer": order.get("buyer"), "target": endpoint}
+    now = store.now_iso()
+    return (order["id"], "pending", 0, _clock(), json.dumps(payload, ensure_ascii=False), payload_hash(payload),
+            json.dumps(data), now, now)
+
+
+def write(row: tuple | None) -> None:
+    """Insert a prepared outbox row; called inside the order's own transaction (service._place_order, _decide)."""
+    if row is not None:
+        store._exec("INSERT INTO erp_outbox (order_id, status, attempts, next_ts, payload, payload_hash, data, "
+                    "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)", row)
+
+
 def enqueue(order: dict) -> dict | None:
-    """Put an ordered order in the outbox (once per order id). Returns the outbox row."""
+    """Put an ordered order in the outbox if it isn't there yet (idempotent by order id). Returns the outbox row."""
     if order.get("status") != "ordered":
         return None
     _ensure()
     if (row := _get(order["id"])) is not None:
         return row
-    from . import account, service as S
     try:
-        acct = account.for_mandate(S._mandate(order["mandate_id"]))
-    except S.GatewayError:
-        acct = None
-    payload = to_orders05(order, acct.customer_number if acct else None)
-    h = payload_hash(payload)
-    endpoint = endpoint_for(order)
-    data = {"endpoint": "stub" if endpoint.startswith("stub") else "http", "customer_number":
-            acct.customer_number if acct else None, "confirmation_id": None, "last_error": None,
-            "sent_at": None, "confirmed_at": None, "buyer": order.get("buyer"), "target": endpoint}
-    try:
-        store._exec("INSERT INTO erp_outbox (order_id, status, attempts, next_ts, payload, payload_hash, data, "
-                    "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-                    (order["id"], "pending", 0, _clock(), json.dumps(payload, ensure_ascii=False), h,
-                     json.dumps(data), store.now_iso(), store.now_iso()))
+        write(prepare(order))
     except Exception as e:  # another thread enqueued it first
         if type(e).__name__ != "IntegrityError":
             raise
     return _get(order["id"])
 
 
+def reconcile(limit: int = 200) -> int:
+    """Queue every ordered order that has no outbox row (a crash or failure between storing an order and queueing
+    it). Orders from before activation have `legacy` rows, so they are never picked up. Returns how many."""
+    _ensure()
+    rows = store._exec("SELECT id FROM purchase_order WHERE status = 'ordered' "
+                       "AND id NOT IN (SELECT order_id FROM erp_outbox) LIMIT ?", (limit,))[0]
+    n = 0
+    for r in rows:
+        o = store.get_order(r["id"])
+        if o and enqueue(o) is not None:
+            n += 1
+            store.audit("order.erp_reconciled", "erp-adapter", "system", o["id"], o.get("buyer"),
+                        {"order_id": o["id"], "reason": "ordered but not in the ERP outbox: queued by the sweep"})
+    return n
+
+
 def attempt(order_id: str) -> dict | None:
     """Send one queued order now (if it's due or never tried). Idempotent; failures stay queued."""
     with _send_lock:
         row = _get(order_id)
-        if row is None or row["status"] in ("sent", "confirmed") or row["data"].get("gave_up"):
+        if row is None or row["status"] in ("sent", "confirmed", "legacy") or row["data"].get("gave_up"):
             return row
         payload = json.loads(row["payload"])
         d, buyer, now = row["data"], row["data"].get("buyer"), _clock()
@@ -258,8 +318,9 @@ def submit(order: dict) -> dict:
 
 
 def process_due(limit: int = 50) -> int:
-    """Retry what is due (the background sweep calls this every minute). Returns how many were attempted."""
-    _ensure()
+    """Queue what is missing (reconcile), then send or retry what is due (the background sweep calls this at
+    startup and every minute). Returns how many were attempted."""
+    reconcile()
     rows = store._exec("SELECT order_id, data FROM erp_outbox WHERE status IN ('pending', 'failed') AND next_ts <= ? "
                        "ORDER BY next_ts LIMIT ?", (_clock(), limit))[0]
     n = 0
@@ -274,7 +335,7 @@ def process_due(limit: int = 50) -> int:
 def status(order_id: str) -> dict | None:
     """The `erp` block for an order, or None when it was never queued (not ordered, or ordered before the adapter)."""
     row = _get(order_id)
-    if row is None:
+    if row is None or row["status"] == "legacy":
         return None
     d = row["data"]
     return {"status": row["status"], "confirmation_id": d.get("confirmation_id"), "payload_hash": row["payload_hash"],
@@ -297,4 +358,4 @@ def attach(order: dict) -> dict:
 def document(order_id: str) -> dict | None:
     """The exact payload sent (or queued) for the order, with its status."""
     row = _get(order_id)
-    return None if row is None else {"order_id": order_id, "erp": status(order_id), "payload": json.loads(row["payload"])}
+    return None if row is None or row["status"] == "legacy" else {"order_id": order_id, "erp": status(order_id), "payload": json.loads(row["payload"])}

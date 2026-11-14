@@ -256,3 +256,69 @@ def test_api_erp_and_account_endpoints():
     r = c.patch("/accounts/0000104711", json={"payment_block": True})
     assert r.status_code == 200 and r.json()["payment_block"] is True
     assert events("account.updated")
+
+
+# --- durability: order and outbox row commit together; the sweep reconciles anything missing --------------------
+
+def test_outbox_insert_failure_rolls_back_the_order(monkeypatch):
+    """QA (board 6875727497): INSERT INTO erp_outbox fails once while the order store works. The order must not be
+    left `ordered` without an outbox row: the transaction rolls both back, the quote is free again, and the
+    agent's retry with the same idempotency key goes through and is sent."""
+    import sqlite3
+    real = store._exec
+    fail = [True]
+
+    def flaky(sql, args=()):
+        if fail[0] and sql.startswith("INSERT INTO erp_outbox") and "SELECT" not in sql:
+            fail[0] = False
+            raise sqlite3.OperationalError("disk I/O error")
+        return real(sql, args)
+
+    erp._ensure()
+    monkeypatch.setattr(store, "_exec", flaky)
+    q = quote()
+    with pytest.raises(sqlite3.OperationalError):
+        S.place_order("a", "M", q["id"], "k-qa")
+    assert store.list_orders(status="ordered") == []
+    assert store.get_quote(q["id"])["_order_id"] is None
+    o = S.place_order("a", "M", q["id"], "k-qa")
+    assert o["status"] == "ordered" and o["erp"]["status"] == "confirmed"
+
+
+def test_crash_between_order_and_outbox_is_reconciled_by_sweep():
+    """An order stored as ordered with no outbox row (a crash between steps, or a write path that skipped the
+    outbox) is queued and sent by the next sweep, once."""
+    o = order()
+    crashed = {**o, "id": "PO-CRASHED1", "idempotency_key": None}
+    crashed.pop("erp", None)
+    store.insert_order(crashed)
+    assert erp.document("PO-CRASHED1") is None
+    assert erp.process_due() == 1
+    assert S.get_order("PO-CRASHED1")["erp"]["status"] == "confirmed"
+    assert [x["subject"] for x in events("order.erp_reconciled")] == ["PO-CRASHED1"]
+    assert erp.process_due() == 0 and len(events("order.erp_reconciled")) == 1
+
+
+def test_orders_from_before_activation_are_never_sent(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "STATE_DB", tmp_path / "old.db")
+    monkeypatch.setattr(store, "_conn", None)
+    store.insert_order({"id": "PO-OLD", "quote_id": "Q", "mandate_id": "M", "agent_id": "a", "status": "ordered",
+                        "total_ex_vat": 1.0, "created_at": "2026-11-01T10:00:00+02:00",
+                        "updated_at": "2026-11-01T10:00:00+02:00", "lines": []})
+    assert erp.process_due() == 0
+    assert erp.activated_at() and erp.document("PO-OLD") is None and erp.status("PO-OLD") is None
+    assert not events("order.erp_sent")
+
+
+def test_approval_writes_outbox_in_same_transaction(monkeypatch):
+    S.issue_mandate(Mandate(id="M", buyer="Hotel Aurora, Helsinki", customer_number="0000104711", agent_id="a",
+                            issued_by="chef", auto_approve_limit_eur=1, min_delivery_reliability=None))
+    o = order()
+
+    def down(row):
+        raise RuntimeError("outbox down")
+
+    monkeypatch.setattr(erp, "write", down)
+    with pytest.raises(RuntimeError):
+        S.decide(o["id"], "Anna", True)
+    assert store.get_order(o["id"])["status"] == "pending_approval"  # rolled back: still waiting, nothing lost

@@ -774,8 +774,11 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
     if not store.claim_quote(quote_id, oid):
         RES.release(oid, now)
         raise GatewayError("quote_used", f"Quote {quote_id} was already used for an order.", 409)
+    outbox = erp.prepare(order, mandate) if status == "ordered" else None
     try:
-        store.insert_order(order)
+        with store.transaction():  # the order and its ERP outbox row commit together, or neither (sous/erp.py)
+            store.insert_order(order)
+            erp.write(outbox)
     except store.Conflict:
         store.release_quote(quote_id, oid)
         RES.release(oid, now)
@@ -977,10 +980,13 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
     o["approval_url"] = None
     o["receipt_jws"] = _receipt(o)
     # Conditional on the order still being pending, so a concurrent decision is never overwritten.
-    if not store.update_order(o, expected_status="pending_approval"):
-        current = store.get_order(order_id) or {}
-        raise GatewayError("not_pending",
-                           f"Order {order_id} is {current.get('status')}, not waiting for approval.", 409)
+    outbox = erp.prepare(o, mandate) if status == "ordered" else None
+    with store.transaction():  # an approved order and its ERP outbox row commit together (sous/erp.py)
+        if not store.update_order(o, expected_status="pending_approval"):
+            current = store.get_order(order_id) or {}
+            raise GatewayError("not_pending",
+                               f"Order {order_id} is {current.get('status')}, not waiting for approval.", 409)
+        erp.write(outbox)
     store.audit("order.approved" if approve else "order.rejected_by_human", approver, "human", order_id,
                 o["buyer"], {"order_id": order_id, "note": note, "resulting_status": status, "reason": reason,
                  "authority": authority, **({"passkey": evidence} if evidence else {})})
