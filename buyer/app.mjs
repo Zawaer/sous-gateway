@@ -475,10 +475,19 @@ async function renderOrder(current, order) {
     content.append(element('p', 'Sandbox example priced from stored reference data.', 'notice'));
   }
   content.append(outcomeLine(tier, (order.status === 'ordered' && tierLabels[tier]) || statusLabels[order.status] || status, `${order.id} · ${status}`, 'outcome total'));
+  if (order.amendments?.length) content.append(element('p', 'Coverage below reflects the original quote. Check the current signed order lines for later changes.', 'notice'));
   renderCoverage(content, quote, [], (_, row, container) => showOrderAlternatives(gateway, quote, row, container));
   appendFindings(content, 'Gateway decision', order.decision.findings, gateway);
   try {
     const signed = await gateway.receipt(order, quote);
+    if (signed.amendments?.length) {
+      content.append(element('h3', 'Current signed order'),
+        element('p', `${money(signed.total_ex_vat, quote.currency)} ex VAT`, 'total'));
+      appendList(content, 'Current order lines', signed.lines.map(line =>
+        `${line.name} · ${line.quantity} ${salesUnits.get(line.sales_unit?.toUpperCase()) ?? line.sales_unit ?? 'sales units'} · delivery ${line.delivery_date || 'unspecified'}`));
+      appendList(content, 'Verified amendments', order.amendments.map(amendment =>
+        `${amendment.kind.replaceAll('_', ' ')} · ${amendment.status.replaceAll('_', ' ')} · ${amendment.reason}`));
+    }
     const unitNotes = (signed.lines ?? []).filter((line) => line.unit_note)
       .map((line) => [line.name, line.unit_note].filter(Boolean).join(' · '));
     appendList(content, 'Pack quantities', unitNotes);

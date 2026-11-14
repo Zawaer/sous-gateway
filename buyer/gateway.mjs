@@ -160,16 +160,40 @@ export class Gateway {
   }
 
   async receipt(order, quote) {
-    const signed = await verifyJws(order.receipt_jws, await this.request('/.well-known/jwks.json'), documentTypes('order'));
+    const keys = await this.request('/.well-known/jwks.json');
+    const signed = await verifyJws(order.receipt_jws, keys, documentTypes('order'));
+    const amended = Array.isArray(signed.amendments) && signed.amendments.length > 0;
     const hasDecisionSnapshot = Object.hasOwn(signed, 'approval') || Object.hasOwn(signed, 'updated_at');
     const matchesStatus = hasDecisionSnapshot
       ? signed.status === order.status && equalJson(signed.approval, order.approval) && signed.updated_at === order.updated_at
       : signed.status === order.status || (signed.status === 'pending_approval' && Boolean(order.approval));
     if (signed.quote_id !== quote.id || signed.mandate_id !== quote.mandate_id ||
-        order.agent_id !== quote.agent_id || signed.total_ex_vat !== quote.total_ex_vat ||
+        order.agent_id !== quote.agent_id ||
+        (amended ? signed.original_total_ex_vat ?? signed.total_ex_vat : signed.total_ex_vat) !== quote.total_ex_vat ||
         !['id', 'quote_id', 'mandate_id', 'total_ex_vat', 'lines', 'decision'].every((key) => equalJson(signed[key], order[key])) ||
         !matchesStatus) {
       throw new Error('The signed receipt does not match this order and quote.');
+    }
+    if (amended) {
+      if (!equalJson(signed.original_total_ex_vat ?? null, order.original_total_ex_vat ?? null) ||
+          !equalJson(signed.credit_notes, order.credit_notes ?? []) ||
+          !Array.isArray(order.amendments) || order.amendments.length !== signed.amendments.length) {
+        throw new Error('The signed amendment history does not match this order.');
+      }
+      for (const [index, summary] of signed.amendments.entries()) {
+        const amendment = order.amendments[index];
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(amendment.jws));
+        const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+        const payload = await verifyJws(amendment.jws, keys, 'sous-amendment+jws');
+        const { jws, erp, ...reported } = amendment;
+        if (hash !== summary.jws_sha256 || payload.order_id !== signed.id ||
+            !equalJson(payload, reported) ||
+            !['id', 'kind', 'status', 'tier', 'line'].every(key => equalJson(payload[key], summary[key]))) {
+          throw new Error('The signed amendment does not match this order and receipt.');
+        }
+      }
+    } else if (order.amendments?.length) {
+      throw new Error('The receipt does not sign this order’s amendments.');
     }
     return signed;
   }

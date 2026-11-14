@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import test from 'node:test';
 
 import { Gateway, gatewayUrl, verifyJws } from './gateway.mjs';
@@ -273,4 +273,50 @@ test('reports all 15 kg of rice missing when the gateway returns blocked lines a
   assert.equal(row.missing, 15);
   assert.deepEqual(row.reasons, ['Cut-off passed.']);
   assert.equal(row.referenceSku, 'rice-sku');
+});
+
+test('reopens a short-pick order and verifies its original price, amended receipt and signed change history', async () => {
+  const amendment = { id: 'AM-1', order_id: 'PO-amended', kind: 'short_pick', line: 0,
+    status: 'applied', tier: 'notify', reason: 'Only half the packs were picked.' };
+  const amendmentJws = token(amendment, 'amendment', 'sous');
+  const summary = { id: amendment.id, kind: amendment.kind, line: 0, status: amendment.status,
+    tier: amendment.tier, jws_sha256: createHash('sha256').update(amendmentJws).digest('hex') };
+  const payload = { id: amendment.order_id, quote_id: quote.id, mandate_id: mandate.id,
+    total_ex_vat: quote.total_ex_vat / 2, original_total_ex_vat: quote.total_ex_vat,
+    lines: [{ name: 'Oats', quantity: 1 }], decision: { outcome: 'notify' }, status: 'ordered',
+    approval: null, updated_at: '2026-11-14T12:00:00Z', credit_notes: [], amendments: [summary] };
+  const order = { ...payload, agent_id: mandate.agent_id,
+    amendments: [{ ...amendment, jws: amendmentJws, erp: { status: 'simulated' } }],
+    receipt_jws: token(payload, 'order', 'sous') };
+  const client = new Gateway('https://example.test', async url => {
+    if (url.endsWith('jwks.json')) return Response.json(jwks);
+    if (url.includes('/quotes/')) return Response.json({ quote, jws: token(quote, 'quote') });
+    return Response.json(order);
+  });
+  const reopened = await client.getOrder(order.id);
+  const originalQuote = await client.getQuote(reopened.quote_id);
+  assert.deepEqual(await client.receipt(reopened, originalQuote), payload);
+  const changedReason = structuredClone(order);
+  changedReason.amendments[0].reason = 'A fabricated seller reason';
+  await assert.rejects(client.receipt(changedReason, quote), /amendment/);
+  await assert.rejects(client.receipt({ ...order, amendments: [] }, quote), /amendment/);
+  await assert.rejects(client.receipt({ ...order, original_total_ex_vat: 999 }, quote), /amendment/);
+  const badDigest = { ...payload, amendments: [{ ...summary, jws_sha256: '0'.repeat(64) }] };
+  await assert.rejects(client.receipt({ ...order, receipt_jws: token(badDigest, 'order', 'sous') }, quote), /amendment/);
+  const wrongOrder = { ...amendment, order_id: 'PO-other' };
+  const wrongJws = token(wrongOrder, 'amendment', 'sous');
+  const wrongReceipt = { ...payload, amendments: [{ ...summary,
+    jws_sha256: createHash('sha256').update(wrongJws).digest('hex') }] };
+  await assert.rejects(client.receipt({ ...order, amendments: [{ ...wrongOrder, jws: wrongJws }],
+    receipt_jws: token(wrongReceipt, 'order', 'sous') }, quote), /amendment/);
+  const pending = { ...amendment, kind: 'delay', status: 'pending_buyer' };
+  const pendingJws = token(pending, 'amendment', 'sous');
+  const pendingReceipt = { ...payload, total_ex_vat: quote.total_ex_vat, original_total_ex_vat: null,
+    amendments: [{ ...summary, kind: 'delay', status: 'pending_buyer',
+      jws_sha256: createHash('sha256').update(pendingJws).digest('hex') }] };
+  const pendingOrder = { ...order, ...pendingReceipt, amendments: [{ ...pending, jws: pendingJws }],
+    receipt_jws: token(pendingReceipt, 'order', 'sous') };
+  delete pendingOrder.original_total_ex_vat;
+  delete pendingOrder.credit_notes;
+  assert.deepEqual(await client.receipt(pendingOrder, quote), pendingReceipt);
 });
