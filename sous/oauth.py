@@ -339,7 +339,11 @@ def _redirect_registered(client: dict, uri: str | None) -> bool:
 
 # --- authorization endpoint ------------------------------------------------------------
 
-_PAGE_HEADERS = {"X-Frame-Options": "DENY", "Content-Security-Policy": "frame-ancestors 'none'",
+# The consent pages run no script and load nothing: only their inline <style>. No form-action: the consent form
+# posts here and is answered with a 302 to the client's registered redirect_uri, which form-action would block.
+_PAGE_HEADERS = {"X-Frame-Options": "DENY",
+                 "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; "
+                                            "frame-ancestors 'none'",
                  "Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
 _FIELDS = ("response_type", "client_id", "redirect_uri", "state", "code_challenge", "code_challenge_method",
            "scope", "resource")

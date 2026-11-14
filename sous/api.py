@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import functools
+import hashlib
 import importlib.metadata
 import os
 import subprocess
@@ -87,11 +88,56 @@ app = FastAPI(
     ),
     lifespan=lifespan,
 )
+# --- rate limits: per client IP (rate_limit below) and per credential (here) -----------------------------------------
+# One sliding 60 s window per key in _hits. Per-IP keys are the IP; per-credential keys are "cred:" + a SHA-256 prefix
+# of the presented secret, so no raw token is ever kept. Tests clear _hits to reset both.
+_hits: dict[str, deque] = defaultdict(deque)
+
+
+def _take_slot(key: str, limit: int) -> int | None:
+    """Count one request against key's 60 s window. None when allowed, else seconds until a slot frees up."""
+    q = _hits[key]
+    now = time.time()
+    while q and now - q[0] > 60:
+        q.popleft()
+    if len(q) >= limit:
+        return max(1, int(60 - (now - q[0])) + 1)
+    q.append(now)
+    return None
+
+
+def _too_many(retry_after: int, message: str) -> JSONResponse:
+    return JSONResponse(status_code=429, headers={"Retry-After": str(retry_after)},
+                        content={"error": "rate_limited", "message": message, "retry_after_s": retry_after})
+
+
+def _credential_key(request: Request) -> str | None:
+    """The credential a request presents (bearer token or X-Approver-Code), as a hash key; None without one."""
+    secret = agent_auth.bearer(request.headers.get("authorization")) or request.headers.get("x-approver-code")
+    if not secret:
+        return None
+    return "cred:" + hashlib.sha256(secret.encode()).hexdigest()[:32]
+
+
+async def credential_rate_limit(request: Request, call_next):
+    """Per-credential limit on POSTs (REST writes and every MCP call at /mcp and /connect/mcp). Registered inside
+    oauth.connect_gate, so a connector's OAuth access token is counted against the agent token it maps to: minting new
+    access tokens doesn't buy a fresh budget. A stolen token used from many IPs still hits this ceiling."""
+    limit = config.RATE_LIMIT_PER_CREDENTIAL_MIN
+    if request.method == "POST" and limit > 0 and (key := _credential_key(request)):
+        if (wait := _take_slot(key, limit)) is not None:
+            return _too_many(wait, f"Too many requests for this credential ({limit}/min); retry in {wait} s.")
+    return await call_next(request)
+
+
+# Middleware registered earlier runs INSIDE middleware registered later. Order, outermost first: security_headers,
+# rate_limit (per IP), mcp_without_slash, clock_header, CORS, connect_gate, credential_rate_limit, the app.
+app.middleware("http")(credential_rate_limit)
 # /connect/mcp (OAuth for claude.ai / ChatGPT connectors, sous/oauth.py). Registered before CORS so CORS wraps it
 # and its 401 carries the CORS headers a browser-based client needs to read WWW-Authenticate.
 app.middleware("http")(oauth.connect_gate)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
-                   expose_headers=["Mcp-Session-Id", "Mcp-Protocol-Version", "WWW-Authenticate"])
+                   expose_headers=["Mcp-Session-Id", "Mcp-Protocol-Version", "WWW-Authenticate", "Retry-After"])
 app.include_router(oauth.router)
 
 
@@ -146,9 +192,6 @@ def root():
     return RedirectResponse("/ui/live.html" if (WEB_DIR / "live.html").is_file() else "/ui/")
 
 
-_hits: dict[str, deque] = defaultdict(deque)
-
-
 def _client_ip(request: Request) -> str:
     # CF-Connecting-IP is client-controlled unless Cloudflare is the only way in: trust it only when told to.
     # Otherwise uvicorn --proxy-headers has already resolved X-Forwarded-For into request.client.
@@ -160,16 +203,94 @@ def _client_ip(request: Request) -> str:
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
     """Per-IP limit on writes and MCP calls, so one visitor can't burn our Valio API budget."""
-    if request.method == "POST":
-        q = _hits[_client_ip(request)]
-        now = time.time()
-        while q and now - q[0] > 60:
-            q.popleft()
-        if len(q) >= config.RATE_LIMIT_PER_MIN:
-            return JSONResponse(status_code=429, content={"error": "rate_limited",
-                                                          "message": "Too many requests; try again in a minute."})
-        q.append(now)
+    if request.method == "POST" and (wait := _take_slot(_client_ip(request), config.RATE_LIMIT_PER_MIN)) is not None:
+        return _too_many(wait, f"Too many requests from this address; retry in {wait} s.")
     return await call_next(request)
+
+
+# --- security headers on every response ----------------------------------------------------------------------------
+# HTML pages get a Content-Security-Policy per page family; every response gets nosniff, no-referrer, HSTS and a
+# minimal Permissions-Policy. Inventory behind these policies (web/, buyer/, FastAPI's /docs): all scripts and styles
+# are same-origin files or inline blocks (inline handlers too, hence 'unsafe-inline'; no eval anywhere), fonts come
+# from Google Fonts, images are same-origin, data: (inline SVG) or blob: (photo preview in web/agent.html), the only
+# frame is web/cards.html framing web/mcp-card.html (same origin, sandbox="allow-scripts"), and every fetch is to this
+# gateway. A response that already sets a header (sous/oauth.py's consent pages) keeps its own value.
+_FONTS_CSS, _FONTS = "https://fonts.googleapis.com", "https://fonts.gstatic.com"
+_CDN = "https://cdn.jsdelivr.net"  # FastAPI's Swagger UI / ReDoc bundles (fastapi.openapi.docs), only on /docs, /redoc
+_DEV_ORIGINS = "http://localhost:* http://127.0.0.1:*"  # CSP source lists cannot name IPv6 literals
+
+
+def _csp(connect: str = "'self'", frame_ancestors: str = "'none'", script: str = "'self' 'unsafe-inline'",
+         style: str = f"'self' 'unsafe-inline' {_FONTS_CSS}", img: str = "'self' data: blob:", font: str = f"'self' {_FONTS}",
+         worker: str = "'self'") -> str:
+    return "; ".join([
+        "default-src 'self'", f"script-src {script}", f"style-src {style}", f"font-src {font}", f"img-src {img}",
+        f"connect-src {connect}", "frame-src 'self'", f"worker-src {worker}", "object-src 'none'", "base-uri 'none'",
+        "form-action 'self'", f"frame-ancestors {frame_ancestors}"])
+
+
+_CSP_UI = _csp()
+# The /ui pages accept ?api=<gateway> for development. connect-src 'self' turns that into same-origin only on a
+# deployed gateway, so a crafted link can't make the approver inbox send the X-Approver-Code a person types to
+# another host. On a loopback host the pages may still reach another local gateway port.
+_CSP_UI_LOCAL = _csp(connect=f"'self' {_DEV_ORIGINS}")
+# The card is framed by /ui/cards.html (same origin); MCP hosts render it from ui://sous/card.html, not this URL.
+# Checked in headless Chrome: the sandbox="allow-scripts" (opaque-origin) frame still passes frame-ancestors 'self'
+# and X-Frame-Options SAMEORIGIN, since both are matched against the card's URL origin.
+_CSP_CARD = _csp(frame_ancestors="'self'")
+
+# /buyer is the reference BUYER agent: a client of any Sous gateway (its "gateway" field), so it may connect to any
+# https origin or a loopback one (buyer/gateway.mjs refuses to send an agent token over plain http elsewhere).
+_CSP_BUYER = _csp(connect=f"'self' https: {_DEV_ORIGINS}")
+_CSP_DOCS = _csp(script=f"'self' 'unsafe-inline' {_CDN}", style=f"'self' 'unsafe-inline' {_CDN} {_FONTS_CSS}",
+                 img="'self' data: https://fastapi.tiangolo.com https://cdn.redoc.ly", worker="'self' blob:")
+_ALWAYS = [(b"x-content-type-options", b"nosniff"), (b"referrer-policy", b"no-referrer"),
+           (b"strict-transport-security", b"max-age=31536000"),
+           (b"permissions-policy", b"camera=(), microphone=(), geolocation=(), payment=(), usb=()")]
+
+
+def _html_policy(path: str, host: str) -> tuple[str, str]:
+    """(Content-Security-Policy, X-Frame-Options) for an HTML response at path."""
+    if path in ("/docs", "/redoc") or path.startswith("/docs/"):
+        return _CSP_DOCS, "DENY"
+    if path.startswith("/buyer"):
+        return _CSP_BUYER, "DENY"
+    if path == "/ui/mcp-card.html":
+        return _CSP_CARD, "SAMEORIGIN"
+    local = host.rsplit(":", 1)[0].strip("[]") in ("localhost", "127.0.0.1", "::1")
+    return (_CSP_UI_LOCAL if local else _CSP_UI), "DENY"
+
+
+class SecurityHeaders:
+    """Pure ASGI (not BaseHTTPMiddleware) so MCP's streamed SSE responses pass through untouched: only the
+    http.response.start message is edited."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        path = scope["path"]
+        host = next((v.decode("latin-1") for k, v in scope["headers"] if k == b"host"), "")
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                have = {k.lower() for k, _ in headers}
+                add = list(_ALWAYS)
+                ctype = next((v for k, v in headers if k.lower() == b"content-type"), b"")
+                if ctype.startswith(b"text/html"):
+                    csp, xfo = _html_policy(path, host)
+                    add += [(b"content-security-policy", csp.encode()), (b"x-frame-options", xfo.encode())]
+                headers += [(k, v) for k, v in add if k not in have]
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
+
+app.add_middleware(SecurityHeaders)  # outermost: also covers the 429s above, CORS preflights and the mounted apps
 
 
 def require_approver(request: Request, x_approver_code: str | None = Header(default=None),
