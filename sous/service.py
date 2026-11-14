@@ -353,8 +353,10 @@ class QuoteRequest(BaseModel):
                                   "(e.g. 'Q-1A2B3C4D.O2'): that item's lines become the option's, other items stay")
 
 
-def order_url(order_id: str) -> str:
-    return f"{config.PUBLIC_BASE_URL}/ui/#/orders/{order_id}"
+def order_url(order_id: str, sandbox_id: str | None = None) -> str:
+    """Link to the order in the seller UI; sandbox orders keep the visitor inside their own sandbox."""
+    q = f"?sandbox={sandbox_id}" if sandbox_id else ""
+    return f"{config.PUBLIC_BASE_URL}/ui/{q}#/orders/{order_id}"
 
 
 def request_quote(req: QuoteRequest, agent_token: str | None = None) -> dict:
@@ -598,8 +600,8 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
         "decision": {"outcome": outcome, "findings": [f.model_dump() for f in findings], "by": "mandate-engine",
                      "at": now.isoformat(timespec="milliseconds")},
         "approval": None,
-        "order_url": order_url(oid),
-        "approval_url": order_url(oid) if status == "pending_approval" else None,
+        "order_url": order_url(oid, getattr(mandate, "sandbox", None)),
+        "approval_url": order_url(oid, getattr(mandate, "sandbox", None)) if status == "pending_approval" else None,
         "idempotency_key": idempotency_key,
         "agent_rationale": rationale or q.get("rationale"),
         "created_at": now.isoformat(timespec="milliseconds"), "updated_at": now.isoformat(timespec="milliseconds"),
