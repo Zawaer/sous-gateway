@@ -229,6 +229,18 @@ def test_name_pack_count_not_multiplied_twice():
     assert Q.content_per_sales_unit(p, None)[:2] == (4.0, "KG")
 
 
+def test_search_cards_show_the_case_size_from_the_catalog():
+    """A case of 6 x 0,5 l sold per KI: the card says 3 L per KI (no price call), as a quote would."""
+    p = product(name="Kuohukerma 0,5 l", names={"fi": "Kuohukerma 0,5 l", "en": "", "sv": ""}, sales_unit="KI",
+                base_unit="ST", units={"ST": 1.0, "KI": 6.0}, size_from_name=(0.5, "L"))
+    c = catalog.card(p)["content_per_sales_unit"]
+    assert (c["amount"], c["unit"], c["source"]) == (3.0, "L", "pack size from product name")
+    assert c["base_units_per_sales_unit"] == 6 and "no price call" in c["basis"]
+    assert c["amount"] == Q.content_per_sales_unit(p, None)[0]
+    assert catalog.card(product(size_from_name=None))["content_per_sales_unit"] is None
+    assert catalog.card(product(sales_unit="KG", size_from_name=None))["content_per_sales_unit"]["unit"] == "KG"
+
+
 def test_reasons_use_readable_names():
     from sous.mandate import readable_name
     assert readable_name("BRAVO CHEF 400G CHOPPED TOMATOES") == "Bravo chef 400g chopped tomatoes"

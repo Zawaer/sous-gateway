@@ -137,6 +137,9 @@ class ProductCardOut(_Open):
     delivery_reliability: float | None = None
     co2_kg_per_kg_group_avg: float | None = None
     category: str | None = None
+    content_per_sales_unit: dict[str, Any] | None = Field(
+        None, description="{amount, unit, source, basis}: how much one sales unit holds (e.g. 3 L per KI of 6 x 0.5 l), "
+        "from the catalog only; a quote confirms it against Valio's price ratio")
 
 
 class SearchOut(_Open):

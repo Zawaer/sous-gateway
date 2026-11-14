@@ -514,11 +514,32 @@ def search(
     return out
 
 
+CARD_CONTENT_BASIS = ("catalog only (product name and pack hierarchy, no price call); a quote confirms it against "
+                      "Valio Aimo's price / comparison-price ratio")
+
+
+def card_content(p: dict) -> dict | None:
+    """How much one sales unit holds, from the same function quotes use (quote.content_per_sales_unit) without a
+    price: "Kuohukerma 0,5 l" sold per KI of 6 -> 3 L per KI. None when the name gives no size."""
+    from . import quote  # quote imports this module
+    try:
+        c = quote.content_per_sales_unit(p, None)
+    except (KeyError, TypeError, ZeroDivisionError):
+        return None
+    if not c:
+        return None
+    units = p.get("units") or {}
+    per = units.get(p.get("sales_unit"), 1.0) / (units.get(p.get("base_unit"), 1.0) or 1.0)
+    return {"amount": c[0], "unit": c[1], "source": c[2], "basis": CARD_CONTENT_BASIS,
+            **({"base_units_per_sales_unit": round(per, 3), "base_unit": p.get("base_unit")} if per > 1 else {})}
+
+
 def card(p: dict) -> dict:
     """The subset an agent needs to choose candidates (keeps tool responses small)."""
     keys = ("id", "name", "brand", "sales_unit", "size_from_name", "temperature", "claims",
             "labels", "allergens", "delivery_reliability", "co2_kg_per_kg_group_avg", "category")
     c = {k: p[k] for k in keys}
+    c["content_per_sales_unit"] = card_content(p)
     c["country_of_origin"] = origin.code(p.get("country_of_origin"))
     if "allergen_check" in p:
         c["allergen_check"] = p["allergen_check"]
