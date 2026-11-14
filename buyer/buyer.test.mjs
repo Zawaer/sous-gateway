@@ -91,7 +91,7 @@ test('uses signed request identities, selected SKUs, catalog filters and one ide
   assert.deepEqual(requests[2].url.searchParams.getAll('avoid_allergens'), ['AM', 'AN']);
   assert.deepEqual(requests[2].url.searchParams.getAll('claims'), ['VEGAN']);
   assert.deepEqual(await client.quote(need, mandate, ['sku']), quote);
-  assert.deepEqual(requests[3].body.items[0], { product_ids: ['sku'], amount: 5, unit: 'KG', substitute_for: null, note: 'oats' });
+  assert.deepEqual(requests[3].body.items[0], { product_ids: ['sku'], amount: 5, unit: 'KG', substitute_for: null, note: 'oats', product_type: 'oats' });
   assert.equal((await client.order(quote)).status, 'pending_approval');
   const expired = { ...quote, expires_at: '2000-01-01T00:00:00Z' };
   await assert.rejects(client.order(expired), /expired/);
@@ -114,15 +114,16 @@ test('rejects a quote whose JSON, signed identity, or product shortlist differs'
   }
 });
 
-test('accepts a signed null product type and rejects an added constraint', async () => {
+test('accepts a signed null product type for replacements and rejects an added constraint', async () => {
   for (const product_type of [null, 'milk']) {
-    const items = [{ product_ids: ['sku'], amount: 5, unit: 'KG', substitute_for: null, note: 'oats', product_type }];
-    const signed = { ...quote, items, lines: quote.lines.map((line) => ({ ...line, item_index: 0 })) };
+    const items = [{ product_ids: ['sku'], amount: 5, unit: 'KG', substitute_for: 'old-sku', note: 'oats', product_type }];
+    const signed = { ...quote, items, lines: quote.lines.map((line) => ({ ...line, item_index: 0, substitute_for: 'old-sku' })) };
     const client = new Gateway('https://example.test', async (url) => Response.json(
       url.endsWith('jwks.json') ? jwks : { quote: signed, jws: token(signed, 'quote') },
     ));
-    if (product_type === null) assert.deepEqual(await client.quote(need, mandate, ['sku']), signed);
-    else await assert.rejects(client.quote(need, mandate, ['sku']), /signed quote does not match/);
+    const result = client.quote({ ...need, substituteFor: 'old-sku' }, mandate, ['sku']);
+    if (product_type === null) assert.deepEqual(await result, signed);
+    else await assert.rejects(result, /signed quote does not match/);
   }
 });
 
@@ -195,8 +196,8 @@ test('binds each signed basket line to its request and reports a named shortage 
   const rice = { ...need, query: 'rice', amount: 15, claims: [] };
   const entries = [{ need, productIds: ['sku'] }, { need: rice, productIds: ['rice-sku'] }];
   const items = [
-    { note: 'oats', amount: 5, unit: 'KG', product_ids: ['sku'], substitute_for: null },
-    { note: 'rice', amount: 15, unit: 'KG', product_ids: ['rice-sku'], substitute_for: null },
+    { note: 'oats', amount: 5, unit: 'KG', product_ids: ['sku'], substitute_for: null, product_type: 'oats' },
+    { note: 'rice', amount: 15, unit: 'KG', product_ids: ['rice-sku'], substitute_for: null, product_type: 'rice' },
   ];
   const basketQuote = {
     ...quote, items,

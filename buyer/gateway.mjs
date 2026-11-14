@@ -94,6 +94,7 @@ export class Gateway {
       return {
         product_ids: productIds, amount: need.amount, unit: need.unit,
         substitute_for: need.substituteFor || null, note: need.query,
+        ...(need.query && !need.substituteFor ? { product_type: need.query } : {}),
       };
     });
     const allIds = items.flatMap((item) => item.product_ids);
