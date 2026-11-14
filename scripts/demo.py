@@ -208,7 +208,7 @@ def scene_1(gw: Gateway, when: date) -> None:
     say(_c("1", '"We need 1,000 litres of lactose-free milk delivered on Monday."') + _c("2", "  (Hotel Aurora's agent)"))
     ids = gw.search(agent, "laktoositon maito", 12, claims=["FREE_FROM_LACTOSE"])
     say(f"  searched the static catalog: {len(ids)} lactose-free candidates, 0 Valio API calls")
-    q = gw.quote(agent, mandate, [{"product_ids": ids, "amount": 1000, "unit": "L"}], when)
+    q = gw.quote(agent, mandate, [{"product_ids": ids, "amount": 1000, "unit": "L", "product_type": "milk"}], when)
     show_quote(q)
     show_order(gw.order(agent, mandate, q["id"]), gw.base)
 
@@ -237,12 +237,12 @@ def scene_3(gw: Gateway, when: date) -> None:
     agent, mandate = "aurora-purchasing-agent", "M-HOTEL-AURORA"
     gw.why = '300 litres of lactose-free skimmed or semi-skimmed milk, cheapest that arrives Monday.'
     say(_c("1", '"300 litres of lactose-free skimmed or semi-skimmed milk, cheapest that arrives Monday."'))
-    q = gw.quote(agent, mandate, [{"product_ids": ["464119", "476240", "464201"], "amount": 300, "unit": "L"}], when)
+    q = gw.quote(agent, mandate, [{"product_ids": ["464119", "476240", "464201"], "amount": 300, "unit": "L", "product_type": "milk"}], when)
     show_quote(q)
     show_order(gw.order(agent, mandate, q["id"]), gw.base)
     gw.why = 'No, 500 litres of exactly 464119, the one we always buy.'
     say(_c("1", '"No, 500 litres of exactly 464119, the one we always buy."'))
-    q = gw.quote(agent, mandate, [{"product_ids": ["464119"], "amount": 500, "unit": "L"}], when)
+    q = gw.quote(agent, mandate, [{"product_ids": ["464119"], "amount": 500, "unit": "L", "product_type": "milk"}], when)
     show_quote(q)
     show_order(gw.order(agent, mandate, q["id"]), gw.base)
 
