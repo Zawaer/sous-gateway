@@ -1003,7 +1003,10 @@ function eventSummary(e) {
       return `${(d.lines || []).length} line(s), ${eur(d.total_ex_vat)} ex VAT${d.preview ? " · mandate preview " + tier(d.preview) : ""}${calls != null ? ` · ${calls} Valio API call(s)${hits ? `, ${hits} from cache` : ""}` : ""}`;
     }
     case "order.ordered": case "order.pending_approval": case "order.refused":
-      return `${eur(d.total_ex_vat)} ${tier(d.outcome)} ${(d.fired || []).map((f) => msg(f.message)).join(" · ")}`;
+      // One reason reads; four in a row don't. Lead with the most telling, count the rest (all are in "Data and hashes").
+      { const sev = { block: 0, ask: 1, notify: 2, silent: 3 };
+        const fired = rankReasons(d.fired || []).sort((x, y) => (sev[x.outcome] ?? 9) - (sev[y.outcome] ?? 9));
+        return `${eur(d.total_ex_vat)} ${tier(d.outcome)} ${fired.length ? msg(fired[0].message) : ""}${fired.length > 1 ? ` <span class="muted">+ ${fired.length - 1} more reason${fired.length > 2 ? "s" : ""}</span>` : ""}`; }
     case "order.approved": case "order.rejected_by_human":
       return `→ ${tier(d.resulting_status)}${d.note ? ` “${esc(d.note)}”` : ""}${d.reason && d.reason !== d.note ? " · " + esc(d.reason) : ""}`;
     case "order.rejected":
@@ -1062,8 +1065,9 @@ views.mandates = {
     if (key === this.key && view.dataset.view === "mandates") return;
     this.key = key;
     view.dataset.view = "mandates";
-    view.innerHTML = `<div class="head"><div><h2>Mandates</h2>
-      <div class="muted">A mandate (valtakirja) is what a human lets their purchasing agent do. The gateway signs it and enforces it on every order.</div></div>
+    view.innerHTML = `<div class="head"><div><h2>${SIDE === "buyer" ? "Your rules" : "Mandates"}</h2>
+      <div class="muted">${SIDE === "buyer" ? "What you let your purchasing agent do, as a signed mandate (valtakirja). Sous enforces it on every order."
+        : "A mandate (valtakirja) is what a human lets their purchasing agent do. The gateway signs it and enforces it on every order."}</div></div>
       <a class="btn plain" href="sign-mandate.html${SANDBOX ? "?sandbox=" + encodeURIComponent(SANDBOX) : ""}">Sign a mandate with your own key →</a></div>
       ${mandates.length ? mandates.map(mandateCard).join("") : `<div class="empty">No mandates issued yet.</div>`}`;
     view.querySelectorAll("[data-revoke]").forEach((b) => b.addEventListener("click", async () => {
