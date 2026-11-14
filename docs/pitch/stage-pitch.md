@@ -14,7 +14,7 @@ allergen-safety case for hospitals and schools), **Implementation** (beats 2 and
   2. `/ui/break.html?sandbox=<id>` with the agent token pasted;
   3. terminal with Claude Code connected to `$SOUS/mcp` (sandbox agent token), prompt typed, not sent.
 - Phone (for the approval): the same inbox link, approver token pasted.
-- Fallback if the venue network fails: deck slides 4, 5 and 9 carry the same story with production screenshots. If
+- Fallback if the venue network fails: deck slides 4–10 carry the same story with production screenshots. If
   production is down, use staging (same flow); say so.
 - Never show the approver code or a token on the projector.
 
@@ -24,7 +24,7 @@ allergen-safety case for hospitals and schools), **Implementation** (beats 2 and
 |---|---|---|---|
 | 0:00–0:25 | **1. Problem** | "We asked a shopping agent for 1,000 litres of lactose-free milk by Monday. Thirteen minutes later it told us to phone a wholesaler on Saturday. Agents will buy for kitchens anyway; the question is whose rules they follow. If Valio Aimo doesn't define that, someone else's platform will." | Slide 2 |
 | 0:25–1:25 | **2. Live demo moment** | "This is Claude Code, any agent, connected to Valio Aimo over MCP. I ask for the hotel's milk." Send the prompt: it searches, gets a signed quote with live price, orders, and the gateway answers *Auto + FYI* with the rule. "Now the hospital's agent asks for a substitute." It is *held*: "Needs approval, decide by" a clock time from Valio's cut-off. Approve it on the phone. Then one click on the break page: "agent approves its own order", 403, in the audit log. | Terminal, phone, `/ui/break.html` |
-| 1:25–1:55 | **3. The trust idea** | "The agent carries a mandate, *valtakirja*, signed for its human: limits, allergens, substitutions. Valio Aimo's gateway enforces it in plain code. No language model ever approves an order or relaxes a rule: the agent's model reads the request and explains the result, and our one classifier can only add a refusal. Every order lands in one of four tiers, and buyer and Valio Aimo read the same hash-chained record." | Slide 4 (tiers) |
+| 1:25–1:55 | **3. The trust idea** | "The agent carries a mandate, *valtakirja*, signed for its human: limits, allergens, substitutions. Valio Aimo's gateway enforces it in plain code. No language model ever approves an order or relaxes a rule: the agent's model reads the request and explains the result, and our one classifier can only add a refusal. Every order lands in one of four tiers, and buyer and Valio Aimo read the same hash-chained record." | Slide 6 (tiers) |
 | 1:55–2:25 | **4. Numbers** | "60 of 60 scripted buyer requests on live Valio prices; 43 of 43 unsafe actions stopped or sent to a human. Three LLM agents on the same 48 sentences, scored in one CI run: Kimi 47, Gemini 46, Nemotron 30 matched the buyer, and zero mandate violations ordered by any of them. A 17-check conformance kit anyone can run against a gateway: 17 of 17 on staging. All our own cases, and we say so." | Slide 11 |
 | 2:25–2:50 | **5. Why it can be a real product** | "It is open: MCP and OpenAPI, signed JSON, AP2 and A2A exports, MIT. It runs on Verda in Finland with CI on CRACI. What's missing is honest and short: real buyer login and keys bound to agents, and Valio Aimo's order API with contract prices." | Slide 12 |
 | 2:50–3:00 | **6. Ask** | "We'd like one Valio Aimo customer kitchen for a pilot: one mandate, one agent, real orders. Sous: the agent carries the mandate, Valio Aimo enforces it." | Slide 1 (URL + QR) |

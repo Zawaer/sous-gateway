@@ -55,7 +55,7 @@ has been decided, rerun `demo_prep.py`: it makes a new sandbox on its own.
 **If the Wi-Fi or Valio fails:** the seeded sandbox (held renewal, standing-order history, audit log) and the
 break page make **no Valio calls**, so they still work as long as the gateway is reachable (use a phone hotspot).
 If Valio's circuit is open, `/health` shows `circuit: open` and quotes fail. In that case show the inbox and the
-break page and say why. If the gateway is unreachable, use deck slides 4, 5 and 9 (production screenshots).
+break page and say why. If the gateway is unreachable, use deck slides 4–10 (production screenshots).
 Never show a token or the approver code on the projector.
 
 ---
