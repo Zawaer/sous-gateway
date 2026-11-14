@@ -463,6 +463,10 @@ def _build() -> list[dict]:
            "(order.requested_by: who minted the agent's credential, else the mandate's issuer), or gave no name. "
            "Someone else must approve; rejecting is still allowed. It compares identities (the approver's name or "
            "passkey name), not people.", "separate_approver", status=403),
+        _r("approver_not_authorized", "refusal", ["block"], "buyer", "Role routing: the held order has a "
+           "finding the mandate routes to named approvers (approvers_for, e.g. allergen holds to the dietitian), and "
+           "the approval came from someone else. One of them must approve; anyone may still reject.",
+           "approvers_for", status=403),
         _r("approval_deadline_passed", "refusal", ["block"], "gateway",
            "A held order can be approved only until its approve_by: the earliest order cut-off among its lines "
            f"minus {deadline.MARGIN_MIN:g} minutes (or the start of the delivery day), or the mandate's or sandbox's expiry if that comes "

@@ -129,6 +129,11 @@ class Mandate(BaseModel):
         "requested it (order.requested_by: who minted the agent's credential, else the mandate's issuer); refused "
         "with 403 separate_approver_required. Compares identities (approver name / passkey name), not people: "
         "pair it with approval_method 'passkey' so the approver's name is bound to an enrolled device")
+    approvers_for: dict[str, list[str]] = Field(
+        default_factory=dict, description="Who may approve which holds: {rule id or prefix: [approver names]}, e.g. "
+        "{'allergen.': ['Maria Lehto, dietitian']}. When a held order has a finding matching a key, only one of "
+        "those names may approve it (403 approver_not_authorized); anyone may still reject. Names are compared like "
+        "four-eyes (case and spacing ignored); pair with approval_method 'passkey' so the name is bound to a device")
     max_substitute_premium_pct: float | None = Field(
         None, gt=0, description="A substitute may cost at most this many percent more per comparable unit (L, kg, "
         "piece: Valio's comparison price) than the product it replaces; above it, or when the replaced product's "

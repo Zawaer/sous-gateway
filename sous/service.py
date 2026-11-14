@@ -8,6 +8,7 @@ written to the audit log.
 from __future__ import annotations
 
 import contextlib
+import logging
 import secrets
 import threading
 from datetime import date, datetime, timedelta
@@ -27,6 +28,9 @@ class GatewayError(Exception):
     def __init__(self, code: str, message: str, status: int = 400, retry_after: int | None = None):
         super().__init__(message)
         self.code, self.message, self.status, self.retry_after = code, message, status, retry_after
+
+
+log = logging.getLogger(__name__)
 
 
 def valio_error(e: aimo.AimoError) -> GatewayError:
@@ -1276,6 +1280,26 @@ def _approval_blocker(o: dict, mandate: Mandate, now: datetime) -> tuple[str, st
     return None
 
 
+def _requote_after_recheck(o: dict, q: dict) -> dict | None:
+    """When the live re-check at approval expires an order (price moved, stock gone), quote the same items again at
+    today's terms for the same agent and mandate, so nobody starts over: the agent can place_order on it and the
+    mandate decides again (a moved price is held for a person again if the limits say so). None if it can't."""
+    try:
+        items = [QuoteItem(**it) for it in (q.get("items") or [])]
+        if not items:
+            return None
+        day = date.fromisoformat(q.get("requested_delivery_date") or o["requested_delivery_date"])
+        r = _request_quote(QuoteRequest(agent_id=o["agent_id"], mandate_id=o["mandate_id"], delivery_date=day,
+                                        items=items, rationale="Re-quote after the live check at approval"))
+        nq = r["quote"]
+        return {"quote_id": nq["id"], "total_ex_vat": nq["total_ex_vat"], "expires_at": nq["expires_at"],
+                "would_be": (nq.get("mandate_preview") or {}).get("outcome"),
+                "note": "Same items, priced and checked now. Order it with place_order(quote_id); the mandate decides again."}
+    except Exception:  # noqa: BLE001 - the expiry stands on its own; a re-quote is a convenience
+        log.exception("re-quote after the approval re-check failed for %s", o.get("id"))
+        return None
+
+
 def _decide(order_id: str, approver: str, approve: bool, note: str | None,
             authority: str | None = None, evidence: dict | None = None) -> tuple[dict, Mandate]:
     o = store.get_order(order_id)
@@ -1302,6 +1326,7 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
                            "/approve/passkey; page /ui/approve.html). The approver code can still reject it.", 403)
     if approve:  # four-eyes (separate_approver): never the identity the order was requested by
         controls.check_separate_approver(mandate, o, approver)
+        controls.check_approver_role(mandate, o, approver)  # approvers_for: who may approve which holds
     holds.invalidate()  # under _order_lock, like holds.create: _approval_blocker sees every hold made so far
     status = "ordered" if approve else "rejected"
     reason = reason_fi = note  # the human's own note stays in their words
@@ -1318,6 +1343,9 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
             raise valio_error(e)
         if blocked:
             status, reason, reason_fi = blocked
+            if requote := _requote_after_recheck(o, q):  # a fresh quote at today's terms, ready to order
+                o["requote"] = requote
+                reason += f" A new quote at today's terms is ready: {requote['quote_id']} (€{requote['total_ex_vat']:,.2f})."
     if status == "ordered" and (short := RES.confirm(o, now, RES.pool_of(mandate))):  # tentative -> firm
         status, reason = "refused", " ".join(RES.message(s) for s in short)
         reason_fi = " ".join(fi.allocation(s) for s in short)

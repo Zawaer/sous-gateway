@@ -182,3 +182,22 @@ def check_separate_approver(mandate: Mandate, order: dict, approver: str | None)
                            f"Mandate {mandate.id} requires a separate approver: {order.get('kind', 'order')} {order.get('id')} was "
                            f"requested by '{req}', who can't also approve it. Another approver must approve it "
                            "(rejecting it is still allowed).", 403)
+
+
+def check_approver_role(mandate: Mandate, order: dict, approver: str | None) -> None:
+    """Role routing (mandate.approvers_for): a held order whose findings match a key may only be approved by one of
+    that key's names (e.g. allergen holds only by the dietitian). Raise GatewayError 403 approver_not_authorized."""
+    routes = getattr(mandate, "approvers_for", None) or {}
+    if not routes:
+        return
+    from .service import GatewayError
+    fired = [f.get("rule", "") for f in (order.get("decision") or {}).get("findings") or []
+             if f.get("outcome") in ("ask", "block")]
+    for key, names in routes.items():
+        hit = [r for r in fired if r == key or (key.endswith(".") and r.startswith(key))]
+        if hit and _norm(approver) not in {_norm(n) for n in names}:
+            raise GatewayError("approver_not_authorized",
+                               f"{order.get('id')} was held for {', '.join(sorted(set(hit)))}; mandate {mandate.id} lets "
+                               f"only {', '.join(names)} approve that (approver given: '{approver or ''}'). They "
+                               "must approve it; rejecting is still allowed.", 403)
+

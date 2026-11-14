@@ -586,3 +586,25 @@ def test_every_decision_names_the_policy_that_made_it():
     assert a["approval"]["policy"]["rules_sha256"] == p["rules_sha256"]
     signed = signing.verify(a["receipt_jws"], "sous-order+jws")
     assert signed["decision"]["policy"] == p and signed["approval"]["policy"] == a["approval"]["policy"]
+
+
+def test_expired_at_approval_comes_with_a_fresh_quote(monkeypatch):
+    o = _held(monkeypatch)
+    PRICE["eur"] = 1.30
+    a = S.decide(o["id"], "chef", True)
+    rq = a["requote"]
+    assert a["status"] == "expired" and rq["total_ex_vat"] == 78.0 and rq["quote_id"] in a["approval"]["result_reason"]
+    assert rq["would_be"] == "ask"  # €78 is over the €50 the agent may spend alone: a person decides again
+    o2 = S.place_order("a", "M", rq["quote_id"])
+    assert o2["status"] == "pending_approval" and o2["total_ex_vat"] == 78.0
+
+
+def test_role_routed_approval(monkeypatch):
+    issue(auto_approve_limit_eur=50, approvers_for={"spend.": ["Maria Lehto"]})
+    o = order(60)  # held by spend.auto_limit
+    with pytest.raises(S.GatewayError) as e:
+        S.decide(o["id"], "chef", True)
+    assert e.value.code == "approver_not_authorized" and e.value.status == 403
+    assert S.decide(o["id"], " maria  lehto ", True)["status"] == "ordered"
+    o2 = order(60)
+    assert S.decide(o2["id"], "chef", False)["status"] == "rejected"  # anyone may still reject
