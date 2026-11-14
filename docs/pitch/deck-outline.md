@@ -8,8 +8,8 @@ same arc as the demo video ([video-script.md](video-script.md)): the flow, the t
 
 1. **Sous.** Valio Aimo's front door for AI purchasing agents; "The agent carries the mandate. Valio Aimo enforces it.
    The customer stays in control." Live page screenshot, prod URL, QR, repo, MIT.
-2. **The problem, by example.** "Cream for Saturday's panna cotta. Our usual one is short." An agent on its own swaps
-   in another cream; Sous knows the cream is for a recipe, so that swap waits for the chef's yes (coffee cream could be
+2. **The problem, by example.** "Monday's panna cotta: our usual whipping cream can't come." (its order cut-off had
+   passed). An agent on its own swaps in another cream; Sous knows the cream is for a recipe, so that swap waits for the chef's yes (coffee cream could be
    any brand). The gateway's real reason on production, `substitution.use_sensitive`, quoted word for word.
 3. **Sous runs all four steps, live.** Request (any agent, MCP or OpenAPI) → Lookup (17,546 products, 0 Valio calls;
    live price and stock for the shortlist, ≤ 2 calls) → Order (Ed25519-signed quote, fixed price, ordered once) →
