@@ -256,6 +256,10 @@ function renderMandate(mandate) {
     mandate.substitutions && `Substitutions: ${tierLabels[mandate.substitutions] || mandate.substitutions}`,
     mandate.unknown_allergens && `Unknown allergen data: ${tierLabels[mandate.unknown_allergens] || mandate.unknown_allergens}`,
   ].filter(Boolean));
+  if (mandate.max_substitute_premium_pct != null) {
+    content.append(element('p', `Substitute premium cap: ${mandate.max_substitute_premium_pct}% above the comparable unit price · ${tierLabels[mandate.substitute_premium] || mandate.substitute_premium || 'Needs approval'}`));
+  }
+  if (mandate.separate_approver) content.append(element('p', 'Approval identity must differ from the mandate issuer.'));
   if (mandate.approval_method === 'passkey') content.append(element('p', 'Approval requires a registered passkey.'));
   if (mandate.valid_until) content.append(element('p', `Valid until ${time(mandate.valid_until)} Helsinki time`));
   content.append(element('p', 'The gateway checks the current mandate and supplier conditions for each order.', 'muted'));
