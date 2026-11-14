@@ -118,10 +118,14 @@ export class Gateway {
     });
     const allIds = items.flatMap((item) => item.product_ids);
     if (new Set(allIds).size !== allIds.length) throw new Error('A product can only appear on one basket item. Combine quantities or choose different products.');
+    const buyerRequest = entries.map(({ need }) => need.buyerRequest).filter(Boolean).join(' ').replace(/\s+/gu, ' ').trim();
+    if (buyerRequest.length > 2000) throw new Error('The basket’s original request descriptions exceed 2,000 characters. Shorten them before quoting.');
     const quote = await this.signed(await this.request('/quotes', {
       agent_id: mandate.agent_id, mandate_id: mandate.id, delivery_date: deliveryDate, items,
+      ...(buyerRequest ? { buyer_request: buyerRequest } : {}),
     }), 'quote');
     if (!quote.id || !Number.isFinite(Date.parse(quote.expires_at)) || quote.agent_id !== mandate.agent_id || quote.mandate_id !== mandate.id ||
+        (quote.buyer_request || '') !== buyerRequest ||
         quote.requested_delivery_date !== deliveryDate || !tiers.has(quote.mandate_preview?.outcome) ||
         (quote.items ? !equalJson(
           quote.items.map((item) => ({ product_type: null, purpose: null, substitution: null, use: null, ...item })),
@@ -198,7 +202,7 @@ export class Gateway {
         order.agent_id !== quote.agent_id ||
         (amended ? signed.original_total_ex_vat ?? signed.total_ex_vat : signed.total_ex_vat) !== quote.total_ex_vat ||
         !['id', 'quote_id', 'mandate_id', 'total_ex_vat', 'lines', 'decision'].every((key) => equalJson(signed[key], order[key])) ||
-        !matchesStatus) {
+        !equalJson(signed.buyer_request, order.buyer_request) || !matchesStatus) {
       throw new Error('The signed receipt does not match this order and quote.');
     }
     if (amended) {

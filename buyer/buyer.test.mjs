@@ -204,6 +204,7 @@ test('requires the current status, approval details and update time to match a n
   assert.deepEqual(await client.receipt(order, quote), payload);
   await assert.rejects(client.receipt({ ...order, approval: { ...payload.approval, by: 'Someone else' } }, quote));
   await assert.rejects(client.receipt({ ...order, updated_at: null }, quote));
+  await assert.rejects(client.receipt({ ...order, buyer_request: 'An unsigned request' }, quote));
   const pendingToken = token({ ...payload, status: 'pending_approval', approval: null }, 'order');
   await assert.rejects(client.receipt({ ...order, receipt_jws: pendingToken }, quote));
 });
@@ -425,4 +426,23 @@ test('single-item form parsing explains how to enter a second quantified product
   ]) assert.throws(() => parseIntent(input, '2026-11-14'), /Add to basket/);
   assert.equal(parseIntent('2 kg salt and pepper by Tuesday', '2026-11-14').query, 'salt and pepper');
   assert.equal(parseIntent('2 packs olive oil 1 L by Tuesday', '2026-11-14').query, 'olive oil 1 L');
+});
+
+test('binds the buyer’s normalized original wording into the signed basket quote', async () => {
+  const originalNeed = { ...need, buyerRequest: '  5 kg  oats\nby Monday  ' };
+  let altered = false;
+  const client = new Gateway('https://example.test', async (url, init) => {
+    if (url.endsWith('jwks.json')) return Response.json(jwks);
+    const body = JSON.parse(init.body);
+    assert.equal(body.buyer_request, '5 kg oats by Monday');
+    const payload = { ...quote, items: body.items,
+      lines: quote.lines.map(line => ({ ...line, item_index: 0 })),
+      buyer_request: altered ? '50 kg oats by Monday' : body.buyer_request };
+    return Response.json({ quote: payload, jws: token(payload, 'quote') });
+  });
+  const signed = await client.quote(originalNeed, mandate, ['sku']);
+  assert.equal(signed.buyer_request, '5 kg oats by Monday');
+  altered = true;
+  await assert.rejects(client.quote(originalNeed, mandate, ['sku']), /signed quote does not match/);
+  await assert.rejects(client.quote({ ...need, buyerRequest: 'x'.repeat(2001) }, mandate, ['sku']), /2,000/);
 });

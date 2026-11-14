@@ -66,6 +66,7 @@ function readNeed(findSubstitutes) {
   const need = {
     query: $('query').value.trim(), amount: $('amount').valueAsNumber, unit: $('unit').value,
     purpose: $('purpose').value.trim(), substitution: $('substitution-policy').value,
+    buyerRequest: $('intent').value.trim(),
     deliveryDate: $('delivery').value, claims: codes($('claims').value), avoidAllergens: codes($('allergens').value),
     category: $('category').value.trim(), temperature: $('temperature').value, substituteFor: $('substitute').value.trim(),
   };
@@ -153,7 +154,7 @@ function selectedProducts() {
 
 function startItem(entry = null, index = null) {
   state.editing = index;
-  $('intent').value = '';
+  $('intent').value = entry?.need.buyerRequest ?? '';
   $('query').value = entry?.need.query ?? '';
   $('purpose').value = entry?.need.purpose ?? '';
   $('substitution-policy').value = entry?.need.substitution ?? '';
@@ -433,6 +434,7 @@ function renderQuote(quote) {
     element('p', `${money(quote.total_ex_vat, quote.currency)} ex VAT · ${money(quote.total_inc_vat, quote.currency)} inc VAT`, 'total'),
     outcomeLine(preview.outcome, tierLabels[preview.outcome], tiers[preview.outcome]),
   );
+  if (quote.buyer_request) content.append(element('p', `Buyer request: ${quote.buyer_request}`, 'muted'));
   const carbon = quote.co2_summary;
   if (carbon?.lines_with_data > 0) {
     content.append(element('p',
@@ -490,6 +492,7 @@ async function renderOrder(current, order) {
   try {
     const signed = await gateway.receipt(order, quote);
     verifiedStatus = signed.status;
+    if (signed.buyer_request) content.append(element('p', `Buyer request: ${signed.buyer_request}`, 'muted'));
     pendingAmendment = Boolean(signed.amendments?.some(amendment => amendment.status === 'pending_buyer'));
     const status = statuses[signed.status] || signed.status;
     const approvedOrder = signed.status === 'ordered' && signed.approval?.approved;
