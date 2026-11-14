@@ -508,9 +508,13 @@ jobs:
     # API, checks every outbound connection against the `network:` that job declares above, diffs CRACI's SBOMs
     # with syft's and uv.lock, asks CRACI who created the image and the caches, and signs the result
     # (scripts/craci_evidence.py, docs/CRACI.md). Fails only if a deny-mode job reached an undeclared host.
+    #
+    # Runs on a GitHub-hosted runner, outside the platform it audits: from inside a CRACI VM, api.craci.com answers
+    # "403 Access denied" even with `default: allow` (runs 43579559941, 43579657052; example.com was reachable).
+    # Set the repo variable CRACI_EVIDENCE_RUNNER=craci once CRACI lets jobs reach its API; the policy below applies.
     if: ${{ always() }}
     needs: [test, docker, smoke, eval, llm-eval, draft-eval]
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    runs-on: ${{ vars.CRACI_EVIDENCE_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 10
     permissions:
       contents: read
@@ -522,10 +526,10 @@ jobs:
     steps:
       # Egress: PyPI (uv + the locked dependencies), the CRACI API and the GitHub REST API. Nothing else.
       - uses: cracicorp/setup@5cbae507e2547dca6c402e413c645767fbae3534 # v1
-        if: ${{ vars.CI_RUNNER == 'craci' }}
+        if: ${{ vars.CRACI_EVIDENCE_RUNNER == 'craci' }}
         with:
           network: |
-            default: allow
+            default: deny
             presets: [pypi]
             connections:
               - tls:
@@ -544,13 +548,6 @@ jobs:
         run: |
           PIPX_HOME="$HOME/.pipx" PIPX_BIN_DIR="$HOME/.local/bin" pipx install uv==0.13.6
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: debug egress (temporary)
-        continue-on-error: true
-        run: |
-          env | grep -i -E '^(https?|no|all)_proxy=' | sed 's/=.*@/=***@/' || true
-          curl -s -o /dev/null -w 'craci noauth %{http_code}\n' https://api.craci.com/v1preview1/jobs?status=active || true
-          curl -s -w '\ncraci auth %{http_code}\n' -H "Authorization: Bearer $CRACI_API_TOKEN" "https://api.craci.com/v1preview1/jobs?status=active" | tail -c 300 || true
-          getent hosts api.craci.com; curl -s -o /dev/null -w "example %{http_code}\n" https://example.com/ || true
       - name: Build, check and sign the evidence bundle
         run: |
           uv sync --frozen --no-dev
