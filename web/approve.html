@@ -324,7 +324,7 @@ async function decide(action, btn) {
   const remember = action === "approve" ? picks() : [];
   document.querySelectorAll(".actionbar button").forEach((b) => (b.disabled = true));
   try {
-    const opts = await api(`/orders/${encodeURIComponent(ORDER)}/approve/options`, { method: "POST", body: JSON.stringify({ action }) });
+    const opts = await api(`/orders/${encodeURIComponent(ORDER)}/approve/options`, { method: "POST", body: JSON.stringify({ action, ...(remember.length ? { remember } : {}) }) });  // signed with the order
     binding = JSON.stringify(opts.binding, null, 2);
     if ($("#binding")) $("#binding").textContent = binding;
     const pk = opts.publicKey;

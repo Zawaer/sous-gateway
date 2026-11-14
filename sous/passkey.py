@@ -230,12 +230,21 @@ def binding_fields(order: dict) -> dict:
             "currency": "EUR", "lines_sha256": lines_hash(order.get("lines")), "approve_by": order.get("approve_by")}
 
 
-def approve_options(order: dict, action: str, rp_id: str) -> dict:
+def remember_terms(picks: list | None) -> list[dict]:
+    """The "approve and remember" picks as the passkey signs them (binding.remember): every field of each
+    RememberIn (defaults filled in), sorted, so the same choice always hashes the same."""
+    terms = [p.model_dump() if hasattr(p, "model_dump") else dict(p) for p in picks or []]
+    return sorted(terms, key=lambda t: json.dumps(t, sort_keys=True))
+
+
+def approve_options(order: dict, action: str, rp_id: str, remember: list | None = None) -> dict:
     creds = credentials_for(order)
     if not creds:
         raise _err("passkey_not_registered", f"No passkey is registered for {order['mandate_id']} or buyer "
                    f"{order.get('buyer')}. Register one first (POST /approvers/register/options).", 409)
-    binding = {**binding_fields(order), "action": action, "rp_id": rp_id, "nonce": b64u(secrets.token_bytes(16)),
+    # the remembered findings are signed too: a remember list added or changed after the challenge fails to verify
+    binding = {**binding_fields(order), "action": action, "remember": remember_terms(remember),
+               "rp_id": rp_id, "nonce": b64u(secrets.token_bytes(16)),
                "issued_at": datetime.now(config.TZ).isoformat(timespec="seconds")}
     challenge = challenge_for(binding)
     opts = generate_authentication_options(
@@ -248,14 +257,19 @@ def approve_options(order: dict, action: str, rp_id: str) -> dict:
             "approvers": [{"approver": c["approver"], "last8": c["credential_id"][-8:]} for c in creds]}
 
 
-def verify_approval(order: dict, action: str, credential: dict, origins: list[str]) -> dict:
+def verify_approval(order: dict, action: str, credential: dict, origins: list[str],
+                    remember: list | None = None) -> dict:
     """Verify a passkey assertion for deciding `order`; consumes the challenge and advances the sign count.
+    `remember`: the picks sent with the assertion, which must be exactly binding.remember (what the passkey signed).
     Returns the evidence for the audit event (also re-verifiable offline)."""
     challenge = _client_challenge(credential)
     binding = _take_challenge(challenge, "approve", order["id"])
     if binding.get("action") != action:
         raise _err("passkey_invalid", f"This passkey response was made to {binding.get('action')} the order, "
                    f"not to {action} it.", 400)
+    if binding.get("remember", []) != remember_terms(remember):
+        raise _err("passkey_invalid", "The findings to remember differ from what the passkey signed. Start the "
+                   "approval again with the same choices.", 409)
     now_fields = binding_fields(order)
     changed = [k for k, v in now_fields.items() if binding.get(k) != v]
     if changed:

@@ -192,6 +192,44 @@ def test_assertion_for_another_orders_challenge_fails(client):
     assert client.post(f"/orders/{b['id']}/reject/passkey", json={"credential": cred}).json()["status"] == "rejected"
 
 
+def test_remember_picks_are_signed_by_the_passkey(client):
+    """Approve and remember with a passkey: the picks are part of the binding the passkey signs, so a remember
+    list added, removed or changed after the challenge fails (409 passkey_invalid) and nothing is decided."""
+    auth = Authenticator()
+    enrol(client, auth)
+    q = S.request_quote(S.QuoteRequest(agent_id="a", mandate_id="M", delivery_date=MON, items=[
+        S.QuoteItem(product_ids=["MILK"], amount=100, unit="L", substitute_for="ORIG")]))["quote"]
+    o = S.place_order("a", "M", q["id"])
+    assert o["status"] == "pending_approval"
+    assert any(f["rule"] == "substitution" and f["outcome"] == "ask" for f in o["decision"]["findings"])
+    pick = {"rule": "substitution", "product_id": "MILK"}
+
+    def attempt(signed, sent):
+        r = client.post(f"/orders/{o['id']}/approve/options", json={"action": "approve", "remember": signed})
+        assert r.status_code == 200, r.text
+        opts = r.json()
+        assert opts["binding"]["remember"] == passkey.remember_terms([S.remembered.RememberIn(**p) for p in signed])
+        return client.post(f"/orders/{o['id']}/approve/passkey", json={"credential": auth.get(opts), "remember": sent})
+
+    for signed, sent in (([], [pick]),                       # added after the challenge
+                         ([pick], []),                       # dropped
+                         ([pick], [{**pick, "days": 90}]),   # changed
+                         ([{**pick, "max_quantity": 5}], [pick])):  # cap removed
+        r = attempt(signed, sent)
+        assert r.status_code == 409 and r.json()["error"] == "passkey_invalid", r.text
+        assert S.get_order(o["id"])["status"] == "pending_approval"
+        assert S.remembered.list_for("M") == []
+    # reject can't carry remember picks
+    r = client.post(f"/orders/{o['id']}/approve/options", json={"action": "reject", "remember": [pick]})
+    assert r.status_code == 422
+    # the same list with its defaults spelled out is what was signed: approved and remembered
+    r = attempt([pick], [{**pick, "days": 30}])
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ordered" and r.json()["remembered"][0]["rule"] == "substitution"
+    ev = [e for e in store.audit_events(o["id"]) if e["event"] == "order.approved"][0]["data"]["passkey"]
+    assert ev["binding"]["remember"][0]["product_id"] == "MILK" and verify_evidence(ev)["ok"]
+
+
 def test_replay_fails_by_one_time_challenge_and_sign_count(client):
     auth = Authenticator()
     enrol(client, auth)

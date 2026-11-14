@@ -110,6 +110,9 @@ def order_passkeys(order_id: str):
 
 class OptionsIn(BaseModel):
     action: Literal["approve", "reject"] = "approve"
+    remember: list[RememberIn] = Field(default_factory=list, max_length=20, description=(
+        "Approve only: the findings this approval will remember (sous/remembered.py). They are part of the signed "
+        "binding (binding.remember), so /approve/passkey must send exactly the same list."))
 
 
 def _pending(order_id: str) -> dict:
@@ -125,16 +128,22 @@ def _pending(order_id: str) -> dict:
 @router.post("/orders/{order_id}/approve/options", dependencies=[Depends(_read_order)])
 def approve_options(order_id: str, request: Request, body: OptionsIn | None = None):
     """A WebAuthn challenge bound to this exact order: SHA-256 of the canonical JSON `binding` (order id, quote id,
-    SHA-256 of the signed quote JWS, total, SHA-256 of the lines, approve_by, action, RP ID, one-time nonce).
+    SHA-256 of the signed quote JWS, total, SHA-256 of the lines, approve_by, action, the `remember` picks, RP ID,
+    one-time nonce).
     Returns `publicKey` for navigator.credentials.get(), the `binding` and the approvers who may answer it."""
     o = _pending(order_id)
-    return passkey.approve_options(o, (body or OptionsIn()).action, passkey.rp(_base(request))[0])
+    body = body or OptionsIn()
+    if body.action != "approve" and body.remember:
+        raise S.GatewayError("invalid_request", "remember is for approving only.", 422)
+    return passkey.approve_options(o, body.action, passkey.rp(_base(request))[0], body.remember)
 
 
 def _decide_passkey(order_id: str, approve: bool, body: CredentialIn, request: Request) -> dict:
     o = _pending(order_id)
+    if not approve and body.remember:
+        raise S.GatewayError("invalid_request", "remember is for approving only.", 422)
     ev = passkey.verify_approval(o, "approve" if approve else "reject", body.credential,
-                                 passkey.rp(_base(request))[1])
+                                 passkey.rp(_base(request))[1], body.remember)
     return S.decide(order_id, ev["approver"], approve, body.note, authority=passkey.authority(ev), evidence=ev,
                     remember=(body.remember or None) if approve else None)
 

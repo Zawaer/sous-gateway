@@ -4,7 +4,8 @@ A passkey approval's audit event (`order.approved` / `order.rejected_by_human`, 
 everything needed:
 
   binding          what the approver's device signed for: order id, quote id, SHA-256 of the quote JWS, total,
-                   SHA-256 of the order lines, approve_by, action, RP ID, a one-time nonce
+                   SHA-256 of the order lines, approve_by, action, the findings to remember
+                   (approve and remember), RP ID, a one-time nonce
   challenge        base64url(SHA-256(canonical JSON of binding)): the WebAuthn challenge
   public_key_spki  the approver's passkey public key (DER SubjectPublicKeyInfo, base64url), as registered
   assertion        authenticatorData, clientDataJSON and signature exactly as the browser returned them
