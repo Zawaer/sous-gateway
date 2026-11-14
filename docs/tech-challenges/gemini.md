@@ -9,13 +9,13 @@
 Gemini never picks the product a line is bought from or the tier; the runtime binds agent, mandate and idempotency key. A misread costs a wrong quantity on a quote a human can read, never an order the mandate forbids.
 
 **Results** (our own cases, live Valio prices, CI on CRACI)
-- Recipe eval, 7 menus (fi/en, 4 mandates), run 43524836008: **7/7 schema-valid first answers**, 8/8 dishes, 22/23 main ingredients, 0 allergen-rule violations on quoted lines, tier 7/7; only 4/7 pass the 35 % quantity bar against our reference recipes. ~2,000 tokens, ~$0.006, 10.1 s per menu.
+- Recipe eval, 7 menus (fi/en, 4 mandates), run 43595658113: **5/7 pass, 7/7 schema-valid first answers**, 8/8 dishes, 22/23 main ingredients, 0 allergen-rule violations on quoted lines, tier 7/7; both misses are quantities past our 35 % bar (Kimi 5/7, recipe table 7/7). ~2,000 tokens, ~$0.007 per menu.
 - Buyer eval, 48 sentences, run 43587725624 (11d8448): **46/48 matched without correction, 34/34 unsafe held or refused, 0 mandate violations auto-ordered**, $0.046/request; Kimi K3.1 Pro 47/48, Nemotron 30/48 in the same run. Misses: a milk drink picked for milk (H02) and S04, a scripted-only premise (the coconut cream found live has allergen data).
 
 **What's new here.** The LLM reads; code decides. Each menu becomes one auditable quote with every number after the reading made by code, and the eval measures both reading and safety.
 
-**Why Gemini.** Structured output honoured on every eval call (7/7 menus) in Finnish and English, and 46/48 buyer sentences at $0.046 per request.
+**Why Gemini.** Structured output honoured on every eval call (7/7 menus) in Finnish and English; 46/48 buyer sentences at $0.046 per request.
 
-Not done: on the servers it is CLI and CI only. The web page `/agent/` (08371ec) exists but is off until the servers get a model key.
+Not done: `/agent/` (menu planning in the browser) runs on staging only; prod has no model key.
 
 Code: https://github.com/Zawaer/sous · [docs/GEMINI.md](../GEMINI.md) · [evals/recipe_results.md](../../evals/recipe_results.md)

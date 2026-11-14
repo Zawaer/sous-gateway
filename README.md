@@ -6,7 +6,9 @@ Built at Junction 2026 for Valio Aimo's challenge "Trusted Trade Agents".
 
 ## Judge path in 5 minutes
 
-The demo server is production, `https://135-181-8-209.sslip.io`, set as `SOUS` below. It is redeployed from `main` until the Sun 15.11 08:00 Helsinki freeze. Staging, `https://staging.135-181-63-134.sslip.io`, is the fallback if production is ever down and usually runs newer code (on Sat 14.11 11:50Z prod was at a880f90, staging at 8624b18); [docs/STATUS.md](docs/STATUS.md#deployed-now) says what runs where. Needs `curl` and `jq`.
+The demo server is production, `https://135-181-8-209.sslip.io`, set as `SOUS` below. It is redeployed from `main` until the Sun 15.11 08:00 Helsinki freeze. Staging, `https://staging.135-181-63-134.sslip.io`, is the fallback if production is ever down and usually runs newer code (on Sat 14.11 14:11Z `/health` showed prod at a431ff6, staging at ea4cd19); [docs/STATUS.md](docs/STATUS.md#deployed-now) says what runs where. Needs `curl` and `jq`.
+
+**Dates:** Valio's mock gives Stock products a cut-off of Sun 15.11 17:00 for Monday delivery. After that the quickstart's Monday date is refused (`availability.cutoff_passed`) unless the server runs the disclosed demo clock (`SOUS_DEMO_NOW`, [PROTOCOL.md section 21](docs/PROTOCOL.md); shown in `/health` as `clock.mode`) or you ask for a later date.
 
 1. **Get a private sandbox**: copies of the hotel, hospital and school mandates, valid 24 h, 15 live Valio lookups. The two tokens in the response are shown once.
    ```bash
@@ -31,14 +33,14 @@ The demo server is production, `https://135-181-8-209.sslip.io`, set as `SOUS` b
    curl -s "$SOUS/audit?sandbox=$(jq -r .sandbox.id sandbox.json)&limit=5" \
      -H "Authorization: Bearer $(jq -r .agent_token sandbox.json)" | jq '.events[] | {seq, event, hash, prev_hash}'
    ```
-5. **Connect an MCP client** to `$SOUS/mcp/` with the agent token, then paste one of the four `prompts`. Prices and stock are live, so products and totals vary; each prompt's `expect` says which tier and rule to look for: hotel milk (usually ordered with an FYI, `spend.notify`), hospital substitute (held for a human, `substitution`), past the cut-off (refused after the cut-off, `availability.cutoff_passed`), school over budget (refused above €1,500, `spend.hard_limit`).
+5. **Connect an MCP client** to `$SOUS/mcp` (the URL in the MCP server card; the quickstart prints `/mcp/`, which the server treats the same) with the agent token, then paste one of the four `prompts`. Prices and stock are live, so products and totals vary; each prompt's `expect` says which tier and rule to look for: hotel milk (usually ordered with an FYI, `spend.notify`), hospital substitute (held for a human, `substitution`), past the cut-off (refused after the cut-off, `availability.cutoff_passed`), school over budget (refused above €1,500, `spend.hard_limit`).
    ```bash
    jq -r .quickstart.claude_code sandbox.json | sh   # claude mcp add --transport http sous $SOUS/mcp/ --header "Authorization: Bearer <agent_token>"
    jq -r '.prompts[] | .title, .prompt, ""' sandbox.json
    ```
    **From claude.ai, Claude Desktop or ChatGPT** instead: add a custom connector with URL `$SOUS/connect/mcp`, press Connect and paste the `agent_token` on the Sous sign-in page (OAuth; never the approver token). Cursor, VS Code and the details: [docs/CONNECT.md](docs/CONNECT.md).
 
-Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it (our own cases, not held out). From one full CI run on CRACI, [43587725624](https://github.com/Zawaer/sous/actions/runs/43587725624) on 11d8448: scripted cases (no LLM, live Valio prices) **60/60**, 43/43 unsafe actions blocked or escalated; LLM buyer agent on 48 one-sentence cases: Kimi K3.1 Pro (Verda Inference) 47/48, Gemini 4 Hydrogen 46/48, Nemotron 3.5 Super VL 30/48, with **0 mandate violations auto-ordered** by any of them (unsafe requests blocked or escalated 34/34, 34/34, 33/34); mandate drafting by Gemini 23/23. Conformance kit 17/17 on staging ([CONFORMANCE.md](docs/CONFORMANCE.md)); check-the-checker catches 47/47 planted violations ([EVAL_INTEGRITY.md](docs/EVAL_INTEGRITY.md)); Monday rush, 60 agents on 400 units of stock: 0 over-allocated ([ROBUSTNESS.md](docs/ROBUSTNESS.md)). Spend so far: $29.77 known ([COSTS.md](docs/COSTS.md)).
+Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it (our own cases, not held out). From one full CI run on CRACI, [43587725624](https://github.com/Zawaer/sous/actions/runs/43587725624) on 11d8448: scripted cases (no LLM, live Valio prices) **60/60**, 43/43 unsafe actions blocked or escalated; LLM buyer agent on 48 one-sentence cases: Kimi K3.1 Pro (Verda Inference) 47/48, Gemini 4 Hydrogen 46/48, Nemotron 3.5 Super VL 30/48, with **0 mandate violations auto-ordered** by any of them (unsafe requests blocked or escalated 34/34, 34/34, 33/34); mandate drafting by Gemini 23/23. Conformance kit 17/17 on staging ([CONFORMANCE.md](docs/CONFORMANCE.md)); check-the-checker catches 47/47 planted violations ([EVAL_INTEGRITY.md](docs/EVAL_INTEGRITY.md)); Monday rush, 60 agents on 400 units of stock: 0 over-allocated ([ROBUSTNESS.md](docs/ROBUSTNESS.md)). Recipe planner, 7 menus (CI [43595658113](https://github.com/Zawaer/sous/actions/runs/43595658113), after the R05 crash fix): recipe table 7/7, Gemini 5/7, Kimi 5/7, every miss a quantity outside our 35 % bar. Red team on a Verda GPU ([REDTEAM.md](docs/REDTEAM.md), 51b139d): 2,000 generated requests through a self-hosted Qwen3-30B-A3B (vLLM), 976/997 unsafe held or refused; it found 3 order-slicing misses in the gateway (demo mandates had the split window off), fix in progress. Spend so far: $38.26 known ([COSTS.md](docs/COSTS.md)).
 
 ## Where to read more
 
@@ -58,15 +60,15 @@ Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it (our own ca
 
 ## What it does
 
-- **Search** 17,546 products in Finnish, Swedish and English, with filters for claims, allergens, labels, temperature and country of origin. Search uses a local index and costs no Valio API calls.
+- **Search** 17,546 products in Finnish, Swedish and English, with filters for claims, allergens, labels, temperature and country of origin. Search uses a local index and costs no Valio API calls. Type-aware ranking (6e547ce): 'laktoositon maito' ranks plain lactose-free milk above coffee milk; precision@3 90.5 % → 99.3 % on our own 49 tuning queries.
 - **Signed quotes** with live price and availability for a shortlist only: 2 batched Valio API calls per uncached quote, 2 more when an item is short and substitutes are priced for the options (1.0 on average with the cache in `evals/results.json`). Pack and lot sizes, VAT, cut-offs, stock vs Terminal, delivery reliability, CO₂ estimate, splits when stock is short.
 - **Mandate engine** in plain code. Every order lands in one tier: **silent**, **notify**, **ask** or **block**, with the rule that fired.
 - **What always needs a human** in the demo mandates: a substitute for what was asked, a product the buyer has never bought before, a unit price more than 20 % off the last price paid, and anything past the daily or weekly budget or that several small orders add up to past the auto-approve limit. **Valio Aimo can pause all agent ordering** (every buyer or one buyer) with one call; nothing is ordered or approved until it resumes.
 - **Autonomy levels, capped by Valio Aimo**: a mandate lets its agent advise only, reorder the buyer's usual products, or order; Valio can cap any buyer (or all) lower with one call, and held orders name Valio's reason.
 - **Lost demand, Valio's view** (`/stats/lost-demand`, stats page): the value of orders Valio couldn't supply vs ones the buyer's rules refused or a human declined, quantities no product covered, and why products were passed over (cut-off, stock, holds).
-- **Peppol BIS Ordering 3.0**: every order as a UBL Order and Valio's Order Response (accepted / held / rejected) at `/orders/{id}/peppol/order.xml` and `/order-response.xml`, for buyers' ERP and e-procurement systems.
+- **Peppol BIS Ordering 3.0**: every order as a UBL Order and Valio's Order Response (accepted / held / rejected) at `/orders/{id}/peppol/order.xml` and `/order-response.xml`, for buyers' ERP and e-procurement systems. Validated against the official UBL 2.1 XSD and OpenPeppol BIS schematron in CI (2d2d6a5).
 - **Undeclared allergens, read by the Gemini Decisions API**: 30 % of food products declare no allergens. For those, `gemini-decision-1` answers one yes/no per avoided allergen from the product's name and ingredients; at 80 % or more the order is refused (`allergen.likely`). Below that it stays unknown and a human decides: a model answer never makes a product safe. Accuracy on products whose allergens are known is on `/proof`.
-- **Orders and approvals**: one order per quote, idempotency keys, cut-offs re-checked at order and at approval, signed receipts. A human approves or rejects from a phone link.
+- **Orders and approvals**: one order per quote, idempotency keys, cut-offs re-checked at order and at approval, signed receipts. A human approves or rejects from a phone link before an approve-by time: the earliest cut-off minus 15 minutes, capped by the mandate's and sandbox's expiry (e24b0cd). Explanations and rule texts also in Finnish (`/rules?lang=fi`, 31d0d32). With no real order API, the ERP hand-off is a stub and labelled `simulated` (611ab8b).
 - **Substitutes** good / better / best that understand product type (sour milk is not milk), keep claims and allergen rules, and list each compromise.
 - **Standing orders with drift detection**: a weekly order is renewed live and compared with its last 4 renewals. Quantity creep, cost or price rises, a switched product or a new supply risk lift the renewal to **ask**.
 - **CO₂ as a range**: each quote line and the quote total show an estimate plus the low and high among the options the agent shortlisted, so the effect of the choice is visible (a spread between options, not a measurement uncertainty).
@@ -75,13 +77,13 @@ Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it (our own ca
 - **Notifications** for notify and ask orders and human decisions: in-app feed, ntfy push to a phone, signed webhook.
 - **Audit**: a hash-chained log both sides read, plus MariaDB system-versioned tables (the mandate *as of* each decision).
 - **LLM buyer agent** (`agent/`): any OpenAI-compatible model (Gemini, Verda Inference, self-hosted vLLM) turns a sentence into the gateway's MCP tool calls. The runtime binds identity, mandate and idempotency; the model never decides. Scored per model by `scripts/llm_eval.py`.
-- **Snap a photo of the order** (CLI; the web upload in `/agent/` is off on the servers): NVIDIA Nemotron 3.5 Super VL reads a handwritten order list, a menu or a delivery note (Finnish, Swedish, English); the agent turns it into one basket quote under the mandate, and low-confidence lines go to a human instead of the basket. See [docs/NEMOTRON.md](docs/NEMOTRON.md).
+- **Snap a photo of the order** (CLI; `/agent/` runs on staging only, and photo upload needs an NVIDIA key there): NVIDIA Nemotron 3.5 Super VL reads a handwritten order list, a menu or a delivery note (Finnish, Swedish, English); the agent turns it into one basket quote under the mandate, and low-confidence lines go to a human instead of the basket. See [docs/NEMOTRON.md](docs/NEMOTRON.md).
 - **Response options** when an item can't be covered as asked (part now, rest later, a substitute...), each with a mandate preview. **Rule register** at `GET /rules`.
 - **Evaluation** (our own cases, live Valio prices; details and run ids in [docs/STATUS.md](docs/STATUS.md#evaluation)), all from CI run 43587725624 (11d8448) on CRACI: scripted, no LLM: 60/60 cases, 43/43 unsafe actions blocked or escalated (incl. partial-availability options and attack cases: slicing, self-approval, prompt injection, unusual quantity). LLM agent, 48 one-sentence cases, all three models in the same run: Kimi K3.1 Pro 47/48, Gemini 4 Hydrogen 46/48, Nemotron 3.5 Super VL 30/48; 0 mandate violations auto-ordered with any of them. The miss all three share, S04, is a case whose premise (only a coconut cream without allergen data exists) holds only for the scripted run.
 
 ## Try it yourself
 
-The demo server (`$SOUS`, see [Judge path](#judge-path-in-5-minutes); production is a Verda CPU instance in Finland) and staging both serve `/docs`, `/mcp/`, `/ui/` and `/buyer/`; human actions need the approver code. Get a private sandbox there (copies of the hotel, hospital and school mandates, valid 24 h, kept out of the curated demo data):
+The demo server (`$SOUS`, see [Judge path](#judge-path-in-5-minutes); production is a Verda CPU instance in Finland) and staging both serve `/docs`, `/mcp` (also `/mcp/`), `/ui/` and `/buyer/`; human actions need the approver code. Get a private sandbox there (copies of the hotel, hospital and school mandates, valid 24 h, kept out of the curated demo data):
 
 ```bash
 curl -s -X POST $SOUS/sandbox | jq
@@ -136,15 +138,15 @@ Then open:
 Connect Claude Code as the buyer agent over MCP:
 
 ```sh
-claude mcp add --transport http sous http://localhost:8000/mcp/
+claude mcp add --transport http sous http://localhost:8000/mcp
 ```
 
-Then ask it, for example: *"You are aurora-purchasing-agent with mandate M-HOTEL-AURORA. Buy 1,000 litres of lactose-free milk for delivery on Monday."* Against the demo server, use `$SOUS/mcp/` instead.
+Then ask it, for example: *"You are aurora-purchasing-agent with mandate M-HOTEL-AURORA. Buy 1,000 litres of lactose-free milk for delivery on Monday."* Against the demo server, use `$SOUS/mcp` instead.
 
 Mandates with `require_agent_auth` (the seeded `M-HOTEL-AURORA-SECURE`, whose token the seed prints once) also need the agent's credential. Pass it as a header:
 
 ```sh
-claude mcp add --transport http sous http://localhost:8000/mcp/ --header "Authorization: Bearer <token>"
+claude mcp add --transport http sous http://localhost:8000/mcp --header "Authorization: Bearer <token>"
 ```
 
 Without it, quotes and orders on that mandate get `agent_auth_required`. See [PROTOCOL.md, section 16](docs/PROTOCOL.md#16-agent-authentication).
