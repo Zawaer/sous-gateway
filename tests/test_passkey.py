@@ -173,7 +173,7 @@ def test_register_then_approve_records_passkey_authority_and_verifiable_evidence
     bad["binding"]["total_ex_vat"] = 1.0
     assert not verify_evidence(bad)["ok"]
     bad = json.loads(json.dumps(ev))
-    bad["assertion"]["signature"] = b64u(unb64u(bad["assertion"]["signature"])[:-1] + b"\x00")
+    sig = unb64u(bad["assertion"]["signature"]); bad["assertion"]["signature"] = b64u(sig[:-1] + bytes([sig[-1] ^ 0x01]))  # always a different byte
     assert not verify_evidence(bad)["ok"]
 
 
