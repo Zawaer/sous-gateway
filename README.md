@@ -45,6 +45,7 @@ Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it: scripted c
 - [docs/STATUS.md](docs/STATUS.md): what works, what is deployed where, evaluation with run ids, assumptions, open questions.
 - [docs/PROTOCOL.md](docs/PROTOCOL.md): the full protocol. Start with [6. Tiers and rules](docs/PROTOCOL.md#6-tiers-and-rules), [12. Audit log](docs/PROTOCOL.md#12-audit-log) and [18. Judge sandbox](docs/PROTOCOL.md#18-judge-sandbox).
 - [docs/DECISIONS.md](docs/DECISIONS.md): technical choices and the path to production.
+- [docs/CONFORMANCE.md](docs/CONFORMANCE.md): one command (`scripts/conformance.py --base <url>`) runs 15 black-box checks (signatures, tampering, idempotency, self-approval, private reads, hard limit, prompt injection, audit, stock exposure) against any Sous gateway; latest staging run included.
 - [docs/STANDARDS.md](docs/STANDARDS.md): mapping to AP2, ACP, A2A, MCP server cards, schema.org, W3C VC 2.0, JOSE.
 - [docs/LLM_EVAL.md](docs/LLM_EVAL.md), [docs/CI.md](docs/CI.md), [docs/VERDA.md](docs/VERDA.md), [docs/GEMINI.md](docs/GEMINI.md), [docs/NEMOTRON.md](docs/NEMOTRON.md), [docs/AIVEN.md](docs/AIVEN.md), [docs/demo-runbook.md](docs/demo-runbook.md).
 - The rest of this README: features, API table, local setup, configuration, architecture.
