@@ -174,6 +174,11 @@ def build(
     per_pack = _content_of(original_id, offers) if unit is None and subs else None
     if per_pack:
         subs = [s for s in subs if (s["offer"].get("content_per_sales_unit") or {}).get("unit") == per_pack[1]]
+    elif unit is None:
+        # What one original pack holds is unknown, so no substitute amount can be shown to be equivalent:
+        # N of the substitute's own packs could be far more or less. No substitute options rather than a
+        # quantity a mandate could auto-approve (substitutions=notify) on an unverified claim.
+        subs = []
     s_unit = per_pack[1] if per_pack else unit
 
     def s_fill(need: float, pool: list[dict]) -> tuple[list[dict], float, float]:

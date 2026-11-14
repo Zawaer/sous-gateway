@@ -315,6 +315,27 @@ def test_substitute_in_another_measure_is_not_offered_for_packs():
     assert OPT.build(0, 40, None, offers, [offers[0]], MON, [milk], "T") == []
 
 
+def test_no_substitute_options_for_packs_when_the_original_content_is_unknown(monkeypatch):
+    """No size in the name and no comparison price: 2 packs of the original can't be shown equal to anything,
+    so no option claims '2 units ... no compromises' as 2 x 10 kg (QA, board 03:40Z)."""
+    PRODUCTS["X"] = product("X", "Chopped tomatoes", size_from_name=None, temperature="ambient")
+    monkeypatch.setitem(RAW_PRICE, "X", {**price_kg(0.8, 2.0), "comparisonPrice": None, "comparisonUnit": None})
+    try:
+        AVAIL.update({"X": None, "T10": ("2026-11-16", None, None)})
+        offers = [pack_offer("X", 2)]
+        assert offers[0]["content_per_sales_unit"] is None
+        sub = {**tomato_sub(), "tier": "best", "compromises": [], "offer": pack_offer("T10", 2)}  # 2 own packs
+        assert OPT.build(0, 2, None, offers, [offers[0]], MON, [sub], "X") == []
+        # through the gateway: the quote has no substitute option an agent could order under notify
+        monkeypatch.setattr(substitutes, "suggest", lambda *a, **k: {"options": [sub]})
+        q = S.request_quote(S.QuoteRequest(agent_id="agent", mandate_id="M-T", delivery_date=MON,
+                                           items=[S.QuoteItem(product_ids=["X"], amount=2)]))["quote"]
+        assert not [o for o in q.get("options") or [] if o["substitute"]]
+        assert q["mandate_preview"]["outcome"] == "block"
+    finally:
+        del PRODUCTS["X"]
+
+
 def test_choosing_a_content_sized_substitute_requotes_its_own_packs(monkeypatch):
     """The option's lines are in the substitute's own packs; option_id re-quotes exactly those (2 x 10 kg)."""
     AVAIL.update({"T": None, "T10": ("2026-11-16", None, None)})
