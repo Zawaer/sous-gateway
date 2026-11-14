@@ -48,7 +48,7 @@ on:
         type: boolean
         default: false
       llm_models:
-        description: "LLM eval models for this run, e.g. 'nvidia:nvidia/nemotron-3-super-120b-a12b' (empty: LLM_EVAL_MODELS)"
+        description: "LLM eval models for this run, e.g. 'nvidia:nvidia/nemotron-3.5-super-vl-120b-a12b' (empty: LLM_EVAL_MODELS)"
         type: string
         default: ""
 
