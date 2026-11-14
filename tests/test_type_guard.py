@@ -272,9 +272,54 @@ def test_unit_code_the_product_defines_is_counted_literally(monkeypatch):
 def test_unit_code_the_product_lacks_means_its_sales_units(monkeypatch):
     monkeypatch.setattr(catalog, "get", lambda pid: PESTOS.get(pid))
     o = Q.build_offer(NO_ST, pprice("41"), avail(), DAY, 20, "ST", NOW)
-    assert o["quantity"] == 20 and "unit_note" not in o
+    # the fallback is never silent, and covers names the real unit, not a false '20 ST'
+    assert o["quantity"] == 20 and o["unit_note"] == "ST is not a unit of this product; read as 20 KI"
+    assert o["covers"] == {"amount": 20.0, "unit": "KI"}
     [line], left = Q.plan(20, "ST", [o])
     assert line["quantity"] == 20 and left == 0
+    assert line["covers"]["unit"] == "KI" and line["unit_note"].startswith("ST is not a unit of this product")
+
+
+# Filos artichokes (465976): sold per KI of 6 jars, coded PRK (purkki); no ST unit at all. Judge audit: '20 ST'
+# came back as 20 KI (120 jars, EUR 306.80) with covers '20 ST' and no unit_note.
+ARTI = product("42", "Filos artisokansydämet 6x", "Filos artichoke hearts", size=(0.28, "KG"), category="P",
+               temperature="ambient", claims=[], sales_unit="KI", base_unit="PRK", units={"PRK": 1.0, "KI": 6.0})
+# two piece-type codes at ratio 1: no single piece unit, so ST falls back to cartons (and says so)
+ARTI2 = product("43", "Filos artisokansydämet 6x", "Filos artichoke hearts", size=(0.28, "KG"), category="P",
+                temperature="ambient", claims=[], sales_unit="KI", base_unit="PRK",
+                units={"PRK": 1.0, "BOT": 1.0, "KI": 6.0})
+
+
+def test_pieces_of_a_product_coded_in_jars_are_jars(monkeypatch):
+    monkeypatch.setattr(catalog, "get", lambda pid: {"42": ARTI, "43": ARTI2}.get(pid))
+    assert Q.piece_unit(ARTI) == "PRK" and Q.packs_per_sales_unit(ARTI, "ST") == 6
+    for unit in ("ST", "PCS", "kpl"):
+        o = Q.build_offer(ARTI, pprice("41"), avail(), DAY, 20, Q.normalize_unit(unit), NOW)
+        assert o["quantity"] == 4 and o["covers"] == {"amount": 24.0, "unit": "PRK"}
+        assert o["unit_note"] == ("ST read as PRK (this product's piece unit): 20 PRK asked -> 4 KI (24 PRK) "
+                                  "ordered, rounded up to whole KI")
+    [line], left = Q.plan(20, "ST", [o])
+    assert line["quantity"] == 4 and line["covers"] == {"amount": 24.0, "unit": "PRK"} and left == 0
+    assert "PRK" in line["unit_note"]
+    # PRK asked directly is exact
+    assert Q.build_offer(ARTI, pprice("41"), avail(), DAY, 12, "PRK", NOW)["quantity"] == 2
+    # ambiguous pieces: sales units, said out loud, covers in KI
+    assert Q.piece_unit(ARTI2) is None
+    o = Q.build_offer(ARTI2, pprice("41"), avail(), DAY, 20, "ST", NOW)
+    assert o["quantity"] == 20 and o["covers"] == {"amount": 20.0, "unit": "KI"}
+    assert o["unit_note"] == "ST is not a unit of this product; read as 20 KI = 120 PRK"
+    [line], _ = Q.plan(20, "ST", [o])
+    assert line["covers"]["unit"] == "KI" and line["unit_note"] == o["unit_note"]
+
+
+def test_substitutes_for_jar_pieces_size_by_the_jars(monkeypatch):
+    cat = {"42": ARTI, "41": NO_ST}
+    monkeypatch.setattr(catalog, "get", lambda pid: cat.get(pid))
+    monkeypatch.setattr(Sub, "_same_category", lambda c: list(cat.values()))
+    monkeypatch.setattr(Q, "offers", lambda ids, d, n=None, u=None, **k: (
+        [Q.build_offer(cat[i], pprice("41"), avail(i != "42"), d, n, u, NOW) for i in ids], NOW))
+    r = Sub.suggest("42", DAY, 20, "ST")
+    assert r["need"]["amount"] == 5.6 and r["need"]["unit"] == "KG"  # 20 jars x 280 g, not 20 cartons
 
 
 def test_quote_in_pieces_orders_whole_cartons(gw):

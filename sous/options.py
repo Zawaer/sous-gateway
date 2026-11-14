@@ -103,6 +103,15 @@ def _covered(lines: list[dict], unit: str | None) -> float:
     return round(sum((l.get("covers") or {}).get("amount") or 0 for l in lines), 3)
 
 
+def _covers_unit(lines: list[dict], unit: str | None) -> str:
+    """The unit an option's `covers` is in: the lines' own real unit when they all agree on one (20 ST of jars coded
+    PRK covers 24 PRK; ST read as cartons covers KI), else the unit asked for."""
+    real = {(l.get("covers") or {}).get("unit") for l in lines}
+    if unit in Q.PACK_CODES and len(real) == 1 and None not in real:
+        return real.pop()
+    return unit or "SALES_UNIT"
+
+
 def _content_of(original_id: str | None, offers: list[dict]) -> tuple[float, str] | None:
     """What one pack of the original holds (amount, 'L' or 'KG'): from its offer, else its catalog entry."""
     o = next((o for o in offers if o["product_id"] == original_id), None)
@@ -166,7 +175,8 @@ def build(
         total = round(sum(l["line_total_ex_vat"] or 0 for l in lines), 2)
         out.append({
             "item_index": item_index, "kind": kind, "tradeoff": f"{tradeoff} Total €{total:,.2f} ex VAT.",
-            "covers": {"amount": _covered(lines, unit) if covers is None else covers, "unit": unit or "SALES_UNIT"},
+            "covers": {"amount": _covered(lines, unit) if covers is None else covers,
+                       "unit": _covers_unit(lines, unit) if covers is None else unit or "SALES_UNIT"},
             **({"covers_content": content} if content else {}),
             "on_time": timing == 0, "delivery_dates": dates,
             "total_ex_vat": total, "total_inc_vat": round(sum(l["line_total_inc_vat"] or 0 for l in lines), 2),

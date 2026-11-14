@@ -47,15 +47,56 @@ def is_packs(unit: str | None) -> bool:
     return unit is None or unit == "SALES_UNIT" or unit in PACK_CODES
 
 
-def packs_per_sales_unit(product: dict | None, unit: str | None) -> float:
-    """How many `unit` one sales unit of the product is: 6 for ST on a KI of 6 jars. 1 for SALES_UNIT, the sales
-    unit itself, or a code the product doesn't define (then it means the sales unit)."""
-    if not product or unit in (None, "SALES_UNIT") or unit not in PACK_CODES:
-        return 1.0
+# Valio's codes for one consumer piece (a jar, bottle, bag, can, box ...). A product sold per KI of 6 jars often
+# has no ST at all, only PRK (purkki) at ratio 1: then '20 ST' means 20 of those jars, not 20 cartons.
+PIECE_CODES = ("PRK", "PAK", "BOT", "BAG", "PSS", "PLO", "RS", "RAS", "TLK", "KAN", "DOL", "PNT", "ZML", "NIP")
+
+
+def piece_unit(product: dict | None) -> str | None:
+    """The product's one consumer-piece unit when it has no ST: exactly one unit other than the sales unit with
+    ratio 1 to the base unit and a piece-type code (PRK on a KI of 6 jars), else the sales unit itself when that is
+    a single piece (sold per PRK). None when there is no unambiguous piece."""
+    if not product:
+        return None
     units, su = product.get("units") or {}, product.get("sales_unit")
-    if unit == su or not units.get(unit) or not units.get(su):
-        return 1.0
-    return units[su] / units[unit]
+    if "ST" in units:
+        return "ST"
+    ones = [c for c, v in units.items() if c != su and v == 1]
+    if len(ones) == 1 and ones[0] in PIECE_CODES and units.get(su):
+        return ones[0]
+    if not ones and su in PIECE_CODES and units.get(su) == 1:
+        return su
+    return None
+
+
+def resolve_pack_unit(product: dict | None, unit: str | None) -> tuple[str | None, float, str]:
+    """How a need in pack unit `unit` is read for this product: (the product's real unit, how many of it one sales
+    unit is, how). how is 'sales' (SALES_UNIT / no unit / the sales unit), 'exact' (the product has that code),
+    'piece' (ST read as the product's piece unit, e.g. PRK) or 'fallback' (no such unit: read as sales units)."""
+    su = (product or {}).get("sales_unit")
+    if not product or unit in (None, "SALES_UNIT") or unit not in PACK_CODES or unit == su:
+        return su if product else unit, 1.0, "sales"
+    units = product.get("units") or {}
+    if units.get(unit) and units.get(su):
+        return unit, units[su] / units[unit], "exact"
+    if unit == "ST" and (piece := piece_unit(product)) and units.get(piece) and units.get(su):
+        return piece, units[su] / units[piece], "piece"
+    return su, 1.0, "fallback"
+
+
+def packs_per_sales_unit(product: dict | None, unit: str | None) -> float:
+    """How many `unit` one sales unit of the product is: 6 for ST on a KI of 6 jars (also when the jars are coded
+    PRK and the product has no ST). 1 for SALES_UNIT, the sales unit itself, or a code the product doesn't define
+    (then it means the sales unit, and pack_unit_note says so)."""
+    return resolve_pack_unit(product, unit)[1]
+
+
+def covers_unit(product: dict | None, unit: str | None) -> str | None:
+    """The unit a pack need's `covers` is reported in: the product's real unit (PRK for ST read as jars, KI when
+    ST fell back to sales units), never a unit the product doesn't have."""
+    if unit not in PACK_CODES or not product:
+        return unit
+    return resolve_pack_unit(product, unit)[0]
 
 
 def unit_note(asked: float, unit: str, qty: float, sales_unit: str, per: float) -> str:
@@ -63,6 +104,27 @@ def unit_note(asked: float, unit: str, qty: float, sales_unit: str, per: float) 
     got = round(qty * per, 3)
     return (f"{round(asked, 3):g} {unit} asked -> {qty:g} {sales_unit} ({got:g} {unit}) ordered"
             + (f", rounded up to whole {sales_unit}" if got > asked + 1e-9 else ""))
+
+
+def pack_unit_note(product: dict, asked: float, unit: str | None, qty: float) -> str | None:
+    """The unit_note for a need in a Valio pack code, or None when the reading is plain (sales units, 1:1)."""
+    if unit not in PACK_CODES:
+        return None
+    real, per, how = resolve_pack_unit(product, unit)
+    su = product.get("sales_unit")
+    if how == "fallback":
+        units, base = product.get("units") or {}, product.get("base_unit")
+        inner = units.get(su, 0) / units[base] if base and base != su and units.get(base) else 0
+        return (f"{unit} is not a unit of this product; read as {qty:g} {su}"
+                + (f" = {qty * inner:g} {base}" if inner > 1 else "")
+                + (f" (asked {round(asked, 3):g} {unit})" if abs(qty - asked) > 1e-9 else ""))
+    if how == "piece":
+        if per == 1:
+            return f"{unit} read as {real}, this product's piece unit: {round(asked, 3):g} {unit} -> {qty:g} {su}"
+        return f"{unit} read as {real} (this product's piece unit): " + unit_note(asked, real, qty, su, per)
+    if how == "exact" and per != 1:
+        return unit_note(asked, unit, qty, su, per)
+    return None
 
 
 # The schema lists the common choices (agents and LLMs see a short enum); the other Valio codes are accepted too.
@@ -167,8 +229,7 @@ def build_offer(
     if need is not None:
         if is_packs(need_unit):
             qty = round_to_lot(need / per, su, product["allowed_lot_size"])
-            if per != 1:
-                note = unit_note(need, need_unit, qty, su, per)
+            note = pack_unit_note(product, need, need_unit, qty)
         elif content and content[1] == need_unit:
             qty = round_to_lot(need / content[0], su, product["allowed_lot_size"])
         elif content:
@@ -277,7 +338,8 @@ def build_offer(
         "allowed_lot_size": product["allowed_lot_size"],
         "content_per_sales_unit": {"amount": content[0], "unit": content[1], "source": content[2]} if content else None,
         "quantity": qty,
-        "covers": {"amount": round(covered, 2), "unit": need_unit} if covered is not None else None,
+        "covers": ({"amount": round(covered, 2), "unit": covers_unit(product, need_unit)}
+                   if covered is not None else None),
         **({"unit_note": note} if note else {}),
         "unit_price_ex_vat": unit_ex,
         "unit_price_inc_vat": unit_inc,
@@ -365,7 +427,8 @@ def plan(need: float, need_unit: str | None, candidates: list[dict], sized: bool
     for o in sorted(candidates, key=rank_key):
         if remaining <= 1e-9 or not o["orderable"] or o["quantity"] is None:
             continue
-        content = (packs_per_sales_unit(catalog.get(o["product_id"]), need_unit) if is_packs(need_unit)
+        product = catalog.get(o["product_id"])
+        content = (packs_per_sales_unit(product, need_unit) if is_packs(need_unit)
                    else (o["content_per_sales_unit"] or {}).get("amount"))
         if not content:
             continue
@@ -379,10 +442,11 @@ def plan(need: float, need_unit: str | None, candidates: list[dict], sized: bool
         line["quantity"] = want
         line["line_total_ex_vat"] = round(o["unit_price_ex_vat"] * want, 2)
         line["line_total_inc_vat"] = round(o["unit_price_inc_vat"] * want, 2)
-        line["covers"] = {"amount": round(want * content, 2), "unit": need_unit}
+        line["covers"] = {"amount": round(want * content, 2), "unit": covers_unit(product, need_unit)}
         line.pop("unit_note", None)
-        if need_unit in PACK_CODES and content != 1:
-            line["unit_note"] = unit_note(min(remaining, want * content), need_unit, want, o["sales_unit"], content)
+        if need_unit in PACK_CODES and product and (
+                note := pack_unit_note(product, min(remaining, want * content), need_unit, want)):
+            line["unit_note"] = note
         if sized:
             line["issues"] = [i for i in o["issues"] if i["code"] != "PARTIAL_STOCK"]
         else:
