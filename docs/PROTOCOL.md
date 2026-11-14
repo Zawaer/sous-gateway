@@ -47,7 +47,7 @@ The same operations are exposed twice, over one service layer (`sous/service.py`
 | Judge sandbox | `POST /sandbox` (no login, per-IP limited), `GET /sandbox/{id}`, `DELETE /sandbox/{id}` (approver); `?sandbox=<id>` on `GET /orders`, `/mandates`, `/audit`, `/notifications`, `/standing-orders` (section 18) | |
 | Public key | `GET /.well-known/jwks.json` | |
 | Allergen codes | `GET /allergens` | resource `sous://allergens` |
-| Health | `GET /health` (Valio call counters, shared Valio budget (section 19), storage backend, whether the approver code is required) | |
+| Health | `GET /health` (build `version` (pyproject) and `commit` (env `SOUS_COMMIT`, the Docker build arg of the same name, else "unknown"), Valio call counters, shared Valio budget (section 19), storage backend, whether the approver code is required) | |
 
 Substitutes: `delivery_date` is optional (default: the next delivery day; the answer's `delivery_date {date, defaulted, note}` says which was used). A need in packs is the original's sales units and what they hold, stated in `need.asked` (`20 x KI (6 x 190 g) = 22.8 kg`). A different product type or a negative `match_score` is never offered; those are listed in `not_offered[] {product_id, name, type, match, match_score, reason}`, and with no acceptable option `no_safe_substitute` is `"no acceptable substitute; ask a human"` (`null` otherwise).
 

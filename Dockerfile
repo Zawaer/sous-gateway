@@ -10,6 +10,10 @@ COPY web ./web
 COPY buyer ./buyer
 COPY agent ./agent
 RUN uv sync --frozen --no-dev
+# Build id for /health: docker build --build-arg SOUS_COMMIT=$(git rev-parse --short HEAD) (compose passes it
+# from the environment). Late in the file so a new commit doesn't invalidate the dependency layers.
+ARG SOUS_COMMIT=unknown
+ENV SOUS_COMMIT=$SOUS_COMMIT
 EXPOSE 8000
 # First start downloads Valio Aimo's data with the API key from the environment,
 # builds the search index and issues the demo mandates; later starts reuse /data.

@@ -181,6 +181,23 @@ def test_health_and_header(env):
     assert c.get("/mandates/nope").headers["x-sous-clock"].startswith("demo ")  # errors too
 
 
+def test_health_names_the_build(monkeypatch):
+    import importlib.metadata
+
+    from fastapi.testclient import TestClient
+    from sous import api
+    monkeypatch.setenv("SOUS_COMMIT", "abc1234")
+    api._build.cache_clear()
+    try:
+        h = TestClient(api.app).get("/health").json()
+        assert h["version"] == importlib.metadata.version("sous") and h["commit"] == "abc1234"
+        monkeypatch.delenv("SOUS_COMMIT")
+        api._build.cache_clear()
+        assert TestClient(api.app).get("/health").json()["commit"]  # git HEAD here, "unknown" without git
+    finally:
+        api._build.cache_clear()
+
+
 def test_credential_windows_stay_on_real_time(env):
     clock.configure(DEMO, "frozen")
     assert S._now() == datetime.fromisoformat(DEMO)

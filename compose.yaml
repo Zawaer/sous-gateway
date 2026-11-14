@@ -1,6 +1,9 @@
 services:
   valtakirja:
-    build: .
+    build:
+      context: .
+      args:
+        SOUS_COMMIT: ${SOUS_COMMIT:-unknown}   # SOUS_COMMIT=$(git rev-parse --short HEAD) docker compose build
     restart: unless-stopped
     env_file: .env
     environment:

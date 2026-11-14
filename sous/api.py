@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import contextlib
+import functools
+import importlib.metadata
 import os
+import subprocess
 from datetime import date
+from pathlib import Path
 from typing import Annotated, Literal
 
 import time
@@ -294,9 +298,28 @@ def order_schema_org(order_id: str, request: Request):
                         media_type="application/ld+json")
 
 
+@functools.cache
+def _build() -> dict:
+    """Which build is running: `version` from pyproject (the installed package), `commit` from SOUS_COMMIT
+    (the Dockerfile's SOUS_COMMIT build arg; "unknown" when not passed), else the checkout's git HEAD."""
+    try:
+        version = importlib.metadata.version("sous")
+    except importlib.metadata.PackageNotFoundError:
+        version = "unknown"
+    commit = os.environ.get("SOUS_COMMIT", "").strip()
+    if not commit:
+        try:
+            root = Path(__file__).resolve().parent.parent
+            commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=root, capture_output=True,
+                                    text=True, timeout=2).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            commit = ""
+    return {"version": version, "commit": commit or "unknown"}
+
+
 @app.get("/health", tags=["meta"])
 def health():
-    return {"ok": True, "clock": clock.info(), "valio_api_calls": aimo.stats, "approver_code_required": bool(config.APPROVER_CODE),
+    return {"ok": True, **_build(), "clock": clock.info(), "valio_api_calls": aimo.stats, "approver_code_required": bool(config.APPROVER_CODE),
             "agent_auth_required_globally": config.REQUIRE_AGENT_AUTH,
             "storage": store.backend(), "valio_aimo": aimo.health()}
 
