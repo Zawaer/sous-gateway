@@ -71,6 +71,13 @@ The same rush with the SQLite file on this host's disk (`--data-dir /tmp`, while
 disk) still allocated exactly 400 of 400, but at p50 4.7 s per quote: each SQLite commit costs ~27 ms of
 fsync here. Production uses MariaDB.
 
+**Pools.** The first version used one global pool. The CI eval (run 43585886793) then failed 7 cases (H03, H04,
+P07, P02, O01, O02, O06): earlier cases' orders had reserved the same products' stock, so later cases saw it as
+allocated. Now each judge sandbox has its own pool, each eval case runs in its own pool, and only the rush uses one
+shared pool (docs/PROTOCOL.md 5.3). For the mock weekend, `SOUS_RESERVATION_RELEASE_UNCHANGED=1` ends a global
+reservation once a fresh Valio reading (taken more than 60 s later) is unchanged, so curated demo orders don't hold
+stock for 30 minutes.
+
 **Limits.** Reservations know only orders placed through Sous; Valio's other channels show up when Valio's
 availability refresh does (a fall in Valio's amount is taken to be our orders arriving first, so a fall caused
 by another channel ends our reservations early and the next quote sees the lower amount). Offline nothing

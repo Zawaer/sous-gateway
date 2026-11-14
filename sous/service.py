@@ -460,7 +460,7 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
         unit = None if item.unit == "SALES_UNIT" else item.unit
         day = (fetch_on or {}).get(item_index, req.delivery_date)
         offers, now = Q.offers(item.product_ids, day, item.amount, unit)
-        RES.adjust_offers(offers, mandate.buyer if mandate else None, now)  # minus stock reserved by orders
+        RES.adjust_offers(offers, mandate.buyer if mandate else None, now, RES.pool_of(mandate))  # minus reserved
         if day > req.delivery_date:
             OPT.flag_later(offers, req.delivery_date, f"chosen option {req.option_id}")
         if not offers:
@@ -795,7 +795,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
         raise GatewayError("quote_expired", f"Quote {quote_id} expired at {q['expires_at']}; ask for a new one.", 409)
 
     _refresh_cutoffs(q, now)
-    short = _mark_allocated(q, RES.check(q["lines"], mandate.buyer, now))  # stock other orders reserved
+    short = _mark_allocated(q, RES.check(q["lines"], mandate.buyer, now, RES.pool_of(mandate)))  # reserved by others
     outcome, findings = _evaluate(mandate, agent_id, q, now, extra_findings)
     status = {"silent": "ordered", "notify": "ordered", "ask": "pending_approval", "block": "refused"}[outcome]
     oid = _id("PO")
@@ -824,7 +824,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
         order["approve_by"], order["approve_by_detail"] = (dl["at"], dl) if dl else (None, None)
     if status != "refused" and (late := _mark_allocated(q, RES.reserve(oid, q["lines"], mandate.buyer, now, (
             datetime.fromisoformat(order["approve_by"]) if order.get("approve_by") else None)
-            if status == "pending_approval" else None))):
+            if status == "pending_approval" else None, RES.pool_of(mandate)))):
         # another deployment took the stock between check and reserve (Valkey): refused like the check would
         short, (outcome, findings) = late, _evaluate(mandate, agent_id, q, now, extra_findings)
         status = order["status"] = "refused"
@@ -1030,7 +1030,7 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
     reason = note
     if approve and (blocked := _approval_blocker(o, mandate, now)):
         status, reason = blocked
-    if status == "ordered" and (short := RES.confirm(o, now)):  # tentative reservation -> firm
+    if status == "ordered" and (short := RES.confirm(o, now, RES.pool_of(mandate))):  # tentative -> firm
         status, reason = "refused", " ".join(RES.message(s) for s in short)
         o["allocation"], o["options"] = {"policy": RES.mode(), "lines": short}, RES.options(o["id"], short)
     elif status != "ordered":

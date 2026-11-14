@@ -153,8 +153,9 @@ def test_valkey_mirror_is_shared_between_deployments(tmp_path, monkeypatch):
     server = fakeredis.FakeServer()
     shared.configure(url="redis://fake", client=fakeredis.FakeRedis(server=server, decode_responses=True))
     assert order(1, quote(1, 80))["status"] == "ordered"
-    raw = fakeredis.FakeRedis(server=server, decode_responses=True).hgetall(f"{shared.PREFIX}resv:B1:2026-11-16")
-    assert "_obs" in raw and len(raw) == 2
+    fr = fakeredis.FakeRedis(server=server, decode_responses=True)
+    assert len(fr.hgetall(f"{shared.PREFIX}resv:B1:2026-11-16")) == 1
+    assert fr.get(f"{shared.PREFIX}resv-obs:B1:2026-11-16")
     # another deployment: its own (empty) database, the same Valkey
     monkeypatch.setattr(config, "STATE_DB", tmp_path / "other.db")
     monkeypatch.setattr(store, "_conn", None)
@@ -174,3 +175,44 @@ def test_valkey_mirror_is_shared_between_deployments(tmp_path, monkeypatch):
 def test_rule_is_registered():
     r = rules.get("availability.allocated")
     assert r["owner"] == "valio" and r["tiers"] == ["block"]
+
+
+def sandbox_mandate(n, sbx):
+    S.issue_mandate(Mandate(id=f"M{n}", buyer=f"Visitor {n}", agent_id=f"a{n}", issued_by="judge", sandbox=sbx,
+                            notify_above_eur=None, auto_approve_limit_eur=500, hard_limit_eur=20000,
+                            min_delivery_reliability=None, unusual_quantity_factor=None))
+
+
+def test_sandbox_orders_reserve_only_within_their_sandbox(monkeypatch):
+    import contextlib
+    monkeypatch.setattr(S.sandbox, "metered", lambda m: contextlib.nullcontext())  # no sandbox rows here
+    sandbox_mandate(4, "SBX-AAAA")
+    sandbox_mandate(5, "SBX-BBBB")
+    sandbox_mandate(6, "SBX-AAAA")
+    assert order(4, quote(4, 90))["status"] == "ordered"
+    assert quote(5, 80)["lines"][0]["quantity"] == 80  # another sandbox: its own world, full stock
+    assert quote(1, 80)["lines"][0]["quantity"] == 80  # the global pool doesn't see sandbox orders either
+    assert quote(6, 80)["lines"][0]["quantity"] == 10  # the same sandbox does
+    assert RES.summary("B1", "2026-11-16", NOW, "SBX-AAAA")["reserved"] == 90
+    assert RES.summary("B1", "2026-11-16", NOW)["reserved"] == 0
+
+
+def test_eval_style_cases_each_see_full_stock():
+    try:
+        for case in ("H01", "H02", "H03"):
+            RES.set_scope(f"eval-test-{case}")
+            q = quote(1, 80)
+            assert q["lines"][0]["quantity"] == 80, case
+            assert order(1, q)["status"] == "ordered"
+    finally:
+        RES.set_scope(None)
+    assert quote(1, 80)["lines"][0]["quantity"] == 80  # nothing reached the global pool
+
+
+def test_release_when_valio_unchanged(monkeypatch):
+    monkeypatch.setenv("SOUS_RESERVATION_RELEASE_UNCHANGED", "1")
+    order(1, quote(1, 80))
+    assert quote(2, 80)["lines"][0]["quantity"] == 20  # within aimo's cache window: still reserved
+    later = NOW + timedelta(seconds=61)
+    monkeypatch.setattr(S, "_now", lambda: later)
+    assert RES.summary("B1", "2026-11-16", later)["reserved"] == 0  # a fresh reading still says 100: released

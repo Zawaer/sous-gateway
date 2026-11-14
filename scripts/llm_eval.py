@@ -75,10 +75,12 @@ def applicability(case: dict) -> str | None:
 
 def fresh_state(path: Path, spec: dict) -> None:
     """Point the gateway at a new, empty SQLite file and issue the eval mandates into it."""
-    from sous import config, service as S, store
+    from sous import config, reservations, service as S, store
     from sous.mandate import Mandate
     from scripts.seed import MANDATES
 
+    # each case its own stock-reservation pool (a shared Valkey would otherwise carry orders across cases/runs)
+    reservations.set_scope(f"llmeval-{os.getpid()}-{path.stem}")
     if store._conn is not None:
         try:
             store._conn.close()

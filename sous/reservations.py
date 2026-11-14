@@ -25,6 +25,14 @@ Fair share when short, set by Valio (not by a buyer's mandate): SOUS_ALLOCATION
                        leaves the rest to the others (water filling). Demand = what buyers asked for in quotes
                        and orders of the last RESERVATION_TTL minutes.
 
+Pools: a judge sandbox's orders reserve only within that sandbox (each sandbox is its own world, keyed by its
+id), so one visitor's demo order never takes another's stock; real and curated mandates share the global pool.
+An eval runner gives each case its own pool (set_scope), so cases never see each other's orders. Reflection by
+Valio's refresh applies to the global pool only (sandbox orders never reach Valio). Valio's mock never lowers
+its stock, so with SOUS_RESERVATION_RELEASE_UNCHANGED=1 a reservation also ends once a fresh availability
+reading (older than aimo's 60 s cache) still shows the amount it was made against: protection against a burst,
+not a 30-minute hold on data that never moves.
+
 Storage: the `stock_reservation`, `stock_demand` and `stock_observation` tables (created lazily, like holds). With
 SOUS_VALKEY_URL set, reservations are mirrored in one Valkey hash per (product, date) and the check-and-reserve
 is one optimistic WATCH/MULTI transaction there, so several deployments share them; Valkey down falls back to
@@ -76,6 +84,7 @@ COLS = ["id", "order_id", "product_id", "delivery_date", "buyer", "quantity", "b
         "created_at", "expires_at", "updated_at"]
 
 _ready_for = None
+_override = ""  # pool for mandates outside a sandbox: "" (global) unless an eval runner set one (set_scope)
 _seen: dict = {}  # (table, key) -> last value written: skip rewriting unchanged rows (each write is a commit)
 _vol_cache: dict = {}
 _vol_lock = threading.Lock()
@@ -92,6 +101,32 @@ def ttl() -> timedelta:
         return timedelta(minutes=float(config.env("RESERVATION_TTL_MINUTES", "30")))
     except ValueError:
         return timedelta(minutes=30)
+
+
+def set_scope(name: str | None) -> None:
+    """Eval runners: put the orders of mandates outside a sandbox in their own pool (one per case), or back in
+    the global one (None)."""
+    global _override
+    _override = (name or "").replace("/", "-")
+
+
+def pool_of(mandate) -> str:
+    """The reservation pool for a mandate: its sandbox, else the runner's scope, else global ("")."""
+    sbx = getattr(mandate, "sandbox", None) if mandate is not None else None
+    return (sbx or _override or "").replace("/", "-")
+
+
+def _pk(pid: str, scope: str) -> str:
+    """Pool key: the product id itself in the global pool, '<scope>/<product id>' in another."""
+    return f"{scope}/{pid}" if scope else pid
+
+
+def _pid(pk: str) -> str:
+    return pk.rsplit("/", 1)[-1]
+
+
+def _release_unchanged() -> bool:
+    return config.env("RESERVATION_RELEASE_UNCHANGED", "0") == "1"
 
 
 def _ensure() -> None:
@@ -118,8 +153,12 @@ def _key(pid: str, day: str) -> str:
     return f"{shared.PREFIX}resv:{pid}:{day}"
 
 
-def _floor(qty: float, pid: str) -> float:
-    p = catalog.get(pid) or {}
+def _obs_key(pid: str, day: str) -> str:
+    return f"{shared.PREFIX}resv-obs:{pid}:{day}"
+
+
+def _floor(qty: float, pk: str) -> float:
+    p = catalog.get(_pid(pk)) or {}
     lot = p.get("allowed_lot_size")
     if p.get("sales_unit") == "KG":
         step = lot or 0.01
@@ -141,24 +180,13 @@ def observe(pid: str, day: str, amount: float, now: datetime) -> None:
                   (pid, day, float(amount), _iso(now)))
     r = shared._redis()
     if r is not None:
-        def tx(pipe):
-            raw = pipe.hgetall(_key(pid, day))
-            active, ended = _settle([json.loads(v) for k, v in raw.items() if k != "_obs"], float(amount), now)
-            pipe.multi()
-            pipe.hset(_key(pid, day), "_obs", json.dumps({"amount": float(amount), "at": _iso(now)}))
-            if ended:
-                pipe.hdel(_key(pid, day), *ended)
-            for y in active:
-                if y.pop("_rebased", None):
-                    pipe.hset(_key(pid, day), y["id"], json.dumps(y))
-            pipe.expire(_key(pid, day), int(ttl().total_seconds()) + 86400)
-
         try:
-            r.transaction(tx, _key(pid, day))
+            r.set(_obs_key(pid, day), json.dumps({"amount": float(amount), "at": _iso(now)}),
+                  ex=int(ttl().total_seconds()) + 3600)
             shared._ok()
         except Exception as e:  # noqa: BLE001 - fail open
             shared._failed(e)
-    _settle_db(pid, day, float(amount), now)
+    _settle_db(pid, day, float(amount), now)  # the global pool's reflected reservations end now
 
 
 def last_amount(pid: str, day: str) -> float | None:
@@ -169,7 +197,7 @@ def last_amount(pid: str, day: str) -> float | None:
     r = shared._redis()
     if r is not None:
         try:
-            v = r.hget(_key(pid, day), "_obs")
+            v = r.get(_obs_key(pid, day))
             shared._ok()
             if v:
                 return float(json.loads(v)["amount"])
@@ -185,9 +213,13 @@ def _settle(resv: list[dict], amount: float | None, now: datetime) -> tuple[list
     a changed base is marked x["_rebased"] for the caller to persist."""
     ended: dict[str, str] = {}
     active = []
+    unchanged_after = timedelta(seconds=60)  # aimo.AVAILABILITY_TTL: a reading after it is fresh from Valio
     for x in sorted(resv, key=lambda x: x["created_at"]):
         if _dt(x["expires_at"]) <= now:
             ended[x["id"]] = "expired"
+        elif (amount is not None and _release_unchanged() and abs(amount - x["base"]) < EPS
+              and now - _dt(x["created_at"]) >= unchanged_after):
+            ended[x["id"]] = "unchanged"
         else:
             active.append(x)
     if amount is not None and active:
@@ -210,8 +242,14 @@ def _rows(pid: str, day: str) -> list[dict]:
                        (pid, day, "active"))[0]
 
 
+def _valio(pk: str, amount: float | None) -> float | None:
+    """The amount to settle a pool against: Valio's, for the global pool; none (TTL only) for a sandbox's or an
+    eval case's pool, whose orders never reach Valio."""
+    return None if "/" in pk else amount
+
+
 def _settle_db(pid: str, day: str, amount: float | None, now: datetime) -> list[dict]:
-    active, ended = _settle(_rows(pid, day), amount, now)
+    active, ended = _settle(_rows(pid, day), _valio(pid, amount), now)
     for rid, why in ended.items():
         store._exec("UPDATE stock_reservation SET status = ?, updated_at = ? WHERE id = ?", (why, _iso(now), rid))
     for x in active:
@@ -294,7 +332,7 @@ def _cap(buyer: str | None, pid: str, day: str, pool: float, asking: float, acti
     demand[buyer] = max(demand.get(buyer, 0.0), held.get(buyer, 0.0) + asking)
     if sum(demand.values()) <= pool + EPS:
         return None
-    vol = volumes(pid, now)
+    vol = volumes(_pid(pid), now)
     known = [v for b, v in vol.items() if v > 0 and b in demand]
     floor_w = min(known) if known else 1.0
     weights = {b: vol.get(b) or floor_w for b in demand}
@@ -329,7 +367,7 @@ def _active(pid: str, day: str, amount: float | None, now: datetime) -> list[dic
         try:
             raw = r.hgetall(_key(pid, day))
             shared._ok()
-            active, _ = _settle([json.loads(v) for k, v in raw.items() if k != "_obs"], amount, now)
+            active, _ = _settle([json.loads(v) for v in raw.values()], _valio(pid, amount), now)
             return active
         except Exception as e:  # noqa: BLE001
             shared._failed(e)
@@ -347,24 +385,27 @@ def stock_lines(lines: list[dict]) -> list[tuple[int, dict, str]]:
     return out
 
 
-def check(lines: list[dict], buyer: str | None, now: datetime) -> list[dict]:
-    """Shortfalls if these lines were ordered now: [{line, product_id, delivery_date, asked, left, why}]."""
+def check(lines: list[dict], buyer: str | None, now: datetime, scope: str = "") -> list[dict]:
+    """Shortfalls if these lines were ordered now in pool `scope`: [{line, product_id, delivery_date, asked,
+    left, why}]."""
     out = []
     asked: dict[tuple[str, str], float] = {}
     for i, l, day in stock_lines(lines):
         pid = l["product_id"]
+        pk = _pk(pid, scope)
         prior = asked.get((pid, day), 0.0)  # two lines of the same product in one order count together
         asked[(pid, day)] = prior + float(l["quantity"])
-        note_demand(buyer, pid, day, asked[(pid, day)], now)
-        left, why = available(pid, day, last_amount(pid, day), buyer, now, asked[(pid, day)])
+        note_demand(buyer, pk, day, asked[(pid, day)], now)
+        left, why = available(pk, day, last_amount(pid, day), buyer, now, asked[(pid, day)])
         if asked[(pid, day)] > left + EPS:
             out.append({"line": i, "product_id": pid, "name": l.get("name"), "sales_unit": l.get("sales_unit"),
                         "delivery_date": day, "asked": float(l["quantity"]),
-                        "left": max(0.0, _floor(left - prior, pid)), "why": why})
+                        "left": max(0.0, _floor(left - prior, pk)), "why": why})
     return out
 
 
-def reserve(order_id: str, lines: list[dict], buyer: str | None, now: datetime, until: datetime | None = None) -> list[dict]:
+def reserve(order_id: str, lines: list[dict], buyer: str | None, now: datetime, until: datetime | None = None,
+            scope: str = "") -> list[dict]:
     """Reserve every stock line of an order that goes through (until=None: firm, TTL) or is held (until =
     approve_by: tentative). All or nothing: returns the shortfalls and reserves nothing if any line no longer
     fits (another deployment took it since check())."""
@@ -377,7 +418,7 @@ def reserve(order_id: str, lines: list[dict], buyer: str | None, now: datetime, 
     for i, l, day in todo:
         pid = l["product_id"]
         amount = last_amount(pid, day)
-        x = {"id": "R-" + secrets.token_hex(5).upper(), "order_id": order_id, "product_id": pid,
+        x = {"id": "R-" + secrets.token_hex(5).upper(), "order_id": order_id, "product_id": _pk(pid, scope),
              "delivery_date": day, "buyer": buyer, "quantity": float(l["quantity"]), "base": float(amount),
              "kind": kind, "status": "active", "created_at": _iso(now), "expires_at": _iso(expires),
              "updated_at": _iso(now)}
@@ -400,7 +441,7 @@ def _put(x: dict, amount: float, now: datetime) -> tuple[float, str] | None:
 
         def tx(pipe):
             raw = pipe.hgetall(_key(pid, day))
-            active, ended = _settle([json.loads(v) for k, v in raw.items() if k != "_obs"], amount, now)
+            active, ended = _settle([json.loads(v) for v in raw.values()], _valio(pid, amount), now)
             left, why = _left(buyer, pid, day, amount, x["quantity"], active, now)
             pipe.multi()
             if ended:
@@ -412,7 +453,7 @@ def _put(x: dict, amount: float, now: datetime) -> tuple[float, str] | None:
                 out["short"] = (left, why)
                 return
             pipe.hset(_key(pid, day), x["id"], json.dumps(x))
-            pipe.expire(_key(pid, day), int(ttl().total_seconds()) + 86400)
+            pipe.expire(_key(pid, day), int(ttl().total_seconds()) + 3600)
 
         try:
             r.transaction(tx, _key(pid, day))
@@ -459,12 +500,12 @@ def release(order_id: str, now: datetime, status: str = "released") -> int:
     return len(rows)
 
 
-def confirm(order: dict, now: datetime) -> list[dict]:
+def confirm(order: dict, now: datetime, scope: str = "") -> list[dict]:
     """An approved held order: its tentative reservations become firm (TTL from now). An order held before
     reservations existed reserves now; returns the shortfalls if the stock was allocated meanwhile."""
     rows = for_order(order["id"])
     if not rows:
-        return reserve(order["id"], order.get("lines") or [], order.get("buyer"), now)
+        return reserve(order["id"], order.get("lines") or [], order.get("buyer"), now, scope=scope)
     exp = _iso(now + ttl())
     for x in rows:
         store._exec("UPDATE stock_reservation SET kind = ?, expires_at = ?, updated_at = ? WHERE id = ?",
@@ -480,8 +521,8 @@ def confirm(order: dict, now: datetime) -> list[dict]:
     return []
 
 
-def total_reserved(pid: str, day: str, now: datetime) -> float:
-    return sum(x["quantity"] for x in _active(pid, day, None, now))
+def total_reserved(pid: str, day: str, now: datetime, scope: str = "") -> float:
+    return sum(x["quantity"] for x in _active(_pk(pid, scope), day, None, now))
 
 
 # --- what the gateway says ------------------------------------------------------------------------
@@ -513,16 +554,17 @@ def options(order_id: str, shortfalls: list[dict]) -> list[dict]:
             for n, s in enumerate((s for s in shortfalls if s["left"] > 0), 1)]
 
 
-def adjust_offers(offers: list[dict], buyer: str | None, now: datetime) -> None:
-    """Quote hook: record Valio's amount and size each offer to what is left for this buyer."""
+def adjust_offers(offers: list[dict], buyer: str | None, now: datetime, scope: str = "") -> None:
+    """Quote hook: record Valio's amount and size each offer to what is left for this buyer in pool `scope`."""
     for o in offers:
         day, amount = o.get("delivery_date"), o.get("available_amount")
         if o.get("logistic_model") != "Stock" or amount is None or not day:
             continue
         if not any(i["code"] == "DATA_STALE" for i in o.get("issues") or []):
             observe(o["product_id"], day, amount, now)
-        note_demand(buyer, o["product_id"], day, o.get("quantity"), now)
-        left, why = available(o["product_id"], day, amount, buyer, now)
+        pk = _pk(o["product_id"], scope)
+        note_demand(buyer, pk, day, o.get("quantity"), now)
+        left, why = available(pk, day, amount, buyer, now)
         if left >= amount - EPS:
             continue
         from . import exposure
@@ -539,10 +581,11 @@ def adjust_offers(offers: list[dict], buyer: str | None, now: datetime) -> None:
                                 "message": f"Only {left:g} {o.get('sales_unit')} in stock; {o['quantity']:g} needed."})
 
 
-def summary(pid: str, day: str, now: datetime) -> dict:
+def summary(pid: str, day: str, now: datetime, scope: str = "") -> dict:
     amount = last_amount(pid, day)
-    active = _active(pid, day, amount, now)
-    return {"product_id": pid, "delivery_date": day, "valio_amount": amount, "policy": mode(),
+    active = _active(_pk(pid, scope), day, amount, now)
+    return {"product_id": pid, "delivery_date": day, "pool": scope or "global", "valio_amount": amount,
+            "policy": mode(),
             "reserved": round(sum(x["quantity"] for x in active), 3),
             "tentative": round(sum(x["quantity"] for x in active if x["kind"] == "tentative"), 3),
             "by_buyer": {b: round(sum(x["quantity"] for x in active if x["buyer"] == b), 3)

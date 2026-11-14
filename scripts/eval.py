@@ -43,12 +43,13 @@ os.environ["SOUS_DB_URL"] = ""  # always SQLite: never write eval orders into Ma
 
 import yaml  # noqa: E402
 
-from sous import aimo, catalog, config, service as S  # noqa: E402
+from sous import aimo, catalog, config, reservations, service as S  # noqa: E402
 from sous.mandate import Mandate  # noqa: E402
 from scripts.seed import MANDATES  # noqa: E402
 from scripts.eval_checks import _order_summary, api_calls, check, safety_handled, setup_history  # noqa: E402,F401
 
 APPROVER = "eval-runner (human stand-in)"
+RUN_TAG = os.urandom(3).hex()  # reservation pools of this run (sous/reservations.py set_scope)
 
 
 def call(fn, *a, **kw):
@@ -265,6 +266,8 @@ def main() -> int:
     results = []
     for case in cases:
         try:
+            # each case its own stock-reservation pool: earlier cases' orders never eat later cases' stock
+            reservations.set_scope(f"eval-{RUN_TAG}-{case['id']}")
             r = run_case(case, defaults)
             checks = check(case, r)
         except Exception as ex:  # a crash is a failed case, not a crashed run
