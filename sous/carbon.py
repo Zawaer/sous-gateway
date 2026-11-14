@@ -30,6 +30,19 @@ def add_range(chosen: list[dict], offers: list[dict]) -> None:
                                  "options": len(rates), "basis": RANGE_BASIS}
         else:
             l["co2_range_kg"] = None
+            l["co2_range_note"] = range_note(l, rates, offers)
+
+
+def range_note(line: dict, rates: list[float], offers: list[dict]) -> str:
+    """Why a line's co2_range_kg is null (the logic above is unchanged; this only says which condition failed)."""
+    if line.get("co2_estimate_kg") is None:
+        if not (line.get("covers") or {}).get("amount"):
+            return ("No CO2 estimate for this line: its quantity in kg or L isn't known (e.g. the need was given in "
+                    "sales units or packs), so there is nothing to scale a range to.")
+        return "No CO2 estimate for this line: Valio's carbon file has no product-group average for this product."
+    orderable = sum(1 for o in offers if o.get("orderable"))
+    return (f"A range needs at least two orderable shortlisted options with CO2 data; {len(rates)} of the "
+            f"{len(offers)} shortlisted ({orderable} orderable) have one, so only the single estimate is shown.")
 
 
 def summary(lines: list[dict]) -> dict:

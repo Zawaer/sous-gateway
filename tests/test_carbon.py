@@ -43,3 +43,19 @@ def test_summary_adds_up_and_counts_missing_data():
     assert (s["estimate_kg"], s["low_kg"], s["high_kg"]) == (150.0, 150.0, 221.0)
     assert (s["lines_with_data"], s["lines"]) == (2, 3)
     assert "estimate" in s["basis"]
+
+
+def test_a_null_range_says_why():
+    only = [offer("A", 110.0), offer("B", 90.0, orderable=False), offer("C", None)]
+    line = dict(only[0])
+    carbon.add_range([line], only)
+    assert line["co2_range_kg"] is None and "1 of the 3 shortlisted (2 orderable)" in line["co2_range_note"]
+    nodata = {**offer("N", None)}
+    carbon.add_range([nodata], [offer("A", 1.0), offer("B", 2.0)])
+    assert "no product-group average" in nodata["co2_range_note"]
+    packs = {**offer("P", None), "covers": None}  # need in sales units: no kg/L to scale to
+    carbon.add_range([packs], [offer("A", 1.0), offer("B", 2.0)])
+    assert "quantity in kg or L isn't known" in packs["co2_range_note"]
+    ranged = dict(offer("A", 110.0))
+    carbon.add_range([ranged], [offer("A", 110.0), offer("B", 181.0)])
+    assert "co2_range_note" not in ranged
