@@ -73,8 +73,7 @@ the chef costs a wrong quantity on a quote a human can read, never an order the 
 
 ## Results
 
-From one CI run (`llm-eval` job, run 43524836008, 14.11.2026, live Valio prices, `GEMINI_API_KEY` as a GitHub
-secret). Full tables: [`evals/recipe_results.md`](../evals/recipe_results.md) and [LLM_EVAL.md](LLM_EVAL.md).
+Recipe eval: one CI run (`llm-eval` job, run 43524836008, 14.11.2026 ~01:30 Helsinki, live Valio prices). Not re-run since. Full tables: [`evals/recipe_results.md`](../evals/recipe_results.md) and [LLM_EVAL.md](LLM_EVAL.md).
 
 **Menu -> one order (recipe eval, 7 cases):**
 
@@ -100,18 +99,17 @@ differences are visible in the ingredient table before anything is ordered, and 
 with them. The curated table is exact by construction (it *is* the reference), which is why it is the offline
 fallback and not the default: it knows six dishes, Gemini knows the menu.
 
-**Single purchase requests (buyer agent, 40 cases from `evals/cases.yaml`):**
+**Single purchase requests (buyer agent, 40 sentences from `evals/cases.yaml`, live Valio prices):**
 
-| | Gemini 4 Hydrogen | Kimi K3.1 Pro (Verda, EU) |
-|---|---|---|
-| Matched the buyer's need without manual correction | 36/40 = 90 % | 34/40 = 85 % |
-| Need understood (amount, unit, date, product) | 38/40 = 95 % | 36/40 = 90 % |
-| Mandate violations auto-ordered | 0 | 0 |
-| Tool calls / Valio calls per request | 3.05 / 1.57 | 3.1 / 1.6 |
-| Latency p50 / cost per request | 11.8 s / $0.037 | 8.8 s / – |
+| | Gemini 4 Hydrogen, CI 43524836008 (91ef7f5) | Gemini 4 Hydrogen, CI 43530717095 (e84bb41) | Kimi K3.1 Pro (Verda, EU), CI 43524836008 |
+|---|---|---|---|
+| Matched the buyer's need without manual correction | 36/40 = 90 % | **39/40 = 97.5 %** | 34/40 = 85 % |
+| Need understood (amount, unit, date, product) | 38/40 | 39/40 | 36/40 |
+| Mandate violations auto-ordered | 0 | 0 | 0 |
+| Tool calls / Valio calls per request | 3.05 / 1.57 | 3.02 / 1.15 | 3.1 / 1.6 |
+| Latency p50 / cost per request | 11.8 s / $0.037 | 9.8 s / $0.037 | 8.8 s / – |
 
-Gemini had the best understanding of the models we ran; with every model the gateway auto-ordered nothing the
-mandate forbids.
+Between the two Gemini runs the eval loop changed the gateway and the cases, not the model: the quote keeps every unorderable candidate as a line so refusals name the real rule (5eaed68), and three case sentences were made unambiguous (H09, P02, A04). Gemini's remaining miss (H03) was live data: Valio reported one coffee undeliverable at that moment. Kimi was not re-run on the new code (Verda Inference returned empty responses, then went offline), so the like-for-like comparison is the 43524836008 column pair: Gemini 36/40 vs Kimi 34/40. With every model the gateway auto-ordered nothing the mandate forbids. The cases are written by the team, not a held-out set.
 
 ## Run it
 
