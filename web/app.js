@@ -22,13 +22,19 @@ const SANDBOX = (new URLSearchParams(location.search).get("sandbox") || "").trim
 const CODE_KEY = "vk-approver-code" + (SANDBOX ? ":" + SANDBOX : "");
 const SANDBOX_LISTS = /^\/(orders|mandates|audit|notifications|standing-orders)(\?|$)/;
 
+// One code prompt at a time: the page refreshes every few seconds, so parallel 401s share one dialog,
+// and after "Cancel" background reads stop asking until the human starts an action themselves.
+let codePrompt = null, codeDeclined = false;
+
 async function api(path, opts = {}, retried = false) {
   const headers = { "content-type": "application/json" };
   const code = store.get(CODE_KEY);
-  if (opts.method === "POST" && code) headers["x-approver-code"] = code;
-  if (SANDBOX && SANDBOX_LISTS.test(path)) path += (path.includes("?") ? "&" : "?") + "sandbox=" + encodeURIComponent(SANDBOX);
+  const write = (opts.method || "GET") !== "GET";
+  // The approver code also unlocks reads when the gateway scopes them (read access control).
+  if (code) headers["x-approver-code"] = code;
+  const url = SANDBOX && SANDBOX_LISTS.test(path) ? path + (path.includes("?") ? "&" : "?") + "sandbox=" + encodeURIComponent(SANDBOX) : path;
   if (SANDBOX && code) headers.authorization = "Bearer " + code;
-  const res = await fetch(API + path, {
+  const res = await fetch(API + url, {
     ...opts,
     headers,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
@@ -36,16 +42,19 @@ async function api(path, opts = {}, retried = false) {
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { message: text }; }
-  if (res.status === 401 && (opts.method === "POST" || SANDBOX)) {
+  if (res.status === 401 && !(retried && !write) && (write || !codeDeclined)) {
     // Ask in-page (masked, no auto-capitalise/autocorrect: phone keyboards change codes) until it
     // is accepted or the human cancels.
-    const c = await askCode(code || retried
+    codePrompt ||= askCode(code || retried
       ? "That approver code was not accepted. Check it and try again (it is case-sensitive)."
       : SANDBOX ? `This needs the approver token of sandbox ${SANDBOX} (sbxa_…, from POST /sandbox).`
-      : "This action needs the human approver code.");
-    if (c) { store.set(CODE_KEY, c); return api(path, opts, true); }
-    store.set(CODE_KEY, "");
-    throw new Error("Approver code needed for this action.");
+      : write ? "This action needs the human approver code."
+      : "Reading this data needs the approver code (demo buyers stay public).").finally(() => { codePrompt = null; });
+    const c = await codePrompt;
+    if (c) { codeDeclined = false; store.set(CODE_KEY, c); return api(path, opts, true); }
+    if (!write) codeDeclined = true;
+    else store.set(CODE_KEY, "");
+    throw new Error("Approver code needed for this.");
   }
   if (!res.ok) {
     const msg = data?.message || data?.detail?.message || data?.detail || res.statusText;
