@@ -73,7 +73,8 @@
       .step h4 .by { display: inline-block; margin-top: 4px; }
       .grid3 .card, .sbx-card { padding: 18px 16px; }
     }
-  </style>
+    .about { margin: 0 0 16px; } .about summary { cursor: pointer; color: var(--ink-60); font-size: .88rem; width: fit-content; padding: 4px 0; }
+</style>
 </head>
 <body>
   <header class="top">
@@ -101,8 +102,9 @@
           prices, checks and decides.</div>
       </div>
     </div>
+    <details class="about"><summary data-i18n="agent.banner_sum">What is this agent?</summary>
     <div class="banner" data-i18n="agent.banner">Reference buyer agent (runs on the buyer's side; shown here for the demo). It talks to the
-      Sous gateway like any other agent, with your sandbox's agent token. Models never see prices and never decide.</div>
+      Sous gateway like any other agent, with your sandbox's agent token. Models never see prices and never decide.</div></details>
 
     <section class="card" id="agent-off" hidden>
       <h3 data-i18n="agent.off_h">The reference buyer agent isn't switched on on this server</h3>
@@ -112,6 +114,7 @@
         agent, or run the agent locally with <span class="mono">SOUS_BUYER_AGENT=1</span>
         (<a href="https://github.com/Zawaer/sous-gateway#quick-start">Quick start</a>). Your sandbox below still works.</div>
       <div class="actions" id="agent-off-links">
+        <a class="btn yes" href="try.html" data-i18n="agent.try_guided">Try Sous without the agent</a>
         <a class="btn plain" href="./" data-i18n="common.seller_ui">Seller UI</a>
         <a class="btn plain" href="/buyer/" data-i18n="common.buyer_page">Buyer page</a>
         <a class="btn plain" href="/docs" data-i18n="common.gateway_api">Gateway API</a>
@@ -141,6 +144,19 @@
 
     <div class="grid3 needs-agent">
       <section class="card">
+        <h3 data-i18n="agent.ask_h">Ask in a sentence</h3>
+        <div class="model" id="m-ask" data-i18n="agent.ask_model">LLM buyer agent with the gateway's tools</div>
+        <textarea id="ask-text" placeholder="What do you need?" data-i18n-attr="placeholder=agent.ask_ph">1,000 litres of lactose-free milk by Monday</textarea>
+        <div class="chips">
+          <button class="chip" type="button" data-ask="1,000 litres of lactose-free milk by Monday" data-i18n="agent.ask_c1">1,000 L milk</button>
+          <button class="chip" type="button" data-ask="40 packs of chopped tomatoes 400 g for Monday, find a substitute if ours is out" data-i18n="agent.ask_c2">Tomatoes + substitute</button>
+          <button class="chip" type="button" data-ask="20 kg butter for Monday" data-i18n="agent.ask_c3">20 kg butter</button>
+        </div>
+        <label class="small muted"><input type="checkbox" id="ask-order" checked> <span data-i18n="agent.ask_order">the agent may place the order (the mandate decides)</span></label>
+        <div class="actions"><button class="btn yes" id="ask-go" type="button" data-i18n="agent.ask_go">Ask the agent</button></div>
+      </section>
+
+      <section class="card">
         <h3 data-i18n="agent.menu_h">Plan from a menu</h3>
         <div class="model" id="m-menu">Gemini 4 Hydrogen</div>
         <textarea id="menu-text" placeholder="What are you cooking, for how many, when?" data-i18n-attr="placeholder=agent.menu_ph">Lasagne for 120 on Monday, we have 10 kg flour</textarea>
@@ -163,19 +179,6 @@
         </div>
         <input type="file" id="photo-file" accept="image/jpeg,image/png">
         <div class="muted small" data-i18n="agent.photo_hint">JPEG or PNG, up to 4 MB. Order list, menu or delivery note.</div>
-      </section>
-
-      <section class="card">
-        <h3 data-i18n="agent.ask_h">Ask in a sentence</h3>
-        <div class="model" id="m-ask" data-i18n="agent.ask_model">LLM buyer agent with the gateway's tools</div>
-        <textarea id="ask-text" placeholder="What do you need?" data-i18n-attr="placeholder=agent.ask_ph">1,000 litres of lactose-free milk by Monday</textarea>
-        <div class="chips">
-          <button class="chip" type="button" data-ask="1,000 litres of lactose-free milk by Monday" data-i18n="agent.ask_c1">1,000 L milk</button>
-          <button class="chip" type="button" data-ask="40 packs of chopped tomatoes 400 g for Monday, find a substitute if ours is out" data-i18n="agent.ask_c2">Tomatoes + substitute</button>
-          <button class="chip" type="button" data-ask="20 kg butter for Monday" data-i18n="agent.ask_c3">20 kg butter</button>
-        </div>
-        <label class="small muted"><input type="checkbox" id="ask-order" checked> <span data-i18n="agent.ask_order">the agent may place the order (the mandate decides)</span></label>
-        <div class="actions"><button class="btn yes" id="ask-go" type="button" data-i18n="agent.ask_go">Ask the agent</button></div>
       </section>
     </div>
 

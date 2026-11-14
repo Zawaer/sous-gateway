@@ -63,6 +63,9 @@
     .attack-head { flex-direction: column; gap: 12px; }
     .attack .btn { width: 100%; }
   }
+  .finebox { margin: 0 0 18px; } .finebox summary { cursor: pointer; color: var(--ink-60); font-size: .88rem; width: fit-content; padding: 4px 0; }
+  .using { color: var(--ink-60); font-size: .9rem; margin: 0 0 8px; }
+  .startbox { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 22px; }
 </style>
 </head>
 <body>
@@ -81,13 +84,20 @@
   <h1 data-i18n="break.h1">Try to break it</h1>
   <p class="lead" data-i18n="break.lead">Seven things a careless or hostile purchasing agent might try. Each button runs one against your
     sandbox through the same gateway code an agent's calls reach: the mandate rules, the signature check, the approval guard.</p>
+  <details class="finebox"><summary data-i18n="break.fine_sum">How the attacks are run</summary>
   <p class="fine" data-i18n="break.fine">Quotes here are priced from reference prices stored in the gateway, so no Valio Aimo call is made
     and your sandbox's live lookups stay untouched. Orders an attack creates are real sandbox orders, marked as attack
     demos, and appear in the seller UI and the audit log. Orders that could go through are placed under a separate
     attack-demo mandate in your sandbox (€500 per order, orders within an hour added up against it, €1,500 a day), so your hotel, hospital and school mandates
-    keep their limits for your own tries.</p>
+    keep their limits for your own tries.</p></details>
 
-  <section class="access" aria-labelledby="access-h">
+  <p class="using" id="using" hidden></p>
+  <div class="startbox" id="startbox" hidden>
+    <button class="btn yes" id="create" type="button" data-i18n="break.create">Start with a new sandbox</button>
+    <button class="btn no" id="own" type="button" data-i18n="break.own">I already have a sandbox</button>
+  </div>
+
+  <section class="access" id="access" aria-labelledby="access-h" hidden>
     <h2 id="access-h" hidden data-i18n="break.access_h">Your sandbox</h2>
     <div class="field" id="sid-field" hidden>
       <label for="sid" data-i18n="break.sid_label">Sandbox id</label>
@@ -228,14 +238,44 @@ function build() {
   });
 }
 
-setSandbox(sandbox);
-if (!SID_RE.test(sandbox)) {
-  $("sid-field").hidden = false;
-  $("sid").value = sandbox;
-  $("sid").addEventListener("input", (e) => setSandbox(e.target.value.trim().toUpperCase()));
+// The sandbox this browser already has (made on try.html, agent.html or here): no id or token to paste.
+const SHARED = "sous-agent-sandbox";
+function shared() { try { return JSON.parse(localStorage.getItem(SHARED) || "null"); } catch { return null; } }
+function useShared(s) {
+  setSandbox(s.id);
+  $("token").value = s.token;
+  $("access").hidden = true; $("startbox").hidden = true;
+  $("using").hidden = false; $("using").textContent = t("break.using", { id: s.id });
 }
+function manual() {
+  $("access").hidden = false; $("startbox").hidden = true; $("using").hidden = true;
+  if (!SID_RE.test(sandbox)) {
+    $("sid-field").hidden = false;
+    $("sid").value = sandbox;
+    $("sid").addEventListener("input", (e) => setSandbox(e.target.value.trim().toUpperCase()));
+  }
+}
+$("own").addEventListener("click", manual);
+$("create").addEventListener("click", async () => {
+  const b = $("create"); b.disabled = true; b.textContent = t("break.creating");
+  try {
+    const r = await fetch("/sandbox", { method: "POST" });
+    const d = await r.json().catch(() => null);
+    if (!r.ok) throw new Error(friendly(r.status, d));
+    const s = { id: d.sandbox.id, expires_at: d.sandbox.expires_at, token: d.agent_token, approver: d.approver_token, mandates: d.mandates, pick: "hotel" };
+    try { localStorage.setItem(SHARED, JSON.stringify(s)); localStorage.setItem("vk-approver-code:" + s.id, s.approver); } catch { /* private mode: this tab still has it */ }
+    useShared(s);
+  } catch (e) { $("using").hidden = false; $("using").textContent = e.message; }
+  finally { b.disabled = false; b.textContent = t("break.create"); }
+});
+
+setSandbox(sandbox);
+const mine = shared();
+if (mine?.token && (!SID_RE.test(sandbox) || sandbox === mine.id)) useShared(mine);
+else if (SID_RE.test(sandbox)) manual();
+else $("startbox").hidden = false;
 build();
-I18N.onChange(() => { setSandbox(sandbox); build(); });
+I18N.onChange(() => { setSandbox(sandbox); if (!$("using").hidden && SID_RE.test(sandbox)) $("using").textContent = t("break.using", { id: sandbox }); build(); });
 </script>
 </body>
 </html>
