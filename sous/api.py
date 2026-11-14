@@ -19,7 +19,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
@@ -230,21 +230,45 @@ async def validation_error(_: Request, e: RequestValidationError):
         "details": jsonable_encoder(e.errors())})
 
 
+def _proof_public() -> bool:
+    """The evidence stays private until submission (other teams read each other's pages):
+    SOUS_PROOF_PUBLIC=1 publishes it; until then only the approver code reads /proof/data."""
+    return (config.env("PROOF_PUBLIC", "") or "").strip().lower() in ("1", "true", "yes")
+
+
+_PROOF_SOON = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Evidence · Sous</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f8f8f3;color:#000;
+font:16px/1.5 system-ui,sans-serif}@media(prefers-color-scheme:dark){body{background:#141412;color:#f2f1ea}}
+main{max-width:30rem;padding:24px}h1{font:400 2rem Georgia,serif;margin:0 0 8px}a{color:inherit}</style></head>
+<body><main><h1>Evidence</h1><p>Our evaluation results are published with our submission.</p>
+<p><a href="/ui/">Seller UI</a> · <a href="/docs">API</a></p></main>
+<script>try{const c=localStorage.getItem("vk-approver-code");if(c)fetch("/proof/data",{headers:{"x-approver-code":c}})
+.then(r=>{if(r.ok)location.replace("/proof?preview=1")})}catch(e){}</script></body></html>"""
+
+
 @app.get("/proof", include_in_schema=False)
-def proof_page():
-    """The evidence page for judges (web/proof.html); it renders GET /proof/data."""
+def proof_page(preview: bool = False):
+    """The evidence page for judges (web/proof.html); it renders GET /proof/data. Until SOUS_PROOF_PUBLIC is set,
+    a short note instead (team members who entered the approver code in /ui are sent on to the preview)."""
     page = WEB_DIR / "proof.html"
+    if not _proof_public() and not preview:
+        return HTMLResponse(_PROOF_SOON)
     if not page.is_file():
         return RedirectResponse("/proof/data")
     return FileResponse(page, media_type="text/html")
 
 
 @app.get("/proof/data", tags=["meta"])
-def proof_data():
+def proof_data(x_approver_code: str | None = Header(default=None)):
     """Our evidence, each figure with its source file and what that file records about its run (scripted eval,
     LLM agents per model, drafting, recipe, vision, conformance, rule count, allergen-data audit of the loaded
     catalog). Read from files and the loaded catalog only; computed once per process. A missing source is
-    reported as not available, never as a number."""
+    reported as not available, never as a number. Private until submission (SOUS_PROOF_PUBLIC); before that it
+    needs the approver code."""
+    if not _proof_public() and config.APPROVER_CODE and not access.approver_code_ok(x_approver_code):
+        return JSONResponse(status_code=403, content={
+            "error": "not_yet_public", "message": "The evidence is published with our submission."})
     return proof.data()
 
 

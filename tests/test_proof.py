@@ -20,6 +20,11 @@ def _json(rel: str):
     return json.loads((config.ROOT / rel).read_text(encoding="utf-8"))
 
 
+@pytest.fixture(autouse=True)
+def proof_public(monkeypatch):
+    monkeypatch.setenv("SOUS_PROOF_PUBLIC", "1")
+
+
 @pytest.fixture
 def no_catalog(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "CATALOG_DB", tmp_path / "none.db")
@@ -171,3 +176,12 @@ def test_source_reads_recorded_provenance(tmp_path):
     s = proof._source(f, {"generated_at": "t", "provenance": {"origin": "ci", "ci_run_id": "9", "commit": "abc"}})
     assert (s["origin"], s["ci_run_id"], s["run_commit"], s["generated_at"]) == ("ci", "9", "abc", "t")
     assert proof._source(f, {})["origin"] == "not recorded"
+
+
+def test_proof_private_until_submission(client, monkeypatch):
+    monkeypatch.delenv("SOUS_PROOF_PUBLIC")
+    monkeypatch.setattr(config, "APPROVER_CODE", "c0de")
+    r = client.get("/proof")
+    assert r.status_code == 200 and "published with our submission" in r.text and "Scripted eval" not in r.text
+    assert client.get("/proof/data").status_code == 403
+    assert client.get("/proof/data", headers={"x-approver-code": "c0de"}).status_code == 200
