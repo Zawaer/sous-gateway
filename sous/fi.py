@@ -363,7 +363,12 @@ RULES = {
                       "yhteensä; tehdyt ja hyväksyntää odottavat tilaukset lasketaan).",
     "offer_not_found": "Tälle valtakirjalle ei ole tällaista erikoistarjousta (toiselle ostajalle tehty "
                        "erikoistarjous vastaa samoin).",
-    "offer_expired": "Erikoistarjous on vanhentunut, peruttu tai loppunut.",
+    "offer_signature_invalid": "Tallennettu erikoistarjous poikkeaa siitä, minkä Valio Aimo allekirjoitti (hinnat, "
+                               "määräkatto, voimassaolo, syy tai kohteet): sillä ei voi hinnoitella. Ehdot otetaan "
+                               "aina vain tarkistetusta JWS:stä.",
+    "offer.signature_invalid": "Tallennettu Valio Aimon erikoistarjous, jonka hinnalla tarjous laskettiin, ei enää "
+                               "vastaa allekirjoitettua JWS:ää (muutettu tai vioittunut): tilaus estetään.",
+    "offer_expired":"Erikoistarjous on vanhentunut, peruttu tai loppunut.",
     "offer_not_applicable": "Mikään erikoistarjouksen tuotteista ei ole tarjouksen tilattava rivi.",
     "offer_over_cap": "Tarjous pyytää erikoistarjouksen tuotetta enemmän kuin sen määräkatosta on jäljellä.",
     "offer_requires_mandate": "Erikoistarjouksen hinnan saa vain sillä valtakirjalla, jolle se on tehty (anna "
