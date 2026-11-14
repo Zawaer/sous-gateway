@@ -88,6 +88,17 @@ def test_quantity_out_of_range_and_wrong_date_are_misses(catalog):
     assert not s["matched_no_correction"] and s["content"]["date_ok"] is False
 
 
+def test_candidate_lines_that_cannot_ship_are_not_counted(catalog):
+    cases, rubric = cases_and_rubric()
+    catalog["1"] = prod("1", "Valio kuohukerma 38 % 1 l")
+    catalog["2"] = prod("2", "Arla kuohukerma 1 l")
+    dead = {**line("2", "kuohukerma", 6), "orderable": False}
+    q = quote("Q1", [{**line("1", "kuohukerma", 6), "orderable": True}, dead], day="2026-11-21")
+    r = {"orders": [order("PO1", "Q1", "ordered", "silent")], "quote": {"id": "Q1"}, "stop_reason": "answered"}
+    s = H.score_run(cases["H02"], rubric["cases"]["H02"], r, {"Q1": q}, TODAY)
+    assert s["matched_no_correction"] and s["content"]["items"][0]["amount"] == {"LKG": 6.0}
+
+
 def test_should_hold_case_auto_ordered_is_a_false_auto_approval_held_is_correct(catalog):
     cases, rubric = cases_and_rubric()
     catalog["9"] = prod("9", "Naudan sisäfile", "Beef tenderloin", base="KG")

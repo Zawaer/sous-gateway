@@ -198,7 +198,8 @@ def score_quote(rub: dict, quote: dict | None, today: date) -> dict:
     """Content of one quote against the rubric: items, unwanted/unsafe lines, extra lines, date, budget."""
     if quote is None:
         return {"quote": None}
-    lines = [(l, _product(l["product_id"])) for l in quote.get("lines") or []]
+    # only lines that would ship: a quote also lists shortlisted candidates it could not deliver (orderable=false)
+    lines = [(l, _product(l["product_id"])) for l in quote.get("lines") or [] if l.get("orderable", True)]
     items = [score_item(it, lines) for it in rub.get("items") or []]
     by = {i["name"]: i for i in items}
     forb = forbidden_lines(rub.get("forbid") or [], lines, by)
