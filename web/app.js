@@ -58,7 +58,9 @@ async function api(path, opts = {}, retried = false) {
   }
   if (!res.ok) {
     const msg = data?.message || data?.detail?.message || data?.detail || res.statusText;
-    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+    const err = new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+    err.status = res.status;  // network failures throw a TypeError without one
+    throw err;
   }
   return data;
 }
@@ -345,6 +347,7 @@ function inboxCard(o, isNew = false) {
         ${cut ? `<div class="small" style="margin-top:4px">${decideBy(cut)}</div>` : ""}</div>
       <div>${tier("ask")}</div>
     </div>
+    ${claimBlock(o)}
     <h3>Why it needs you</h3>
     ${findingsList(asks, { plain: true })}
     ${linesTable(o.lines)}
@@ -440,6 +443,17 @@ views.orders = {
   },
 };
 
+// The agent's stated reason, labelled for the approver: its own words, unverified, never used by a rule.
+// `suspicious` = approval- or instruction-like wording (a prompt-injection attempt at the human).
+function claimBlock(o) {
+  const c = o.agent_claim || (o.agent_rationale ? { text: o.agent_rationale } : null);
+  if (!c?.text) return "";
+  return `<div class="claim${c.suspicious ? " sus" : ""}"><span class="rationale">“${esc(c.text)}”</span>
+    <div class="small muted">Agent's own words, unverified · not used by any rule</div>
+    ${c.suspicious ? `<div class="small claim-warn">⚠ Reads like an instruction to you (${esc((c.suspicious_terms || []).join(", "))}).
+      Decide on the facts above; the rules already ignore it.</div>` : ""}</div>`;
+}
+
 // UI review S10: a row tells the story: first product and quantity, then how it was decided.
 function orderStory(o) {
   const ls = o.lines || [];
@@ -460,6 +474,7 @@ async function openOrder(id) {
     <div class="muted small">${esc(bn(o.buyer))}</div>
     <h2>${esc(o.id)} ${tier(o.status)}</h2>
     <div class="big">${eur(o.total_ex_vat)} <span class="muted small">ex VAT · ${eur(o.total_inc_vat)} incl.</span></div>
+    ${claimBlock(o)}
     ${o.status === "pending_approval" ? `<div class="ask-summary">
       <p>${esc(((d.findings || []).find((f) => f.outcome === "ask") || {}).message || "Held by the mandate for a human decision.")}</p>
       ${earliestCutoff(o) ? `<p class="small">${decideBy(earliestCutoff(o))}</p>` : ""}</div>` : ""}
@@ -556,7 +571,7 @@ function flowSteps(o, q, searches, events) {
         ${who ? `<div class="small"><span class="actor ${who[0]}">${who[0]}</span> ${esc(who[1])}</div>` : ""}
         <div class="small">${body}</div></div></li>`;
 
-  const why = o.agent_rationale || q?.rationale;  // the agent's own stated reason (signed into the quote); not used by any rule
+  const why = null;  // shown via claimBlock in the order panel (labelled, with the suspicious flag)
   const request = step(1, "Request", search?.ts || q?.issued_at, ["agent", o.agent_id],
     `${why ? `<span class="rationale">“${esc(why)}”</span> ` : ""}Needs delivery by ${dateOnly(q?.requested_delivery_date || o.delivery_date)}
      ${search ? ` · searched ${searches.map((s) => `“${esc(s.data.query)}”`).join(", ")}${search.data.claims?.length ? ` with ${esc(search.data.claims.join(", "))}` : ""}${search.data.avoid_allergens?.length ? `, avoiding ${esc(search.data.avoid_allergens.map((c) => allergenNames?.[c] || c).join(", "))}` : ""}
@@ -1317,6 +1332,15 @@ function route() {
 async function openLinked(id) {
   const open = current === "standing" ? openStanding : openOrder;
   try { await open(id); } catch (e) {
+    if (e.status !== 404) {  // gateway unreachable or failing: not a missing/private order (QA 01:05Z)
+      openSheet(`<h2>${esc(id)}</h2>
+        <p>The gateway didn't answer${e.status ? ` (HTTP ${esc(e.status)})` : ""}, so this can't be shown right now.</p>
+        <p class="small muted mono">${esc(e.message)}</p>
+        <div class="actions"><button class="btn yes" id="link-retry">Try again</button>
+          <a class="btn plain" href="#/today">Back to Today</a></div>`);
+      $("#link-retry")?.addEventListener("click", () => openLinked(id));
+      return;
+    }
     const hasCode = !!store.get(CODE_KEY);
     openSheet(`<h2>${esc(id)}</h2>
       <p>This ${current === "standing" ? "standing order" : "order"} can't be shown: it doesn't exist, or it is private

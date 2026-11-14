@@ -393,3 +393,8 @@ pre {
 .actionbar-buttons { display: flex; gap: 8px; }
 .actionbar-buttons .btn { min-height: 44px; }
 @media (max-width: 560px) { .actionbar.decide { margin: 24px -16px -40px; padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); bottom: -40px; } }
+
+/* the agent's own words, labelled; suspicious wording gets a warning */
+.claim { margin: 10px 0; padding: 8px 12px; border-left: 2px solid var(--rule); }
+.claim.sus { border-left-color: var(--block); background: var(--block-bg); }
+.claim-warn { color: var(--block); margin-top: 4px; }
