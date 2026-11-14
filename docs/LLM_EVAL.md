@@ -45,6 +45,8 @@ The Sous agent ([`agent/sous_agent.py`](../agent/sous_agent.py)) keeps the same 
 
 Caveats: the parser was written with these cases in view (there is no held-out set), so its "need understood" score is optimistic; `tests/test_sous_agent.py` adds sentences that are not in the cases. A model API error (e.g. the provider's HTTP 429 quota) counts as a miss for either agent.
 
+Parser corrections and self-check stops were 0 in every Sous-agent run: the models never built a quote that contradicted the parsed need, and the self-check never stopped an order. So the difference comes from the shorter prompt, the four-tool subset and the parsed need given to the model up front, not from the code checks.
+
 ## Per case
 
 | Case | Request | `gemini:gemini-3.8-flash` | `gemini:gemini-3.8-flash + sous-agent` | `gemini:gemini-4-hydrogen` | `gemini:gemini-4-hydrogen + sous-agent` | `gemma:gemma-4-26b-a4b-it` | `gemma:gemma-4-26b-a4b-it + sous-agent` | `gemma:gemma-4-31b-it` | `gemma:gemma-4-31b-it + sous-agent` | `verda:kimi-k3-1-pro` | `verda:kimi-k3-1-pro + sous-agent` | `nvidia:nvidia/nemotron-3.5-super-vl-120b-a12b` | `verda-selfhosted:qwen3-30b-a3b` | `oracle:scripted-plan` |
