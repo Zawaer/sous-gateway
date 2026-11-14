@@ -395,3 +395,55 @@ def test_unknown_type_is_unconfirmed_not_different(gw, extra):
         assert f["outcome"] == "ask" and "unconfirmed" in f["message"] and "different product type" not in f["message"]
     finally:
         CATALOG.pop("32"), PRICE_PER_L.pop("32")
+
+
+# --- an unnamed flavour means any flavour; English qualifiers count (QA: pesto false mismatch, 473479) -----------
+
+GARLIC_PESTO = product("60", "Saclà Villi Valkosipuli Pesto 190 g", "Saclá 190g Garlic Pesto", size=(0.19, "KG"), brand="Saclá",
+                category="21453", temperature="ambient", claims=[],
+                allergens={"declared": True, "contains": ["AM"], "may_contain": ["AP"], "free_from": []})
+YOG_PLAIN = product("61", "Valio maustamaton jogurtti 1 kg", "Valio plain yoghurt 1 kg", size=(1.0, "KG"))
+YOG_STRAW = product("62", "Valio jogurtti 1 kg mansikka", "Valio strawberry yoghurt 1 kg", size=(1.0, "KG"))
+
+
+@pytest.fixture
+def pesto():
+    for p, v in ((GARLIC_PESTO, 20.0), (YOG_PLAIN, 3.0), (YOG_STRAW, 3.2)):
+        CATALOG[p["id"]], PRICE_PER_L[p["id"]] = p, v
+    yield
+    for p in (GARLIC_PESTO, YOG_PLAIN, YOG_STRAW):
+        CATALOG.pop(p["id"]), PRICE_PER_L.pop(p["id"])
+
+
+def test_garlic_pesto_hint_reads_the_english_qualifier():
+    assert Sub.type_from_hint("garlic pesto")["flavour"] == "garlic"
+    assert Sub.type_from_hint("valkosipulipesto")["flavour"] == "garlic"
+    generic = Sub.type_from_hint("pesto")
+    assert generic["flavour"] is None and generic["plain"] is False and generic["any_flavour"] is True
+    t = Sub.product_type(GARLIC_PESTO)
+    for hint in ("pesto", "garlic pesto", "valkosipulipesto"):
+        assert Sub.compare_types(Sub.type_from_hint(hint), t)[0] == "same", hint
+
+
+@pytest.mark.parametrize("hint", ["pesto", "garlic pesto", "valkosipulipesto"])
+def test_pesto_hints_quote_garlic_pesto_without_a_type_review(gw, pesto, hint):
+    q = gw(["60"], amount=1, unit="SALES_UNIT", product_type=hint)
+    assert "product.type_mismatch" not in rules(q), hint
+    assert not any(i["code"] == "TYPE_MISMATCH" for l in q["lines"] for i in l["issues"]), hint
+
+
+def test_explicit_plain_yoghurt_still_flags_a_flavoured_one(gw, pesto):
+    for hint in ("plain yoghurt", "maustamaton jogurtti"):
+        assert Sub.type_from_hint(hint)["plain"] is True
+        assert Sub.compare_types(Sub.type_from_hint(hint), Sub.product_type(YOG_STRAW))[0] == "different"
+        assert Sub.compare_types(Sub.type_from_hint(hint), Sub.product_type(YOG_PLAIN))[0] == "same"
+        assert "product.type_mismatch" in rules(gw(["62"], amount=1, unit="SALES_UNIT", product_type=hint))
+    assert "product.type_mismatch" not in rules(gw(["62"], amount=1, unit="SALES_UNIT", product_type="yoghurt"))
+
+
+def test_pesto_allergens_are_still_enforced(gw, pesto):
+    S.issue_mandate(Mandate(id="MM", buyer="Hotel", agent_id="a", issued_by="chef", auto_approve_limit_eur=5000,
+                            hard_limit_eur=10000, avoid_allergens=["AM"]))
+    q = S.request_quote(S.QuoteRequest(agent_id="a", mandate_id="MM", delivery_date=DAY, items=[
+        S.QuoteItem(product_ids=["60"], amount=1, unit="SALES_UNIT", product_type="garlic pesto")]))["quote"]
+    assert q["mandate_preview"]["outcome"] == "block" and "product.type_mismatch" not in rules(q)

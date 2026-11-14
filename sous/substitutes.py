@@ -478,7 +478,7 @@ def compare_types(o: dict, c: dict) -> tuple[str, list[str], list[str]]:
     if o["species"] and c["species"] and o["species"] != c["species"]:
         (minor if o["species_group"] == c["species_group"] else different).append(
             f"{c['species']} instead of {o['species']}")
-    if o["flavour"] != c["flavour"]:
+    if o["flavour"] != c["flavour"] and not (o["flavour"] is None and o.get("any_flavour")):
         if o["flavour"] is None:
             (minor if c["flavour"] == "lightly salted" else different).append(f"{c['flavour']} instead of plain")
         elif c["flavour"] is None:
@@ -515,9 +515,22 @@ def type_from_hint(hint: str | None) -> dict | None:
     if not hint:
         return None
     t = product_type({"names": {"fi": hint}})
+    en = product_type({"names": {"en": hint}})
     if not t["key"]:
-        t = product_type({"names": {"en": hint}})
-    return t if t["key"] else None
+        t = en
+    elif en["key"] == t["key"]:
+        # English qualifiers count like Finnish ones: 'garlic pesto' is pesto with flavour garlic, just as
+        # 'valkosipulipesto' is ('pesto' is a Finnish head too, and the Finnish pass ignores 'garlic')
+        for f in ("flavour", "species", "species_group", "form", "prep", "fat_pct", "salt"):
+            if t[f] is None and en[f] is not None:
+                t[f] = en[f]
+        t["plant_based"] = t["plant_based"] or en["plant_based"]
+        t["plain"] = (t["plain"] or en["plain"]) and t["flavour"] is None
+    if not t["key"]:
+        return None
+    # A request that names no flavour means any flavour; only an explicit 'plain' / 'maustamaton' asks for plain.
+    t["any_flavour"] = t["flavour"] is None and not t["plain"]
+    return t
 
 
 def type_guard(offers: list[dict], hint: str | None = None) -> tuple[dict | None, dict[str, tuple[str, str | None]]]:
