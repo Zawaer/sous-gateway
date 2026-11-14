@@ -214,6 +214,14 @@ def _build() -> list[dict]:
         _r("substitution", "finding", _field_tiers("substitutions"), "buyer",
            "A line replaces the product the buyer asked for; the mandate says how much say the human gets.",
            "substitutions"),
+        _r("needs.changed", "finding", ["ask"], "buyer",
+           "The buyer's needs changed mid-contract: a mandate update tightened its allergen or diet constraints "
+           "(a newly avoided allergen, a newly required claim, may-contain or missing allergen data no longer "
+           "accepted). Every standing order, held or upcoming order and remembered decision of the mandate is "
+           "re-checked: a conflicting standing order is paused, a held order gets this finding, an already sent "
+           "order is flagged for review, and a remembered approval or allergen clearance that would now be unsafe "
+           "is revoked. Nothing is changed or dropped silently; loosening never expands anything automatically "
+           "(sous/needs.py).", "avoid_allergens", condition="mandate update"),
         _r("product.held", "finding", ["block"], "valio",
            "Valio Aimo has put the product on hold (recall, quality hold or sales stop; GET /holds): it can't be "
            "quoted as orderable, ordered, or approved into an order, also on a quote issued before the hold.", None),

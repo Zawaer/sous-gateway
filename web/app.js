@@ -1252,7 +1252,12 @@ views.today = {
     const standing = noQA(standingR.standing_orders || [], isQAMandate);
     const details = await Promise.all(standing.map((s) => api("/standing-orders/" + encodeURIComponent(s.id)).catch(() => null)));
     const drift = details.filter(Boolean).map((d) => ({ d, r: lastLive(d) })).filter(({ r }) => r && r.drift?.length);
-    const key = [day, orders.length, pending.length, orders[0]?.updated_at, drift.length, chain.events].join("|");
+    // Needs changed mid-contract (sous/needs.py): the latest re-check per mandate from the last 14 days
+    const since = Date.now() - 14 * 864e5;
+    const needs = (await Promise.all(mandates.filter((m) => !m.revoked).map((m) =>
+      api(`/mandates/${encodeURIComponent(m.id)}/needs-reviews?limit=1`).then((r) => r.needs_reviews[0]).catch(() => null))))
+      .filter((r) => r && r.change?.tightened?.length && Date.parse(r.created_at) > since);
+    const key = [day, orders.length, pending.length, orders[0]?.updated_at, drift.length, chain.events, needs.map((r) => r.id).join()].join("|");
     if (key === this.key && view.dataset.view === "today") { tickDeadlines(); return; }
     this.key = key;
     view.dataset.view = "today";
@@ -1289,6 +1294,16 @@ views.today = {
         ${stat("trending_up", heldDrift ? "st-ask" : "", heldDrift, "drift held", "#/standing")}
         ${stat(chain.ok ? "verified" : "gpp_bad", chain.ok ? "st-silent" : "st-block", chain.ok ? "Intact" : "Broken", "audit chain", "#/audit")}
       </div>
+      ${needs.length ? `<section class="msec"><h3>Your needs changed</h3><div class="mlist">${needs.map((r) => `
+        <details class="mrow"><summary>${ic("rule", r.held.length || r.flagged.length ? "st-ask" : "st-notify")}
+          <span class="mrow-main"><b>${esc(bn(r.buyer))}</b><span class="muted">${esc(r.held.length)} held · ${esc(r.flagged.length)} to review · ${esc(r.revoked.length)} revoked · ${esc(r.unaffected.length)} still running</span></span>
+          ${ic("expand_more", "chev")}</summary>
+          <div class="mrow-more"><p>${msg(r.summary)}</p><p class="muted small" lang="fi">${esc(r.summary_fi)}</p>
+            ${[...r.held, ...r.flagged, ...r.revoked].length ? `<ul class="why">${[...r.held, ...r.flagged, ...r.revoked].slice(0, 6).map((x) => `<li>${msg(x.findings[0].message)}</li>`).join("")}</ul>` : ""}
+            ${r.substitutes.filter((s) => s.proposal).map((s) => `<p class="small">Proposed instead of ${esc(s.for_product_id)}: <b>${esc(s.proposal.name)}</b> (a proposal; your agent quotes it and your rules decide)</p>`).join("")}
+            <a class="btn plain sm" href="#/standing">Standing orders ${ic("arrow_forward")}</a>
+            <a class="btn plain sm" href="#/inbox">Approvals ${ic("arrow_forward")}</a>
+            <span class="muted mono small">${esc(r.id)}</span></div></details>`).join("")}</div></section>` : ""}
       <section class="msec"><h3>${SIDE === "buyer" ? "Waiting for you" : "Waiting for buyers"}</h3>
         ${pending.length ? `<div class="mlist">${pending.slice(0, 6).map((o) => {
           const cut = earliestCutoff(o);

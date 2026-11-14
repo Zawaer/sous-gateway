@@ -956,12 +956,25 @@ def mandate_offers(mandate_id: str, include_inactive: bool = False):
 # --- mandates ---------------------------------------------------------------
 
 @app.post("/mandates", tags=["mandates"], dependencies=[Depends(require_approver)])
-def issue_mandate(m: Mandate, mint_agent_credential: bool | None = None):
+def issue_mandate(m: Mandate, mint_agent_credential: bool | None = None,
+                  change_note: str | None = Query(None, max_length=200, description=(
+                      "Why the buyer's needs changed, e.g. 'Ward 3 is now nut-free'; opens the needs.changed "
+                      "findings when this update tightens allergen or diet constraints"))):
     """A human issues a mandate to their agent; the gateway signs it.
 
     With require_agent_auth (or mint_agent_credential=true) the response includes agent_credential: the agent's
-    bearer token, shown this once."""
-    return S.issue_mandate(m, mint_agent_credential)
+    bearer token, shown this once. An update that tightens allergen or diet constraints re-checks every standing
+    order, held or upcoming order and remembered decision of the mandate and returns `needs_review` (held,
+    flagged, revoked, unaffected, proposed substitutes; summary and summary_fi). See sous/needs.py."""
+    return S.issue_mandate(m, mint_agent_credential, change_note)
+
+
+@app.get("/mandates/{mandate_id}/needs-reviews", tags=["mandates"], dependencies=[Depends(_read_mandate)])
+def mandate_needs_reviews(mandate_id: str, limit: int = Query(20, ge=1, le=100)):
+    """The re-checks run when this mandate's allergen or diet constraints changed (newest first): what was held,
+    flagged for review or revoked, and what kept running (sous/needs.py)."""
+    from . import needs
+    return {"mandate_id": mandate_id, "needs_reviews": needs.list_for(mandate_id, limit)}
 
 
 @app.get("/mandates", tags=["mandates"])

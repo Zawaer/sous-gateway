@@ -531,6 +531,19 @@ estimated cut-off has passed is skipped (the default renewal date moves a week o
 
 Demo history: `POST /standing-orders/{id}/simulate-history` (human) stores past renewals marked `simulated: true`. Only the amounts are made up; they are priced at a real signed quote under the same mandate, never at an invented Valio response. With `scripts/demo_standing.py`, the hotel's milk is +18 % over its 4-week median and the cost +€135 (+16 %), so the renewal is held for a human.
 
+### 8.1 Needs changed mid-contract (`sous/needs.py`)
+
+A buyer's situation changes during the contract: a hospital ward goes nut-free or gluten-free. The human updates the mandate (`POST /mandates`, optional `?change_note=Ward 3 is now nut-free`, or a re-signed buyer credential). When the update **tightens** the allergen or diet constraints (a new `avoid_allergens` code, a new `required_claims` entry, `allow_may_contain` turned off, `unknown_allergens` ask → block), the gateway re-checks everything of that mandate that runs on the old assumptions. A product conflicts when it fails the new constraint in a way it didn't fail the old one (contains, may contain, no allergen data for the new code, lacks the new claim).
+
+| What | If it conflicts |
+|---|---|
+| Active standing order (every candidate product) | Paused, with `needs_hold {review_id, findings}`; only a human resumes it (`POST /standing-orders/{id}/resume`) |
+| Held order (`pending_approval`) | Gets a `needs.changed` finding (ask) in its decision, receipt re-signed; approval re-checks the mandate as always |
+| Ordered, delivery today or later | Flagged for review in the summary and audit; Sous never cancels or changes a sent order on its own |
+| Remembered decision, allergen clearance | Revoked (`remembered.revoked` / `allergen.clearance_revoked`, authority `needs.changed`) |
+
+Each finding says what changed, what it affects and why: *"Ward 3 is now nut-free since 14 Nov: the standing order Breakfast for Granola 500g contains tree nuts."* (Finnish in `message_fi`). Unaffected items keep running. Where possible, one compliant substitute per conflicting product is proposed from the substitute ranking (section 5), a proposal only: the agent quotes it with `substitute_for` and the mandate decides. The result is one summary, `needs_review {id, change {tightened, loosened}, held, flagged, revoked, unaffected, substitutes, summary, summary_fi}`, in the mandate update's response, at `GET /mandates/{id}/needs-reviews`, in the audit (`needs.changed`), in the buyer's notification feed and on the buyer dashboard (Today, "Your needs changed"). **Loosening never expands anything**: held standing orders stay paused and revoked decisions stay revoked until a human acts.
+
 ## 9. Valio suggests
 
 Source: `sous/suggest.py`. The seller's side of the conversation: Valio Aimo offers the buyer's agent products it may want. `GET /mandates/{id}/suggestions?agent_id=&delivery_date=&limit=5&basis=<product id>...` (MCP `get_suggestions`). Only the mandate's agent may ask (`agent_mismatch`).

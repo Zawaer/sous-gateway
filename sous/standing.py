@@ -104,8 +104,11 @@ def set_active(standing_id: str, active: bool, by: str) -> dict:
     so = _get(standing_id)
     so["active"] = active
     so["updated_at"] = S._now().isoformat(timespec="milliseconds")
+    # a hold from a needs change (sous/needs.py) ends only when a human resumes; the audit keeps which one it was
+    cleared = so.pop("needs_hold", None) if active else None
     SS.put(so)
-    store.audit("standing.resumed" if active else "standing.paused", by, "human", standing_id, so["buyer"], {})
+    store.audit("standing.resumed" if active else "standing.paused", by, "human", standing_id, so["buyer"],
+                {"needs_review_id": cleared["review_id"]} if cleared else {})
     return so
 
 

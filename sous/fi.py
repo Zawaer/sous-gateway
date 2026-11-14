@@ -283,6 +283,13 @@ RULES = {
                      "tuotekohtaisesti tai rivillä; agentti voi vain tiukentaa.",
     "purpose.ask": "Korvaava tuote tuotteelle, jota ostaja käyttää reseptissä (kuohukerma ei välttämättä vaahdotu "
                    "samoin): ostaja päättää aina. Kahvikerma taas voidaan merkitä vapaasti korvattavaksi.",
+    "needs.changed": "Ostajan tarpeet muuttuivat kesken sopimuksen: valtakirjan päivitys tiukensi allergeeni- tai "
+                     "ruokavaliovaatimuksia (uusi vältettävä allergeeni, uusi vaadittu merkintä, 'voi sisältää' tai "
+                     "puuttuvat allergeenitiedot eivät enää kelpaa). Kaikki valtakirjan vakiotilaukset, odottavat ja "
+                     "tulevat tilaukset sekä muistetut päätökset tarkistetaan uudelleen: ristiriitainen vakiotilaus "
+                     "pysäytetään, odottava tilaus saa tämän havainnon, jo lähetetty tilaus merkitään "
+                     "tarkistettavaksi, ja nyt vaarallinen muistettu hyväksyntä tai allergeenivarmistus perutaan. "
+                     "Mitään ei muuteta tai pudoteta hiljaa; lievennys ei koskaan laajenna mitään itsestään.",
     "product.held": "Valio Aimo on pysäyttänyt tuotteen (takaisinveto, laatupidätys tai myyntikielto; GET "
                     "/holds): sitä ei voi tarjota tilattavana, tilata eikä hyväksyä, ei edes ennen pysäytystä "
                     "annetulla tarjouksella.",

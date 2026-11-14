@@ -98,11 +98,18 @@ def _comparable(m: Mandate) -> dict:
 
 # --- mandates ---------------------------------------------------------------
 
-def issue_mandate(m: Mandate, mint_agent_credential: bool | None = None) -> dict:
+def issue_mandate(m: Mandate, mint_agent_credential: bool | None = None, change_note: str | None = None) -> dict:
     """Sign and store the mandate. When the agent must authenticate (or when asked), also mint the agent's
-    credential: its token is in the response this once and never again."""
+    credential: its token is in the response this once and never again. An update that changes the allergen or
+    diet constraints re-checks everything running under the mandate (sous/needs.py): `needs_review`."""
+    from . import needs
     with _order_lock:  # an order being placed or approved sees the mandate before or after the change, not both
-        return _issue_mandate(m, mint_agent_credential)
+        prev = needs.previous(store.get_mandate(m.id))
+        out = _issue_mandate(m, mint_agent_credential)
+        rev = needs.review(prev, m, note=change_note)
+    if rev:  # substitute proposals price a shortlist at Valio Aimo: outside the lock
+        out["needs_review"] = needs.add_substitutes(rev, m)
+    return out
 
 
 def _issue_mandate(m: Mandate, mint_agent_credential: bool | None) -> dict:
@@ -227,6 +234,12 @@ def issue_credential_mandate(token: str, mint_agent_credential: bool | None = No
            "countersigned_by": credentials.gateway_did()}
     if mint_agent_credential if mint_agent_credential is not None else agent_auth.required(m):
         out["agent_credential"] = agent_auth.mint(m, m.issued_by)
+    if existing:  # needs changed mid-contract (sous/needs.py): re-check what runs on the old constraints
+        from . import needs
+        with _order_lock:
+            rev = needs.review(needs.previous(existing), m)
+        if rev:
+            out["needs_review"] = needs.add_substitutes(rev, m)
     return out
 
 
