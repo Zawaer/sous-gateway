@@ -13,6 +13,13 @@ Reasoning mode is a chat-template switch (`chat_template_kwargs.enable_thinking`
 because reading a page is perception, not deliberation, and it costs latency. The eval also measures it
 switched on (`+think`).
 
+**Nemotron hosted on Verda with NVIDIA.** The same model also runs on Verda GPUs: preset `verda-nemotron`
+(`https://containers.datacrunch.io/nemotron-3-5-super-vl-b300/v1`, model `nemotron-3.5-super-vl`, its own key
+`VERDA_NEMOTRON_KEY`, EU). The photo reader (`agent/vision.py`, `/agent/read-photo`) uses it when that key is
+set and falls back to the `nvidia` preset. Its reasoning arrives in `reasoning`/`reasoning_content`; `agent/llm.py`
+keeps that apart from the answer and never sends it back. On this deployment reasoning **stays on** (see Results):
+with it off, the same prompt and checks made 6 silent errors.
+
 ## What it does
 
 A kitchen's real inputs are often on paper: a handwritten order list taped to the cold-room door, next week's
@@ -140,6 +147,21 @@ so they went to a human instead of becoming silent errors. With the page check a
 the same accuracy at ~5x the latency (20.7 s vs 4.3 s per page), so it stays off. Default variant cost per
 page: ~3,300 prompt + ~470 completion tokens, 1.16 calls; free on build.nvidia.com.
 
+**Nemotron on Verda** (run 6, 14.11. 16:45Z, `verda-nemotron`, one local run, Nemotron calls only, 0 Valio
+calls; `evals/vision/history/run6-verda-nemotron.*`):
+
+| variant | pages read | qty+unit exact | delivered exact | auto-correct | silent errors | traps | invalid JSON | s/page |
+|---|---|---|---|---|---|---|---|---|
+| v3 + checks + second look, reasoning off | 32 | 97 % | 81 % | 94 % | **6** | 6/8 | 1 | **1.2** |
+| v3 + checks + second look, reasoning on (**default there**) | 8 | 100 % | 100 % | 100 % | **0** | 2/2 | 0 | 5.5 |
+
+With reasoning off it is 3.6x faster than the free tier (1.2 vs 4.3 s/page) but less careful: the crossed-out
+yoghurt was read as an order twice, and the red-pen correction on the photographed delivery note was missed
+3 times out of 4 (all counted as silent errors), plus one page answered with two JSON objects. With reasoning on
+it matched the free tier's best (100 %, 0 silent errors) at 5.5 s/page instead of 20.7 s, so `verda-nemotron`
+defaults to reasoning on (`max_tokens` 16,384, temperature 0.6). ~3,180 prompt + ~3,150 completion tokens per
+page (reasoning included). Reasoning-on is 8 reads only: a small sample.
+
 Real readings are recorded in `evals/vision/samples/`. `--from-json` replays them through the live gateway
 without a key, e.g. the photographed delivery note: "Ruokakerma 1 l | 5 | 5 | l | puuttuu 3 l!" → delivered
 2 → shortfall 3 L + 4 kg of mince → one quote, mandate preview *ask* (the cream is above the hotel's €2.50/L
@@ -156,6 +178,7 @@ The scorer and the pipeline are also checked offline: an oracle "model" answerin
   Invalid JSON gets one repair retry, then a clean `VisionError`. A failed second look keeps the flags
   (fail-safe). The API key is only ever sent in the Authorization header, never logged or put in errors.
 - **No key, no problem for the demo:** `--from-json` replays a saved reading through the same pipeline.
-- **CI:** the `llm-eval` job has a `vision_only` manual input. It runs the vision eval when the
-  `NVIDIA_API_KEY` secret exists (`integrate.api.nvidia.com` is on the job's CRACI egress allowlist). It
-  makes no Valio calls.
+- **CI:** the `llm-eval` job has a `vision_only` manual input and a `vision_provider` input (`auto` =
+  `verda-nemotron` when the `VERDA_NEMOTRON_KEY` secret exists, else `nvidia`). It skips with a notice when the
+  chosen key is missing. `integrate.api.nvidia.com` and `containers.datacrunch.io` are on the job's CRACI egress
+  allowlist. It makes no Valio calls.

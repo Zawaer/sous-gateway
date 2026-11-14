@@ -249,6 +249,39 @@ def test_nvidia_preset_sends_images_and_turns_reasoning_off():
     assert base64.b64decode(img.split(",", 1)[1])[:8] == b"\x89PNG\r\n\x1a\n"
 
 
+def test_verda_nemotron_preset_keeps_reasoning_out_of_the_answer():
+    env = {"VERDA_NEMOTRON_KEY": "verda-test", "NVIDIA_API_KEY": "nvapi-test"}
+    cfg = config_from_env("verda-nemotron", env=env)
+    assert cfg.base_url == "https://containers.datacrunch.io/nemotron-3-5-super-vl-b300/v1"
+    assert cfg.model == "nemotron-3.5-super-vl" and cfg.max_tokens_field == "max_tokens" and "verda-test" not in repr(cfg)
+    assert cfg.max_tokens == 16384 and cfg.temperature == 0.6  # reasoning on by default: room for it
+    assert config_from_env("verda-nemotron", env={**env, "LLM_THINKING": "0"}).extra_body == {
+        "chat_template_kwargs": {"enable_thinking": False}}
+    # the photo reader prefers Verda's Nemotron when its key is set, else NVIDIA's catalog
+    assert V.vision_provider(env) == "verda-nemotron"
+    assert V.vision_provider({"NVIDIA_API_KEY": "k"}) == "nvidia" and V.vision_provider({}) == "nvidia"
+    sent = []
+
+    def handler(request):
+        sent.append({**json.loads(request.content), "auth": request.headers["authorization"]})
+        # reasoning in reasoning_content (or vLLM's newer "reasoning"), with a decoy JSON object in it
+        field = "reasoning_content" if len(sent) == 1 else "reasoning"
+        return httpx.Response(200, json={"choices": [{"message": {
+            "content": "not json" if len(sent) == 1 else json.dumps(ORDER),
+            field: '{"kind": "menu", "items": []} let me think'}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 1200, "completion_tokens": 300}})
+    client = ChatClient(cfg, http=httpx.Client(transport=httpx.MockTransport(handler)))
+    vr = V.read_order_image(png(), None, client, today=TODAY, verify=False)
+    # the reasoning's JSON was never taken as the answer: the first reply needed a repair, the second is the read
+    assert vr.repaired and vr.read.kind == "order_list" and vr.model == "verda-nemotron:nemotron-3.5-super-vl"
+    assert sent[0]["auth"] == "Bearer verda-test" and sent[0]["max_tokens"] == 16384
+    assert sent[0]["chat_template_kwargs"] == {"enable_thinking": True}
+    assert sent[0]["messages"][1]["content"][1]["image_url"]["url"].startswith("data:image/png;base64,")
+    # the repair turn echoes the answer only, not the reasoning
+    assert all("reasoning" not in m and "reasoning_content" not in m for m in sent[1]["messages"])
+    assert vr.prompt_tokens == 2400 and vr.completion_tokens == 600
+
+
 # --- the eval scorer ---------------------------------------------------------------------------------
 
 def test_eval_scorer_counts_silent_errors():

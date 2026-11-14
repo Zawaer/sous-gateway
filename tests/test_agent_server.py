@@ -281,6 +281,17 @@ def test_read_photo_flags_doubtful_lines_and_the_order_button_is_idempotent(c, s
     assert [(p["provider"], p["model_calls"], p["cost_estimated"]) for p in u] == [("nvidia", 2, True)]
 
 
+def test_read_photo_prefers_nemotron_on_verda(c, sbx):
+    LLMS["nvidia"] = FakeLLM("nvidia", "nvidia/nemotron-3.5-super-vl-120b-a12b", [])  # must not be called
+    LLMS["verda-nemotron"] = FakeLLM("verda-nemotron", "nemotron-3.5-super-vl", [PAGE, {"lines": []}], price=(0, 0))
+    r = c.post("/read-photo", headers=sbx["headers"], data={"mandate_id": sbx["mandate_id"],
+               "agent_id": sbx["agent_id"]}, files={"image": ("list.jpg", jpeg(), "image/jpeg")})
+    assert r.status_code == 200, r.text
+    rd = r.json()["reading"]
+    assert rd["by"] == "NVIDIA Nemotron 3.5 Super VL (on Verda)" and rd["model"]["provider"] == "verda-nemotron"
+    assert rd["model"]["calls"] == 2 and LLMS["verda-nemotron"].answers == []
+
+
 # --- a sentence -> the LLM buyer agent ------------------------------------------------------------------------
 
 def _tool(name, args):

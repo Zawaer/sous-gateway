@@ -27,6 +27,10 @@ on:
         description: "Only the vision eval (Nemotron VL reading kitchen paper; no Valio calls)"
         type: boolean
         default: false
+      vision_provider:
+        description: "Vision eval provider: auto (verda-nemotron when VERDA_NEMOTRON_KEY is set, else nvidia), verda-nemotron or nvidia"
+        type: string
+        default: "auto"
       vision_variants:
         description: "Vision eval prompt variants, e.g. 'v2 v3 v3+verify' (empty: the default set)"
         type: string
@@ -343,6 +347,8 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       VERDA_INFERENCE_API_KEY: ${{ secrets.VERDA_INFERENCE_API_KEY }}
       NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+      # Nemotron 3.5 Super VL hosted on Verda with NVIDIA (provider verda-nemotron; its own key, not the inference key)
+      VERDA_NEMOTRON_KEY: ${{ secrets.VERDA_NEMOTRON_KEY }}
       # our own open-weight model on a Verda GPU (provider verda-selfhosted); optional, skipped when unset
       SOUS_SELFHOSTED_URL: ${{ secrets.SOUS_SELFHOSTED_URL }}
       SOUS_SELFHOSTED_KEY: ${{ secrets.SOUS_SELFHOSTED_KEY }}
@@ -355,7 +361,7 @@ jobs:
       # recipe planning eval (manual runs only), next to the table provider
       RECIPE_EVAL_MODELS: ${{ vars.RECIPE_EVAL_MODELS || 'gemini:gemini-4-hydrogen verda:kimi-k3-1-pro' }}
     steps:
-      # Egress: PyPI, Valio Aimo, the model APIs (Gemini, Verda in the EU, NVIDIA for Nemotron) and Aiven
+      # Egress: PyPI, Valio Aimo, the model APIs (Gemini, Verda in the EU, NVIDIA and Verda's endpoint for Nemotron) and Aiven
       # Valkey. Nothing else.
       - uses: cracicorp/setup@5cbae507e2547dca6c402e413c645767fbae3534 # v1
         if: ${{ vars.CI_RUNNER == 'craci' }}
@@ -367,7 +373,8 @@ jobs:
             connections:
               - tls:
                   serverNamePatterns: [junction26.valioaimo.fi, generativelanguage.googleapis.com, inference.verda.com,
-                                       integrate.api.nvidia.com, 95-133-254-130.sslip.io]  # last: self-hosted GPU
+                                       integrate.api.nvidia.com, containers.datacrunch.io,
+                                       95-133-254-130.sslip.io]  # datacrunch: Nemotron on Verda; sslip: self-hosted GPU
                   ports: [443]
               # Aiven for Valkey (shared Valio budget, rediss://). The port is our service's, from its Service URI.
               - tls:
@@ -382,12 +389,21 @@ jobs:
           BEFORE: ${{ github.event.before }}
           EVENT: ${{ github.event_name }}
           VISION_ONLY: ${{ inputs.vision_only }}
+          VISION_PROVIDER: ${{ inputs.vision_provider || 'auto' }}
         run: |
           vision=false
-          if [ "$EVENT" = workflow_dispatch ] && [ -n "$NVIDIA_API_KEY" ]; then vision=true; fi
+          vp=$VISION_PROVIDER
+          if [ "$vp" = auto ]; then if [ -n "$VERDA_NEMOTRON_KEY" ]; then vp=verda-nemotron; else vp=nvidia; fi; fi
+          case "$vp" in
+            verda-nemotron) key=$VERDA_NEMOTRON_KEY; kname=VERDA_NEMOTRON_KEY ;;
+            nvidia) key=$NVIDIA_API_KEY; kname=NVIDIA_API_KEY ;;
+            *) echo "::error::vision_provider must be auto, verda-nemotron or nvidia"; exit 1 ;;
+          esac
+          if [ "$EVENT" = workflow_dispatch ] && [ -n "$key" ]; then vision=true; fi
           echo "vision=$vision" >> "$GITHUB_OUTPUT"
+          echo "vision_provider=$vp" >> "$GITHUB_OUTPUT"
           if [ "$VISION_ONLY" = true ]; then
-            [ "$vision" = true ] || echo "::notice::NVIDIA_API_KEY secret not set: skipping the vision eval"
+            [ "$vision" = true ] || echo "::notice::$kname secret not set: skipping the vision eval ($vp)"
             echo "run=$vision" >> "$GITHUB_OUTPUT"; exit 0
           fi
           run=true
@@ -454,12 +470,14 @@ jobs:
           done
           uv run python scripts/recipe_eval.py --providers $providers
           cat evals/recipe_results.md >> "$GITHUB_STEP_SUMMARY"
-      - name: Vision eval (Nemotron VL reads kitchen paper; manual runs with NVIDIA_API_KEY only)
+      - name: Vision eval (Nemotron VL reads kitchen paper; manual runs with VERDA_NEMOTRON_KEY or NVIDIA_API_KEY)
         # 8 rendered pages (evals/vision/), field-level accuracy per prompt variant. Model calls only, no Valio.
         if: ${{ !cancelled() && steps.pre.outputs.run == 'true' && steps.pre.outputs.vision == 'true' && !inputs.recipe_only && !inputs.llm_only }}
+        env:
+          VISION_PROVIDER: ${{ steps.pre.outputs.vision_provider }}
         run: |
           uv sync --frozen
-          uv run python scripts/vision_eval.py --provider nvidia --variants $VISION_EVAL_VARIANTS --repeat "$VISION_EVAL_REPEAT"
+          uv run python scripts/vision_eval.py --provider "$VISION_PROVIDER" --variants $VISION_EVAL_VARIANTS --repeat "$VISION_EVAL_REPEAT"
           cat evals/vision/results.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() && steps.pre.outputs.run == 'true' }}

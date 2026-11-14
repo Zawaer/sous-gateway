@@ -221,7 +221,7 @@ def make_llm(provider: str, model: str | None, think: bool):
     cfg = config_from_env(provider, model)
     if cfg.provider != "local" and not key_present(cfg.provider):
         return None
-    if provider == "nvidia":
+    if provider in ("nvidia", "verda-nemotron"):  # the same Nemotron; thinking is a chat-template switch
         cfg.extra_body = {"chat_template_kwargs": {"enable_thinking": think}}
         if think:
             cfg.max_tokens = 16384

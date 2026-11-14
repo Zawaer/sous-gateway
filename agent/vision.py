@@ -463,7 +463,8 @@ def read_order_image(src: str | Path | bytes, kind_hint: str | None = None, llm=
     Raises VisionError when the model's answer is invalid twice (the VisionRead is attached as .result).
     """
     if llm is None:
-        raise VisionError("No vision model: set NVIDIA_API_KEY (provider nvidia) or pass --from-json.")
+        raise VisionError("No vision model: set VERDA_NEMOTRON_KEY (verda-nemotron) or NVIDIA_API_KEY (nvidia), "
+                          "or pass --from-json.")
     today = today or helsinki_today()
     data, mime = prepare_image(src)
     label = getattr(getattr(llm, "cfg", None), "label", "llm")
@@ -943,12 +944,22 @@ def render(po: PhotoOrder, source: str = "photo") -> str:
 
 # --- CLI ------------------------------------------------------------------------------------------------
 
+VISION_PROVIDERS = ("verda-nemotron", "nvidia")  # the same Nemotron 3.5 Super VL: Verda-hosted first, NVIDIA's catalog
+
+
+def vision_provider(env: dict | None = None) -> str:
+    """The photo reader's provider: Nemotron on Verda when VERDA_NEMOTRON_KEY is set, else NVIDIA's API catalog."""
+    from .llm import key_present
+    return next((p for p in VISION_PROVIDERS if key_present(p, env)), VISION_PROVIDERS[-1])
+
+
 def make_llm(provider: str | None, model: str | None = None):
     from .llm import ChatClient, config_from_env, key_present
+    provider = provider or vision_provider()
     cfg = config_from_env(provider, model)
     if cfg.provider != "local" and not key_present(cfg.provider):
         return None
-    cfg.max_tokens = 4096
+    cfg.max_tokens = max(cfg.max_tokens or 0, 4096)  # verda-nemotron reasons first: its preset leaves room
     return ChatClient(cfg)
 
 
@@ -957,7 +968,8 @@ def main(argv=None) -> int:
     ap.add_argument("image", nargs="?", help="JPEG/PNG/WebP photo or scan")
     ap.add_argument("--mandate", default="M-HOTEL-AURORA")
     ap.add_argument("--agent", default="aurora-purchasing-agent")
-    ap.add_argument("--provider", default="nvidia", help="vision model provider (default nvidia: Nemotron 3.5 Super VL)")
+    ap.add_argument("--provider", default=None, help="vision model provider (default: verda-nemotron when "
+                    "VERDA_NEMOTRON_KEY is set, else nvidia; both Nemotron 3.5 Super VL)")
     ap.add_argument("--model")
     ap.add_argument("--kind", choices=["order_list", "menu", "delivery_note"], help="hint what the page is")
     ap.add_argument("--prompt", default=DEFAULT_PROMPT, choices=sorted(PROMPTS))
@@ -986,9 +998,10 @@ def main(argv=None) -> int:
     else:
         if not a.image:
             ap.error("give an image (or --from-json)")
+        a.provider = a.provider or vision_provider()
         llm = make_llm(a.provider, a.model)
         if llm is None:
-            print(f"No API key for {a.provider} (NVIDIA_API_KEY for nvidia). Use --from-json to replay a reading.",
+            print(f"No API key for {a.provider} (VERDA_NEMOTRON_KEY or NVIDIA_API_KEY). Use --from-json to replay.",
                   file=sys.stderr)
             return 2
         try:
@@ -999,7 +1012,7 @@ def main(argv=None) -> int:
     if a.read_only:
         print(json.dumps(vr.to_dict(), ensure_ascii=False, indent=1))
         return 0
-    rp = a.recipe_provider or ("table" if a.from_json else a.provider)
+    rp = a.recipe_provider or ("table" if a.from_json else a.provider or vision_provider())
     recipe_llm = None if rp == "table" else make_llm(rp, a.model if rp == a.provider else None)
     from .buyer import MCPGateway
     if a.gateway == "local":

@@ -56,6 +56,7 @@ FALLBACK_PRICE = (float(config.env("AGENT_PRICE_IN", "1.0")), float(config.env("
 DISPLAY = {
     "gemini-4-hydrogen": "Gemini 4 Hydrogen", "gemini-4-argon": "Gemini 4 Argon", "gemini-4-carbon": "Gemini 4 Carbon",
     "gemini-3.8-flash": "Gemini 3.8 Flash", "nvidia/nemotron-3.5-super-vl-120b-a12b": "NVIDIA Nemotron 3.5 Super VL",
+    "nemotron-3.5-super-vl": "NVIDIA Nemotron 3.5 Super VL (on Verda)",
     "kimi-k3-1-pro": "Kimi K3.1 Pro",
     "Qwen/Qwen3-30B-A3B-Instruct-2507": "Qwen3 30B-A3B (self-hosted on Verda)",
     "qwen3-30b-a3b": "Qwen3 30B-A3B (self-hosted on Verda)",
@@ -416,9 +417,10 @@ async def read_photo(request: Request, image: UploadFile = File(..., description
 def _read_photo(data: bytes, mandate_id: str, agent_id: str, kind_hint: str | None, token: str | None,
                 approver_code: str | None, ip: str) -> dict:
     authorize(mandate_id, agent_id, token, approver_code, "agent.read_photo")
-    llm = make_llm("nvidia")
+    llm = next((c for c in map(make_llm, V.VISION_PROVIDERS) if c is not None), None)  # Verda first, then NVIDIA
     if llm is None:
-        raise AgentError("vision_unavailable", "This server has no NVIDIA_API_KEY, so the photo reader "
+        raise AgentError("vision_unavailable", "This server has no VERDA_NEMOTRON_KEY or NVIDIA_API_KEY, so the "
+                                               "photo reader "
                                                "(Nemotron 3.5 Super VL) is off. Try 'Plan from a menu' instead.", 503)
     try:
         V.prepare_image(data)
@@ -609,6 +611,12 @@ def usage():
     return usage_totals()
 
 
+def _photo_status() -> dict:
+    from .llm import PRESETS
+    p = next((p for p in V.VISION_PROVIDERS if _preset_env(p)), V.VISION_PROVIDERS[-1])
+    return {"provider": p, "display": DISPLAY[PRESETS[p]["model"]], "available": bool(_preset_env(p))}
+
+
 @app.get("/status", tags=["buyer agent"])
 def status():
     """Which models this server can use (no secrets: only whether a key is configured)."""
@@ -620,7 +628,6 @@ def status():
                 "available": bool(_preset_env("gemini") or _preset_env("verda")), "sandbox_only": True},
         "draft": {"provider": "gemini", "display": DISPLAY["gemini-4-hydrogen"],
                   "available": bool(_preset_env("gemini")), "fallback": "offline rule-based drafter"},
-        "photo": {"provider": "nvidia", "display": DISPLAY["nvidia/nemotron-3.5-super-vl-120b-a12b"],
-                  "available": bool(_preset_env("nvidia"))}},
+        "photo": _photo_status()},
         "today": {"spent_usd": round(spent_today(), 4), "budget_usd": DAILY_USD},
         "limits": {"per_ip_per_hour": PER_IP_HOUR, "max_image_mb": MAX_IMAGE_BYTES / 1024 / 1024}}

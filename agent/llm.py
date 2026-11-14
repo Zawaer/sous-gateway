@@ -7,6 +7,9 @@ One small httpx client covers every provider we use, because they all speak the 
     verda   https://inference.verda.com/v1                             VERDA_INFERENCE_API_KEY  kimi-k3-1-pro
     nvidia  https://integrate.api.nvidia.com/v1                        NVIDIA_API_KEY           nvidia/nemotron-3.5-super-vl-120b-a12b
             (also the LLM eval's buyer agent, text + tools; nemotron-3-super-120b-a12b answered 404 to our key)
+    verda-nemotron  https://containers.datacrunch.io/nemotron-3-5-super-vl-b300/v1  VERDA_NEMOTRON_KEY  nemotron-3.5-super-vl
+            (the same Nemotron 3.5 Super VL, hosted on Verda with NVIDIA: no free-tier rate limit; the photo
+            reader prefers it when its key is set and falls back to nvidia)
     verda-selfhosted  $SOUS_SELFHOSTED_URL (our vLLM on a Verda GPU)  SOUS_SELFHOSTED_KEY  $SOUS_SELFHOSTED_MODEL
             (default Qwen/Qwen3-30B-A3B-Instruct-2507)
     gemma   (the Gemini API's OpenAI endpoint)                        GEMINI_API_KEY           gemma-4-31b-it
@@ -18,7 +21,9 @@ LLM_BASE_URL / LLM_API_KEY / LLM_MODEL override any preset; LLM_PROVIDER picks t
 passed. LLM_REASONING_EFFORT sets reasoning_effort (Verda's Kimi K3.1 Pro defaults to max, which is slow
 and costly for tool calling; the presets send "low"). LLM_PRICE_IN / LLM_PRICE_OUT (USD per 1M tokens)
 override the built-in price table for the cost estimate. LLM_MIN_INTERVAL_S spaces requests out (the nvidia
-preset defaults to 1.6 s: NVIDIA's free tier allows ~40 requests/min).
+preset defaults to 1.6 s: NVIDIA's free tier allows ~40 requests/min). LLM_THINKING=1 turns Nemotron's
+reasoning on, LLM_THINKING=0 off (nvidia: off by default; verda-nemotron: on); the reasoning text (reasoning_content / reasoning) is kept apart from the
+answer in ChatResponse.reasoning and never echoed back to the model.
 
 API keys are only ever put in the Authorization header: never logged, never in repr(), never in errors.
 """
@@ -47,6 +52,15 @@ PRESETS: dict[str, dict] = {
                "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
                "min_interval_s": 1.6,  # free tier: ~40 requests/min per key
                "where": "NVIDIA API catalog (build.nvidia.com; NVIDIA-hosted NIM, US)"},
+    # The same Nemotron 3.5 Super VL, hosted on Verda together with NVIDIA (a dedicated Verda key). Reasoning
+    # arrives in reasoning_content/reasoning. It stays ON here: with it off this deployment made 6 silent errors in
+    # 32 page reads (NVIDIA's catalog: 0); on, 0 in 8 at 5.5 s/page (docs/NEMOTRON.md). So: room for the reasoning
+    # in max_tokens and NVIDIA's recommended temperature 0.6. LLM_THINKING=0 switches it off.
+    "verda-nemotron": {"base_url": "https://containers.datacrunch.io/nemotron-3-5-super-vl-b300/v1",
+                       "key_env": "VERDA_NEMOTRON_KEY", "model": "nemotron-3.5-super-vl", "reasoning_effort": None,
+                       "extra_body": {"chat_template_kwargs": {"enable_thinking": True}},
+                       "temperature": 0.6, "max_tokens": 16384,
+                       "where": "Verda (Nemotron 3.5 Super VL hosted on Verda GPUs with NVIDIA, EU)"},
     # Our own open-weight model on a Verda GPU (vLLM behind an authenticated HTTPS proxy; docs/VERDA.md). URL, key
     # and model id come from the environment, so the endpoint can move without a code change.
     "verda-selfhosted": {"base_url": "", "base_url_env": "SOUS_SELFHOSTED_URL", "key_env": "SOUS_SELFHOSTED_KEY",
@@ -82,6 +96,8 @@ PRICES: dict[str, tuple[float, float]] = {
     # NVIDIA API catalog free tier: rate-limited (~40 requests/min), no per-token charge
     "nvidia/nemotron-3-super-120b-a12b": (0.0, 0.0),
     "nvidia/nemotron-3.5-super-vl-120b-a12b": (0.0, 0.0),
+    # Verda-hosted Nemotron endpoint provided for the challenge: no per-token price published to us
+    "nemotron-3.5-super-vl": (0.0, 0.0),
     "claude-opus-5-5": (4.00, 20.00),
     "claude-haiku-5-5": (0.10, 0.50),
 }
@@ -136,8 +152,8 @@ def config_from_env(provider: str | None = None, model: str | None = None, env: 
     price_in = float(env["LLM_PRICE_IN"]) if env.get("LLM_PRICE_IN") else price[0]
     price_out = float(env["LLM_PRICE_OUT"]) if env.get("LLM_PRICE_OUT") else price[1]
     extra = dict(p.get("extra_body") or {})
-    if provider == "nvidia" and env.get("LLM_THINKING") in ("1", "true", "on"):
-        extra["chat_template_kwargs"] = {"enable_thinking": True}
+    if "chat_template_kwargs" in extra and env.get("LLM_THINKING") in ("1", "true", "on", "0", "false", "off"):
+        extra["chat_template_kwargs"] = {"enable_thinking": env["LLM_THINKING"] in ("1", "true", "on")}
     interval = float(env["LLM_MIN_INTERVAL_S"]) if env.get("LLM_MIN_INTERVAL_S") else p.get("min_interval_s", 0.0)
     base_url = env.get("LLM_BASE_URL") or (env.get(p["base_url_env"]) if p.get("base_url_env") else None) \
         or p["base_url"]
@@ -146,6 +162,7 @@ def config_from_env(provider: str | None = None, model: str | None = None, env: 
     return LLMConfig(provider=provider, base_url=base_url.rstrip("/"),
                      model=model, api_key=env.get("LLM_API_KEY") or env.get(p["key_env"], ""),
                      reasoning_effort=effort, temperature=p.get("temperature", 0.0),
+                     max_tokens=p.get("max_tokens", 4096),
                      max_tokens_field=p.get("max_tokens_field", "max_tokens"),
                      price_in=price_in, price_out=price_out, where=p["where"], extra_body=extra or None,
                      min_interval_s=interval)
@@ -167,6 +184,8 @@ class ChatResponse:
     usage: dict              # prompt_tokens, completion_tokens, total_tokens (0 when not reported)
     latency_ms: int
     retries: int
+    reasoning: str = ""      # the model's reasoning (reasoning_content / reasoning): never the answer
+
 
     @property
     def tool_calls(self) -> list[dict]:
@@ -244,10 +263,14 @@ class ChatClient:
                 choice = (data.get("choices") or [{}])[0]
                 msg = dict(choice.get("message") or {})
                 msg["role"] = "assistant"
+                # reasoning is not the answer, and is not sent back on the next turn
+                reasoning = msg.pop("reasoning_content", None) or msg.pop("reasoning", None) or ""
+                msg.pop("reasoning", None)
                 u = data.get("usage") or {}
                 usage = {k: int(u.get(k) or 0) for k in ("prompt_tokens", "completion_tokens", "total_tokens")}
                 return ChatResponse(message=msg, finish_reason=choice.get("finish_reason"), usage=usage,
-                                    latency_ms=round((time.perf_counter() - t0) * 1000), retries=attempt)
+                                    latency_ms=round((time.perf_counter() - t0) * 1000), retries=attempt,
+                                    reasoning=reasoning if isinstance(reasoning, str) else str(reasoning))
             last = f"HTTP {r.status_code}: {_error_text(r)}"
             if r.status_code not in RETRY_STATUS or attempt == c.max_retries:
                 break
