@@ -3,6 +3,11 @@
 Served over Streamable HTTP at /mcp by the main app (see api.py), or over stdio:
     uv run python -m sous.mcp_server
 
+Trust: over HTTP every tool's read scope comes from the request's headers (sous/access.py). Over stdio there is
+no request, so the process is the local operator and reads every mandate, quote and order in its database
+(access.from_headers(None)); stock still follows SOUS_STOCK_EXPOSURE (stdio is not the approver). Run stdio only
+where whoever starts the process may already read the database; never expose it to outside agents.
+
 Every tool declares an outputSchema (MCP 2025-06-18 structured output) and returns its JSON object both as
 structuredContent and, for older clients, as one text block with the same JSON. The schemas reuse the documentation
 models served at /schemas/*.json (sous/standards.py). On failure the result has isError=true and the object is
@@ -607,4 +612,6 @@ Use only facts the tools return."""
 
 
 if __name__ == "__main__":
+    log.warning("MCP over stdio: local operator scope, every read is allowed "
+                "(docs/PROTOCOL.md section 22). Don't expose this process to outside agents.")
     mcp.run()

@@ -87,3 +87,12 @@ def test_no_plain_comparison_of_the_approver_code():
     hits = [f"{p.name}:{i}" for p in SOUS.glob("*.py")
             for i, line in enumerate(p.read_text().splitlines(), 1) if plain.search(line)]
     assert hits == []
+
+
+# --- MCP over stdio is the local operator, explicitly ------------------------
+
+def test_mcp_stdio_is_operator_scope_but_not_approver():
+    from sous import exposure, mcp_server
+    r = mcp_server._reader(None)
+    assert r.everything and not exposure.is_approver(r)  # reads everything; stock stays under the exposure policy
+    assert "local operator" in mcp_server.__doc__
