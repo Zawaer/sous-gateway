@@ -262,6 +262,27 @@ def test_chat_retries_429_then_succeeds_and_never_leaks_the_key():
     assert "non-JSON" in str(e.value)
 
 
+def test_min_interval_paces_requests():
+    """The nvidia preset spaces requests out (free tier ~40/min); the wait is measured from the last start."""
+    assert config_from_env("nvidia", env={"NVIDIA_API_KEY": "k"}).min_interval_s == 1.6
+    assert config_from_env("nvidia", env={"NVIDIA_API_KEY": "k", "LLM_MIN_INTERVAL_S": "0"}).min_interval_s == 0
+    assert config_from_env("gemini", env={"GEMINI_API_KEY": "k"}).min_interval_s == 0
+    now, slept = [100.0], []
+
+    def sleep(s):
+        slept.append(s)
+        now[0] += s
+    ok = httpx.MockTransport(lambda req: httpx.Response(200, json={"choices": [{"message": {"content": "x"}}]}))
+    c = ChatClient(LLMConfig(provider="nvidia", base_url="http://llm/v1", model="m", min_interval_s=1.6),
+                   http=httpx.Client(transport=ok), sleep=sleep, clock=lambda: now[0])
+    c.chat([{"role": "user", "content": "a"}])
+    now[0] += 0.5
+    c.chat([{"role": "user", "content": "b"}])
+    now[0] += 5
+    c.chat([{"role": "user", "content": "c"}])
+    assert slept == [pytest.approx(1.1)]
+
+
 # --- the LLM eval's harness logic --------------------------------------------------------------
 
 def test_llm_eval_applicability_and_need_checks():

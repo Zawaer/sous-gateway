@@ -6,12 +6,14 @@ One small httpx client covers every provider we use, because they all speak the 
     gemini  https://generativelanguage.googleapis.com/v1beta/openai/  GEMINI_API_KEY           gemini-4-hydrogen
     verda   https://inference.verda.com/v1                             VERDA_INFERENCE_API_KEY  kimi-k3-1-pro
     nvidia  https://integrate.api.nvidia.com/v1                        NVIDIA_API_KEY           nvidia/nemotron-3.5-super-vl-120b-a12b
+            (the LLM eval's text buyer agent uses --model nvidia/nemotron-3-super-120b-a12b)
     local   $LLM_BASE_URL (vLLM, Ollama, llama.cpp server, ...)       LLM_API_KEY (optional)   $LLM_MODEL
 
 LLM_BASE_URL / LLM_API_KEY / LLM_MODEL override any preset; LLM_PROVIDER picks the preset when none is
 passed. LLM_REASONING_EFFORT sets reasoning_effort (Verda's Kimi K3.1 Pro defaults to max, which is slow
 and costly for tool calling; the presets send "low"). LLM_PRICE_IN / LLM_PRICE_OUT (USD per 1M tokens)
-override the built-in price table for the cost estimate.
+override the built-in price table for the cost estimate. LLM_MIN_INTERVAL_S spaces requests out (the nvidia
+preset defaults to 1.6 s: NVIDIA's free tier allows ~40 requests/min).
 
 API keys are only ever put in the Authorization header: never logged, never in repr(), never in errors.
 """
@@ -38,6 +40,7 @@ PRESETS: dict[str, dict] = {
     "nvidia": {"base_url": "https://integrate.api.nvidia.com/v1", "key_env": "NVIDIA_API_KEY",
                "model": "nvidia/nemotron-3.5-super-vl-120b-a12b", "reasoning_effort": None,
                "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+               "min_interval_s": 1.6,  # free tier: ~40 requests/min per key
                "where": "NVIDIA API catalog (build.nvidia.com; NVIDIA-hosted NIM, US)"},
     "local": {"base_url": "http://127.0.0.1:8000/v1", "key_env": "LLM_API_KEY", "model": "",
               "reasoning_effort": None, "where": "self-hosted OpenAI-compatible server (e.g. vLLM on a Verda GPU)"},
@@ -50,6 +53,9 @@ PRICES: dict[str, tuple[float, float]] = {
     "gemini-4-argon": (2.00, 10.00),
     "gemini-4-carbon": (2.00, 10.00),
     "gemini-3.8-flash": (0.75, 3.75),
+    # NVIDIA API catalog free tier: rate-limited (~40 requests/min), no per-token charge
+    "nvidia/nemotron-3-super-120b-a12b": (0.0, 0.0),
+    "nvidia/nemotron-3.5-super-vl-120b-a12b": (0.0, 0.0),
 }
 
 RETRY_STATUS = {408, 409, 425, 429, 500, 502, 503, 504, 529}
@@ -74,6 +80,7 @@ class LLMConfig:
     price_out: float | None = None  # USD per 1M output tokens
     where: str = ""
     extra_body: dict | None = None  # provider-specific body fields (e.g. NVIDIA's chat_template_kwargs)
+    min_interval_s: float = 0.0     # at least this long between request starts (provider rate limits)
 
     @property
     def label(self) -> str:
@@ -102,10 +109,12 @@ def config_from_env(provider: str | None = None, model: str | None = None, env: 
     extra = dict(p.get("extra_body") or {})
     if provider == "nvidia" and env.get("LLM_THINKING") in ("1", "true", "on"):
         extra["chat_template_kwargs"] = {"enable_thinking": True}
+    interval = float(env["LLM_MIN_INTERVAL_S"]) if env.get("LLM_MIN_INTERVAL_S") else p.get("min_interval_s", 0.0)
     return LLMConfig(provider=provider, base_url=(env.get("LLM_BASE_URL") or p["base_url"]).rstrip("/"),
                      model=model, api_key=env.get("LLM_API_KEY") or env.get(p["key_env"], ""),
                      reasoning_effort=effort,
-                     price_in=price_in, price_out=price_out, where=p["where"], extra_body=extra or None)
+                     price_in=price_in, price_out=price_out, where=p["where"], extra_body=extra or None,
+                     min_interval_s=interval)
 
 
 def key_present(provider: str, env: dict | None = None) -> bool:
@@ -137,10 +146,20 @@ class ChatResponse:
 class ChatClient:
     """chat(messages, tools) -> ChatResponse, with retries and backoff on 429 / 5xx / timeouts."""
 
-    def __init__(self, cfg: LLMConfig, http: httpx.Client | None = None, sleep=time.sleep):
+    def __init__(self, cfg: LLMConfig, http: httpx.Client | None = None, sleep=time.sleep, clock=time.monotonic):
         self.cfg = cfg
         self._http = http or httpx.Client(timeout=cfg.timeout_s)
         self._sleep = sleep
+        self._clock = clock
+        self._last_start: float | None = None
+
+    def _pace(self) -> None:
+        """Keep at least cfg.min_interval_s between request starts (retries included)."""
+        if self.cfg.min_interval_s > 0 and self._last_start is not None:
+            wait = self._last_start + self.cfg.min_interval_s - self._clock()
+            if wait > 0:
+                self._sleep(wait)
+        self._last_start = self._clock()
 
     def chat(self, messages: list[dict], tools: list[dict] | None = None,
              response_format: dict | None = None) -> ChatResponse:
@@ -167,6 +186,7 @@ class ChatClient:
         t0 = time.perf_counter()
         last = ""
         for attempt in range(c.max_retries + 1):
+            self._pace()
             try:
                 r = self._http.post(url, json=body, headers=headers)
             except (httpx.TimeoutException, httpx.TransportError) as e:

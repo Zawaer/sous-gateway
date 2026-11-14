@@ -43,6 +43,14 @@ on:
         description: "Run id the CRACI evidence job audits (empty: this run)"
         type: string
         default: ""
+      llm_only:
+        description: "Only the per-model LLM eval (skips the scripted eval, drafting, recipe and vision evals)"
+        type: boolean
+        default: false
+      llm_models:
+        description: "LLM eval models for this run, e.g. 'nvidia:nvidia/nemotron-3-super-120b-a12b' (empty: LLM_EVAL_MODELS)"
+        type: string
+        default: ""
 
 concurrency:
   # manual runs (e.g. the LLM eval) get their own group so a push can't bump them out of the queue
@@ -225,7 +233,7 @@ jobs:
   eval:
     name: eval (live Valio API)
     # Only on main or by hand: it spends real Valio Aimo API calls.
-    if: ${{ github.event_name != 'pull_request' && !inputs.recipe_only && !inputs.vision_only && !inputs.draft_only }}
+    if: ${{ github.event_name != 'pull_request' && !inputs.recipe_only && !inputs.vision_only && !inputs.draft_only && !inputs.llm_only }}
     needs: test
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 20
@@ -310,11 +318,11 @@ jobs:
       VISION_EVAL_VARIANTS: ${{ inputs.vision_variants || vars.VISION_EVAL_VARIANTS || 'v1 v2 v3 v3+verify v3+verify+think' }}
       VISION_EVAL_REPEAT: ${{ inputs.vision_repeat || '1' }}
       # provider:model pairs; override with the repo variable LLM_EVAL_MODELS
-      LLM_EVAL_MODELS: ${{ vars.LLM_EVAL_MODELS || 'gemini:gemini-4-hydrogen verda:kimi-k3-1-pro verda:deepseek-4-1-flash-1017' }}
+      LLM_EVAL_MODELS: ${{ inputs.llm_models || vars.LLM_EVAL_MODELS || 'gemini:gemini-4-hydrogen verda:kimi-k3-1-pro verda:deepseek-4-1-flash-1017' }}
       # recipe planning eval (manual runs only), next to the table provider
       RECIPE_EVAL_MODELS: ${{ vars.RECIPE_EVAL_MODELS || 'gemini:gemini-4-hydrogen verda:kimi-k3-1-pro' }}
     steps:
-      # Egress: PyPI, Valio Aimo, the model APIs (Gemini, Verda in the EU, NVIDIA for Nemotron VL) and Aiven
+      # Egress: PyPI, Valio Aimo, the model APIs (Gemini, Verda in the EU, NVIDIA for Nemotron) and Aiven
       # Valkey. Nothing else.
       - uses: cracicorp/setup@5cbae507e2547dca6c402e413c645767fbae3534 # v1
         if: ${{ vars.CI_RUNNER == 'craci' }}
@@ -351,8 +359,8 @@ jobs:
           fi
           run=true
           if [ -z "$VALIO_AIMO_API_KEY" ]; then echo "::notice::VALIO_AIMO_API_KEY secret not set: skipping llm-eval"; run=false; fi
-          if [ -z "$GEMINI_API_KEY" ] && [ -z "$VERDA_INFERENCE_API_KEY" ]; then
-            echo "::notice::Neither GEMINI_API_KEY nor VERDA_INFERENCE_API_KEY secret is set: skipping llm-eval"; run=false
+          if [ -z "$GEMINI_API_KEY" ] && [ -z "$VERDA_INFERENCE_API_KEY" ] && [ -z "$NVIDIA_API_KEY" ]; then
+            echo "::notice::No GEMINI_API_KEY, VERDA_INFERENCE_API_KEY or NVIDIA_API_KEY secret is set: skipping llm-eval"; run=false
           fi
           if [ "$run" = true ] && [ "$EVENT" = push ]; then
             if git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
@@ -386,7 +394,11 @@ jobs:
           status=0
           for pm in $LLM_EVAL_MODELS; do
             provider=${pm%%:*}; model=${pm#*:}
-            if [ "$provider" = gemini ]; then key=$GEMINI_API_KEY; else key=$VERDA_INFERENCE_API_KEY; fi
+            case "$provider" in
+              gemini) key=$GEMINI_API_KEY ;;
+              nvidia) key=$NVIDIA_API_KEY ;;   # free tier ~40 req/min: the nvidia preset paces requests
+              *) key=$VERDA_INFERENCE_API_KEY ;;
+            esac
             if [ -z "$key" ]; then echo "::notice::No key for $provider: skipping $model"; continue; fi
             echo "::group::$provider $model"
             uv run python scripts/llm_eval.py --provider "$provider" --model "$model" || status=1
@@ -398,7 +410,7 @@ jobs:
           exit $status
       - name: Recipe planning eval (manual runs only)
         # Menu -> ingredients -> one basket quote (agent/recipe.py), per provider; one batched Valio quote per case.
-        if: ${{ !cancelled() && steps.pre.outputs.run == 'true' && github.event_name == 'workflow_dispatch' && !inputs.vision_only }}
+        if: ${{ !cancelled() && steps.pre.outputs.run == 'true' && github.event_name == 'workflow_dispatch' && !inputs.vision_only && !inputs.llm_only }}
         run: |
           providers=table
           for pm in $RECIPE_EVAL_MODELS; do
@@ -410,7 +422,7 @@ jobs:
           cat evals/recipe_results.md >> "$GITHUB_STEP_SUMMARY"
       - name: Vision eval (Nemotron VL reads kitchen paper; manual runs with NVIDIA_API_KEY only)
         # 8 rendered pages (evals/vision/), field-level accuracy per prompt variant. Model calls only, no Valio.
-        if: ${{ !cancelled() && steps.pre.outputs.run == 'true' && steps.pre.outputs.vision == 'true' && !inputs.recipe_only }}
+        if: ${{ !cancelled() && steps.pre.outputs.run == 'true' && steps.pre.outputs.vision == 'true' && !inputs.recipe_only && !inputs.llm_only }}
         run: |
           uv sync --frozen
           uv run python scripts/vision_eval.py --provider nvidia --variants $VISION_EVAL_VARIANTS --repeat "$VISION_EVAL_REPEAT"
@@ -434,7 +446,7 @@ jobs:
     # in the test job). By hand (draft_only skips the other evals), or on a push to main that changes the drafter
     # or its cases. Fails only if the offline rule parser regresses; Gemini's score is reported, not gated.
     # Not chained to eval/llm-eval: it shares no rate-limited key with them.
-    if: ${{ github.event_name != 'pull_request' && !inputs.recipe_only && !inputs.vision_only && !inputs.craci_evidence_only }}
+    if: ${{ github.event_name != 'pull_request' && !inputs.recipe_only && !inputs.vision_only && !inputs.craci_evidence_only && !inputs.llm_only }}
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 15
     env:
