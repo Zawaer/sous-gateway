@@ -542,6 +542,11 @@ async function renderOrder(current, order) {
         link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       })));
+      const checker = element('a', 'Verify a downloaded proof ↗', 'text-action');
+      checker.href = './verify.html';
+      checker.target = '_blank';
+      checker.rel = 'noopener';
+      content.append(checker);
       content.append(actionButton('Download signed receipt', () => {
         const url = URL.createObjectURL(new Blob([order.receipt_jws], { type: 'application/jose' }));
         const link = element('a');
