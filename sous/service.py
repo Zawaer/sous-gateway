@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import account, agent_auth, aimo, allergen_ai, catalog, clock, config, credentials, deadline, erp, exposure, holds, notify, options as OPT, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
+from . import account, agent_auth, aimo, allergen_ai, autonomy, catalog, clock, config, credentials, deadline, erp, exposure, holds, notify, options as OPT, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
 from .mandate import Mandate, evaluate, product_refusals
 
 
@@ -730,7 +730,7 @@ def _spend_context(mandate: Mandate, now: datetime) -> dict:
     if mandate.split_window_minutes:
         since = local - timedelta(minutes=mandate.split_window_minutes)
         out["recent_orders"] = store.ordered_since(mandate.id, since.isoformat(timespec="milliseconds"))
-    if mandate.first_time_products:
+    if mandate.first_time_products or mandate.autonomy != "order" or autonomy.cap_for(mandate.buyer):
         out["ordered_products"] = store.ordered_product_ids(mandate.id)
     if mandate.max_price_change_pct:
         out["last_prices"] = store.last_unit_prices(mandate.id)

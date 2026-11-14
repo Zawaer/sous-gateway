@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from . import catalog, config, holds, pause
+from . import autonomy, catalog, config, holds, pause
 
 # Four tiers, from least to most human involvement:
 #   silent: routine, the order goes through and is logged
@@ -48,6 +48,10 @@ class Mandate(BaseModel):
         "auto-approve limit, add up to more than it (an agent slicing one big order into small ones); None = off")
     first_time_products: Literal["notify", "ask", "block"] | None = Field(
         None, description="Tier for a product never ordered under this mandate before; None = off")
+    autonomy: Literal["advise", "reorder", "order"] = Field(
+        "order", description="How much the agent may do alone: advise (every order waits for a human), reorder (only "
+        "the buyer's usual products alone) or order (whatever the other rules allow). Valio Aimo can cap it lower "
+        "per buyer (GET /autonomy-caps)")
     usual_products: list[str] = Field(
         default_factory=list, description="Product ids the buyer has bought before (e.g. imported from their Valio "
         "order history); with first_time_products they count as known, like products ordered under this mandate")
@@ -207,6 +211,12 @@ def evaluate(
         add("mandate.agent", "block", f"Agent '{agent_id}' is not the holder of mandate {mandate.id}.")
     if not lines:
         add("order.empty", "block", "Nothing orderable was found for this request.")
+    # How much the agent may do alone: the mandate's level, capped by Valio Aimo (sous/autonomy.py).
+    level, cap = autonomy.effective(mandate.autonomy, mandate.buyer)
+    capped = f" Valio Aimo limits this buyer's agents to '{level}': {cap['reason']}" if cap else ""
+    if level == "advise" and lines:
+        add("autonomy.capped" if cap else "autonomy.advise", "ask",
+            f"The agent may advise only: every order waits for a human.{capped}")
     # Valio Aimo's kill switch: no agent orders (nor approvals) while ordering is paused for this buyer.
     if paused := pause.active_for(mandate.buyer):
         add("ordering.paused", "block", pause.message(paused))
@@ -291,6 +301,12 @@ def evaluate(
                 add("product.type_mismatch", "ask", f"{name}: {issue['message']}", pid)
             elif issue["code"] == "PACK_OVERSIZE":  # 12 kg needed, one 20 kg bag planned: the buyer is told
                 add("quantity.pack_oversize", "notify", f"{name}: {issue['message']}", pid)
+
+        if level == "reorder" and l.get("orderable", True) and pid not in (ordered_products or set()) \
+                and pid not in mandate.usual_products:
+            add("autonomy.capped" if cap else "autonomy.reorder", "ask",
+                f"{name} is not one of the buyer's usual products, and the agent may only reorder those alone."
+                + capped, pid)
 
         if (mandate.first_time_products and ordered_products is not None
                 and pid not in ordered_products and pid not in mandate.usual_products):

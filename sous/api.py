@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
-from . import access, account, agent_auth, aimo, catalog, clock, config, erp, exposure, holds, pause, proof, quote as Q, rules, sandbox, service as S, signing, standing, store
+from . import access, autonomy, account, agent_auth, aimo, catalog, clock, config, erp, exposure, holds, pause, peppol, proof, quote as Q, rules, sandbox, service as S, signing, standing, store
 from .mandate import Mandate
 from .mcp_server import mcp
 
@@ -470,6 +470,19 @@ def list_orders(status: Literal["ordered", "pending_approval", "refused", "rejec
                        and (ok is None or o["mandate_id"] in ok)]}
 
 
+@app.get("/orders/{order_id}/peppol/order.xml", tags=["standards"], dependencies=[Depends(_read_order)])
+def order_peppol(order_id: str):
+    """The order as a Peppol BIS Ordering 3.0 UBL Order (shaped after the spec; not validated by Peppol tooling)."""
+    return Response(peppol.order_xml(S.get_order(order_id)), media_type="application/xml")
+
+
+@app.get("/orders/{order_id}/peppol/order-response.xml", tags=["standards"], dependencies=[Depends(_read_order)])
+def order_response_peppol(order_id: str):
+    """Valio Aimo's Peppol BIS Order Response: AP accepted, AB held for the buyer's human, RE refused/rejected/expired,
+    with the rules that fired as the note."""
+    return Response(peppol.order_response_xml(S.get_order(order_id)), media_type="application/xml")
+
+
 @app.get("/orders/{order_id}", tags=["ordering"], dependencies=[Depends(_read_order)])
 def get_order(order_id: str):
     """The order. agent_claim labels the agent's rationale: its own words, unverified, never used by a rule."""
@@ -582,6 +595,28 @@ def resume_agent_ordering(req: pause.ResumeIn):
     """Lift a pause (the every-buyer one without `buyer`). New decisions only; refused orders stay refused."""
     if (out := pause.resume(req)) is None:
         raise HTTPException(404, f"Agent ordering is not paused for {req.buyer or 'every buyer'}.")
+    return out
+
+
+# --- Valio caps on agent autonomy (sous/autonomy.py) -------------------------
+
+@app.get("/autonomy-caps", tags=["holds"])
+def autonomy_caps(x_approver_code: str | None = Header(default=None)):
+    """The autonomy levels, Valio's cap for every buyer (if any) and how many single buyers are capped. Which buyers
+    and why only with the global approver code."""
+    return autonomy.status(full=not config.APPROVER_CODE or access.approver_code_ok(x_approver_code))
+
+
+@app.post("/autonomy-caps", tags=["holds"], dependencies=[Depends(require_global_approver)])
+def set_autonomy_cap(req: autonomy.CapIn):
+    """Cap a buyer's agents (or every buyer's) at advise or reorder, whatever their mandate says (rule autonomy.capped)."""
+    return autonomy.set_cap(req)
+
+
+@app.delete("/autonomy-caps", tags=["holds"], dependencies=[Depends(require_global_approver)])
+def lift_autonomy_cap(buyer: str | None = None, by: str = "valio"):
+    if (out := autonomy.lift(buyer, by)) is None:
+        raise HTTPException(404, f"No autonomy cap for {buyer or 'every buyer'}.")
     return out
 
 

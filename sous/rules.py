@@ -83,6 +83,16 @@ def _build() -> list[dict]:
         _r("mandate.ok", "finding", ["silent", "notify"], "buyer",
            "Every check passed: the order goes through (with an FYI to the buyer if a notify rule fired).", None),
         _r("order.empty", "finding", ["block"], "gateway", "Nothing orderable was found for the request.", None),
+        _r("autonomy.advise", "finding", ["ask"], "buyer",
+           "The mandate lets the agent advise only: it may search and quote, and every order waits for a human.",
+           "autonomy"),
+        _r("autonomy.reorder", "finding", ["ask"], "buyer",
+           "The mandate lets the agent reorder alone only the buyer's usual products (ordered under this mandate "
+           "before, or in usual_products); any other product waits for a human.", ["autonomy", "usual_products"]),
+        _r("autonomy.capped", "finding", ["ask"], "valio",
+           "Valio Aimo caps this buyer's agents (or every buyer's) at a lower autonomy level than the mandate's "
+           "(GET /autonomy-caps): the order waits for a human, and the finding names Valio's reason. A cap never "
+           "raises autonomy or lets through what another rule holds.", None),
         _r("ordering.paused", "finding", ["block"], "valio",
            "Valio Aimo has paused agent ordering for every buyer or for this buyer (GET /agent-ordering): no "
            "order goes through and no held order can be approved until Valio Aimo resumes it. Search and "

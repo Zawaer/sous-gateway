@@ -330,3 +330,80 @@ def test_public_pause_status_hides_single_buyers_and_reasons(monkeypatch):
     assert full["pauses"][0]["buyer"] == "Private School"
     o = order(10, mid="M2")  # the buyer's own agent learns why
     assert o["status"] == "refused" and "Unpaid invoices" in o["decision"]["findings"][0]["message"]
+
+
+# --- autonomy level (mandate) capped by Valio, and Peppol BIS Ordering export -------------------------------
+
+def test_autonomy_advise_holds_every_order():
+    issue(autonomy="advise")
+    o = order(10)
+    assert o["status"] == "pending_approval" and fired(o) == ["autonomy.advise"]
+
+
+def test_autonomy_reorder_only_usual_products_alone():
+    issue(autonomy="reorder", usual_products=["MILK"])
+    assert order(10)["status"] == "ordered"
+    o = order(10, pid="OATS")
+    assert fired(o) == ["autonomy.reorder"] and S.decide(o["id"], "chef", True)["status"] == "ordered"
+    clock["now"] += timedelta(minutes=1)
+    assert order(10, pid="OATS")["status"] == "ordered"  # bought once, now a usual product
+
+
+def test_valio_cap_lowers_but_never_raises_autonomy():
+    from sous import autonomy
+    issue("M", buyer="Hotel")
+    issue("M2", buyer="School", autonomy="advise")
+    autonomy.set_cap(autonomy.CapIn(buyer="Hotel", max="advise", reason="New account, first month supervised"))
+    o = order(10)
+    assert fired(o) == ["autonomy.capped"] and "First month supervised".lower() in o["decision"]["findings"][0]["message"].lower()
+    autonomy.set_cap(autonomy.CapIn(max="reorder", reason="Valio-wide caution"))  # every buyer: reorder
+    assert fired(order(10, mid="M2")) == ["autonomy.advise"]  # the mandate's own lower level stays
+    autonomy.lift("Hotel", "valio")
+    o = order(10, pid="OATS")  # every-buyer cap still says reorder; OATS is new
+    assert fired(o) == ["autonomy.capped"] and "Valio-wide caution" in o["decision"]["findings"][0]["message"]
+    assert autonomy.status()["everyone"]["max"] == "reorder" and "caps" not in autonomy.status()
+
+
+def test_autonomy_caps_over_rest(monkeypatch):
+    from fastapi.testclient import TestClient
+    from sous.api import app
+    monkeypatch.setattr(config, "APPROVER_CODE", "secret")
+    c = TestClient(app)
+    assert c.post("/autonomy-caps", json={"buyer": "Hotel", "max": "advise", "reason": "x"}).status_code == 401
+    r = c.post("/autonomy-caps", json={"buyer": "Hotel", "max": "advise", "reason": "Invoices overdue"},
+               headers={"x-approver-code": "secret"})
+    assert r.status_code == 200
+    public = c.get("/autonomy-caps").json()
+    assert public["buyer_caps"] == 1 and "Hotel" not in str(public) and "Invoices" not in str(public)
+    assert c.get("/autonomy-caps", headers={"x-approver-code": "secret"}).json()["caps"][0]["max"] == "advise"
+    assert c.delete("/autonomy-caps?buyer=Hotel", headers={"x-approver-code": "secret"}).status_code == 200
+
+
+def test_peppol_order_and_order_response():
+    from xml.etree import ElementTree as ET
+    from sous import peppol
+    issue(auto_approve_limit_eur=50)
+    ok, held = order(20), order(60)
+    cbc = "{" + peppol.NS["cbc"] + "}"
+    x = ET.fromstring(peppol.order_xml(S.get_order(ok["id"])))
+    assert x.tag.endswith("}Order") and x.find(cbc + "CustomizationID").text == peppol.CUSTOMIZATION_ORDER
+    assert x.find(cbc + "ProfileID").text == peppol.PROFILE and x.find(cbc + "ID").text == ok["id"]
+    line = x.find("{%s}OrderLine/{%s}LineItem" % (peppol.NS["cac"], peppol.NS["cac"]))
+    assert line.find(cbc + "Quantity").attrib["unitCode"] == "EA" and line.find(cbc + "Quantity").text == "20"
+    codes = {o["id"]: ET.fromstring(peppol.order_response_xml(S.get_order(o["id"]))).find(cbc + "OrderResponseCode").text
+             for o in (ok, held)}
+    assert codes == {ok["id"]: "AP", held["id"]: "AB"}
+    S.decide(held["id"], "chef", False, "not this week")
+    r = ET.fromstring(peppol.order_response_xml(S.get_order(held["id"])))
+    assert r.find(cbc + "OrderResponseCode").text == "RE"
+
+
+def test_peppol_routes_follow_order_read_access():
+    from fastapi.testclient import TestClient
+    from sous.api import app
+    issue()
+    o = order(10)
+    c = TestClient(app)
+    r = c.get(f"/orders/{o['id']}/peppol/order.xml")
+    assert r.status_code in (200, 404) and (r.status_code == 404 or r.headers["content-type"].startswith("application/xml"))
+    assert c.get("/orders/PO-NOPE/peppol/order-response.xml").status_code == 404
