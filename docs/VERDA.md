@@ -130,7 +130,7 @@ is cheaper and already keeps data in the EU.
   These are estimates, not load tests (none was run). A kitchen orders a few times a day, mostly before the evening cut-off, so 20k kitchens is on the order of
   50-100k orders a day with a peak of a few orders per second: two or three CPU instances plus a managed
   MariaDB, not a GPU problem. The binding limit is Valio's API: a quote costs 2 live calls (batched shortlist, cached), 4 when
-  substitutes are priced for options; 1.16 per request on average in the scripted eval.
+  substitutes are priced for options; 1.0 per request on average in the scripted eval.
 - **Model.** Tokens per request x requests per day decides the product: about 22k tokens per
   request in the eval (21,745 for Kimi K3.1 Pro). At 75k requests/day that is about 1.6 billion tokens/day; per-token
   Inference API pricing scales linearly with no idle cost and per-model rate limits (requests and tokens per

@@ -15,7 +15,7 @@ We asked a general shopping agent for "1,000 litres of lactose-free milk by Mond
 
 ### What it does
 - **Search** 17,546 products (fi/sv/en) with filters for claims, allergens, labels and temperature. No API calls.
-- **Quote** a shortlist with live price and availability: 2 batched Valio API calls, up to 4 when substitutes are priced for the options (1.16 on average with the cache). Pack and lot sizes, VAT, cut-offs, stock vs supplier-shipped, reliability, CO₂ estimate, splits when stock is short. Signed, expiring.
+- **Quote** a shortlist with live price and availability: 2 batched Valio API calls, up to 4 when substitutes are priced for the options (1.0 on average with the cache). Pack and lot sizes, VAT, cut-offs, stock vs supplier-shipped, reliability, CO₂ estimate, splits when stock is short. Signed, expiring.
 - **Check the mandate** in deterministic code. Every order lands in one of four tiers: **silent**, **notify** (ordered, human gets an FYI), **ask** (held for a human), **block** (refused, with the rule).
 - **Approve** from a phone: push notification, approval link, reason and cut-off countdown.
 - **Standing orders with drift detection**: a weekly order renews itself, but rising quantities, cost, a switched product or a new supply risk make it ask first. Demo: milk +18 % vs the 4-week median, cost +€135 (+16 %) → ask before renewing.
@@ -36,7 +36,7 @@ Terminal (supplier-shipped) products show an order cut-off that has already pass
 MCP and OpenAPI expose the same operations. A browser reference buyer verifies signatures itself. Our LLM buyer agent runs on OpenAI-compatible models (tested: Gemini, and Kimi on Verda Inference in the EU). The runtime binds identity, mandate and idempotency; the model only fills in the request. We score each model on the same 40 buyer sentences: Gemini 4 Hydrogen matched the buyer without correction in 39/40 cases (CI 43530717095); Kimi K3.1 Pro on Verda Inference (EU) in 36/40 (CI 43511463514; 34/40 in a later run, not re-measured on current code because Verda's API went down); both stopped 31/31 unsafe requests (blocked or held for a human) with 0 mandate violations auto-ordered. The cases are ours, not a held-out set. The mandate engine, not the model, keeps every unsafe request out.
 
 ### Results
-Scripted buyer requests (no LLM, live Valio prices, cases we wrote): 45/45 in CI on CRACI (run 43530484114), 51/51 locally with 6 partial-availability cases, 7/7 attack cases (order slicing, an agent approving itself, prompt injection, unusual quantity). 36/36 unsafe actions blocked or escalated. Search first-result accuracy 56 % → 100 % on 39 fi/sv/en queries we wrote while tuning.
+Scripted buyer requests (no LLM, live Valio prices, cases we wrote): 59/59 in a local run, incl. partial-availability options and attack cases (order slicing, an agent approving itself, prompt injection, unusual quantity); 43/43 unsafe actions blocked or escalated. The first 45 also pass in CI on CRACI (run 43530484114). Search first-result accuracy 56 % → 100 % on 39 fi/sv/en queries we wrote while tuning.
 
 ### Built like production
 CI on CRACI: tests with MariaDB, Docker build, CycloneDX SBOM, grype gate, and a smoke test under deny-by-default egress (a gateway holding a supplier key must not talk to anything else). Deployed on a Verda CPU instance in Finland (production runs an older commit than `main`; see docs/STATUS.md).

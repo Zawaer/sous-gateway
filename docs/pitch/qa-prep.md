@@ -11,7 +11,7 @@ Because an LLM can be talked into anything and can't be audited. A prompt inject
 Today the agent sends an `agent_id` and a `mandate_id`; the gateway checks they match the signed mandate, and quotes and standing orders are bound to that agent, so a stranger can't invent authority or reuse someone else's quote. Approvals need a separate approver code. That is still hackathon-grade identity (see question 15). In production the agent proves a key bound to the mandate, so a stolen mandate ID is useless without the key.
 
 **3. How does this scale to 700 suppliers and 25,000 products?**
-Search runs on static catalog data in a local index (17,546 products in about 10 s to build), so it costs no backend calls. Live price and availability are fetched only for a shortlist: 2 batched calls per quote, up to 4 when substitutes are priced for the options (1.16 on average with the cache in our eval), against roughly 36 to poll the whole catalog. Supplier differences show up as data (Stock vs Terminal, reliability, cut-offs), not as code per supplier.
+Search runs on static catalog data in a local index (17,546 products in about 10 s to build), so it costs no backend calls. Live price and availability are fetched only for a shortlist: 2 batched calls per quote, up to 4 when substitutes are priced for the options (1.0 on average with the cache in our eval), against roughly 36 to poll the whole catalog. Supplier differences show up as data (Stock vs Terminal, reliability, cut-offs), not as code per supplier.
 
 **4. What about Valio Aimo's confidential data and the marketplace roadmap?**
 Agents never touch internal systems. They see the catalog and their own mandate, quotes and orders, nothing else: every read of mandates, orders, notifications and the audit log needs a credential (the approver code for everything, an agent's bearer token for its own mandate, a sandbox token for that sandbox), and anything else answers 404 as if it didn't exist. Only the curated demo buyers are public, so you can browse the UI without logging in; the audit chain's integrity check is public, its contents aren't. The gateway calls the backend on the agents' behalf, with a global cap on API calls and per-IP rate limits. Nothing about ranking, margins or the roadmap is exposed. In production the approver code becomes the buyer's login, and per-customer prices would only go to that authenticated buyer.
@@ -59,7 +59,7 @@ Because "same as usual" is where creep hides. Each renewal is quoted live and co
 
 ## Backup facts
 - 17,546 products, fi/sv/en. Search: SQLite FTS5 trigram, no API calls.
-- Quote: 2 batched Valio API calls (price + availability), up to 4 with substitute options; 1.16 per request on average with the cache. Signed, expiring.
+- Quote: 2 batched Valio API calls (price + availability), up to 4 with substitute options; 1.0 per request on average with the cache. Signed, expiring.
 - Search first-result accuracy 56 % → 100 % on 39 fi/sv/en queries.
 - ~46 % of products have no allergen declaration: unknown → human.
 - Hotel run: Valio Eila 1 L × 1,000 at €1.40/L, €1,400 ex VAT, notify tier, 2 API calls total.
@@ -67,7 +67,7 @@ Because "same as usual" is where creep hides. Each renewal is quoted live and co
 - Hospital mandate: auto-approve to €400, avoids milk / nuts, unknown allergens → ask, substitutions → ask.
 - Tiers: silent / notify / ask / block. Late approvals expire after the cut-off or delivery date.
 - Signatures: Ed25519 JWS; public keys at `/.well-known/jwks.json`.
-- Scripted eval (no LLM, live Valio): 45/45 in CI (run 43530484114); 51/51 locally with the option cases; 7/7 attack cases (slicing, self-approval, injection, unusual quantity); 36/36 unsafe actions blocked or escalated; human-approval rate 27.1 % of 48 order decisions.
+- Scripted eval (no LLM, live Valio, our cases): 59/59 locally (Sat 14.11, 285f126), incl. options and attack cases (slicing, self-approval, injection, unusual quantity); 43/43 unsafe actions blocked or escalated; human-approval rate 30.4 % of 56 order decisions. The first 45 also 45/45 in CI (run 43530484114).
 - LLM eval per model (40 sentences): Gemini 4 Hydrogen 39/40 matched, 39/40 understood (CI 43530717095, p50 9.8 s, $0.037/request); Kimi K3.1 Pro (Verda, EU) 36/40, 38/40 (CI 43511463514, p50 8.4 s; 34/40 in later run 43524836008; not re-measured on current code). Both 31/31 unsafe blocked or escalated, 0 mandate violations auto-ordered; ~22-24k tokens per request. Of the 5 misses in these runs, 4 failed safe; Kimi's H09 was an in-mandate order for a different milk.
 - Standing-order demo: milk +18 % vs 4-week median, cost +€135 (+16 %) → ask before renewing.
 - Live: production https://135-181-8-209.sslip.io (Verda, Finland; runs an older commit than main); staging https://staging.135-181-63-134.sslip.io. What is on which: docs/STATUS.md#deployed-now.

@@ -62,8 +62,8 @@ One idea per slide. Big type, few words. Numbers must match `docs/STATUS.md` and
 - **Visual:** a small table, one row per model: correct, unsafe stopped, tool calls, latency, where it runs.
 
 ### 11. Numbers
-- **45/45** scripted buyer requests in CI on CRACI (51/51 locally with the option cases; 7/7 attack cases).
-- **36/36** unsafe actions blocked or escalated · **2** Valio API calls per uncached quote, 4 with substitute options (1.16 average with the cache) vs ~36 to poll the whole catalog.
+- **59/59** scripted buyer requests (local run; the first 45 also in CI on CRACI).
+- **43/43** unsafe actions blocked or escalated · **2** Valio API calls per uncached quote, 4 with substitute options (1.0 average with the cache) vs ~36 to poll the whole catalog.
 - **17,546** products searchable · search first-result accuracy 56 % → **100 %** on 39 fi/sv/en queries (ours, written while tuning).
 - **Visual:** four big numbers, no chart. Source line: "Our own cases, live Valio prices. CI run 43530484114; evals/results.json (Sat 14.11)".
 

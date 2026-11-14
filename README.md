@@ -16,7 +16,7 @@ Built at Junction 2026 for Valio Aimo's challenge "Trusted Trade Agents".
 ## What it does
 
 - **Search** 17,546 products in Finnish, Swedish and English, with filters for claims, allergens, labels and temperature. Search uses a local index and costs no Valio API calls.
-- **Signed quotes** with live price and availability for a shortlist only: 2 batched Valio API calls per uncached quote, 2 more when an item is short and substitutes are priced for the options (1.16 on average with the cache in `evals/results.json`). Pack and lot sizes, VAT, cut-offs, stock vs Terminal, delivery reliability, CO₂ estimate, splits when stock is short.
+- **Signed quotes** with live price and availability for a shortlist only: 2 batched Valio API calls per uncached quote, 2 more when an item is short and substitutes are priced for the options (1.0 on average with the cache in `evals/results.json`). Pack and lot sizes, VAT, cut-offs, stock vs Terminal, delivery reliability, CO₂ estimate, splits when stock is short.
 - **Mandate engine** in plain code. Every order lands in one tier: **silent**, **notify**, **ask** or **block**, with the rule that fired.
 - **Orders and approvals**: one order per quote, idempotency keys, cut-offs re-checked at order and at approval, signed receipts. A human approves or rejects from a phone link.
 - **Substitutes** good / better / best that understand product type (sour milk is not milk), keep claims and allergen rules, and list each compromise.
@@ -27,7 +27,7 @@ Built at Junction 2026 for Valio Aimo's challenge "Trusted Trade Agents".
 - **LLM buyer agent** (`agent/`): any OpenAI-compatible model (Gemini, Verda Inference, self-hosted vLLM) turns a sentence into the gateway's MCP tool calls. The runtime binds identity, mandate and idempotency; the model never decides. Scored per model by `scripts/llm_eval.py`.
 - **Snap a photo of the order** (CLI; the web upload in `/agent/` is off on the servers): NVIDIA Nemotron 3.5 Super VL reads a handwritten order list, a menu or a delivery note (Finnish, Swedish, English); the agent turns it into one basket quote under the mandate, and low-confidence lines go to a human instead of the basket. See [docs/NEMOTRON.md](docs/NEMOTRON.md).
 - **Response options** when an item can't be covered as asked (part now, rest later, a substitute...), each with a mandate preview. **Rule register** at `GET /rules`.
-- **Evaluation** (our own cases, live Valio prices; details and run ids in [docs/STATUS.md](docs/STATUS.md#evaluation)): scripted, no LLM: 45/45 in CI on CRACI (run 43530484114), 51/51 locally with the 6 option cases, 7/7 for the 7 attack cases (slicing, self-approval, prompt injection, unusual quantity); 36/36 unsafe actions blocked or escalated. LLM agent, 40 sentences: Gemini 4 Hydrogen 39/40 (CI 43530717095), Kimi K3.1 Pro 36/40 (CI 43511463514; 34/40 in a later run; not re-measured on current code); 0 mandate violations auto-ordered with either.
+- **Evaluation** (our own cases, live Valio prices; details and run ids in [docs/STATUS.md](docs/STATUS.md#evaluation)): scripted, no LLM: all 59 cases 59/59 in a local run (43/43 unsafe actions blocked or escalated; incl. partial-availability options and attack cases: slicing, self-approval, prompt injection, unusual quantity); the first 45 also 45/45 in CI on CRACI (run 43530484114). LLM agent, 40 sentences: Gemini 4 Hydrogen 39/40 (CI 43530717095), Kimi K3.1 Pro 36/40 (CI 43511463514; 34/40 in a later run; not re-measured on current code); 0 mandate violations auto-ordered with either.
 
 ## Try it yourself
 
@@ -105,7 +105,7 @@ Demos and evaluation (each takes `--base <gateway URL>`; see [docs/demo-runbook.
 ```sh
 uv run python scripts/demo.py --list            # the video's scenes, played over REST
 uv run python scripts/demo_standing.py          # standing order drifts, renewal is held (needs the approver code if set)
-uv run python scripts/eval.py                   # the scripted buyer requests (58 cases), live Valio prices -> evals/results.json
+uv run python scripts/eval.py                   # the scripted buyer requests (59 cases), live Valio prices -> evals/results.json
 uv run python -m agent.buyer "We need 1,000 litres of lactose-free milk delivered on Monday." \
     --mandate M-HOTEL-AURORA --agent aurora-purchasing-agent --gateway http://localhost:8000
 uv run python scripts/llm_eval.py --provider verda   # the eval sentences through the LLM agent, per model
@@ -232,7 +232,7 @@ sous/             the gateway
 agent/            LLM buyer agent: buyer.py (MCP tool loop), llm.py (OpenAI-compatible model presets)
                   recipe.py (menu -> basket), vision.py (photo -> basket, Nemotron VL)
 scripts/          fetch_data.py, seed.py, demo.py, demo_standing.py, eval.py, llm_eval.py
-evals/            cases.yaml (58 cases), results.json, llm_results.*.json, vision/
+evals/            cases.yaml (59 cases), results.json, llm_results.*.json, vision/
 web/              Valio Aimo UI: approvals, orders, mandates, audit, stats, live activity
 buyer/            reference buyer in the browser, verifies JWS with Web Crypto
 tests/            pytest, offline plus MariaDB

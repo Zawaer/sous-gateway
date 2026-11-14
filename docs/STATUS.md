@@ -25,6 +25,7 @@ Things that exist on `main` but not on production are features of the code, not 
 - **No real order API.** `ordered` means accepted and signed by Sous; nothing is sent to Valio Aimo's order system (the challenge provides none).
 - **List prices only.** The mock ignores the customer number, so there are no contract prices.
 - **Evals use our own cases.** The scripted and LLM cases, the search-quality queries and the vision pages were written by the team while building; none is a held-out set from Valio Aimo or real kitchens.
+- **Open authorization gap (QA board 02:20Z/02:24Z):** `GET /mandates/{id}/suggestions` and substitute suggestions (REST and MCP) are not covered by the read scopes yet, so a private mandate's suggestions can be read without its token. Being fixed; prod only holds demo mandates.
 - **Vision pages are rendered by us** (`scripts/vision_make_images.py`), not photos from real kitchens.
 - **CI on main is not always green.** Last fully green run with live evals: [43530484114](https://github.com/Zawaer/sous/actions/runs/43530484114) on e84bb41 (test, docker, smoke, eval 45/45, llm-eval). Several later pushes failed the test job (a test needing `data/`, fixed in e1328eb) or were cancelled by newer pushes.
 
@@ -95,7 +96,7 @@ Pitch line: *"AI purchasing agents carry a signed mandate from their human, and 
 - Redeploy production from current `main` and set `SOUS_VALKEY_URL` + `SOUS_DEPLOYMENT_ROLE` on prod and staging.
 - Model keys on the servers, then `SOUS_BUYER_AGENT=1` so `/agent/` works for judges.
 - Re-measure Kimi K3.1 Pro once Verda's API is reachable again (see Evaluation).
-- A full scripted eval run of all 58 cases in one go, in CI.
+- The 59-case scripted eval confirmed in CI (CI last ran 45 cases green).
 - Self-hosted vLLM on a Verda GPU as a third model in the eval (documented in VERDA.md, never run).
 - Production identity: buyer login (OIDC) instead of the approver code; agent keys bound to the mandate (mTLS, DPoP or VC-bound keys).
 - Signing-key rotation via JWKS `kid`; anchor the audit chain head outside the gateway.
@@ -103,24 +104,25 @@ Pitch line: *"AI purchasing agents carry a signed mandate from their human, and 
 ## Evaluation
 `uv run python scripts/eval.py` runs the scripted buyer requests in `evals/cases.yaml` through `sous.service` with live Valio Aimo prices and availability (no LLM; each case's plan is written in the YAML) and writes `evals/results.json`. Cases cover the hotel, hospital, school and 8 ad-hoc mandates: happy path, splits, partial stock, ask/hard limits, price cap, allergen contains / may contain / unknown, substitutes, Terminal cut-off, out of stock, undeliverable, later delivery, wrong agent, revoked/expired mandate, daily budget, double order, expired quote, idempotent retry, late approval after revocation, response options (O01-O06), and the attack cases below. Uses a fresh SQLite state file. Needs `data/` and the API key, and the mock's cut-off of Sun 15.11 17:00 must still be ahead. CI runs it on `main` (job `eval`, egress limited to PyPI, Valio and Valkey).
 
-`evals/cases.yaml` has **58 cases**. They have not yet been run all together:
+`evals/cases.yaml` has **59 cases**:
 
 | Run | Cases | Result | Source |
 |---|---|---|---|
 | CI on CRACI, run [43530484114](https://github.com/Zawaer/sous/actions/runs/43530484114), e84bb41, Fri 13.11 23:55Z | the first 45 | **45/45** | CI log |
-| Local run with fa7a14a, Sat 14.11 00:00Z | 51 (45 + O01-O06) | **51/51** | `evals/results.json` |
+| Local run with fa7a14a, Sat 14.11 00:00Z | 51 (45 + O01-O06) | 51/51 | `evals/results.json` at fa7a14a |
 | Local run with 5c23ef5, Sat 14.11 00:15Z | 7 (A07, A08, I01-I03, U01, U02) | **7/7** | `evals/results.adopt.json` |
+| Local run with a4644a0 (product-type guard), Sat 14.11 02:31Z | **all 59** (adds H20) | **59/59** | `evals/results.json` (285f126) |
 | CI run 43530717095, e84bb41 (manual) | 45 | 44/45: H14 held for approval instead of notify (live data at that moment) | CI log |
 
-From `evals/results.json` (51 cases):
+From `evals/results.json` (59 cases, local, not yet confirmed in CI):
 
 | Metric | Result |
 |---|---|
-| Cases passed | 51 / 51 |
-| Unsafe actions blocked or escalated | 36 / 36 = 100 % |
-| Human-approval rate | 27.1 % of 48 order decisions |
-| Valio API calls per request | avg 1.16 with the cache (58 live calls, 522 cache hits); max 4. A plain quote is at most 2 batched calls; a quote that can't be met as asked also prices substitutes for its options (2 more). |
-| Latency per request | mean 386 ms, max 942 ms (quote mean 212 ms) |
+| Cases passed | 59 / 59 |
+| Unsafe actions blocked or escalated | 43 / 43 = 100 % |
+| Human-approval rate | 30.4 % of 56 order decisions |
+| Valio API calls per request | avg 1.0 with the cache (58 live calls, 578 cache hits); max 4. A plain quote is at most 2 batched calls; a quote that can't be met as asked also prices substitutes for its options (2 more). |
+| Latency per request | mean 319 ms, max 1,132 ms (quote mean 129 ms) |
 
 LLM buyer agent per model (`scripts/llm_eval.py`, the first 45 cases, of which 40 are one buyer sentence; full table in [LLM_EVAL.md](LLM_EVAL.md)). Live: real model, live Valio prices, fresh state per case.
 

@@ -28,7 +28,7 @@ For a hospital or school kitchen a false "safe" is the one error that can't be u
 ## 5. Shortlist first, then live calls
 Valio Aimo asked teams not to poll the whole catalog. Search runs against a local index of the static product file and costs zero live calls.
 Only the products the agent asks to quote are priced: one batched `/price` and one `/availability` call per quote, covering every item (up to 1000 ids each), price cached 10 min, availability 60 s.
-A typical request costs 2 live calls. Substitute suggestions price the top 25 candidates, also in 2 calls; a quote that can't be met as asked also prices substitutes for its options, so it costs up to 4 (avg 1.16 per request in `evals/results.json`, with the cache). Every quote reports its `valio_api_calls`.
+A typical request costs 2 live calls. Substitute suggestions price the top 25 candidates, also in 2 calls; a quote that can't be met as asked also prices substitutes for its options, so it costs up to 4 (avg 1.0 per request in `evals/results.json`, with the cache). Every quote reports its `valio_api_calls`.
 A global per-minute cap (`SOUS_AIMO_CALLS_PER_MIN`) protects Valio Aimo's systems from a runaway agent.
 
 ## 6. SQLite FTS5 trigram index for the catalog

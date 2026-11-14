@@ -20,7 +20,7 @@ The buyer's sentence from each case in [`evals/cases.yaml`](../evals/cases.yaml)
 | Cost per request / whole run | $0.0372 / $1.49 | – | – | $0 |
 | Cases n/a for an LLM | 5 | 5 | 5 | – |
 
-`oracle:scripted-plan` is not a model: it replays the scripted eval's plan for each case through the same agent runtime and checks, so it validates the harness and is the ceiling a model can reach. *Scripted calls* is `scripts/eval.py` with no LLM (`evals/results.json`: 51 cases, a local run with fa7a14a; the 40 LLM cases are a subset of those).
+`oracle:scripted-plan` is not a model: it replays the scripted eval's plan for each case through the same agent runtime and checks, so it validates the harness and is the ceiling a model can reach. *Scripted calls* is `scripts/eval.py` with no LLM (`evals/results.json` at the time of the LLM runs: 51 cases, a local run with fa7a14a; the 40 LLM cases are a subset).
 
 Run dates: `gemini:gemini-4-hydrogen` 2026-11-14T02:04:57+02:00; `verda:kimi-k3-1-pro` 2026-11-13T23:39:59+02:00; `oracle:scripted-plan` 2026-11-13T22:29:31+02:00
 
