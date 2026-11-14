@@ -2,8 +2,10 @@
 
 The deck is [deck/index.html](deck/index.html) (+ `deck.css`, `qr.js`, `img/`, local `fonts/`), rendered to
 [deck.pdf](deck.pdf) by `scripts/build_deck.py`. PowerPoint style: one idea per slide, a big headline, one visual, few
-words. Every screenshot is a real production screen from the judge sandbox SBX-UF7A (Sat 14.11); numbers match
-`docs/STATUS.md` and carry their source in the footer. Colours and tier badges follow `web/tokens.css`. It follows the
+words. Every screenshot is a real production screen from the judge sandboxes (Sat 14.11); numbers match
+`docs/STATUS.md`. Look: minimal and quiet, Newsreader headlines and Inter text in sentence case, no monospace or
+uppercase labels; paper #f8f8f3 with deep green #17362b, sepia #7a5c45 and one lime accent #c8e05a, grain panels on the
+title, flow and closing slides. The public URL on the slides and in the QR is sous.saarikko.dev. It follows the
 same arc as the demo video ([video-script.md](video-script.md)): the flow, the three must-builds, the bonus ideas.
 
 1. **Sous.** Valio Aimo's front door for AI purchasing agents; "The agent carries the mandate. Valio Aimo enforces it.
