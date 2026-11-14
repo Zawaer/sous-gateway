@@ -53,7 +53,8 @@
           <label>Temperature<select id="temperature"><option value="">Any</option><option>ambient</option><option>chilled</option><option>frozen</option></select></label>
           <label>Product ID being replaced<input id="substitute" placeholder="Original SKU" maxlength="100"></label>
           <label>Gateway URL<input id="gateway" type="url" spellcheck="false"></label>
-          <label>Agent token (if required)<input id="agent-token" type="password" autocomplete="off" spellcheck="false"></label>
+          <label>Agent token (if required)<input id="agent-token" type="password" autocomplete="off" spellcheck="false" aria-describedby="agent-token-hint"></label>
+          <p id="agent-token-hint" class="muted" hidden>Paste the agent token from your sandbox setup.</p>
         </div>
         <p class="muted" id="allergen-help">Use gateway allergen codes, for example AM for milk, AN for tree nuts, and AP for peanuts.</p>
       </details>

@@ -36,6 +36,12 @@ const statuses = {
 
 const pageParams = new URLSearchParams(location.search);
 $('gateway').value = pageParams.get('gateway') || location.origin;
+const linkedMandate = pageParams.get('mandate')?.trim();
+if (linkedMandate && linkedMandate.length <= $('mandate').maxLength) $('mandate').value = linkedMandate;
+if (pageParams.get('sandbox')) {
+  $('agent-token').closest('details').open = true;
+  $('agent-token-hint').hidden = false;
+}
 $('delivery').min = helsinkiDate();
 
 function element(tag, text, className) {
@@ -100,7 +106,10 @@ async function run(work) {
   try {
     await work();
   } catch (error) {
-    if (['agent_auth_required', 'agent_auth_invalid'].includes(error.code)) {
+    if (error.status === 404 && error.code === 'mandate_not_found') {
+      $('agent-token').closest('details').open = true;
+      notice($('feedback'), 'Check the mandate ID. If the mandate is private, enter its agent token and try again.', true);
+    } else if (['agent_auth_required', 'agent_auth_invalid'].includes(error.code)) {
       $('agent-token').closest('details').open = true;
       notice($('feedback'), 'Enter a valid agent token for this mandate under Product filters and gateway, then try again.', true);
     } else {
