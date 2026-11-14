@@ -46,16 +46,21 @@ button:disabled { opacity: .55; cursor: default; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 h1, h2, h3, p { margin: 0 0 .8rem; }
 h1, h2, h3 { font-family: 'Newsreader', Georgia, serif; font-weight: 400; }
-h1 { font-size: clamp(3rem, 8vw, 5.2rem); line-height: .98; letter-spacing: -.045em; }
+h1 { font-size: clamp(1.9rem, 5vw, 2.4rem); line-height: 1.1; letter-spacing: -.01em; }
 h2 { font-size: 1.75rem; }
 h3 { font-size: 1.2rem; }
 p, li { line-height: 1.55; }
 .site-header { border-bottom: 1px solid var(--line); }
 .shell { width: min(100% - 2rem, 54rem); margin: auto; }
 .topbar, .section-title { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; }
-.topbar { padding-block: .9rem; }
-.brand { font: 500 1.15rem/1 'Newsreader', Georgia, serif; }
-.intro { padding: 2.8rem 0 1.5rem; }
+.brand { display: inline-flex; align-items: center; gap: .5rem; font: 400 1.25rem/1 'Newsreader', Georgia, serif; color: var(--ink); text-decoration: none; }
+.brand small { font: 400 .85rem/1 'Inter', system-ui, sans-serif; color: var(--muted); margin-left: .2rem; }
+.topbar { align-items: center; min-height: 56px; padding-block: 0; }
+button, input, select { min-height: 44px; }
+.basket-item button, .coverage button { min-height: 36px; }
+.outcome { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .7rem; }
+.outcome .tier { font-size: .85rem; }
+.intro { padding: 2rem 0 1.25rem; }
 .intro p, .muted, small { color: var(--muted); }
 main { padding-bottom: 4rem; }
 .panel, .notice { border: 1px solid var(--line); border-radius: 6px; margin-bottom: 1rem; padding: clamp(1rem, 3.5vw, 1.65rem); background: var(--surface); }

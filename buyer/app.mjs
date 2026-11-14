@@ -14,6 +14,17 @@ const tiers = {
   silent: 'Within mandate', notify: 'Within mandate · buyer notification required',
   ask: 'Human approval required', block: 'Blocked by mandate',
 };
+// Same tier labels and badge classes as the seller UI (web/tokens.css, docs/UI_PRINCIPLES.md).
+const tierLabels = { silent: 'Auto', notify: 'Auto + FYI', ask: 'Needs approval', block: 'Refused' };
+const statusTier = { pending_approval: 'ask', refused: 'block', rejected: 'block', expired: 'block' };
+const statusLabels = { ordered: 'Ordered', pending_approval: 'Needs approval', refused: 'Refused', rejected: 'Rejected', expired: 'Expired' };
+
+function outcomeLine(tier, label, text, className = 'outcome') {
+  const line = element('p', undefined, className);
+  if (tier in tierLabels) line.append(element('span', label, `tier tier-${tier}`));
+  line.append(element('span', text));
+  return line;
+}
 const statuses = {
   ordered: 'Ordered in the demo gateway', pending_approval: 'Waiting for human approval',
   refused: 'Refused by the gateway', rejected: 'Rejected by the approver', expired: 'Order expired',
@@ -315,7 +326,7 @@ function renderQuote(quote) {
   content.replaceChildren(
     element('p', `${quote.id} · Valid until ${time(quote.expires_at)} Helsinki time`, 'muted'),
     element('p', `${money(quote.total_ex_vat, quote.currency)} ex VAT · ${money(quote.total_inc_vat, quote.currency)} inc VAT`, 'total'),
-    element('p', tiers[preview.outcome]),
+    outcomeLine(preview.outcome, tierLabels[preview.outcome], tiers[preview.outcome]),
   );
   const expired = element('p', 'Quote expired. Request a new signed quote to continue.', 'notice');
   expired.id = 'quote-expired';
@@ -353,7 +364,8 @@ async function renderOrder(current, order) {
   const { gateway, quote } = current;
   const content = document.createDocumentFragment();
   const status = statuses[order.status] || order.status;
-  content.append(element('p', `${order.id} · ${status}`, 'total'));
+  const tier = statusTier[order.status] || order.decision?.outcome;
+  content.append(outcomeLine(tier, (order.status === 'ordered' && tierLabels[tier]) || statusLabels[order.status] || status, `${order.id} · ${status}`, 'outcome total'));
   renderCoverage(content, quote, [], (_, row, container) => showOrderAlternatives(gateway, quote, row, container));
   appendList(content, 'Gateway decision', order.decision.findings.map((finding) => finding.message));
   try {
