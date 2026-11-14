@@ -114,6 +114,17 @@ test('rejects a quote whose JSON, signed identity, or product shortlist differs'
   }
 });
 
+test('rejects a signed quote that drops or changes the requested product type', async () => {
+  for (const type of [{}, { product_type: null }, { product_type: 'milk' }]) {
+    const items = [{ product_ids: ['sku'], amount: 5, unit: 'KG', substitute_for: null, note: 'oats', ...type }];
+    const signed = { ...quote, items, lines: quote.lines.map((line) => ({ ...line, item_index: 0 })) };
+    const client = new Gateway('https://example.test', async (url) => Response.json(
+      url.endsWith('jwks.json') ? jwks : { quote: signed, jws: token(signed, 'quote') },
+    ));
+    await assert.rejects(client.quote(need, mandate, ['sku']), /signed quote does not match/);
+  }
+});
+
 test('accepts a signed null product type for replacements and rejects an added constraint', async () => {
   for (const product_type of [null, 'milk']) {
     const items = [{ product_ids: ['sku'], amount: 5, unit: 'KG', substitute_for: 'old-sku', note: 'oats', product_type }];
