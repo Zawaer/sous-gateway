@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
-from . import access, autonomy, account, agent_auth, aimo, catalog, clock, config, erp, exposure, holds, oauth, offers, origin as origin_mod, pause, peppol, proof, quote as Q, rules, sandbox, service as S, signing, standing, store
+from . import access, autonomy, account, agent_auth, aimo, catalog, clock, config, erp, exposure, holds, lost_demand, oauth, offers, origin as origin_mod, pause, peppol, proof, quote as Q, rules, sandbox, service as S, signing, standing, store
 from .mandate import Mandate
 from .mcp_server import mcp
 
@@ -796,6 +796,18 @@ def resume_agent_ordering(req: pause.ResumeIn):
     if (out := pause.resume(req)) is None:
         raise HTTPException(404, f"Agent ordering is not paused for {req.buyer or 'every buyer'}.")
     return out
+
+
+# --- Valio's lost-demand view (sous/lost_demand.py) ---------------------------
+
+@app.get("/stats/lost-demand", tags=["holds"])
+def lost_demand_view(days: int | None = Query(7, ge=1, le=365, description="Window in days; omit for 7"),
+                     all_time: bool = False, x_approver_code: str | None = Header(default=None)):
+    """What buyers' agents wanted and didn't get, and why: orders Valio couldn't supply vs refused by the buyer's
+    rules vs declined or approved too late (with value), quantity no product covered, and why candidates were passed
+    over. Totals are public; the per-buyer breakdown needs the global approver code."""
+    full = not config.APPROVER_CODE or access.approver_code_ok(x_approver_code)
+    return lost_demand.report(None if all_time else days, with_buyers=full)
 
 
 # --- Valio caps on agent autonomy (sous/autonomy.py) -------------------------

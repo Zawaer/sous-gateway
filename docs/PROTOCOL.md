@@ -999,3 +999,14 @@ The brief asks for "minimum verification for stock, price, origin". Stock and pr
 - **Signed and audited.** The origin fields are part of the signed quote, the rules are in the register (`GET /rules`), and the mandate fields are in the signed mandate (and its VC form).
 
 Production path: replace the supplier-declared field with a verified claim (a certificate of origin or a traceability record, e.g. from the supplier's GS1 / EPCIS data) and let `origin_basis` say `verified`.
+
+## 31. Lost demand: Valio's view (`sous/lost_demand.py`)
+
+`GET /stats/lost-demand?days=7` (or `all_time=true`) and the MCP resource `sous://stats/lost-demand` report what buyers' agents wanted and did not get, from orders and the audit log (no Valio API calls), leaving out judge sandboxes and QA data:
+
+- **Orders that did not go through, by cause, with value ex VAT** (lines at their quoted prices, unorderable ones included): `supply` (a blocking availability issue, `product.held`, `ordering.paused`, or expired at approval because a cut-off passed: the part Valio can act on), `too_late` (approved after the deadline), `buyer` (the buyer's own mandate refused it), `declined` (the buyer's human said no), each with its top rules; plus the value placed and the lost share.
+- **Uncovered quantity**: the `uncovered` part of quotes per item and unit, with the candidate products.
+- **Passed over**: blocking issue codes on quote lines (cut-off passed, out of stock, held, allocated to others...) with the products most often hit.
+
+Totals are public; `by_buyer` (lost value and Valio-side lost value per buyer) only with the global approver code. The Valio UI's stats page shows it as "Lost demand".
+

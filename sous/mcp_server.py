@@ -659,6 +659,14 @@ def holds_resource() -> dict:
     return {"holds": [holds.public(h) for h in holds.list_active()]}
 
 
+@mcp.resource("sous://stats/lost-demand", title="Valio's lost demand (last 7 days)", mime_type="application/json")
+def lost_demand_resource() -> dict:
+    """What buyers' agents wanted from Valio Aimo and didn't get, and why: supply problems vs buyer rules vs approval
+    too late, uncovered quantities and why candidates were passed over. Totals only (no buyer names)."""
+    from . import lost_demand
+    return lost_demand.report(7)
+
+
 @mcp.resource("sous://agent-ordering", title="Is agent ordering paused?", mime_type="application/json")
 def agent_ordering_resource() -> dict:
     """Whether Valio Aimo has paused agent ordering for every buyer (and why), and how many single buyers are paused.

@@ -411,3 +411,42 @@ def test_peppol_routes_follow_order_read_access():
     r = c.get(f"/orders/{o['id']}/peppol/order.xml")
     assert r.status_code in (200, 404) and (r.status_code == 404 or r.headers["content-type"].startswith("application/xml"))
     assert c.get("/orders/PO-NOPE/peppol/order-response.xml").status_code == 404
+
+
+# --- Valio's lost-demand view (sous/lost_demand.py) ----------------------------------------------------------
+
+def test_lost_demand_splits_supply_buyer_rules_and_human_no(monkeypatch):
+    from sous import holds, lost_demand
+    monkeypatch.setattr(S, "_options", lambda *a, **k: [])  # no substitute search: CI has no catalog data
+    issue(auto_approve_limit_eur=50, hard_limit_eur=100)
+    assert order(20)["status"] == "ordered"                      # placed: €20
+    no = order(60)                                               # held, then the human says no: declined €60
+    S.decide(no["id"], "chef", False, "not this week")
+    assert order(150)["status"] == "refused"                     # spend.hard_limit: buyer's own rule, €150
+    holds.create(holds.HoldIn(product_id="OATS", kind="recall", reason="Batch fault"), "Oats")
+    assert order(10, pid="OATS")["status"] == "refused"          # product.held: Valio couldn't supply, €10
+    monkeypatch.setattr(Q, "offers", lambda ids, *a, **k: ([], clock["now"]) if "NOPE" in ids else fake_offers(ids, *a, **k))
+    S.request_quote(S.QuoteRequest(agent_id="a", mandate_id="M", delivery_date=MON, items=[
+        S.QuoteItem(product_ids=["NOPE"], amount=40, unit="L", note="cream")]))
+    r = lost_demand.report(None, now=NOW + timedelta(hours=1))
+    c = r["causes"]
+    assert (c["supply"]["orders"], c["supply"]["value_ex_vat"]) == (1, 10.0)
+    assert c["supply"]["top_rules"][0]["rule"] == "product.held"
+    assert (c["buyer"]["value_ex_vat"], c["declined"]["value_ex_vat"], c["too_late"]["orders"]) == (150.0, 60.0, 0)
+    assert r["placed_value_ex_vat"] == 20.0 and r["lost_value_ex_vat"] == 220.0
+    assert r["uncovered"][0]["item"] == "cream" and r["uncovered"][0]["uncovered"] == 40.0
+    assert any(p["code"] == "PRODUCT_HELD" for p in r["passed_over"])
+    assert "by_buyer" not in r and lost_demand.report(None, with_buyers=True)["by_buyer"][0]["buyer"] == "Hotel"
+
+
+def test_lost_demand_over_rest_hides_buyers_without_the_code(monkeypatch):
+    from fastapi.testclient import TestClient
+    from sous.api import app
+    monkeypatch.setattr(config, "APPROVER_CODE", "secret")
+    issue(hard_limit_eur=10)
+    order(20)
+    c = TestClient(app)
+    public = c.get("/stats/lost-demand?all_time=true").json()
+    assert public["causes"]["buyer"]["orders"] == 1 and "by_buyer" not in public and "Hotel" not in str(public)
+    full = c.get("/stats/lost-demand?all_time=true", headers={"x-approver-code": "secret"}).json()
+    assert full["by_buyer"][0]["buyer"] == "Hotel"

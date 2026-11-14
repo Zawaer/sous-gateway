@@ -1363,11 +1363,42 @@ views.insights = {
   },
 };
 
+// Valio's lost demand (GET /stats/lost-demand): what agents wanted and didn't get, and why.
+function lostDemandCard(L, bar) {
+  const C = L.causes || {};
+  const rows = [["supply", "Valio couldn't supply", "bar-block"], ["too_late", "Approved too late", ""],
+                ["declined", "Buyer's human said no", ""], ["buyer", "Buyer's own rules refused", ""]];
+  const max = Math.max(...rows.map(([k]) => C[k]?.value_ex_vat || 0), 1);
+  const unit = (u) => (u === "SALES_UNIT" ? "packs" : u);
+  const unc = (L.uncovered || []).slice(0, 6);
+  const po = (L.passed_over || []).slice(0, 6);
+  const poMax = Math.max(...po.map((p) => p.lines), 1);
+  const top = (c) => (C[c]?.top_rules || []).map((r) => r.rule).join(", ");
+  return `<div class="card">
+    <h3 style="margin-top:0">Lost demand</h3>
+    <div class="muted small">What buyers' agents wanted from Valio Aimo and didn't get: ${eur(L.lost_value_ex_vat || 0)} ex VAT
+      in ${Object.values(C).reduce((s, c) => s + (c.orders || 0), 0)} orders${L.lost_share_pct != null ? ` (${L.lost_share_pct} % of all demand placed)` : ""}.
+      Sandboxes and QA data left out.</div>
+    ${rows.map(([k, label, cls]) => bar(label, C[k]?.value_ex_vat || 0, max,
+        `${eur(C[k]?.value_ex_vat || 0)} <span class="muted small">(${C[k]?.orders || 0})</span>`,
+        top(k) ? `Rules: ${top(k)}` : "", cls)).join("")}
+    <h4 style="margin:14px 0 4px">Asked for, but no product could cover it</h4>
+    ${unc.length ? unc.map((u) => `<div class="small"><b>${esc(String(u.uncovered))} ${esc(unit(u.unit))}</b> of ${esc(u.item)}
+        <span class="muted">· ${u.quotes} quote${u.quotes === 1 ? "" : "s"}</span></div>`).join("")
+      : `<div class="muted small">Every quoted need was covered.</div>`}
+    <h4 style="margin:14px 0 4px">Why products were passed over</h4>
+    ${po.length ? po.map((p) => bar(esc(p.what), p.lines, poMax, String(p.lines),
+        p.top_products.map((t) => t.name || t.product_id).join(", "))).join("")
+      : `<div class="muted small">No candidate was passed over.</div>`}
+  </div>`;
+}
+
 views.stats = {
   key: "",
   async load() {
-    const [{ orders: allOrders }, { events: allEvents }, chain] = await Promise.all([
-      api("/orders"), api("/audit?limit=5000")  /* 5000 = cap on older gateways (newer allow 20000) */, api("/audit/verify")]);
+    const [{ orders: allOrders }, { events: allEvents }, chain, lost] = await Promise.all([
+      api("/orders"), api("/audit?limit=5000")  /* 5000 = cap on older gateways (newer allow 20000) */, api("/audit/verify"),
+      api("/stats/lost-demand?all_time=true").catch(() => null) /* older gateways: no lost-demand view */]);
     const orders = noQA(allOrders, isQAOrder);
     const events = noQA(allEvents, isQAEvent);
     const key = (events[0]?.seq ?? "") + "|" + orders.length;
@@ -1469,6 +1500,8 @@ views.stats = {
         ${spendRows.length ? spendRows.map(([b, v]) => bar(esc(b), v, spendMax, eur(v), `${b}: ${eur(v)}`)).join("")
           : `<div class="empty">Nothing ordered yet.</div>`}
       </div>
+
+      ${lost ? lostDemandCard(lost, bar) : ""}
 
       <div class="chain ${chain.ok ? "ok" : "bad"}">${chain.ok ? "✔" : "✖"} <div><b>${chain.ok ? "Every number above comes from an intact audit chain" : `Audit chain broken at #${esc(chain.broken_at_seq)}`}</b>
         <div class="small">${chain.events} events verified. <a href="#/audit">Open the audit log</a></div></div></div>`;
