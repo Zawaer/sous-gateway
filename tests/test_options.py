@@ -40,6 +40,21 @@ def price(v):
             "comparisonPrice": {"value": v}, "comparisonUnit": "L", "tax": {"taxRate": 13.5}, "error": False}
 
 
+def price_kg(per_pack, per_kg):
+    """A pack priced per pack with Valio's comparison price per KG (pack / comparison = kg in a pack)."""
+    return {"catalogPrice": {"value": per_pack, "valueWithTax": round(per_pack * 1.135, 2),
+                             "validTo": "2026-12-31T00:00:00+0200"},
+            "comparisonPrice": {"value": per_kg}, "comparisonUnit": "KG", "tax": {"taxRate": 13.5}, "error": False}
+
+
+# Packs of different sizes: a need in 400 g packs met by 10 kg packs (equal content, not equal pack count)
+PRODUCTS.update({
+    "T": product("T", "Chopped tomatoes 400 g", size_from_name=(0.4, "KG"), temperature="ambient"),
+    "T10": product("T10", "Chopped tomatoes 10 kg", size_from_name=(10.0, "KG"), temperature="ambient"),
+})
+RAW_PRICE = {"T": price_kg(0.8, 2.0), "T10": price_kg(15.0, 1.5)}
+
+
 def avail(spec):
     if spec is None:  # undeliverable
         return {"logisticModel": "Stock", "closingTime": None, "salesBlock": False, "scheduleLines": []}
@@ -66,7 +81,7 @@ def offline(tmp_path, monkeypatch):
     def fake_fetch(kind, day, chunk):
         CALLS.append(kind)
         if kind == "price":
-            return [{**price(PRICE[p]), "productId": p} for p in chunk]
+            return [{**(RAW_PRICE.get(p) or price(PRICE[p])), "productId": p} for p in chunk]
         return [{**avail(AVAIL[p]), "productId": p} for p in chunk]
     monkeypatch.setattr(aimo, "_fetch", fake_fetch)
     monkeypatch.setattr(aimo, "_cache", {})
@@ -250,3 +265,71 @@ def test_single_product_short_is_capped_at_stock_and_the_rest_is_uncovered(monke
     rules = {f["rule"] for f in q["mandate_preview"]["findings"]}
     assert "need.partial" in rules and q["mandate_preview"]["outcome"] == "ask"
     assert {o["kind"] for o in q["options"]} == {"split_with_substitute", "substitute"}
+
+
+# --- a need in packs: substitutes sized by equal content ------------------------------------------
+
+def pack_offer(pid, need, unit=None):
+    return Q.build_offer(PRODUCTS[pid], RAW_PRICE[pid], avail(AVAIL[pid]), MON, need, unit, NOW)
+
+
+def tomato_sub(need_kg=16.0):
+    """What substitutes.suggest returns for 40 x 400 g: the 10 kg pack priced for 16 kg (2 packs)."""
+    return {"tier": "better", "product_id": "T10", "name": PRODUCTS["T10"]["name"], "type": {"match": "same"},
+            "compromises": ["10 kg pack instead of 400 g"], "offer": pack_offer("T10", need_kg, "KG")}
+
+
+def test_substitute_for_packs_is_sized_by_content_not_pack_count():
+    """40 x 400 g = 16 kg -> 2 x 10 kg, never 40 x 10 kg."""
+    AVAIL.update({"T": None, "T10": ("2026-11-16", None, None)})
+    offers = [pack_offer("T", 40)]
+    opts = OPT.build(0, 40, None, offers, [offers[0]], MON, [tomato_sub()], "T")
+    assert kinds(opts) == ["substitute"]
+    o = opts[0]
+    assert [(l["product_id"], l["quantity"], l["substitute_for"]) for l in o["_lines"]] == [("T10", 2, "T")]
+    assert o["total_ex_vat"] == 30.0
+    assert o["covers_content"] == {"amount": 20.0, "unit": "KG"}
+    assert o["covers"] == {"amount": 50.0, "unit": "SALES_UNIT"} and o["covers"]["amount"] >= 40
+    assert "40 units (16 KG) as 2 ST, 20 KG, of Chopped tomatoes 10 kg" in o["tradeoff"]
+
+
+def test_split_with_substitute_fills_the_gap_by_content():
+    """30 x 400 g on time (12 kg); the 10 packs missing (4 kg) come as 1 x 10 kg."""
+    AVAIL.update({"T": ("2026-11-16", 30, None), "T10": ("2026-11-16", None, None)})
+    offers = [pack_offer("T", 40)]
+    chosen, left = Q.plan(40, None, offers)
+    assert left == 10
+    opts = OPT.build(0, 40, None, offers, chosen, MON, [tomato_sub()], "T")
+    split = next(o for o in opts if o["kind"] == "split_with_substitute")
+    assert [(l["product_id"], l["quantity"]) for l in split["_lines"]] == [("T", 30), ("T10", 1)]
+    assert split["covers_content"] == {"amount": 22.0, "unit": "KG"} and split["covers"]["amount"] == 55
+    assert "the remaining 10 units (4 KG) as 1 ST, 10 KG, of Chopped tomatoes 10 kg" in split["tradeoff"]
+    full = next(o for o in opts if o["kind"] == "substitute")
+    assert [(l["product_id"], l["quantity"]) for l in full["_lines"]] == [("T10", 2)]
+
+
+def test_substitute_in_another_measure_is_not_offered_for_packs():
+    AVAIL.update({"T": None, "S": ("2026-11-16", None, None)})
+    offers = [pack_offer("T", 40)]
+    milk = sub_entry("S", need=16.0)  # measured in L: can't hold 16 kg
+    assert OPT.build(0, 40, None, offers, [offers[0]], MON, [milk], "T") == []
+
+
+def test_choosing_a_content_sized_substitute_requotes_its_own_packs(monkeypatch):
+    """The option's lines are in the substitute's own packs; option_id re-quotes exactly those (2 x 10 kg)."""
+    AVAIL.update({"T": None, "T10": ("2026-11-16", None, None)})
+    seen = []
+
+    def suggest(product_id, delivery_date, amount, unit, mandate=None, avoid=None, limit=3):
+        seen.append((product_id, amount, unit))
+        return {"options": [tomato_sub(amount * 0.4)]}
+    monkeypatch.setattr(substitutes, "suggest", suggest)
+    q = S.request_quote(S.QuoteRequest(agent_id="agent", mandate_id="M-T", delivery_date=MON,
+                                       items=[S.QuoteItem(product_ids=["T"], amount=40)]))["quote"]
+    assert seen == [("T", 40, None)]
+    opt = next(o for o in q["options"] if o["kind"] == "substitute")
+    assert [(l["product_id"], l["quantity"]) for l in opt["lines"]] == [("T10", 2)]
+    assert opt["covers_content"] == {"amount": 20.0, "unit": "KG"}
+    q2 = S.request_quote(S.QuoteRequest(agent_id="agent", mandate_id="M-T", option_id=opt["id"]))["quote"]
+    assert [(l["product_id"], l["quantity"], l["substitute_for"]) for l in q2["lines"]] == [("T10", 2, "T")]
+    assert q2["total_ex_vat"] == opt["total_ex_vat"] == 30.0

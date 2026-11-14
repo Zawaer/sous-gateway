@@ -10,6 +10,12 @@ is a complete alternative with its own lines, totals, delivery dates and a plain
   split_with_substitute   what the original covers on time, the gap from a compatible substitute
   substitute              a substitute (good / better / best from substitutes.py) covers everything
 
+A need in packs (unit None) is met by a substitute with equal content, not an equal number of its own
+packs: 40 x 400 g is 16 kg, so 2 x 10 kg, not 40 x 10 kg (the same conversion as substitutes.suggest).
+Such options carry `covers_content` ({amount, unit} in L or KG) and say it in the trade-off; their `covers`
+stays in the original's packs (content / one original pack). Option lines are in the substitute's own
+packs, which is what a re-quote with option_id orders (SALES_UNIT).
+
 Ranking: no substitute before substitute; then fully on time > part on time + rest later > later;
 then the substitute tier (best > better > good); then price. Each option carries a mandate preview
 (the tier the whole quote would get with this option in place of the item's lines).
@@ -25,6 +31,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Callable
 
+from . import catalog
 from . import quote as Q
 
 MAX_PER_ITEM = 5
@@ -69,6 +76,21 @@ def _covered(lines: list[dict], unit: str | None) -> float:
     return round(sum((l.get("covers") or {}).get("amount") or 0 for l in lines), 3)
 
 
+def _content_of(original_id: str | None, offers: list[dict]) -> tuple[float, str] | None:
+    """What one pack of the original holds (amount, 'L' or 'KG'): from its offer, else its catalog entry."""
+    o = next((o for o in offers if o["product_id"] == original_id), None)
+    c = (o or {}).get("content_per_sales_unit")
+    if c and c.get("amount"):
+        return c["amount"], c["unit"]
+    p = catalog.get(original_id) if original_id else None
+    c2 = Q.content_per_sales_unit(p, None) if p else None
+    return (c2[0], c2[1]) if c2 else None
+
+
+def _packs(lines: list[dict]) -> str:
+    return " + ".join(f"{l['quantity']:g} {l['sales_unit']}" for l in lines)
+
+
 def _sig(lines: list[dict]) -> tuple:
     return tuple(sorted((l["product_id"], l["quantity"]) for l in lines))
 
@@ -103,7 +125,8 @@ def build(
     seen: set[tuple] = set()
     out: list[dict] = []
 
-    def add(kind: str, lines: list[dict], tradeoff: str, substitute: dict | None = None):
+    def add(kind: str, lines: list[dict], tradeoff: str, substitute: dict | None = None,
+            covers: float | None = None, content: dict | None = None):
         if not lines or _sig(lines) in seen:
             return
         seen.add(_sig(lines))
@@ -113,7 +136,8 @@ def build(
         total = round(sum(l["line_total_ex_vat"] or 0 for l in lines), 2)
         out.append({
             "item_index": item_index, "kind": kind, "tradeoff": f"{tradeoff} Total €{total:,.2f} ex VAT.",
-            "covers": {"amount": _covered(lines, unit), "unit": unit or "SALES_UNIT"},
+            "covers": {"amount": _covered(lines, unit) if covers is None else covers, "unit": unit or "SALES_UNIT"},
+            **({"covers_content": content} if content else {}),
             "on_time": timing == 0, "delivery_dates": dates,
             "total_ex_vat": total, "total_inc_vat": round(sum(l["line_total_inc_vat"] or 0 for l in lines), 2),
             "substitute": substitute, "same_as_quote": _sig(lines) == quoted, "_timing": timing, "_lines": lines,
@@ -144,30 +168,55 @@ def build(
                                     f"({_names(lines)}).")
             break
 
-    # 4. substitutes: fill the gap next to the original, or replace it outright
+    # 4. substitutes: fill the gap next to the original, or replace it outright. A need in the original's
+    # packs becomes what those packs hold, so a substitute in other packs covers the same content.
     subs = [s for s in substitutes or [] if s["offer"]["orderable"] and s["offer"]["quantity"] is not None]
+    per_pack = _content_of(original_id, offers) if unit is None and subs else None
+    if per_pack:
+        subs = [s for s in subs if (s["offer"].get("content_per_sales_unit") or {}).get("unit") == per_pack[1]]
+    s_unit = per_pack[1] if per_pack else unit
+
+    def s_fill(need: float, pool: list[dict]) -> tuple[list[dict], float, float]:
+        """Substitute lines for `need` (in the item's unit); returns (lines, left, content covered in s_unit)."""
+        lines, left = _fill(round(need * per_pack[0], 3) if per_pack else need, s_unit, pool, original_id)
+        return lines, left, _covered(lines, s_unit)
+
+    def in_packs(content: float) -> float:  # content back in the original's packs
+        return round(content / per_pack[0], 3)
+
+    def what(need: float, lines: list[dict]) -> str:
+        if not per_pack:
+            return f"{need:g} {u}"
+        return (f"{need:g} {u} ({need * per_pack[0]:g} {s_unit}) as {_packs(lines)}, "
+                f"{_covered(lines, s_unit):g} {s_unit}, of")
+
     if subs and original_id:
         by_id = {s["product_id"]: s for s in subs}
         compatible = [s["offer"] for s in subs if (s.get("type") or {}).get("match") != "different"]
         if now_lines and gap > 0:
-            sub_lines, left = _fill(gap, unit, [o for o in compatible if not _late(o, requested)], original_id)
+            sub_lines, left, got = s_fill(gap, [o for o in compatible if not _late(o, requested)])
             if sub_lines and left <= 0:
                 s0 = by_id[sub_lines[0]["product_id"]]
+                now_n = _covered(now_lines, unit)
                 add("split_with_substitute", now_lines + sub_lines,
-                    f"{_covered(now_lines, unit):g} {u} of {_names(now_lines)} on {req}; the remaining "
-                    f"{_covered(sub_lines, unit):g} {u} from {_names(sub_lines)}, a substitute"
+                    f"{now_n:g} {u} of {_names(now_lines)} on {req}; the remaining "
+                    f"{what(gap, sub_lines) if per_pack else f'{got:g} {u} from'} {_names(sub_lines)}, a substitute"
                     f"{': ' + _say(s0['compromises']) if s0['compromises'] else ' with no compromises'}.",
                     {"tier": s0["tier"], "for": original_id, "compromises": s0["compromises"],
-                     "match": (s0.get("type") or {}).get("match")})
+                     "match": (s0.get("type") or {}).get("match")},
+                    round(now_n + in_packs(got), 3) if per_pack else None,
+                    {"amount": round(now_n * per_pack[0] + got, 3), "unit": s_unit} if per_pack else None)
         for s in subs:
-            lines, left = _fill(amount, unit, [s["offer"]], original_id)
+            lines, left, got = s_fill(amount, [s["offer"]])
             if lines and left <= 0:
                 when = "on " + req if not _late(lines[0], requested) else "on " + lines[0]["delivery_date"]
                 add("substitute", lines,
-                    f"{s['tier'].capitalize()} substitute: all {amount:g} {u} of {s['name']} instead, arriving "
-                    f"{when}; {_say(s['compromises']) if s['compromises'] else 'no compromises'}.",
+                    f"{s['tier'].capitalize()} substitute: all {what(amount, lines) if per_pack else f'{amount:g} {u} of'} "
+                    f"{s['name']} instead, arriving {when}; "
+                    f"{_say(s['compromises']) if s['compromises'] else 'no compromises'}.",
                     {"tier": s["tier"], "for": original_id, "compromises": s["compromises"],
-                     "match": (s.get("type") or {}).get("match")})
+                     "match": (s.get("type") or {}).get("match")},
+                    in_packs(got) if per_pack else None, {"amount": got, "unit": s_unit} if per_pack else None)
 
     out.sort(key=lambda o: (o["substitute"] is not None, o["_timing"], o["kind"] != "split_with_substitute",
                             _TIER_RANK.get((o["substitute"] or {}).get("tier"), 0),
