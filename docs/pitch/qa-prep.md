@@ -124,6 +124,8 @@ With reasoning on, yes on our pages: 0 silent errors and 100 % correct in 8 page
 - Standing-order demo: milk +18 % vs 4-week median, cost +€135 (+16 %) → ask before renewing.
 - Live: production, the judge URL, https://135-181-8-209.sslip.io (Verda, Finland; at a431ff6 on 14.11 14:11Z); staging https://staging.135-181-63-134.sslip.io (ea4cd19, near current `main`, the fallback). What is on which: docs/STATUS.md#deployed-now.
 - CI on CRACI: SBOM + grype gate; deny-by-default egress per job, with a signed egress proof per run (PASS in 43587725624; docs/CRACI.md).
+- LLM eval, 5 models x generic / Sous agent (local runs, 48 own sentences, b86c6d6, docs/STATUS.md): Sous agent Gemini 4 Hydrogen 48/48, Gemma 4 31B 48/48, Kimi K3.1 Pro 47/48, Gemini 3.8 Flash 46/48, Gemma 4 26B-A4B 40/48; 0 mandate violations auto-ordered in all 10 runs, 34/34 unsafe handled in each.
+- Gemini Decisions allergen check (docs/GEMINI.md): 483 of 488 "likely contains" answers confirmed by the declaration (99.0 %) on 600 declared food products; 468 of 4,118 undeclared food products caught.
 - Held-out (CI 43620135327, Gemini 4 Hydrogen + Sous agent, 15 blind cases x 3): 0 false auto-approvals, should-hold 9/9 (all by the gateway; no-gateway floor 9), matched 12/45 overall, should-order 3/36, menus cookable 0/9, 12 wrong dates. evals/heldout/findings.yaml. Second frozen set: evals/heldout2 (20 cases, d58069a), not yet run.
 - Earned autonomy: ≥5 unchanged approvals over ≥2 ISO weeks, 0 edited, 0 rejected → proposal ask → notify (PROTOCOL 7.2, sous/ramp.py).
 - CRACI vulnerability management (run 43611583279): CRACI's job SBOMs, 201 packages, 0 findings; image 0 Critical, 61 High (2 fixable); gate on fixable Criticals (docs/CRACI.md).

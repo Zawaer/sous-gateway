@@ -13,15 +13,15 @@ Built at Junction 2026 for Valio Aimo's challenge "Trusted Trade Agents".
 
 **What keeps the buyer in control:**
 
-- **Only the buyer approves.** Held orders are decided on the buyer side; agents get 403 (audited), and Valio staff see them read-only.
+- **Only an authenticated person of the buyer approves.** Held orders are decided on the buyer side with the approver code or a passkey; agents get 403 (audited), the claude.ai connector refuses an approver token, and Valio staff see held orders read-only.
 - **No agent can become its own approver.** Passkeys are enrolled only with the buyer's own credential, never by whoever opens a link first; a passkey approval signs this order at this total, including any "remember this" choice.
 - **Autonomy is earned and can be taken back.** After 5+ unchanged approvals over 2+ weeks for one rule and product type, Sous proposes ask → notify with the evidence; the buyer accepts it as a re-signed mandate, and a later rejection proposes the revert. Never allergens or spend limits ([PROTOCOL 7.2](docs/PROTOCOL.md)).
 - **The right product for its use.** Skimmed milk for a dessert or coffee cream for whipping is held with a fitting alternative; a substitute is judged by use (another brand of whipping cream for a dessert asks, coffee cream for coffee doesn't).
 - **Needs change mid-contract.** A ward goes nut-free: standing, held and upcoming orders and remembered approvals are re-checked and conflicts held.
 - **Buyer controls.** Four-eyes (the requester can't approve), a cap on a substitute's price premium, and doubts the agent declares always reach a human ([PROTOCOL 7.3](docs/PROTOCOL.md)).
-- **A record both sides can check.** Every rule at `/rules` (en/fi), signed quotes and receipts (Ed25519 JWS), a hash-chained audit log plus MariaDB system versioning: what the mandate said when each order was decided.
+- **A record both sides can check.** Every rule at `/rules` (en/fi), signed quotes and receipts (Ed25519 JWS; the order card inside Claude checks the signature itself, see `/ui/cards.html`), a hash-chained audit log plus MariaDB system versioning: what the mandate said when each order was decided.
 
-**Try it:** watch agents order live at [135-181-8-209.sslip.io](https://135-181-8-209.sslip.io/) · your own sandbox with ready prompts in 5 minutes: [docs/pitch/try-it.md](docs/pitch/try-it.md) · approve as the buyer: `/ui/buyer.html` · try seven attacks: `/ui/break.html` · connect Claude, ChatGPT or any MCP client: [docs/CONNECT.md](docs/CONNECT.md) · honest numbers, held-out set included: [docs/STATUS.md](docs/STATUS.md#evaluation).
+**Try it:** watch agents order live at [135-181-8-209.sslip.io](https://135-181-8-209.sslip.io/) · your own sandbox with ready prompts in 5 minutes: [docs/pitch/try-it.md](docs/pitch/try-it.md) · approve as the buyer: `/ui/buyer.html` · try seven attacks: `/ui/break.html` · in claude.ai add the connector `https://135-181-8-209.sslip.io/connect/mcp` and press "Create a demo sandbox and connect" (on staging now, `https://staging.135-181-63-134.sslip.io/connect/mcp`, until production is redeployed; you get the approver token, the assistant only the agent token; other clients: [docs/CONNECT.md](docs/CONNECT.md)) · honest numbers, held-out set included: [docs/STATUS.md](docs/STATUS.md#evaluation).
 
 Download a verification bundle from an order in the reference buyer, then verify it with independently trusted public keys (Node 22+, no dependencies):
 
