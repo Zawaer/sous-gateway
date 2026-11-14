@@ -36,7 +36,7 @@ The demo server is production, `https://135-181-8-209.sslip.io`, set as `SOUS` b
    jq -r '.prompts[] | .title, .prompt, ""' sandbox.json
    ```
 
-Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it: scripted cases (no LLM, live Valio prices) 59/59 in a local run (`evals/results.json` at 285f126), 43/43 unsafe actions blocked or escalated; the first 45 also 45/45 in CI (run 43530484114). LLM agent: Gemini 4 Hydrogen 39/40 (CI 43530717095), 0 mandate violations auto-ordered.
+Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it: scripted cases (no LLM, live Valio prices) 59/59 in a local run (`evals/results.json` at 285f126), 43/43 unsafe actions blocked or escalated; 59/59 also in CI on CRACI (run 43553948018, 95dd711). LLM agent: Gemini 4 Hydrogen 39/40 (CI 43530717095), 0 mandate violations auto-ordered.
 
 ## Where to read more
 
@@ -62,7 +62,7 @@ Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it: scripted c
 - **LLM buyer agent** (`agent/`): any OpenAI-compatible model (Gemini, Verda Inference, self-hosted vLLM) turns a sentence into the gateway's MCP tool calls. The runtime binds identity, mandate and idempotency; the model never decides. Scored per model by `scripts/llm_eval.py`.
 - **Snap a photo of the order** (CLI; the web upload in `/agent/` is off on the servers): NVIDIA Nemotron 3.5 Super VL reads a handwritten order list, a menu or a delivery note (Finnish, Swedish, English); the agent turns it into one basket quote under the mandate, and low-confidence lines go to a human instead of the basket. See [docs/NEMOTRON.md](docs/NEMOTRON.md).
 - **Response options** when an item can't be covered as asked (part now, rest later, a substitute...), each with a mandate preview. **Rule register** at `GET /rules`.
-- **Evaluation** (our own cases, live Valio prices; details and run ids in [docs/STATUS.md](docs/STATUS.md#evaluation)): scripted, no LLM: all 59 cases 59/59 in a local run (43/43 unsafe actions blocked or escalated; incl. partial-availability options and attack cases: slicing, self-approval, prompt injection, unusual quantity); the first 45 also 45/45 in CI on CRACI (run 43530484114). LLM agent, 40 sentences: Gemini 4 Hydrogen 39/40 (CI 43530717095), Kimi K3.1 Pro 36/40 (CI 43511463514; 34/40 in a later run; not re-measured on current code); 0 mandate violations auto-ordered with either.
+- **Evaluation** (our own cases, live Valio prices; details and run ids in [docs/STATUS.md](docs/STATUS.md#evaluation)): scripted, no LLM: all 59 cases 59/59 in a local run (43/43 unsafe actions blocked or escalated; incl. partial-availability options and attack cases: slicing, self-approval, prompt injection, unusual quantity); 59/59 also in CI on CRACI (run 43553948018, 95dd711, shared Valio budget on Aiven Valkey). LLM agent, 40 sentences: Gemini 4 Hydrogen 39/40 (CI 43530717095), Kimi K3.1 Pro 36/40 (CI 43511463514; 34/40 in a later run; not re-measured on current code); 0 mandate violations auto-ordered with either.
 
 ## Try it yourself
 

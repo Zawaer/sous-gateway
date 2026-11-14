@@ -2,7 +2,7 @@
 
 Sous is a purchasing gateway that holds a supplier API key (Valio Aimo) and signs orders. The property that matters most is "it talks to nothing it shouldn't". So every CI job runs on CRACI (`CI_RUNNER=craci`), and each job's network policy is the allowlist the product claims it needs.
 
-Green run with every job: [43530484114](https://github.com/Zawaer/sous/actions/runs/43530484114) (e84bb41): test, docker, smoke, eval (45/45), llm-eval. Each job log links its CRACI job page.
+Green run with every job: [43553948018](https://github.com/Zawaer/sous/actions/runs/43553948018) (95dd711): test, docker, smoke, eval (59/59), llm-eval; earlier [43530484114](https://github.com/Zawaer/sous/actions/runs/43530484114) (e84bb41, eval 45/45). Each job log links its CRACI job page.
 
 **Network traces as a product test**
 - `smoke` starts the real `compose.yaml` (MariaDB + gateway) under `default: deny` with **no allowed destinations**: images come from the `docker` job's artifact, so the gateway boots, signs and serves MCP with zero egress.

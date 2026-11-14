@@ -27,7 +27,7 @@ Things that exist on `main` but not on production are features of the code, not 
 - **Evals use our own cases.** The scripted and LLM cases, the search-quality queries and the vision pages were written by the team while building; none is a held-out set from Valio Aimo or real kitchens.
 - **Fixed: authorization gap (QA board 02:20Z/02:24Z).** `GET /mandates/{id}/suggestions` and substitute suggestions with a `mandate_id` (REST and MCP) are now read-scoped like `GET /mandates/{id}`, checked before any mandate or product lookup: 401 `agent_auth_required` for any non-public id when no credential grants anything, 404 when a credential grants something else, so a private mandate's existence isn't revealed (PROTOCOL section 22, tests/test_read_scopes.py). Not yet deployed to prod or staging.
 - **Vision pages are rendered by us** (`scripts/vision_make_images.py`), not photos from real kitchens.
-- **CI on main is not always green.** Last fully green run with live evals: [43530484114](https://github.com/Zawaer/sous/actions/runs/43530484114) on e84bb41 (test, docker, smoke, eval 45/45, llm-eval). Several later pushes failed the test job (a test needing `data/`, fixed in e1328eb) or were cancelled by newer pushes.
+- **CI on main is not always green.** Last fully green run with live evals: [43553948018](https://github.com/Zawaer/sous/actions/runs/43553948018) on 95dd711, Sat 14.11 (test, docker, smoke, eval 59/59 with the shared Valio budget on Aiven Valkey, llm-eval); before that [43530484114](https://github.com/Zawaer/sous/actions/runs/43530484114) on e84bb41 (eval 45/45). Several later pushes failed the test job (a test needing `data/`, fixed in e1328eb) or were cancelled by newer pushes.
 
 ## Vision (one product: Sous)
 Valio Aimo's front door for AI purchasing agents. Any buyer's agent (a hotel's, a hospital's) connects over **MCP or OpenAPI**, searches the catalog, gets a **signed quote** with live price and availability, and orders. Each agent carries a **mandate** (*valtakirja*) from its human: spend limits, allergen rules, substitution rules. Valio Aimo's gateway enforces the mandate in plain code and puts every order into one of four tiers:
@@ -109,6 +109,7 @@ Pitch line: *"AI purchasing agents carry a signed mandate from their human, and 
 
 | Run | Cases | Result | Source |
 |---|---|---|---|
+| CI on CRACI, run [43553948018](https://github.com/Zawaer/sous/actions/runs/43553948018), 95dd711, Sat 14.11 | all 59 | **59/59** | CI log |
 | CI on CRACI, run [43530484114](https://github.com/Zawaer/sous/actions/runs/43530484114), e84bb41, Fri 13.11 23:55Z | the first 45 | **45/45** | CI log |
 | Local run with fa7a14a, Sat 14.11 00:00Z | 51 (45 + O01-O06) | 51/51 | `evals/results.json` at fa7a14a |
 | Local run with 5c23ef5, Sat 14.11 00:15Z | 7 (A07, A08, I01-I03, U01, U02) | **7/7** | `evals/results.adopt.json` |

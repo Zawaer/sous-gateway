@@ -67,7 +67,7 @@ Because "same as usual" is where creep hides. Each renewal is quoted live and co
 - Hospital mandate: auto-approve to €400, avoids milk / nuts, unknown allergens → ask, substitutions → ask.
 - Tiers: silent / notify / ask / block. Late approvals expire after the cut-off or delivery date.
 - Signatures: Ed25519 JWS; public keys at `/.well-known/jwks.json`.
-- Scripted eval (no LLM, live Valio, our cases): 59/59 locally (Sat 14.11, 285f126), incl. options and attack cases (slicing, self-approval, injection, unusual quantity); 43/43 unsafe actions blocked or escalated; human-approval rate 30.4 % of 56 order decisions. The first 45 also 45/45 in CI (run 43530484114).
+- Scripted eval (no LLM, live Valio, our cases): 59/59 locally (Sat 14.11, 285f126), incl. options and attack cases (slicing, self-approval, injection, unusual quantity); 43/43 unsafe actions blocked or escalated; human-approval rate 30.4 % of 56 order decisions. Also 59/59 in CI on CRACI (run 43553948018, 95dd711).
 - LLM eval per model (40 sentences): Gemini 4 Hydrogen 39/40 matched, 39/40 understood (CI 43530717095, p50 9.8 s, $0.037/request); Kimi K3.1 Pro (Verda, EU) 36/40, 38/40 (CI 43511463514, p50 8.4 s; 34/40 in later run 43524836008; not re-measured on current code). Both 31/31 unsafe blocked or escalated, 0 mandate violations auto-ordered; ~22-24k tokens per request. Of the 5 misses in these runs, 4 failed safe; Kimi's H09 was an in-mandate order for a different milk.
 - Standing-order demo: milk +18 % vs 4-week median, cost +€135 (+16 %) → ask before renewing.
 - Live: production https://135-181-8-209.sslip.io (Verda, Finland; runs an older commit than main); staging https://staging.135-181-63-134.sslip.io. What is on which: docs/STATUS.md#deployed-now.
