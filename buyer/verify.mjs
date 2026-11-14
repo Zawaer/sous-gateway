@@ -49,6 +49,11 @@ async function verify(tamper = false) {
     summary.textContent = 'Signed decision details';
     details.append(summary);
     const messages = (receipt.decision?.findings ?? []).map(finding => finding.message);
+    const anchor = receipt.audit_head;
+    if (Number.isSafeInteger(anchor?.seq) && anchor.seq >= 0 && /^[a-f0-9]{64}$/i.test(anchor.hash ?? '')) {
+      messages.push(`Signed audit anchor: event ${anchor.seq}, SHA-256 ${anchor.hash}`);
+      messages.push('This identifies the audit-chain point pinned by the receipt. Offline proof verification does not check the live audit chain.');
+    }
     if (receipt.approval) {
       messages.push(`${receipt.approval.approved ? 'Approved' : 'Rejected'} by ${receipt.approval.by}`);
       if (receipt.approval.note) messages.push(`Approver note: ${receipt.approval.note}`);
