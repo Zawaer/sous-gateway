@@ -2,7 +2,10 @@
 
     uv run python scripts/draft_eval.py                     # offline rule-based drafter (no key, no cost)
     uv run python scripts/draft_eval.py --provider gemini   # Gemini with a JSON schema (needs GEMINI_API_KEY)
-    uv run python scripts/draft_eval.py --json out.json     # per-case results as JSON
+    uv run python scripts/draft_eval.py --json out.json     # per-case results elsewhere
+    uv run python scripts/draft_eval.py --report            # markdown table from the saved results files
+
+Every run writes its per-case results to evals/draft_results.<provider>.json (unless --json names another file).
 
 A case passes when every expected field has the expected value, no forbidden field is proposed, the expected open
 questions and unsupported entries are there, every proposed number is written in the text, and (injection
@@ -18,6 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ROOT / "evals" / "draft_cases.yaml"
+RESULTS = ROOT / "evals" / "draft_results.{}.json"
 sys.path.insert(0, str(ROOT))
 
 
@@ -87,11 +91,44 @@ def run(provider: str = "rules", cases: list[dict] | None = None, llm=None) -> d
             "tokens": tokens, "results": results}
 
 
+def report(providers: tuple[str, ...] = ("rules", "gemini")) -> str:
+    """Markdown: score per provider, then one row per case (the CI job summary)."""
+    runs = {}
+    for p in providers:
+        f = Path(str(RESULTS).format(p))
+        if f.exists():
+            runs[p] = json.loads(f.read_text(encoding="utf-8"))
+    if not runs:
+        return "No draft results yet (run scripts/draft_eval.py).\n"
+    lines = ["## Mandate drafting eval", "", "| Provider | Passed | Model calls | Tokens in | Tokens out |",
+             "|---|---|---|---|---|"]
+    for p, r in runs.items():
+        t = r.get("tokens") or {}
+        lines.append(f"| {p} | {r['passed']}/{r['cases']} | {t.get('calls', 0)} | {t.get('prompt_tokens', 0)} "
+                     f"| {t.get('completion_tokens', 0)} |")
+    by_case: dict[str, dict] = {}
+    for p, r in runs.items():
+        for c in r["results"]:
+            by_case.setdefault(c["id"], {"case": c})[p] = c
+    lines += ["", "| Case | " + " | ".join(runs) + " | Why it failed |", "|---|" + "---|" * len(runs) + "---|"]
+    for cid, row in by_case.items():
+        c = row["case"]
+        tag = f"{c.get('lang') or ''}{', ' + c['trap'] if c.get('trap') else ''}"
+        marks = [("pass" if row[p]["pass"] else "**FAIL**") if p in row else "-" for p in runs]
+        why = "; ".join(f"{p}: {'; '.join(row[p]['fails'])}" for p in runs if p in row and row[p]["fails"])
+        lines.append(f"| {cid} ({tag}) | " + " | ".join(marks) + f" | {why.replace('|', '/')} |")
+    return "\n".join(lines) + "\n"
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--provider", choices=["rules", "gemini"], default="rules")
-    ap.add_argument("--json", help="write per-case results here")
+    ap.add_argument("--json", help="write per-case results here (default evals/draft_results.<provider>.json)")
+    ap.add_argument("--report", action="store_true", help="print a markdown table from the saved results files")
     a = ap.parse_args(argv)
+    if a.report:
+        print(report(), end="")
+        return 0
     llm = None
     if a.provider == "gemini":
         from agent.llm import ChatClient, config_from_env, key_present
@@ -113,8 +150,8 @@ def main(argv: list[str] | None = None) -> int:
         cost = llm.cfg.cost_usd(t["prompt_tokens"], t["completion_tokens"])
         print(f"model calls {t['calls']}, tokens in {t['prompt_tokens']}, out {t['completion_tokens']}"
               + (f", ~${cost}" if cost is not None else "") + "  -> add a line to evals/costs.yaml")
-    if a.json:
-        Path(a.json).write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+    out_path = Path(a.json) if a.json else Path(str(RESULTS).format(a.provider))
+    out_path.write_text(json.dumps(out, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     return 0 if out["passed"] == out["cases"] else 1
 
 
