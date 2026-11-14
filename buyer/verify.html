@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <title>Verify an order proof | Sous</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./verify.mjs"></script>
+</head>
+<body>
+  <header class="site-header"><div class="shell topbar"><a class="brand" href="./">Sous</a></div></header>
+  <main class="shell">
+    <h1>Verify an order proof</h1>
+    <p>Select a downloaded verification bundle and public keys you obtained independently from the trusted gateway. Files are read locally in this tab.</p>
+    <form id="verify-form" class="panel">
+      <label>Order proof JSON<input id="proof-file" type="file" accept=".json,application/json" required></label>
+      <label>Trusted gateway JWKS JSON<input id="keys-file" type="file" accept=".json,application/json" required></label>
+      <p class="muted">The keys embedded in a bundle do not establish who signed it. Use your independently saved key file.</p>
+      <div class="actions">
+        <button type="submit">Verify proof</button>
+        <button id="tamper-proof" type="button" class="secondary">Try changing the signature</button>
+      </div>
+    </form>
+    <section id="verification-result" class="panel" aria-live="polite" hidden></section>
+  </main>
+</body>
+</html>

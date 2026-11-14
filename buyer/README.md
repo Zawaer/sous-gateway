@@ -24,6 +24,8 @@ After a submission, the buyer URL keeps the order ID in the `order` query parame
 
 When the current receipt verifies, **Download verification bundle** exports a JSON file with the original signed quote, current signed receipt, signed amendments and gateway public keys. Each JWS must verify with the expected document type. The receipt binds amendment hashes and the original quote ID and total. Establish the gateway key's trust independently when checking a shared bundle. The bundle excludes the agent token.
 
+For a browser-only check, open `/buyer/verify.html` on HTTPS or serve this directory on localhost. Select the proof and an independently obtained JWKS file. Verification and the signature-change demo run locally, with network connections disabled by the page's Content Security Policy.
+
 To verify a bundle offline with Node 22 or newer, supply public keys obtained independently from the trusted gateway:
 
 ```sh
