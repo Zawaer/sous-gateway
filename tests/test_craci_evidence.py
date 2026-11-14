@@ -90,3 +90,11 @@ def test_cache_and_image_refs_from_craci_sbom():
     assert ce.oci_refs(sb)[0]["repository_url"] == "registry-1.docker.io/library/python"
     s = ce.sbom_summary(sb, "Zawaer/sous")
     assert s["restored_from_cache"] == 1 and s["own_repo_commits"] == 1
+
+
+def test_runner_probe_is_accepted_only_in_its_exact_shape():
+    pol = next(v for v in _policies().values() if v["job"] == "draft-eval")
+    probe = _http("https://pkg.github.com/_dns")
+    assert ce.check_egress(pol, _trace(probe))["verdict"] == "pass"
+    upload = _http("https://pkg.github.com/upload")
+    assert ce.check_egress(pol, _trace(probe, upload))["undeclared_allowed"] == ["pkg.github.com:443"]

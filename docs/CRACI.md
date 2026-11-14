@@ -50,6 +50,16 @@ inside their declarations.
   `pkg.github.com/_dns`. These are runner probes, not our code. The same probes **went out** from the
   observe-mode `docker` job.
 
+**The check caught something in run [43582172396](https://github.com/Zawaer/sous/actions/runs/43582172396)**
+(0216a3e). The evidence job failed: `smoke` runs under `default: deny` with no connections, yet CRACI
+**allowed** `GET https://pkg.github.com/_dns` and `GET https://copilot-proxy.githubusercontent.com/_dns`. It
+recorded no `matchedRule` for either (`policyDenied: false`, HTTP 200). Under `presets: [pypi]`, CRACI blocks
+the same two requests (`draft-eval`). They are the runner's connectivity probes: nothing sent, 2 to 5 bytes
+back. So the evidence job now accepts exactly that shape (GET, path `/_dns`, those two hosts, at most 64
+bytes back, nothing sent) and labels it `runner probe`. Any other request to those hosts still fails the run
+(test `test_runner_probe_is_accepted_only_in_its_exact_shape`). The open question for CRACI: which rule let
+them through in a deny-mode job, and why does the trace name none?
+
 **[43580577498](https://github.com/Zawaer/sous/actions/runs/43580577498)** (`draft_only`): `draft-eval` sent
 137 KiB to `generativelanguage.googleapis.com` and nothing else. **PASS**.
 
@@ -109,3 +119,4 @@ the image is built, so the image can't contain its own evidence. We did not add 
   `load`ed, not pushed, so the built image has no CRACI provenance.
 - No AI-fix endpoint, so no AI fix is shown here.
 - A job's own trace is unavailable while it runs (409), so the evidence job can't audit itself.
+- Allowed traffic without a `matchedRule` under `default: deny` (the `/_dns` probes in `smoke`, run 43582172396): the trace says "allowed" but not why.

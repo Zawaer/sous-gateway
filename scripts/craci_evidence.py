@@ -72,6 +72,15 @@ GITHUB_INFRA = ["github.com", "codeload.github.com", "api.github.com", "*.action
 RUNNER_PROBES = ["copilot-proxy.githubusercontent.com", "pkg.github.com"]
 
 
+def _is_probe(row: dict) -> bool:
+    """A runner connectivity probe: an HTTP GET of /_dns on one of RUNNER_PROBES, nothing sent, a few bytes back.
+    CRACI let these through under `default: deny` with no matched rule in smoke (run 43582172396) and blocked
+    them in draft-eval; they are accepted by exact shape only, so any other request to those hosts still counts."""
+    u = urllib.parse.urlsplit(row.get("url") or "")
+    return (row.get("proto") == "http" and row.get("method") == "GET" and u.path == "/_dns" and not u.query
+            and row.get("bytes_out", 0) == 0 and row.get("bytes_in", 0) <= 64 and _host_match(row["host"], RUNNER_PROBES))
+
+
 # ---------------------------------------------------------------- declared policy (ci.yml)
 
 def declared_policies(workflow_text: str) -> dict:
@@ -151,7 +160,8 @@ def connections(trace: dict) -> list[dict]:
                          "port": u.port or (443 if u.scheme == "https" else 80),
                          "allowed": not h.get("policyDenied", False), "rule": h.get("matchedRule"),
                          "deny_reason": h.get("denyReason"), "bytes_out": 0,
-                         "bytes_in": int(h.get("bodySizeBytes") or 0), "url": h.get("originUrl", "")})
+                         "bytes_in": int(h.get("bodySizeBytes") or 0), "url": h.get("originUrl", ""),
+                         "method": h.get("method")})
         elif proto == "tcp":
             t = o["tcp"]
             host = t.get("tlsServerName") or next(iter(t.get("resolvedHosts") or []), None) or t.get("remoteIp", "")
@@ -176,7 +186,9 @@ def check_egress(policy: dict, trace: dict) -> dict:
     for r in rows:
         k = (r["host"], r["port"])
         d = dests.setdefault(k, {"host": r["host"], "port": r["port"], "protos": set(), "allowed": 0, "denied": 0,
-                                 "bytes_out": 0, "bytes_in": 0, "craci_rules": set(), "deny_reasons": set()})
+                                 "bytes_out": 0, "bytes_in": 0, "craci_rules": set(), "deny_reasons": set(),
+                                 "only_probes": True})
+        d["only_probes"] &= _is_probe(r)
         d["protos"].add(r["proto"])
         d["allowed" if r["allowed"] else "denied"] += 1
         d["bytes_out"] += r["bytes_out"]
@@ -188,6 +200,9 @@ def check_egress(policy: dict, trace: dict) -> dict:
     undeclared, out = [], []
     for d in sorted(dests.values(), key=lambda d: (d["host"], d["port"] or 0)):
         why = explain(policy, d["host"], d["port"])
+        if why is None and d.pop("only_probes"):
+            why = "runner probe (GET /_dns only)"
+        d.pop("only_probes", None)
         d["declared_by"] = why
         if policy["mode"] != "observe" and d["allowed"] and why is None:
             undeclared.append(f"{d['host']}:{d['port']}")
