@@ -283,7 +283,7 @@ def drift(so: dict, snap: dict, hist: list[dict]) -> tuple[list[Finding], dict]:
 
 
 def summary(findings: list[Finding], snap: dict, base: dict) -> str:
-    """One line for the human: 'milk up 18% vs your 4-week median; cost +€212; asking before renewing'."""
+    """One line for the human: 'milk up 18% vs your 4-week median; cost +€212.00; asking before renewing'."""
     if not base["weeks"]:
         return "First renewal: no history yet, so no drift baseline."
     parts = []
@@ -298,7 +298,7 @@ def summary(findings: list[Finding], snap: dict, base: dict) -> str:
         if "standing.new_terminal" in rules or "standing.new_reliability" in rules:
             parts.append(f"{cur['label']} supply risk")
     if any(x.rule == "standing.cost_drift" for x in findings):
-        parts.append(f"cost +€{snap['total_ex_vat'] - base['median_total_ex_vat']:,.0f}")
+        parts.append(f"cost +€{snap['total_ex_vat'] - base['median_total_ex_vat']:,.2f}")
     if not parts:
         return f"In line with the last {base['weeks']} renewals."
     return "; ".join(parts) + "; asking before renewing"

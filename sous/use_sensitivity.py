@@ -119,9 +119,9 @@ def phrase(use: str | None, canonical: str, lang: str = "en") -> str:
 # --- the table -----------------------------------------------------------------------------------------------
 # (type key or family) -> use -> (level, why in English, why in Finnish). The why says what a kitchen would see go
 # wrong; it is shown to the person who confirms. Type keys come from sous/substitutes.py (_TYPES).
-_WHIP = ("exact", "a different brand can whip differently (stabilisers such as lecithin or carrageenan change how "
+_WHIP = ("exact", "a different cream can whip differently (stabilisers such as lecithin or carrageenan change how "
          "it whips and how long the foam holds)",
-         "toisen merkin kerma voi vaahtoutua eri tavalla (stabilointiaineet, kuten lesitiini tai karrageeni, "
+         "toinen kerma voi vaahtoutua eri tavalla (stabilointiaineet, kuten lesitiini tai karrageeni, "
          "vaikuttavat vaahdotukseen ja vaahdon kestoon)")
 _CREAM_COOK = ("same_spec", "in cooking the brand matters little, but the fat % does (lower-fat cream can split "
                "when it boils)",

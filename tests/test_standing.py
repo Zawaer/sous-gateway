@@ -168,7 +168,7 @@ def test_creeping_quantities_escalate_to_ask():
     creep = next(f for f in r["drift"]["findings"] if f["rule"] == "standing.quantity_creep")
     assert creep["message"] == "milk: 500 L is up 18% vs your 4-week median of 425 L."
     # median total 425 + 160 + 60 = 645; now 720 -> +75
-    assert r["drift"]["summary"] == "milk up 18% vs your 4-week median; cost +€75; asking before renewing"
+    assert r["drift"]["summary"] == "milk up 18% vs your 4-week median; cost +€75.00; asking before renewing"
     assert r["drift"]["baseline"]["median_total_ex_vat"] == 645
     chk = events("standing.renewal_checked")[0]["data"]
     assert chk["baseline"]["simulated_weeks"] == 4 and len(chk["drift"]) == 3
