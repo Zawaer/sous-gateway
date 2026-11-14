@@ -73,20 +73,6 @@ def applicability(case: dict) -> str | None:
 
 # --- state -----------------------------------------------------------------------------------
 
-def isolate_reservations(case_id: str) -> None:
-    """Stock reservations (sous/reservations.py) live in the database AND, with SOUS_VALKEY_URL set (as here, for
-    the shared Valio budget), in shared Valkey hashes that outlast a case by the reservation TTL. Without this,
-    one case's orders, or another eval run's or deployment's, eat the stock a later case quotes, and it ends in
-    `availability.allocated`. Give each case its own key space and forget the module's write cache."""
-    import secrets
-    from sous import reservations, shared
-
-    ns = f"{shared.PREFIX}eval:{secrets.token_hex(4)}:{case_id}:"
-    reservations._key = lambda pid, day: f"{ns}resv:{pid}:{day}"  # noqa: E731 - keys still expire (TTL + 1 day)
-    reservations._seen.clear()
-    reservations._ready_for = None
-
-
 def fresh_state(path: Path, spec: dict) -> None:
     """Point the gateway at a new, empty SQLite file and issue the eval mandates into it."""
     from sous import config, reservations, service as S, store
@@ -105,7 +91,6 @@ def fresh_state(path: Path, spec: dict) -> None:
     config.STATE_DB = path
     config.DB_URL = ""
     store._conn = None
-    isolate_reservations(path.stem)
     for m in MANDATES:
         S.issue_mandate(m)
     for raw in spec.get("mandates", []):
