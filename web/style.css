@@ -491,3 +491,35 @@ div.mstat:hover { background: none; }
 .wait-buyer .note-line { margin: 0; flex: 1 1 260px; }
 .purpose { color: var(--ink-60, inherit); display: flex; align-items: center; gap: 4px; margin-top: 2px; }
 .purpose .ms { font-size: 15px; }
+
+/* Approval flow: the decision first, the record one click away (docs/UI_PRINCIPLES.md section 1). */
+.inbox-one { max-width: 640px; }
+.decide-card { padding: 24px; }
+.decide-card .big, .sheet-head .big { font-size: 2.5rem; margin: 6px 0 2px; }
+.what { margin: 2px 0 14px; color: var(--ink-80); }
+.decide-card .findings.plain { margin: 0 0 6px; }
+.deadline-line { margin: 0 0 16px; font-size: .9rem; color: var(--ink-80); }
+.decide-card .actions, .decide-inline .actions { display: flex; gap: 10px; margin: 6px 0 4px; }
+.decide-card .actions .btn, .decide-inline .actions .btn { flex: 1; min-height: 48px; font-size: 1rem; }
+.decide-card .actions .btn.yes, .decide-inline .actions .btn.yes { flex: 1.6; }
+.decide-inline { margin: 14px 0 6px; }
+.decide-inline input[data-note] { width: 100%; border: 1px solid var(--rule); border-radius: 6px; padding: 10px 12px; background: transparent; color: inherit; font: inherit; }
+.sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-top: 4px; padding-right: 44px; }
+.outcome { margin: 0 0 14px; font-size: 1.02rem; }
+.more-sec { border-top: 1px solid var(--rule); margin-top: 14px; }
+.decide-card .more-sec, .decide-inline .more-sec { border-top: 0; margin-top: 8px; }
+.more-sec > summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 12px 0; font: 500 .95rem var(--sans); color: var(--ink); }
+.decide-card .more-sec > summary, .decide-inline .more-sec > summary { justify-content: flex-start; padding: 8px 0; font-size: .86rem; color: var(--ink-60); }
+.more-sec > summary::-webkit-details-marker { display: none; }
+.more-sec > summary::after { content: "+"; font: 400 1.1rem var(--mono); color: var(--ink-60); }
+.more-sec[open] > summary::after { content: "\2212"; }
+.more-in { padding-bottom: 12px; animation: fade .2s ease-out; }
+.more-in > :first-child { margin-top: 0; }
+.sbx { display: flex; gap: 6px 14px; align-items: baseline; flex-wrap: wrap; font-size: .86rem; }
+@media (max-width: 560px) {
+  #who { display: none; }                       /* the name is asked at the first decision */
+  .decide-card .big, .sheet-head .big { font-size: 2.1rem; }
+  .decide-card { padding: 18px 16px; }
+}
+@media (max-width: 560px) { .sheet-head .big .small { display: block; margin-top: 4px; } }

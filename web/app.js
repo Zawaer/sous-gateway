@@ -72,6 +72,27 @@ async function api(path, opts = {}, retried = false) {
   return data;
 }
 
+// The approver's name for the audit log, asked in the page (not the browser's prompt). Resolves to "" when cancelled.
+function askName(message = "Your decision is recorded in the audit log under this name.") {
+  return new Promise((resolve) => {
+    const d = document.createElement("div");
+    d.className = "codebox";
+    d.innerHTML = `<form class="codebox-panel" role="dialog" aria-modal="true" aria-labelledby="namebox-t">
+      <h3 id="namebox-t" style="margin-top:0">Your name</h3>
+      <p class="small muted">${esc(message)}</p>
+      <input type="text" name="who" autocomplete="name" enterkeyhint="done" aria-label="Your name" required style="font-family:inherit;letter-spacing:0">
+      <div class="actions"><button type="button" class="btn no" data-cancel>Cancel</button><button type="submit" class="btn yes">Continue</button></div></form>`;
+    document.body.appendChild(d);
+    const input = d.querySelector("input");
+    input.value = approver();
+    const done = (v) => { d.remove(); resolve(v); };
+    d.querySelector("form").addEventListener("submit", (e) => { e.preventDefault(); const v = input.value.trim(); if (v) setApprover(v); done(v); });
+    d.querySelector("[data-cancel]").addEventListener("click", () => done(""));
+    d.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); done(""); } });
+    setTimeout(() => { input.focus(); input.select(); }, 30);
+  });
+}
+
 // A small in-page dialog for the approver code. Resolves to the code, or null when cancelled.
 function askCode(message) {
   return new Promise((resolve) => {
@@ -210,10 +231,7 @@ function setApprover(name) {
 function renderWho() {
   $("#who").textContent = approver() || "Set your name";
 }
-$("#who").addEventListener("click", () => {
-  const n = prompt("Your name (recorded in the audit log when you approve or reject):", approver());
-  if (n !== null) setApprover(n.trim());
-});
+$("#who").addEventListener("click", () => { askName("Recorded in the audit log when you approve or reject."); });
 
 // --- signatures: verify the gateway's Ed25519 JWS in the browser -----------------
 
@@ -327,12 +345,12 @@ views.inbox = {
       : `<div class="empty"><div class="big">Nothing waiting</div>
           <p>${SIDE === "buyer" ? "Orders that fall outside your agent's mandate show up here for you to approve or reject."
             : "Orders held by a buyer's mandate show up here while they wait for the buyer's own approval."}</p>
-          <p><a href="#/orders">See the last decided orders</a> · try it yourself: <a href="/docs#/sandbox">POST /sandbox</a> gives you
-            private copies of the demo buyers and a token to approve with.</p></div>`;
+          <p><a href="#/orders">See the last decided orders</a> · <a href="/ui/try.html">Try it yourself</a>: a private sandbox with an order
+            waiting for your approval.</p></div>`;
     view.innerHTML = `<div class="head"><div><h2>${orders.length ? (SIDE === "buyer" ? "Waiting for you" : "Waiting for buyers") : (SIDE === "buyer" ? "Approvals" : "Held")}</h2>
       <div class="muted">${orders.length ? `${orders.length} order${orders.length > 1 ? "s" : ""} held by the mandate engine` : "Agents are ordering within their mandates."}</div></div></div>
-      <div class="inbox-grid"><div>${main}</div>
-        <aside class="feed"><div class="feed-head"><span class="live-dot"></span>Live activity</div><div id="feed"></div></aside></div>`;
+      ${SIDE === "buyer" ? `<div class="inbox-one">${main}</div>` : `<div class="inbox-grid"><div>${main}</div>
+        <aside class="feed"><div class="feed-head"><span class="live-dot"></span>Live activity</div><div id="feed"></div></aside></div>`}`;
     this.seen = new Set(orders.map((o) => o.id));
     renderFeed();
     tickDeadlines();
@@ -378,32 +396,36 @@ function renderFeed() {
     </a>`).join("") : `<div class="small muted">No activity yet.</div>`;
 }
 
+// The approval card: amount, what, why, deadline, then the two buttons. Everything else is one click away.
+const sec = (title, body, open = false) => `<details class="more-sec" ${open ? "open" : ""}><summary>${title}</summary><div class="more-in">${body}</div></details>`;
+
 function inboxCard(o, isNew = false) {
   const cut = earliestCutoff(o);
   const asks = (o.decision?.findings || []).filter((f) => f.outcome === "ask");
-  return `<article class="card ask ${isNew ? "fresh" : ""}" data-order="${esc(o.id)}">
-    <div class="row">
-      <div><div class="muted small">${esc(bn(o.buyer))}</div><div class="big">${eur(o.total_ex_vat)} <span class="muted small">ex VAT</span></div>
-        ${cut ? `<div class="small" style="margin-top:4px">${decideBy(cut)}</div>` : ""}</div>
-      <div>${tier("ask")}</div>
-    </div>
-    ${claimBlock(o)}
-    <h3>Why it needs you</h3>
+  const sus = !!o.agent_claim?.suspicious;
+  return `<article class="card ask decide-card ${isNew ? "fresh" : ""}" data-order="${esc(o.id)}">
+    <div class="row"><div class="muted small">${esc(bn(o.buyer))}</div><div>${tier("ask")}</div></div>
+    <div class="big">${eur(o.total_ex_vat)} <span class="muted small">ex VAT</span></div>
+    <p class="what">${orderStory(o)} · delivery ${dateOnly(o.delivery_date)}</p>
     ${findingsList(asks, { plain: true })}
-    ${linesTable(o.lines)}
-    <dl class="kv small">
-      <dt>Agent</dt><dd class="mono">${esc(o.agent_id)}</dd>
-      <dt>Mandate</dt><dd class="mono">${esc(o.mandate_id)}</dd>
-      <dt>Order</dt><dd><a href="#" data-open="${esc(o.id)}" class="mono">${esc(o.id)}</a> · ${eur(o.total_inc_vat)} incl. VAT · delivery ${dateOnly(o.delivery_date)}</dd>
-    </dl>
-    ${SIDE === "buyer" ? `<textarea data-note rows="2" placeholder="Note for the agent and the log (optional)"></textarea>
-    ${rememberBox(o)}
-    ${editBox(o)}
+    ${cut ? `<p class="deadline-line">${decideBy(cut)}</p>` : ""}
+    ${sus ? claimBlock(o) : ""}
+    ${SIDE === "buyer" ? `${rememberBox(o)}
     <div class="actions">
       <button class="btn no" data-act="reject">Reject</button>
       ${approveButton(o)}
-    </div>
-    ${passkeyNote(o)}` : waitingForBuyer(o)}
+    </div>` : waitingForBuyer(o)}
+    ${sec(SIDE === "buyer" ? "Details, note and changes" : "Details", `
+      ${sus ? "" : claimBlock(o)}
+      ${linesTable(o.lines)}
+      <dl class="kv small">
+        <dt>Agent</dt><dd class="mono">${esc(o.agent_id)}</dd>
+        <dt>Mandate</dt><dd class="mono">${esc(o.mandate_id)}</dd>
+        <dt>Order</dt><dd><a href="#" data-open="${esc(o.id)}" class="mono">${esc(o.id)}</a> · ${eur(o.total_inc_vat)} incl. VAT</dd>
+      </dl>
+      ${SIDE === "buyer" ? `<textarea data-note rows="2" placeholder="Note for the agent and the log (optional)"></textarea>
+      ${editBox(o)}
+      ${passkeyNote(o)}` : ""}`)}
   </article>`;
 }
 
@@ -503,7 +525,7 @@ function wireAmendments(o) {
     });
   }
   root.querySelectorAll("[data-amend]").forEach((b) => b.addEventListener("click", async () => {
-    const by = approver() || (prompt("Your name, for the audit log:") || "").trim();
+    const by = approver() || await askName();
     if (!by) return;
     b.disabled = true;
     try {
@@ -520,9 +542,8 @@ function wireDecision(card, onDone) {
     b.addEventListener("click", async () => {
       let by = approver();
       if (!by) {
-        by = (prompt("Your name, for the audit log:") || "").trim();
+        by = await askName();
         if (!by) return;
-        setApprover(by);
       }
       const act = b.dataset.act;
       const note = card.querySelector("[data-note]")?.value.trim() || null;
@@ -640,44 +661,49 @@ function lineFlag(outcome, o) {
   return tier(o.status);
 }
 
+// The order sheet: outcome first, the decision right under the reason, the record in sections.
 async function openOrder(id) {
   const o = await api("/orders/" + encodeURIComponent(id));
   const d = o.decision || {};
   const a = o.approval;
+  const pending = o.status === "pending_approval";
+  const sus = !!o.agent_claim?.suspicious;
+  const top = (d.findings || []).find((f) => f.outcome === (pending ? "ask" : d.outcome)) || (d.findings || [])[0] || {};
+  const outcome = pending ? ""
+    : a ? `${a.approved ? "Approved" : "Rejected"} by <b>${esc(a.by)}</b>, ${when(a.at)}${a.note ? ": \u201c" + esc(a.note) + "\u201d" : "."}`
+    : o.status === "ordered" ? "Ordered by the agent alone, within the mandate."
+    : o.status === "refused" ? msg(top.message || "Refused by the mandate.")
+    : esc(STATUS_LABEL[o.status] || o.status) + ".";
   openSheet(`
-    <div class="muted small">${esc(bn(o.buyer))}</div>
-    <h2>${esc(o.id)} ${tier(o.status)}</h2>
-    <div class="big">${eur(o.total_ex_vat)} <span class="muted small">ex VAT · ${eur(o.total_inc_vat)} incl.</span></div>
-    ${claimBlock(o)}
-    ${o.status === "pending_approval" ? `<div class="ask-summary">
-      <p>${msg(((d.findings || []).find((f) => f.outcome === "ask") || {}).message || "Held by the mandate for a human decision.")}</p>
-      ${earliestCutoff(o) ? `<p class="small">${decideBy(earliestCutoff(o))}</p>` : ""}</div>` : ""}
-    <dl class="kv small">
-      <dt>Agent</dt><dd class="mono">${esc(o.agent_id)}</dd>
-      <dt>Mandate</dt><dd class="mono">${esc(o.mandate_id)}</dd>
-      <dt>Quote</dt><dd class="mono">${esc(o.quote_id)}</dd>
-      <dt>Delivery</dt><dd>${dateOnly(o.delivery_date)}</dd>
-      <dt>Placed</dt><dd>${when(o.created_at)}</dd>
-    </dl>
-    <h3>How it happened</h3>
-    <ol class="flow" id="flow"><li class="muted small">Loading…</li></ol>
-    <p class="small"><a href="/ui/trace.html?order=${encodeURIComponent(o.id)}${SANDBOX ? `&sandbox=${encodeURIComponent(SANDBOX)}` : ""}">Show the journey</a> on the trust board, hop by hop with signatures checked.</p>
-    <h3>Mandate decision ${tier(d.outcome)}</h3>
-    <div class="muted small">By ${esc(d.by)} at ${when(d.at)}. Deterministic rules; no AI in this step.</div>
-    ${findingsList(d.findings)}
-    ${a ? `<h3>Human decision</h3>
-      <p>${a.approved ? "Approved" : "Rejected"} by <b>${esc(a.by)}</b> at ${when(a.at)}${a.note ? `: “${esc(a.note)}”` : ""}</p>
-      ${a.result_reason && a.result_reason !== a.note ? `<p class="muted">${esc(a.result_reason)}</p>` : ""}` : ""}
+    <div class="muted small" data-sheet-order="${esc(o.id)}">${esc(bn(o.buyer))} · <span class="mono">${esc(o.id)}</span></div>
+    <div class="sheet-head"><div class="big">${eur(o.total_ex_vat)} <span class="muted small">ex VAT · ${eur(o.total_inc_vat)} incl.</span></div>
+      <div>${orderBadge(o)}</div></div>
+    <p class="what">${orderStory(o)} · delivery ${dateOnly(o.delivery_date)}</p>
+    ${pending ? `<div class="ask-summary">
+      <p>${msg(top.message || "Held by the mandate for a human decision.")}</p>
+      ${earliestCutoff(o) ? `<p class="small">${decideBy(earliestCutoff(o))}</p>` : ""}</div>` : `<p class="outcome">${outcome}</p>`}
+    ${a && a.result_reason && a.result_reason !== a.note ? `<p class="muted">${esc(a.result_reason)}</p>` : ""}
+    ${sus ? claimBlock(o) : ""}
+    ${pending && SIDE === "seller" ? waitingForBuyer(o) : ""}
+    ${pending && SIDE === "buyer" ? `<div class="decide-inline" data-order="${esc(o.id)}">
+      ${rememberBox(o)}
+      <div class="actions">
+        <button class="btn no" data-act="reject">Reject</button>
+        ${approveButton(o)}
+      </div>
+      ${sec("Add a note or change quantities", `<input data-note type="text" placeholder="Note for the agent and the log (optional)" aria-label="Note">
+        ${editBox(o)}${passkeyNote(o)}`)}</div>` : ""}
     ${a?.replaced_by ? `<p class="note-line">${ic("published_with_changes")} Approved with changes as <a href="#/orders/${esc(a.replaced_by)}">${esc(a.replaced_by)}</a>.</p>` : ""}
     ${o.approval_changes ? `<p class="note-line">${ic("published_with_changes")} ${esc(o.approval_changes.by)} changed
       <a href="#/orders/${esc(o.approval_changes.from_order)}">${esc(o.approval_changes.from_order)}</a> before approving:
       ${o.approval_changes.changes.map((c) => `${esc(pname(c.name))} ${esc(c.from)} → ${esc(c.to)} ${esc(unit(c.unit))}`).join("; ")}. Re-priced live.</p>` : ""}
-    <div id="asof"></div>
-    <h3>Lines</h3>
-    ${linesTable(o.lines)}
-    ${o.status === "ordered" || (o.amendments || []).length ? amendSection(o) : ""}
-    <h3>Substitutes</h3>
-    <p class="small muted">Alternatives from Valio Aimo's own assortment that keep the mandate's hard rules
+    ${(o.amendments || []).length || (o.status === "ordered" && SIDE === "seller") ? amendSection(o) : ""}
+    ${sec("How it happened", `<ol class="flow" id="flow"><li class="muted small">Loading…</li></ol>
+      <p class="small"><a href="/ui/trace.html?order=${encodeURIComponent(o.id)}${SANDBOX ? `&sandbox=${encodeURIComponent(SANDBOX)}` : ""}">Show the journey</a> on the trust board, hop by hop with signatures checked.</p>`, !pending)}
+    ${sec("Lines", linesTable(o.lines), !pending)}
+    ${sec("Why the mandate decided this", `<div class="muted small">By ${esc(d.by)} at ${when(d.at)}. Deterministic rules; no AI in this step.</div>
+      ${findingsList(d.findings)}<div id="asof"></div>`)}
+    ${sec("Substitutes", `<p class="small muted">Alternatives from Valio Aimo's own assortment that keep the mandate's hard rules
       (allergens, claims, category, unit). Ranked best (no compromises), better (minor) and good (a real trade-off).</p>
     <div id="subs">${(o.lines || []).map((l) => {
       const flag = (d.findings || []).find((f) => f.product_id === l.product_id && (f.outcome === "ask" || f.outcome === "block"));
@@ -687,22 +713,18 @@ async function openOrder(id) {
           <button class="btn plain" data-subs="${esc(l.product_id)}" data-qty="${esc(l.quantity)}"
             data-date="${esc(l.delivery_date || o.delivery_date)}">Find substitutes</button></div>
         <div class="sub-out"></div></div>`;
-    }).join("")}</div>
-    <h3>Signed receipt</h3>
-    <p class="small muted">The gateway signs every order. Anyone can check it against the public key at <a href="${API}/.well-known/jwks.json" target="_blank">/.well-known/jwks.json</a>.</p>
-    ${sigButton(o.receipt_jws, "Verify receipt signature")}
-    <details><summary>Raw JWS</summary><pre>${esc(o.receipt_jws)}</pre></details>
-    <h3>History</h3>
-    <div id="order-audit" class="list"><div class="empty">Loading…</div></div>
-    ${o.status === "pending_approval" && SIDE === "seller" ? waitingForBuyer(o) : ""}
-    ${o.status === "pending_approval" && SIDE === "buyer" ? `<div class="actionbar decide" data-order="${esc(o.id)}">
-      <input data-note type="text" placeholder="Note for the agent and the log (optional)" aria-label="Note">
-      ${rememberBox(o)}
-      ${editBox(o)}
-      <div class="actionbar-buttons">
-        <button class="btn no" data-act="reject">Reject</button>
-        ${approveButton(o)}
-      </div>${passkeyNote(o)}</div>` : ""}
+    }).join("")}</div>`)}
+    ${sec("Signed receipt and ids", `<p class="small muted">The gateway signs every order. Anyone can check it against the public key at <a href="${API}/.well-known/jwks.json" target="_blank">/.well-known/jwks.json</a>.</p>
+      ${sigButton(o.receipt_jws, "Verify receipt signature")}
+      <details><summary>Raw JWS</summary><pre>${esc(o.receipt_jws)}</pre></details>
+      ${sus ? "" : claimBlock(o)}
+      <dl class="kv small">
+        <dt>Agent</dt><dd class="mono">${esc(o.agent_id)}</dd>
+        <dt>Mandate</dt><dd class="mono">${esc(o.mandate_id)}</dd>
+        <dt>Quote</dt><dd class="mono">${esc(o.quote_id)}</dd>
+        <dt>Placed</dt><dd>${when(o.created_at)}</dd>
+      </dl>`)}
+    ${sec("History", `<div id="order-audit" class="list"><div class="empty">Loading…</div></div>`)}
   `);
   const box = $("#sheet-body [data-order]");
   if (box) { tickDeadlines(); wireDecision(box, () => openOrder(id)); }
@@ -721,7 +743,7 @@ async function openOrder(id) {
     api("/audit?limit=400").then((r) => r.events).catch(() => []),
     api(`/orders/${encodeURIComponent(o.id)}/history`).catch(() => null),
   ]);
-  if (!$("#flow") || $("#sheet-body h2")?.textContent.indexOf(o.id) !== 0) return; // panel closed or replaced
+  if (!$("#flow") || $("#sheet-body [data-sheet-order]")?.dataset.sheetOrder !== o.id) return; // panel closed or replaced
   const quoteEv = all.find((e) => e.event === "quote.issued");
   const qTime = new Date(quote?.issued_at || quoteEv?.ts || o.created_at);
   // Link a catalog search only if it was this agent's last step before the quote (no other quote in
@@ -1030,7 +1052,7 @@ views.mandates = {
       ${mandates.length ? mandates.map(mandateCard).join("") : `<div class="empty">No mandates issued yet.</div>`}`;
     view.querySelectorAll("[data-revoke]").forEach((b) => b.addEventListener("click", async () => {
       const id = b.dataset.revoke;
-      const by = approver() || (prompt("Your name, for the audit log:") || "").trim();
+      const by = approver() || await askName();
       if (!by) return;
       if (!confirm(`Revoke ${id}? The agent can't place orders with it any more.`)) return;
       try {
@@ -1176,7 +1198,7 @@ async function loadRamp(id, reload) {
     ${del.length ? `<p class="small">Delegated · Delegoitu: ${del.map((d) => `${esc(d.label || d.scope)} (${esc(d.rule)}, ${dateOnly(d.since)})`).join(", ")}</p>` : ""}`;
   box.querySelectorAll("[data-ramp-do]").forEach((b) => b.addEventListener("click", async () => {
     const pid = b.closest("[data-prop]").dataset.prop, act = b.dataset.rampDo;
-    const by = approver() || (prompt("Your name, for the audit log:") || "").trim();
+    const by = approver() || await askName();
     if (!by) return;
     try {
       await api(`/mandates/${encodeURIComponent(id)}/autonomy/${encodeURIComponent(pid)}/${act}`, { method: "POST", body: { by } });
@@ -1288,7 +1310,7 @@ async function openStanding(id) {
   $("#sheet-body [data-toggle]")?.addEventListener("click", async (e) => {
     const act = e.target.dataset.toggle;
     let by = approver();
-    if (!by) { by = (prompt("Your name, for the audit log:") || "").trim(); if (!by) return; setApprover(by); }
+    if (!by) { by = await askName(); if (!by) return; }
     try {
       await api(`/standing-orders/${encodeURIComponent(so.id)}/${act}`, { method: "POST", body: { by } });
       toast(`${so.name} ${act === "pause" ? "paused" : "resumed"}.`);
@@ -1765,9 +1787,9 @@ async function renderSandboxBanner() {
     const live = s.status === "active";
     el.classList.toggle("off", !live);
     el.innerHTML = `<b>Sandbox ${esc(s.id)}</b> <span class="state${live ? "" : " off"}">${esc(s.status)}</span>
-      <span>Only this sandbox's mandates, orders and audit events are shown · ${esc(s.quotes_left)} of ${esc(s.quotes_limit)}
-      live lookups left · expires ${when(s.expires_at)} · ${esc(s.orders?.total ?? 0)} ${(s.orders?.total ?? 0) === 1 ? "order" : "orders"}</span>
-      <a href="${location.pathname}${location.hash}">Leave sandbox</a>`;
+      <span>${esc(s.orders?.total ?? 0)} ${(s.orders?.total ?? 0) === 1 ? "order" : "orders"} · ${esc(s.quotes_left)} of ${esc(s.quotes_limit)}
+      live lookups left · until ${when(s.expires_at)}</span>
+      <a href="/ui/try.html">Back to the guide</a>`;
   } catch (e) {
     el.classList.add("off");
     el.innerHTML = `<b>Sandbox ${esc(SANDBOX)}</b> <span>${esc(e.message)}</span> <a href="${location.pathname}">Leave sandbox</a>`;
