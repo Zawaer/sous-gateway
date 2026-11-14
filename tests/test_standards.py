@@ -188,6 +188,44 @@ def test_quote_schema_org_offer():
     assert o["seller"]["name"] == "Valio Aimo"
 
 
+def cutoff_passed_offers(product_ids, requested, need=None, need_unit=None):
+    pr = {"catalogPrice": {"value": 1.0, "valueWithTax": 1.14, "validTo": None}, "comparisonPrice": {"value": 1.0},
+          "comparisonUnit": "L", "tax": {"taxRate": 14.0}, "error": False}
+    av = {"logisticModel": "Terminal", "closingTime": "2026-11-12T15:00:00+0200", "salesBlock": False,
+          "scheduleLines": [{"salesBlock": False, "availableAmount": 999999, "availableDate": "2026-11-16",
+                             "salesUnit": "ST"}]}
+    return [Q.build_offer(MILK, pr, av, requested, need, need_unit, NOW) for _ in product_ids], NOW
+
+
+def test_unorderable_line_is_indicative_not_chargeable(monkeypatch):
+    """Regression: a quote whose only priced line is past cut-off has total 0; no export may charge the line."""
+    issue()
+    monkeypatch.setattr(Q, "offers", cutoff_passed_offers)
+    monkeypatch.setattr(S.substitutes, "suggest", lambda *a, **k: {"options": []})  # needs data/ otherwise
+    q = quote()
+    assert [l["orderable"] for l in q["lines"]] == [False] and q["total_inc_vat"] == 0
+    assert q["lines"][0]["line_total_inc_vat"] == 11.4
+    out = STD.ap2_quote(q["id"], "https://x")
+    ap2_valid("checkout_mandate", out["checkout_mandate"])
+    co = out["checkout"]
+    assert co["status"] == "incomplete" and co["line_items"] == []
+    assert sum(t["amount"] for li in co["line_items"] for t in li["totals"] if t["type"] == "total") \
+        == next(t["amount"] for t in co["totals"] if t["type"] == "total") == 0
+    (u,) = co["sous"]["unavailable_lines"]
+    assert u["id"] == "L1" and "CUTOFF_PASSED" in u["reasons"]
+    assert next(t["amount"] for t in u["indicative"]["totals"] if t["type"] == "total") == 1140
+    cutoff = next(m for m in co["messages"] if m["code"] == "CUTOFF_PASSED")
+    assert cutoff["path"] == "$.sous.unavailable_lines[0]"
+    details = out["ap2_v0_1_cart_mandate"]["contents"]["payment_request"]["details"]
+    assert details["display_items"] == [] and details["total"]["amount"]["value"] == 0
+    (ui,) = out["ap2_v0_1_cart_mandate"]["contents"]["sous_unavailable_items"]
+    assert ui["indicative_amount"]["value"] == 11.4 and "CUTOFF_PASSED" in ui["reasons"]
+    so = STD.schema_org_quote(q["id"], "https://x")
+    assert so["price"] == 0 and so["includesObject"] == []
+    assert so["addOn"][0]["availability"] == "https://schema.org/OutOfStock"
+    assert "Indicative" in so["addOn"][0]["description"]
+
+
 # --- order -------------------------------------------------------------------
 
 def test_order_receipt_and_schema_org_order():

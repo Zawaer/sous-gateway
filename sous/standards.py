@@ -189,31 +189,51 @@ def _checkout_status(q: dict) -> str:
     return "requires_escalation" if outcome == "ask" else "ready_for_complete"
 
 
+def _issue_messages(l: dict, path: str) -> list[dict]:
+    out = []
+    for issue in l.get("issues", []):
+        msg = {"type": "error" if issue["severity"] == "blocking" else "warning", "code": issue["code"],
+               "path": path, "content": issue["message"]}
+        if msg["type"] == "error":
+            msg["severity"] = "requires_buyer_input"
+        out.append(msg)
+    return out
+
+
+def _line_amounts(l: dict) -> dict:
+    """Cents for one quote line: unit price incl. VAT (or the lot price for weighed goods), UCP quantity, totals."""
+    qty = l.get("quantity")
+    whole = qty is not None and float(qty).is_integer() and qty >= 1
+    unit_inc = l.get("unit_price_inc_vat") if whole else l.get("line_total_inc_vat")
+    ex, inc = _cents(l.get("line_total_ex_vat")), _cents(l.get("line_total_inc_vat"))
+    return {"price": _cents(unit_inc), "quantity": int(qty) if whole else 1,  # UCP quantities are whole
+            "totals": [{"type": "subtotal", "amount": ex}, {"type": "tax", "amount": inc - ex},
+                       {"type": "total", "amount": inc}]}
+
+
 def ucp_checkout(q: dict, base_url: str) -> dict:
-    """A UCP Checkout object for a verified quote payload. Prices in minor units (cents), VAT as `tax`."""
-    lines, messages, sous_lines = [], [], []
+    """A UCP Checkout object for a verified quote payload. Prices in minor units (cents), VAT as `tax`.
+
+    Only orderable lines are chargeable `line_items`, so their totals sum to the checkout totals (which, like the
+    native quote's, count orderable lines only). Lines that can't be ordered (cut-off passed, out of stock, ...)
+    go to the extension `sous.unavailable_lines` with their price marked indicative."""
+    lines, messages, sous_lines, unavailable = [], [], [], []
     for i, l in enumerate(q["lines"]):
         lid = f"L{i + 1}"
-        qty = l.get("quantity")
-        whole = qty is not None and float(qty).is_integer() and qty >= 1
-        unit_inc = l.get("unit_price_inc_vat") if whole else l.get("line_total_inc_vat")
-        lines.append({
-            "id": lid,
-            "item": {"id": l["product_id"], "title": l["name"], "price": _cents(unit_inc)},
-            "quantity": int(qty) if whole else 1,  # UCP quantities are whole; weighed goods go as one priced lot
-            "totals": [{"type": "subtotal", "amount": _cents(l.get("line_total_ex_vat"))},
-                       {"type": "tax", "amount": _cents(l.get("line_total_inc_vat")) - _cents(l.get("line_total_ex_vat"))},
-                       {"type": "total", "amount": _cents(l.get("line_total_inc_vat"))}],
-        })
-        sous_lines.append({"line_id": lid, "quantity": qty, "sales_unit": l.get("sales_unit"),
+        a = _line_amounts(l)
+        sous_lines.append({"line_id": lid, "quantity": l.get("quantity"), "sales_unit": l.get("sales_unit"),
                            "delivery_date": l.get("delivery_date"), "order_cutoff": l.get("order_cutoff"),
                            "orderable": l.get("orderable")})
-        for issue in l.get("issues", []):
-            msg = {"type": "error" if issue["severity"] == "blocking" else "warning", "code": issue["code"],
-                   "path": f"$.line_items[{i}]", "content": issue["message"]}
-            if msg["type"] == "error":
-                msg["severity"] = "requires_buyer_input"
-            messages.append(msg)
+        if l.get("orderable"):
+            messages += _issue_messages(l, f"$.line_items[{len(lines)}]")
+            lines.append({"id": lid, "item": {"id": l["product_id"], "title": l["name"], "price": a["price"]},
+                          "quantity": a["quantity"], "totals": a["totals"]})
+        else:
+            messages += _issue_messages(l, f"$.sous.unavailable_lines[{len(unavailable)}]")
+            unavailable.append({"id": lid, "item": {"id": l["product_id"], "title": l["name"]},
+                                "quantity": a["quantity"], "reasons": [x["code"] for x in l.get("issues", [])],
+                                "indicative": {"price": a["price"], "totals": a["totals"],
+                                               "note": "Not orderable: not charged, not in the checkout totals"}})
     for g in q.get("uncovered") or []:
         messages.append({"type": "error", "code": "NEED_UNCOVERED", "severity": "requires_buyer_input",
                          "content": f"{g['uncovered']:g} {g.get('unit') or 'units'} of item {g.get('item_index')} "
@@ -241,9 +261,15 @@ def ucp_checkout(q: dict, base_url: str) -> dict:
                  "requested_delivery_date": q["requested_delivery_date"], "lines": sous_lines,
                  "mandate_preview": preview.get("outcome")},
     }
+    if unavailable:
+        out["sous"]["unavailable_lines"] = unavailable
     if messages:
         out["messages"] = messages
     return out
+
+
+def _cart_label(l: dict) -> str:
+    return f"{l['name']} x {l.get('quantity')} {l.get('sales_unit') or ''}".strip()
 
 
 def ap2_quote(quote_id: str, base_url: str) -> dict:
@@ -261,15 +287,20 @@ def ap2_quote(quote_id: str, base_url: str) -> dict:
             "method_data": [{"supported_methods": "https://valioaimo.fi/pay/trade-account", "data": {}}],
             "details": {
                 "id": q["id"],
-                "display_items": [{"label": f"{l['name']} x {l.get('quantity')} {l.get('sales_unit') or ''}".strip(),
+                "display_items": [{"label": _cart_label(l),
                                    "amount": {"currency": "EUR", "value": l.get("line_total_inc_vat") or 0}}
-                                  for l in q["lines"]],
+                                  for l in q["lines"] if l.get("orderable")],
                 "total": {"label": "Total incl. VAT", "amount": {"currency": "EUR", "value": q["total_inc_vat"]}},
             },
         },
         "cart_expiry": q["expires_at"],
         "merchant_name": MERCHANT["name"],
     }
+    if unorderable := [l for l in q["lines"] if not l.get("orderable")]:  # extension: outside the payment request
+        contents["sous_unavailable_items"] = [
+            {"label": _cart_label(l), "reasons": [x["code"] for x in l.get("issues", [])],
+             "indicative_amount": {"currency": "EUR", "value": l.get("line_total_inc_vat") or 0}}
+            for l in unorderable]
     merchant_authorization = signing.sign(
         {"iss": credentials.gateway_did(), "sub": q["id"], "iat": _epoch(q["issued_at"]), "exp": exp,
          "jti": q["id"], "cart_hash": b64_sha256(signing.canonical(contents))}, "JWT")
@@ -334,6 +365,9 @@ def schema_org_quote(quote_id: str, base_url: str) -> dict:
             "availability": _availability(l),
             "availabilityStarts": l.get("delivery_date"),
             "seller": seller,
+            **({} if l.get("orderable") else {
+                "description": "Indicative price only: not orderable ("
+                               + ", ".join(x["code"] for x in l.get("issues", [])) + "), not in the basket total"}),
         })
     return {
         "@context": "https://schema.org",
@@ -352,7 +386,7 @@ def schema_org_quote(quote_id: str, base_url: str) -> dict:
         "validThrough": q["expires_at"],
         "priceValidUntil": q["expires_at"][:10],
         "availabilityStarts": q["requested_delivery_date"],
-        "includesObject": [_quantity_node(l) for l in q["lines"]],
+        "includesObject": [_quantity_node(l) for l in q["lines"] if l.get("orderable")],  # what the price covers
         "addOn": line_offers,
         "subjectOf": {"@type": "DigitalDocument", "url": f"{base_url}/quotes/{q['id']}",
                       "encodingFormat": "application/jose", "description": "Signed native quote (sous-quote+jws)"},
