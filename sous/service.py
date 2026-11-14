@@ -552,6 +552,8 @@ def _options(body: dict, troubled: list, requested: date, mandate: Mandate | Non
             lookups += 1
             try:
                 subs = substitutes.suggest(original, requested, item.amount, unit, mandate, None, 4)["options"]
+            except aimo.BudgetLimit:  # our own per-minute budget: a retryable wait, not "no substitutes"
+                raise
             except (aimo.AimoError, KeyError):
                 subs = []
             subs = [s for s in subs if s["product_id"] not in item.product_ids]

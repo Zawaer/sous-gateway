@@ -64,14 +64,13 @@ class AimoError(RuntimeError):
 
 
 class BudgetLimit(AimoError):
-    """This process's own per-minute cap (config.AIMO_CALLS_PER_MIN). Falls back to this process's own
-    last-known copies only, as before Valkey (not to older copies other deployments left in Valkey)."""
+    """Our own per-minute call budget is used up (this process's cap, config.AIMO_CALLS_PER_MIN). A short
+    self-imposed wait with a known Retry-After, not a Valio outage: never answered with a stale copy (that
+    would turn a routine order into DATA_STALE -> ask, at random, depending on timing). Callers retry."""
 
 
-class SharedBudgetLimit(AimoError):
-    """This deployment's share of the budget every deployment shares in Valkey is used up for this minute.
-    A short self-imposed wait, not a Valio outage: never served from a stale copy (a copy another deployment
-    left in Valkey would otherwise turn a routine order into DATA_STALE -> ask)."""
+class SharedBudgetLimit(BudgetLimit):
+    """This deployment's share of the budget every deployment shares in Valkey (sous/shared.py) is used up."""
 
 
 class SandboxLimit(AimoError):
@@ -346,10 +345,9 @@ def _post(kind: str, requested: date, ids: list[str], ttl: int, stale_max: int) 
             for item in _fetch_shared(kind, day, chunk):
                 out[item["productId"]] = item
         except AimoError as e:
-            if isinstance(e, (SandboxLimit, SharedBudgetLimit)):
+            if isinstance(e, (SandboxLimit, BudgetLimit)):
                 raise
-            if not isinstance(e, BudgetLimit):
-                _shared_stale(kind, day, chunk)
+            _shared_stale(kind, day, chunk)
             stale = _stale(kind, day, chunk, stale_max, e)
             if not stale:
                 raise

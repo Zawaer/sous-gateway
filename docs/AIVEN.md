@@ -30,8 +30,9 @@ All keys start with `sous:valio:`.
    `INCR budget:<minute>`, `EXPIRE`, `GET budget:<minute-1>`. Usage is the sliding-window estimate
    `prev × (1 − elapsed fraction of this minute) + cur`. Over the limit: `DECR` and refuse with a
    `Retry-After`; the agent gets the usual retryable `valio_unavailable` (503). This refusal is a short wait, not an outage, so it is never answered
-   with a stale copy (that would turn a routine order into `DATA_STALE` → ask); the per-process cap still falls
-   back to this process's own last-known copies (as before Valkey), real Valio failures to any deployment's. A per-role counter
+   with a stale copy (that would turn a routine order into `DATA_STALE` → ask); the same now holds for the
+   per-process cap. Last-known copies (from any deployment) are for real Valio failures only: 429, 5xx,
+   unreachable, circuit open. A per-role counter
    `budget:<minute>:<role>` is kept for visibility.
 2. **Prod first.** `SOUS_DEPLOYMENT_ROLE` = `prod`, `staging`, `ci`, `demo` or `dev`. The cap compares
    *everybody's* usage with the role's share: prod may use 100 % of
