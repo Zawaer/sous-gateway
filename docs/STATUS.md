@@ -44,6 +44,7 @@ Pitch line: *"AI purchasing agents carry a signed mandate from their human, and 
 ## Works (on main)
 
 **Catalog and quotes**
+- **Stock exposure policy** (`SOUS_STOCK_EXPOSURE`, sous/exposure.py, PROTOCOL 5.2): agents see `stock_level` (ample/limited/short/none/unknown) instead of `available_amount` by default, in quotes (signed that way), options, substitutes and suggestions; `exact` and `approver_exact` modes. tests/test_exposure.py.
 - Search over 17,546 products (fi/sv/en, SQLite FTS5 trigram) with fi/sv/en synonyms, a food prior and head-noun ranking; filters for claims, allergens, labels, temperature. No live API calls. First-result accuracy went from 56 % to 100 % on 39 fi/sv/en queries (`tests/test_search_quality.py`, commit 3452696). The queries were written while tuning the ranking, so this is a regression test, not a held-out measure.
 - Quotes: live price and availability for a shortlist only (at most 2 batched calls per uncached request; 0.95 per request on average with the cache), pack and lot sizes, VAT, cut-off checked against now, stock / Terminal / reliability / price-expiry issues, split across products when stock is short, alternatives with the reason each was rejected. Signed (Ed25519 JWS), expiring.
 - Resilient to Valio Aimo's rate limits: honours `Retry-After` with backoff, a 429 pauses all calls briefly (circuit breaker), identical concurrent calls share one request. If a live call fails, the last-known copy (price ≤ 15 min, availability ≤ 5 min) is used and marked `DATA_STALE`, and such an order always goes to a human.

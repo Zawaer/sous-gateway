@@ -149,7 +149,7 @@ Response: `{"quote": {...}, "jws": "<compact JWS of quote>"}`. Quote fields:
 | `options[]` | Only when an item can't be covered as asked: complete alternatives for that item (section 5.1). |
 | `chosen_option` | Only on a quote made from `option_id`: the option it came from. |
 
-Each line has: `product_id, name, brand, sales_unit, content_per_sales_unit {amount, unit, source}, quantity, covers {amount, unit}, unit_price_ex_vat, unit_price_inc_vat, vat_rate, comparison_price {ex_vat, per}, list_price_ex_vat, line_total_ex_vat, line_total_inc_vat, logistic_model (Stock|Terminal), available_amount, stock (known|plenty|unknown), available_date, delivery_date, order_cutoff, delivery_reliability, co2_estimate_kg, co2_note, labels, claims, allergens, temperature, orderable, issues[], item_index` (which entry of `items[]` it covers), and `substitute_for` when set.
+Each line has: `product_id, name, brand, sales_unit, content_per_sales_unit {amount, unit, source}, quantity, covers {amount, unit}, unit_price_ex_vat, unit_price_inc_vat, vat_rate, comparison_price {ex_vat, per}, list_price_ex_vat, line_total_ex_vat, line_total_inc_vat, logistic_model (Stock|Terminal), available_amount (null unless the stock policy shows exact numbers, section 5.2), stock (known|plenty|unknown), stock_level (ample|limited|short|none|unknown), available_date, delivery_date, order_cutoff, delivery_reliability, co2_estimate_kg, co2_note, labels, claims, allergens, temperature, orderable, issues[], item_index` (which entry of `items[]` it covers), and `substitute_for` when set.
 
 `delivery_date = max(requested, available_date)`. `co2_estimate_kg` is a product-group average times quantity, labelled as an estimate.
 
@@ -162,7 +162,7 @@ When an item can't be covered in full by the requested date (stock short, earlie
 | `id` | `<quote id>.O<n>`, e.g. `Q-1A2B3C4D.O2`. |
 | `item_index`, `rank` | The item it replaces; 1 = best for that item. |
 | `kind` | `on_time` (another candidate covers it all on the requested date), `partial_now_rest_later` (what arrives on the requested date, the rest from products whose earliest date is later: two deliveries), `all_later` (everything from later products, complete by the earliest date that covers it), `split_with_substitute` (what the original covers on time, the gap from a compatible substitute), `substitute` (a substitute covers it all). |
-| `lines[]` | `{product_id, name, quantity, sales_unit, unit_price_ex_vat, line_total_ex_vat, line_total_inc_vat, covers, available_amount, delivery_date, order_cutoff, logistic_model, substitute_for, issues[] (codes)}`. |
+| `lines[]` | `{product_id, name, quantity, sales_unit, unit_price_ex_vat, line_total_ex_vat, line_total_inc_vat, covers, available_amount, stock_level, delivery_date, order_cutoff, logistic_model, substitute_for, issues[] (codes)}`. |
 | `covers`, `total_ex_vat`, `total_inc_vat`, `delivery_dates[]`, `on_time` | What the option delivers, for how much, when. |
 | `tradeoff` | One plain-language sentence with the total. |
 | `substitute` | `null`, or `{tier: best|better|good, for, compromises[], match}` from `substitutes.suggest`. |
@@ -176,6 +176,20 @@ For a need in packs (`SALES_UNIT`), substitute lines (`split_with_substitute`, `
 Choosing: `POST /quotes` (or MCP `request_quote`) with `{agent_id, mandate_id, option_id}` only. The gateway reads the option from the previous quote's **signed** payload (same agent and mandate, not expired), replaces that item with one item per option line (`SALES_UNIT`, `substitute_for` kept), keeps the other items and the date, and returns a fresh, live-priced signed quote with `chosen_option`. Order that quote as usual. Errors: `option_not_found` (404), `quote_mismatch`, `quote_expired` (409), `invalid_request` (422) when neither items nor `option_id` are given.
 
 Assumptions (availability per date): Valio Aimo returns only each product's earliest date (`availableDate`) and the amount then (`availableAmount`); stock on any later date isn't known. So the gateway never assumes the rest of a short product arrives later from the same product: the remainder comes only from other products whose own earliest date and amount cover it. Terminal products count as unknown (unlimited) stock, as in quotes. Substitutes are looked up (two batched Valio calls, `substitutes.suggest`, with the mandate's allergen and claim rules) only when no option without a substitute arrives on time, for at most 3 items per quote; if Valio is unavailable the quote is returned without substitute options. In the Junction mock every product's earliest date is the same day, so `partial_now_rest_later` is exercised in the offline tests (tests/test_options.py), not in the live eval.
+
+### 5.2 Stock exposure (`sous/exposure.py`, `SOUS_STOCK_EXPOSURE`)
+
+Why: a wholesaler doesn't want any agent, a competitor's included, to scrape exact stock levels by asking for quotes. Valio decides how much it shows:
+
+| Mode | What agents see |
+|---|---|
+| `buckets` (default; unknown values fall back to it) | `stock_level` only; `available_amount` is `null` and "Only N in stock" messages become "Not enough in stock for the M needed". |
+| `exact` | The previous behaviour: `available_amount` and the messages as Valio Aimo reports them, plus `stock_level`. |
+| `approver_exact` | `buckets`, except callers with the global approver code (`X-Approver-Code`; not sandbox or agent tokens) see `exact`. |
+
+`stock_level` compares stock with the requested quantity in the product's sales units: `ample` (at least 3x the request, at least 1000 units, or Valio's "no practical limit"), `limited` (covers the request, not 3x), `short` (doesn't cover it), `none` (out of stock or no delivery date), `unknown` (Terminal: supplier-shipped, or no availability data).
+
+Applies to quote lines and option lines, substitute offers and compromises, and Valio's suggestions, over REST and MCP alike. The planner, options and mandate engine still work from the exact numbers; the policy is applied once to what leaves the gateway, and before the quote is signed, so the JWS, the stored quote and the response are the same view (a quote made by an approver under `approver_exact` carries exact numbers in its signed payload). Quantities are never hidden: when stock is short the quote splits it, and that line's `quantity` (and the item's `uncovered` amount) shows what can be supplied. Valio needs to show that much for the buyer to act on it.
 
 ### Issue codes (`sous/quote.py`)
 

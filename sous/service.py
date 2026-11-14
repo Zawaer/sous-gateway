@@ -797,6 +797,7 @@ def suggest_substitutes(agent_id: str, product_id: str, delivery_date: date, amo
     except aimo.AimoError as e:
         raise valio_error(e)
     r["valio_api_calls"] = {k: aimo.stats[k] - before[k] for k in aimo.stats}
+    r = exposure.view(r, exposure.is_approver(reader))  # stock policy (sous/exposure.py), also for the audit copy
     store.audit("substitutes.suggested", agent_id, "agent", product_id, mandate.buyer if mandate else None,
                 {"product_id": product_id, "constraints": r["constraints"],
                  "options": [{"tier": o["tier"], "product_id": o["product_id"], "compromises": o["compromises"]}

@@ -7,9 +7,10 @@ from fastapi.testclient import TestClient
 
 from test_options import AVAIL, MON, fake_suggest, offer, offline  # noqa: F401  (autouse fixture)
 
-from sous import config, exposure, signing, service as S, substitutes
+from sous import access, config, exposure, signing, service as S, substitutes
 
 DAY = MON.isoformat()
+APPROVER = access.Reader(everything=True, kinds=["approver"])
 
 
 def ask(product_ids, amount=100, approver=False, mandate="M-T"):
@@ -124,3 +125,22 @@ def test_mcp_quote_is_redacted(monkeypatch):
     q = r["quote"] if isinstance(r, dict) else r.structuredContent["quote"]
     assert all(l["available_amount"] is None for l in q["lines"])
     assert {l["stock_level"] for l in q["lines"]} == {"short", "ample"}
+
+
+def test_substitutes_and_suggestions_are_redacted(monkeypatch):
+    from sous import suggest
+    monkeypatch.setattr(config, "STOCK_EXPOSURE", "approver_exact")
+    AVAIL["S"] = ("2026-11-16", 70, None)
+    monkeypatch.setattr(substitutes, "suggest", lambda *a, **k: {
+        **fake_suggest([("S", "better", "compatible", ["Only 70 ST in stock; 100 needed."])])(*a, **k),
+        "constraints": {}, "no_safe_substitute": None})
+    r = S.suggest_substitutes("agent", "A", MON, 100, "L", "M-T")
+    assert r["options"][0]["offer"]["available_amount"] is None
+    assert r["options"][0]["offer"]["stock_level"] == "short"
+    assert "70" not in json.dumps(r["options"][0]["compromises"])
+    seller = S.suggest_substitutes("agent", "A", MON, 100, "L", "M-T", reader=APPROVER)
+    assert seller["options"][0]["offer"]["available_amount"] == 70
+
+    monkeypatch.setattr(suggest, "_suggestions", lambda *a: {"suggestions": [{"offer": offer("S")}]})
+    assert suggest.suggestions("M-T", "agent", MON)["suggestions"][0]["offer"]["available_amount"] is None
+    assert suggest.suggestions("M-T", "agent", MON, reader=APPROVER)["suggestions"][0]["offer"]["available_amount"] == 70

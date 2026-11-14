@@ -35,7 +35,7 @@ import re
 import threading
 from datetime import date, timedelta
 
-from . import access, aimo, catalog, config, quote as Q, sandbox, service as S, store
+from . import access, aimo, catalog, config, exposure, quote as Q, sandbox, service as S, store
 from .mandate import Mandate, evaluate
 
 SPONSOR = "Valio Aimo"
@@ -212,6 +212,13 @@ def _allergen_phrase(alt: dict, orig: dict) -> str | None:
 
 def suggestions(mandate_id: str, agent_id: str, delivery_date: date, basis: list[str] | None = None,
                 limit: int = 5, agent_token: str | None = None, reader: access.Reader | None = None) -> dict:
+    """Stock in the offers follows SOUS_STOCK_EXPOSURE (sous/exposure.py); exact for the approver under approver_exact."""
+    return exposure.view(_suggestions(mandate_id, agent_id, delivery_date, basis, limit, agent_token, reader),
+                         exposure.is_approver(reader))
+
+
+def _suggestions(mandate_id: str, agent_id: str, delivery_date: date, basis: list[str] | None,
+                 limit: int, agent_token: str | None, reader: access.Reader | None) -> dict:
     access.check_live(reader, mandate_id)  # first: no existence oracle (sous/access.py)
     m = S._mandate(mandate_id)
     if not access.skips_agent_check(reader, m):
