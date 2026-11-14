@@ -35,6 +35,24 @@ async function verify(tamper = false) {
       throw new Error('The altered receipt was unexpectedly accepted.');
     }
     show('Proof verified', `${receipt.id} · signed status: ${receipt.status} · ${receipt.total_ex_vat} ex VAT · ${receipt.amendments?.length ?? 0} signed amendments.`, true);
+    const details = document.createElement('details');
+    const summary = document.createElement('summary');
+    summary.textContent = 'Signed decision details';
+    details.append(summary);
+    const messages = (receipt.decision?.findings ?? []).map(finding => finding.message);
+    if (receipt.approval) {
+      messages.push(`${receipt.approval.approved ? 'Approved' : 'Rejected'} by ${receipt.approval.by}`);
+      if (receipt.approval.note) messages.push(`Approver note: ${receipt.approval.note}`);
+      if (receipt.approval.result_reason && receipt.approval.result_reason !== receipt.approval.note) {
+        messages.push(receipt.approval.result_reason);
+      }
+    }
+    for (const text of messages) {
+      const line = document.createElement('p');
+      line.textContent = text;
+      details.append(line);
+    }
+    if (messages.length) result.append(details);
   } catch (error) {
     show('Proof could not be verified', error.message);
   } finally {
