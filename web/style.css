@@ -524,3 +524,6 @@ div.mstat:hover { background: none; }
 }
 @media (max-width: 560px) { .sheet-head .big .small { display: block; margin-top: 4px; } }
 .decide-inline input[data-note] { margin: 0 0 8px; }
+.also { margin: 2px 0 10px; font-size: .9rem; }
+.also > summary { cursor: pointer; color: var(--ink-60); width: fit-content; padding: 4px 0; }
+.also .findings.plain { margin: 6px 0 0; }

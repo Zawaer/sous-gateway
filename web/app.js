@@ -396,6 +396,19 @@ function renderFeed() {
     </a>`).join("") : `<div class="small muted">No activity yet.</div>`;
 }
 
+// Several rules often hold one order. The human reads the most telling one first (why this substitute matters for
+// this dish, an allergen, a limit); generic ones ("substitutes need a human", "never ordered before") follow.
+const REASON_RANK = [/^substitution\.use_sensitive$/, /^purpose\./, /^allergen\./, /^standing\./, /^spend\./, /^price\./, /^quantity\./, /^delivery\./, /^availability\./];
+function rankReasons(fs) {
+  const r = (f) => { const i = REASON_RANK.findIndex((re) => re.test(f.rule || "")); return i < 0 ? REASON_RANK.length : i; };
+  return [...fs].sort((a, b) => r(a) - r(b));
+}
+function reasons(fs) {
+  const [lead, ...rest] = rankReasons(fs);
+  if (!lead) return "";
+  return `${findingsList([lead], { plain: true })}${rest.length ? `<details class="also"><summary>${rest.length} more reason${rest.length > 1 ? "s" : ""}</summary>${findingsList(rest, { plain: true })}</details>` : ""}`;
+}
+
 // The approval card: amount, what, why, deadline, then the two buttons. Everything else is one click away.
 const sec = (title, body, open = false) => `<details class="more-sec" ${open ? "open" : ""}><summary>${title}</summary><div class="more-in">${body}</div></details>`;
 
@@ -407,7 +420,7 @@ function inboxCard(o, isNew = false) {
     <div class="row"><div class="muted small">${esc(bn(o.buyer))}</div><div>${tier("ask")}</div></div>
     <div class="big">${eur(o.total_ex_vat)} <span class="muted small">ex VAT</span></div>
     <p class="what">${orderStory(o)} · delivery ${dateOnly(o.delivery_date)}</p>
-    ${findingsList(asks, { plain: true })}
+    ${reasons(asks)}
     ${cut ? `<p class="deadline-line">${decideBy(cut)}</p>` : ""}
     ${sus ? claimBlock(o) : ""}
     ${SIDE === "buyer" ? `${rememberBox(o)}
@@ -668,7 +681,8 @@ async function openOrder(id) {
   const a = o.approval;
   const pending = o.status === "pending_approval";
   const sus = !!o.agent_claim?.suspicious;
-  const top = (d.findings || []).find((f) => f.outcome === (pending ? "ask" : d.outcome)) || (d.findings || [])[0] || {};
+  const asks = rankReasons((d.findings || []).filter((f) => f.outcome === "ask"));
+  const top = (pending ? asks[0] : (d.findings || []).find((f) => f.outcome === d.outcome)) || (d.findings || [])[0] || {};
   const outcome = pending ? ""
     : a ? `${a.approved ? "Approved" : "Rejected"} by <b>${esc(a.by)}</b>, ${when(a.at)}${a.note ? ": \u201c" + esc(a.note) + "\u201d" : "."}`
     : o.status === "ordered" ? "Ordered by the agent alone, within the mandate."
@@ -681,6 +695,7 @@ async function openOrder(id) {
     <p class="what">${orderStory(o)} · delivery ${dateOnly(o.delivery_date)}</p>
     ${pending ? `<div class="ask-summary">
       <p>${msg(top.message || "Held by the mandate for a human decision.")}</p>
+      ${asks.length > 1 ? `<details class="also"><summary>${asks.length - 1} more reason${asks.length > 2 ? "s" : ""}</summary>${findingsList(asks.slice(1), { plain: true })}</details>` : ""}
       ${earliestCutoff(o) ? `<p class="small">${decideBy(earliestCutoff(o))}</p>` : ""}</div>` : `<p class="outcome">${outcome}</p>`}
     ${a && a.result_reason && a.result_reason !== a.note ? `<p class="muted">${esc(a.result_reason)}</p>` : ""}
     ${sus ? claimBlock(o) : ""}
@@ -727,7 +742,8 @@ async function openOrder(id) {
     ${sec("History", `<div id="order-audit" class="list"><div class="empty">Loading…</div></div>`)}
   `);
   const box = $("#sheet-body [data-order]");
-  if (box) { tickDeadlines(); wireDecision(box, () => openOrder(id)); }
+  tickDeadlines();  // the seller's read-only sheet shows the countdown too (it used to render "()")
+  if (box) wireDecision(box, () => openOrder(id));
   wireAmendments(o);
   $("#sheet-body").querySelectorAll("[data-subs]").forEach((b) => b.addEventListener("click", () => findSubstitutes(b, o)));
   const { events } = await api("/audit?subject=" + encodeURIComponent(o.id) + "&limit=50");

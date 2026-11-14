@@ -129,7 +129,10 @@ function reasons(o) {
   // each finding keeps its index: explanations_fi.findings is keyed by it
   const all = ((o.decision || {}).findings || []).map((x, i) => ({ ...x, i }));
   const f = all.filter((x) => x.outcome === "ask" || x.outcome === "block");
-  return f.length ? f : all;
+  // The most telling reason first (same order as the buyer page): why this substitute matters here, an allergen, a limit.
+  const RANK = [/^substitution\.use_sensitive$/, /^purpose\./, /^allergen\./, /^standing\./, /^spend\./, /^price\./, /^quantity\./, /^delivery\./, /^availability\./];
+  const r = (x) => { const k = RANK.findIndex((re) => re.test(x.rule || "")); return k < 0 ? RANK.length : k; };
+  return (f.length ? f : all).sort((a, b) => r(a) - r(b));
 }
 
 // The gateway's own sentence in the page language: Finnish from the unsigned explanations_fi when there is one.
