@@ -469,17 +469,20 @@ function renderQuote(quote) {
 async function renderOrder(current, order) {
   const { gateway, quote } = current;
   const content = document.createDocumentFragment();
-  const status = statuses[order.status] || order.status;
-  const tier = order.status === 'expired_cutoff' ? 'block' : statusTier[order.status] || order.decision?.outcome;
+  let verifiedStatus;
   if (quote.seeded?.sandbox) {
     content.append(element('p', 'Sandbox example priced from stored reference data.', 'notice'));
   }
-  content.append(outcomeLine(tier, (order.status === 'ordered' && tierLabels[tier]) || statusLabels[order.status] || status, `${order.id} · ${status}`, 'outcome total'));
   if (order.amendments?.length) content.append(element('p', 'Coverage below reflects the original quote. Check the current signed order lines for later changes.', 'notice'));
   renderCoverage(content, quote, [], (_, row, container) => showOrderAlternatives(gateway, quote, row, container));
-  appendFindings(content, 'Gateway decision', order.decision.findings, gateway);
   try {
     const signed = await gateway.receipt(order, quote);
+    verifiedStatus = signed.status;
+    const status = statuses[signed.status] || signed.status;
+    const tier = signed.status === 'expired_cutoff' ? 'block' : statusTier[signed.status] || signed.decision?.outcome;
+    content.prepend(outcomeLine(tier, (signed.status === 'ordered' && tierLabels[tier]) ||
+      statusLabels[signed.status] || status, `${signed.id} · ${status}`, 'outcome total'));
+    appendFindings(content, 'Gateway decision', signed.decision.findings, gateway);
     if (signed.amendments?.length) {
       content.append(element('h3', 'Current signed order'),
         element('p', `${money(signed.total_ex_vat, quote.currency)} ex VAT`, 'total'));
@@ -521,7 +524,10 @@ async function renderOrder(current, order) {
       }));
     }
   } catch (error) {
-    content.append(element('p', error.message, 'notice'));
+    verifiedStatus = undefined;
+    content.replaceChildren(
+      element('p', 'Order status could not be verified', 'notice total'),
+      element('p', error.message, 'notice'));
   }
   if (current !== state.order) return;
   $('order-content').replaceChildren(content);
@@ -533,7 +539,7 @@ async function renderOrder(current, order) {
     if (url?.origin === new URL(gateway.base).origin && !url.username && !url.password) approval = url.href;
   }
   $('approvals').href = approval;
-  $('approvals').hidden = order.status !== 'pending_approval';
+  $('approvals').hidden = verifiedStatus !== 'pending_approval';
   const audit = new URL(`${gateway.base}/ui/`);
   const orderUrl = order.order_url && URL.parse(order.order_url, `${gateway.base}/`);
   const sandbox = orderUrl?.origin === audit.origin && orderUrl.searchParams.get('sandbox');
