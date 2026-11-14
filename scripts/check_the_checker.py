@@ -477,6 +477,8 @@ def gateway(ip: str = "10.9.9.9"):
         signing._key.cache_clear()
         mp.setattr(catalog, "get", lambda pid: T.OAT if pid == "OAT" else None)
         mp.setattr(catalog, "search", lambda *a, **k: [T.OAT])
+        from sous import substitutes
+        mp.setattr(substitutes, "_same_category", lambda category: [])  # one-product catalog, no catalog DB
         from scripts.seed import MANDATES
         for m in MANDATES:
             mp.setattr(m, "usual_products", m.usual_products + ["OAT"])
@@ -523,7 +525,7 @@ def _kit_rows() -> list[Row]:
             flagged = expect_fail in failing
             c = by.get(expect_fail, {})
             detail = f"{expect_fail} {c.get('status', '?').upper()}: {str(c.get('detail', ''))[:150]}"
-        rows.append(Row(rid, kind, violation, f"conformance ({expect_fail or 'all 15'})",
+        rows.append(Row(rid, kind, violation, f"conformance ({expect_fail or f'all {len(by)}'})",
                         "reference gateway" if kind == "control" else "gateway with the defect", flagged, detail))
 
     run("C06", "control", "none: the reference gateway", None)

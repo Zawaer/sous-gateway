@@ -7,8 +7,10 @@ It creates a fresh judge sandbox (POST /sandbox: three mandates, an agent token,
 checks below with those credentials only. Nothing from the `sous` package is imported: the kit sees exactly what an
 outside buyer agent or auditor sees. Tokens are never printed.
 
-Live supplier usage: 4 quotes (one small, two identical "ask"-sized, one over the school's hard limit); the second
-"ask" quote is usually served from the gateway's cache. The sandbox's own lookup budget (quotes_limit) caps it anyway.
+Live supplier usage: 6 quotes (one small, two identical "ask"-sized, one over the school's hard limit, and for
+stock_oracle one 10^6-unit quote under a mandate and one without); all are for the same product and day, so most are
+served from the gateway's offer cache. The sandbox's own lookup budget (quotes_limit) caps it anyway. Links found in
+responses are followed only on the gateway's own host.
 See docs/CONFORMANCE.md for what each check means and why it matters.
 """
 
@@ -20,7 +22,9 @@ import json
 import math
 import re
 import sys
+import time
 from datetime import date, timedelta
+from urllib.parse import parse_qsl, urlsplit
 
 import httpx
 from cryptography.exceptions import InvalidSignature
@@ -77,6 +81,116 @@ def _flip(ident: str) -> str:
     return ident[:-1] + ("A" if last != "A" else "B")
 
 
+def _walk(obj, path: str = ""):
+    """Every leaf of a JSON value as (path, last key, value)."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            yield from _walk(v, f"{path}.{k}" if path else str(k))
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            yield from _walk(v, f"{path}[{i}]")
+    else:
+        yield path, re.sub(r"\[\d+\]$", "", path).rsplit(".", 1)[-1], obj
+
+
+# --- agent_visible_approval: what an agent is handed, and what it could try with it ---------------------------
+
+_TOKENISH_KEY = re.compile(r"token|code|secret|key|jws|signature|nonce|challenge|otp|pin|ticket|grant|session|"
+                           r"credential|auth", re.I)
+_OPAQUE = re.compile(r"^[A-Za-z0-9._~+/=-]{24,}$")  # with a digit: opaque, not a long word like a label
+_DECIDE_PATH = re.compile(r"approv|confirm|accept|authori[sz]|continue|decid|consent|reject", re.I)
+
+
+def agent_material(sources: dict[str, object], agent_token: str) -> tuple[list[str], list[tuple[str, str]]]:
+    """(links, [(where, token)]) found in what the agent received. Links: absolute URLs and absolute paths in any
+    string. Tokens: values of token-like fields, long opaque strings and every link's query parameter values; the
+    agent's own bearer token is left out (agent_cannot_approve already tries it)."""
+    links, tokens = [], []
+    for src, obj in sources.items():
+        for path, key, v in _walk(obj):
+            if not isinstance(v, str) or not v:
+                continue
+            for u in re.findall(r"https?://[^\s\"'<>]+|(?<![\w/])/(?:[\w.~-]+/)*[\w.~-]+\?[^\s\"'<>]+", v):
+                if u not in links:
+                    links.append(u)
+                for qk, qv in parse_qsl(urlsplit(u).query) + parse_qsl(urlsplit(u).fragment.partition("?")[2]):
+                    if qv:
+                        tokens.append((f"{src}:{path}?{qk}=", qv))
+            if v.startswith(("http://", "https://", "/")):
+                continue
+            if re.fullmatch(r"[A-Z0-9_.]{1,23}", v):  # enum codes (PARTIAL_STOCK), not secrets
+                continue
+            if ((_TOKENISH_KEY.search(key) and len(v) >= 6 and " " not in v)
+                    or (_OPAQUE.match(v) and re.search(r"\d", v))):
+                tokens.append((f"{src}:{path}", v))
+    seen, uniq = set(), []
+    for where, t in sorted(tokens, key=lambda wt: 0 if "?" in wt[0] else 1):  # link parameters first
+        if t != agent_token and t not in seen and t.isascii() and t.isprintable():
+            seen.add(t)
+            uniq.append((where, t))
+    return links, uniq
+
+
+# --- stock_oracle: an exact available amount hidden in a response ---------------------------------------------
+
+_STOCKY_KEY = re.compile(r"avail|in_?stock|on_?hand|stock_?(amount|qty|quantity|count|level_amount)|can_?supply|"
+                         r"supplyable|max_?(qty|quantity|orderable)|remaining|inventory", re.I)
+_NUM = r"(?<![\w.,])(\d+(?:[.,]\d+)?(?:e[+-]?\d+)?)"
+_STOCK_TEXT = [  # a number next to stock words: "Only 120 ST in stock", "available: 120", "can supply 120"
+    re.compile(r"\bonly\s+" + _NUM + r"(?!\w|[.,]\d|\s*%)", re.I),
+    re.compile(_NUM + r"(?!\w|[.,]\d|\s*%)\s*(?:[A-Za-z]{1,4}\.?\s+)?(?:in stock|available|left|on hand|remaining|"
+               r"can be (?:supplied|delivered))", re.I),
+    re.compile(r"(?:in stock|availab\w*|stock|can supply|can be supplied|can deliver|up to|at most|maximum|max\.?)"
+               r"\s*(?:is|of|:|=)?\s*" + _NUM + r"(?!\w|[.,]\d|\s*%)", re.I),
+]
+_NOT_AMOUNT_KEY = re.compile(r"price|total|vat|co2|reliability|eur|calls|limit|lot|content|expires|_at$|date|"
+                             r"cutoff|index|version|score|rank|percent|ttl", re.I)
+
+
+def _num(x: str) -> float:
+    return float(x.replace(",", "."))
+
+
+def stock_text_numbers(text: str) -> list[tuple[float, str]]:
+    """Numbers a message puts next to stock words, with the snippet; dates and times are skipped."""
+    t = re.sub(r"\d{4}-\d{2}-\d{2}(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?|\b\d{1,2}[:.]\d{2}\b", " ", text)
+    out = []
+    for rx in _STOCK_TEXT:
+        for m in rx.finditer(t):
+            out.append((_num(m.group(1)), t[max(0, m.start() - 20):m.end() + 20].strip()))
+    return out
+
+
+def _close(a: float, allowed: set[float]) -> bool:
+    return any(abs(a - b) <= 1e-6 * max(1.0, abs(b)) for b in allowed)
+
+
+def stock_leaks(obj, allowed: set[float], reveal: set[float] = frozenset(),
+                requested: float | None = None) -> list[str]:
+    """Exact-stock leaks in a response: a numeric stock-like field (available_amount, in_stock, can_supply...) that
+    isn't null or the requested amount; a number beside stock words in any message that isn't `allowed`; and, when
+    the exact amount is known from elsewhere (`reveal`), any amount-like number or message number equal to it."""
+    out = []
+    field_ok = {requested} if requested is not None else allowed
+    for path, key, v in _walk(obj):
+        if isinstance(v, bool) or v is None:
+            continue
+        if isinstance(v, (int, float)):
+            if _STOCKY_KEY.search(key) and not re.search(r"calls|stats", path) and not _close(v, field_ok):
+                out.append(f"{path}={v:g}")
+            elif reveal and not _NOT_AMOUNT_KEY.search(path) and _close(v, reveal) and not _close(v, allowed):
+                out.append(f"{path}={v:g} (the mandate-sized amount)")
+        elif isinstance(v, str) and " " in v:  # prose only: ids, JWS and base64 have no spaces
+            for n, snip in stock_text_numbers(v):
+                if not _close(n, allowed):
+                    out.append(f"{path}: \"{snip}\"")
+            if reveal and not _NOT_AMOUNT_KEY.search(key):
+                for m in re.finditer(_NUM, re.sub(r"\d{4}-\d{2}-\d{2}\S*", " ", v)):
+                    if _close(_num(m.group(1)), reveal) and not _close(_num(m.group(1)), allowed):
+                        out.append(f"{path} names the mandate-sized amount {m.group(1)}")
+    return list(dict.fromkeys(out))
+
+
 # --- the kit ------------------------------------------------------------------------------------------------
 
 class Skip(Exception):
@@ -97,8 +211,18 @@ class Kit:
     def get(self, path, auth=None, approver=None, **kw):
         return self.http.get(path, headers=self._h(auth, approver), **kw)
 
-    def post(self, path, body=None, auth=None, approver=None):
-        return self.http.post(path, json=body if body is not None else {}, headers=self._h(auth, approver))
+    def post(self, path, body=None, auth=None, approver=None, headers=None, params=None):
+        """POST; a 429 (the gateway's per-IP write limit) is waited out once, so a long run stays conclusive."""
+        h = {**self._h(auth, approver), **(headers or {})}
+        r = self.http.post(path, json=body if body is not None else {}, headers=h, params=params)
+        if r.status_code == 429:
+            try:
+                wait = float(r.json().get("retry_after") or 61)
+            except ValueError:
+                wait = 61
+            time.sleep(min(wait, 120))
+            r = self.http.post(path, json=body if body is not None else {}, headers=h, params=params)
+        return r
 
     @staticmethod
     def _h(auth, approver):
@@ -361,6 +485,8 @@ class Kit:
             r = self.quote("hotel", amount)
             if r.status_code != 200:
                 return False, f"{label} quote {self._err(r)}"
+            if label == "plain":
+                self.s["q_ask_body"] = r.json()  # the whole quote response the agent got (agent_visible_approval)
             q = r.json()["quote"]
             r = self.order("hotel", q["id"], key=f"conf-{self.s['sid'].lower()}-{label}", rationale=why)
             if r.status_code != 200:
@@ -390,6 +516,125 @@ class Kit:
               and r2.status_code == 403 and e2 == "agent_cannot_approve" and still == "pending_approval")
         return ok, (f"{oid}: no credentials -> {self._err(r0)}; agent token as Bearer -> {self._err(r1)}; "
                     f"as X-Approver-Code -> {self._err(r2)}; order still {still}")
+
+    # --- MCP over Streamable HTTP (JSON-RPC; the answer may come as JSON or as server-sent events) ---
+
+    def mcp(self, method: str, params: dict | None, session: str | None, rid: int | None, auth: str | None):
+        h = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+        if session:
+            h["Mcp-Session-Id"] = session
+        msg = {"jsonrpc": "2.0", "method": method, **({"params": params} if params is not None else {}),
+               **({"id": rid} if rid is not None else {})}
+        r = self.post("/mcp/", msg, auth=auth, headers=h)
+        data = [ln[5:].strip() for ln in r.text.splitlines() if ln.startswith("data:")]
+        try:
+            body = json.loads(data[-1]) if data else (r.json() if r.text.strip() else None)
+        except ValueError:
+            body = None
+        return r, body
+
+    def mcp_session(self, auth: str) -> str | None | bool:
+        """A Streamable HTTP session id (None when the server is stateless); False when /mcp isn't reachable."""
+        try:
+            r, init = self.mcp("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                                              "clientInfo": {"name": "sous-conformance", "version": "1"}},
+                               None, 1, auth)
+        except Exception:  # noqa: BLE001  a gateway without MCP, or one that breaks on it: just not reachable
+            return False
+        if r.status_code != 200 or not (init or {}).get("result"):
+            return False
+        sid = r.headers.get("mcp-session-id")
+        self.mcp("notifications/initialized", None, sid, None, auth)
+        return sid
+
+    def c_agent_visible_approval(self):
+        """Approve the held order using only what the agent itself was handed: every link (GET, and POST where the
+        link looks like a decision), every token-like value in the quote, order and MCP outputs (as approver code,
+        as bearer, as ?token=, with and without the agent's own bearer), the passkey route and approver enrolment.
+        Every decision attempt must be refused (4xx, never 429) and the order must still be pending."""
+        self.need("o_ask", "q_ask_body")
+        o, agent = self.s["o_ask"], self.s["agent_token"]
+        oid, qid, mid = o["id"], o["quote_id"], o["mandate_id"]
+        sources: dict[str, object] = {"quote response": self.s["q_ask_body"], "order response": o}
+        r = self.get(f"/orders/{oid}", auth=agent)
+        if r.status_code == 200:
+            sources["GET order"] = r.json()
+        r = self.get(f"/quotes/{qid}", auth=agent)
+        if r.status_code == 200:
+            sources["GET quote"] = r.json()
+        mcp_note, decide_tools = "MCP not reachable", []
+        sid = self.mcp_session(agent)
+        if sid is not False:
+            _, tl = self.mcp("tools/list", {}, sid, 2, agent)
+            tools = [t.get("name", "") for t in ((tl or {}).get("result") or {}).get("tools", [])]
+            decide_tools = [t for t in tools if _DECIDE_PATH.search(t)]
+            _, go = self.mcp("tools/call", {"name": "get_order", "arguments": {"order_id": oid}}, sid, 3, agent)
+            res = (go or {}).get("result") or {}
+            if res and not res.get("isError"):
+                sources["MCP get_order"] = res.get("structuredContent") or res
+            mcp_note = (f"MCP {len(tools)} tools, none that decides" if not decide_tools
+                        else f"MCP decision tools {decide_tools}") + \
+                       ("; get_order output read" if "MCP get_order" in sources else "; get_order not readable")
+        links, tokens = agent_material(sources, agent)
+        tokens = tokens[:8]
+
+        attempts: list[tuple[str, int]] = []  # (what, status) for every decision attempt
+        follows: list[str] = []
+        base_host = urlsplit(self.base).netloc
+        for u in links[:8]:
+            parts = urlsplit(u)
+            if parts.netloc and parts.netloc != base_host:
+                follows.append(f"{u[:60]} not followed (another host)")
+                continue
+            rel = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
+            g0, g1 = self.get(rel), self.get(rel, auth=agent)
+            follows.append(f"GET {rel[:70]} -> {g0.status_code}/{g1.status_code}")
+            if _DECIDE_PATH.search(parts.path) and not parts.path.endswith("/options"):
+                for label, auth in (("", None), (" +agent bearer", agent)):
+                    attempts.append((f"POST link {parts.path}{label}", self.post(rel, {"by": "agent"}, auth=auth)
+                                     .status_code))
+        approve = f"/orders/{oid}/approve"
+        for where, t in tokens:
+            name = where.rsplit(":", 1)[-1][:40]
+            attempts.append((f"{name} as X-Approver-Code",
+                             self.post(approve, {"by": "agent"}, approver=t).status_code))
+            attempts.append((f"{name} as Bearer", self.post(approve, {"by": "agent"}, auth=t).status_code))
+            attempts.append((f"{name} as ?token= +agent bearer",
+                             self.post(approve, {"by": "agent"}, auth=agent, approver=t,
+                                       params={"token": t, "code": t}).status_code))
+        # passkey route: the agent may read the order, so it may ask for a challenge; it can't answer one
+        r = self.post(f"/orders/{oid}/approve/options", {"action": "approve"}, auth=agent)
+        challenge = (r.json().get("challenge") if r.status_code == 200 else None) or _b64(b"conformance-forged")
+        options_note = f"approve/options with agent bearer -> {self._err(r)}"
+        cdata = _b64(json.dumps({"type": "webauthn.get", "challenge": challenge,
+                                 "origin": self.base}).encode())
+        forged = {"credential": {"id": "Zm9yZ2Vk", "rawId": "Zm9yZ2Vk", "type": "public-key", "response": {
+            "clientDataJSON": cdata, "authenticatorData": _b64(b"\0" * 37), "signature": _b64(b"\0" * 64)}}}
+        for label, auth in (("", None), (" +agent bearer", agent)):
+            attempts.append((f"forged passkey{label}", self.post(f"/orders/{oid}/approve/passkey", forged,
+                                                                 auth=auth).status_code))
+        for label, auth in (("", None), (" with agent bearer", agent)):
+            attempts.append((f"enrol own passkey{label}",
+                             self.post("/approvers/register/options", {"name": "agent", "mandate_id": mid},
+                                       auth=auth).status_code))
+        if sid is not False:
+            for i, t in enumerate(decide_tools):
+                _, out = self.mcp("tools/call", {"name": t, "arguments": {"order_id": oid, "by": "agent"}},
+                                  sid, 10 + i, agent)
+                res = (out or {}).get("result") or {}
+                attempts.append((f"MCP {t}", 403 if (res.get("isError") or (out or {}).get("error")) else 200))
+
+        r = self.get(f"/orders/{oid}", auth=agent)
+        still = r.json().get("status") if r.status_code == 200 else self._err(r)
+        bad = [f"{w} -> {c}" for w, c in attempts if not (400 <= c < 500 and c != 429)]
+        codes = sorted({c for _, c in attempts})
+        ok = not bad and still == "pending_approval"
+        tried = ", ".join(sorted({w.rsplit(':', 1)[-1] for w, _ in tokens})) or "none"
+        return ok, (f"{oid}: {len(links)} links ({'; '.join(follows) or 'none'}); {len(tokens)} token-like values "
+                    f"from {', '.join(sources)} ({tried}); {mcp_note}; {options_note}; {len(attempts)} decision "
+                    f"attempts -> " + (f"all refused ({', '.join(map(str, codes))})" if not bad
+                                       else "ACCEPTED: " + "; ".join(bad[:4]))
+                    + f"; order still {still}")
 
     def c_approver_can_approve(self):
         self.need("o_ask", "o_inj")
@@ -465,6 +710,76 @@ class Kit:
         return not probs, (f"seeded quote {q['id']}: " + ("every line has a stock_level bucket" if not probs
                                                            else "; ".join(probs[:4])))
 
+    HUGE = 1_000_000
+
+    @staticmethod
+    def _quantities(q: dict) -> set[float]:
+        """Every line/option quantity and covered amount in a quote (what a mandate quote discloses by design)."""
+        return {float(v) for p, k, v in _walk(q) if k in ("quantity", "amount", "uncovered")
+                and isinstance(v, (int, float)) and not isinstance(v, bool)}
+
+    def c_stock_oracle(self):
+        """Ask for 10^6 units under the hotel mandate and without any mandate or credential, and look for Valio's
+        exact stock anywhere in the answers. Under a mandate the gateway sizes the line to what can be supplied (the
+        split quantity is the stock, disclosed on purpose to an authenticated agent: docs/PROTOCOL.md 5.2); that
+        number is the reference. The anonymous answer (and every message and error of both) must not reveal it."""
+        self.need("sandbox")
+        n = self.HUGE
+        notes, leaks = [], []
+        rm = self.quote("hotel", n)
+        ref: set[float] = set()
+        if rm.status_code == 200:
+            qm = rm.json()["quote"]
+            lines = [l for l in qm.get("lines", []) if l.get("item_index", 0) == 0 and l.get("orderable")]
+            covered = sum((l.get("covers") or {}).get("amount") or 0 for l in lines)
+            if lines and covered < n * 0.999:
+                ref = {float(l["quantity"]) for l in lines if l.get("quantity")} | {round(covered, 3)}
+                notes.append(f"mandate quote sized to stock: {', '.join(f'{x:g}' for x in sorted(ref))} "
+                             f"(allowed: an authenticated agent under a mandate gets the coverable amount)")
+            elif lines:
+                notes.append(f"mandate quote covers all {n:g} {self.unit} (no stock limit reported for this product, "
+                             "so no exact amount to find; a short-stocked --product exercises the split)")
+            else:
+                notes.append("mandate quote has nothing orderable for the item")
+            leaks += [f"mandate: {x}" for x in stock_leaks(rm.json(), self._quantities(qm) | {float(n)},
+                                                          requested=float(n))]
+        else:
+            body = rm.json() if rm.headers.get("content-type", "").startswith("application/json") else {}
+            notes.append(f"mandate quote {self._err(rm)}")
+            leaks += [f"mandate error: {x}" for x in stock_leaks(body, {float(n)}, ref)]
+        anon = {"agent_id": "conformance-anonymous", "delivery_date": self.s["day"],
+                "items": [{"product_ids": [self.product], "amount": n, "unit": self.unit}]}
+        ra = self.post("/quotes", anon)
+        self.s["quotes_requested"] = self.s.get("quotes_requested", 0) + 1
+        ja = ra.json() if ra.headers.get("content-type", "").startswith("application/json") else {}
+        if ra.status_code == 200:
+            qa = ja["quote"]
+            lines = [l for l in qa.get("lines", []) if l.get("item_index", 0) == 0 and l.get("orderable")]
+            covered = sum((l.get("covers") or {}).get("amount") or 0 for l in lines)
+            if len(lines) > 1:
+                leaks.append(f"anonymous quote split across {len(lines)} products")
+            if lines and covered < n * 0.999:
+                leaks.append(f"anonymous line capped at {covered:g} {self.unit} of {n}")
+            for g in qa.get("uncovered") or []:
+                if 0 < (g.get("uncovered") or 0) < n:
+                    leaks.append(f"anonymous uncovered {g['uncovered']:g} (so {n - g['uncovered']:g} can be had)")
+            if qa.get("options"):
+                leaks.append(f"anonymous quote has {len(qa['options'])} options (sized to stock)")
+            allowed = {float(n)} | {float(l["quantity"]) for l in lines if l.get("quantity")
+                                    and (l.get("covers") or {}).get("amount", n) >= n * 0.999}
+            leaks += [f"anonymous: {x}" for x in stock_leaks(ja, allowed, ref)]
+            levels = sorted({l.get("stock_level") for l in qa.get("lines", [])} - {None})
+            codes = sorted({i.get("code") for l in qa.get("lines", []) for i in l.get("issues", [])}
+                           & {"PARTIAL_STOCK", "STOCK_SIZING_WITHHELD", "OUT_OF_STOCK"})
+            notes.append(f"anonymous quote {qa['id']}: {len(lines)} orderable line(s) covering "
+                         f"{covered:g} {self.unit}, stock_level {', '.join(levels) or '-'}"
+                         + (f", {', '.join(codes)}" if codes else ""))
+        else:
+            notes.append(f"anonymous quote {self._err(ra)}")
+            leaks += [f"anonymous error: {x}" for x in stock_leaks(ja, {float(n)}, ref)]
+        return not leaks, ("; ".join(notes) + ("; nothing exact in any field or message of either answer"
+                                                if not leaks else "; LEAKS: " + "; ".join(leaks[:5])))
+
     CHECKS = [
         ("discovery", "JWKS, rule register, quote schema and OpenAPI are public", "c_discovery"),
         ("sandbox", "POST /sandbox gives three mandates and two tokens", "c_sandbox"),
@@ -477,10 +792,13 @@ class Kit:
         ("hard_limit", "Over the hard limit is refused with a rule from /rules", "c_hard_limit"),
         ("prompt_injection", "Injected rationale does not change the tier (both ask)", "c_injection"),
         ("agent_cannot_approve", "An agent token cannot approve (403 agent_cannot_approve)", "c_agent_cannot_approve"),
+        ("agent_visible_approval", "Nothing the agent is handed (links, tokens, MCP) approves its held order",
+         "c_agent_visible_approval"),
         ("approver_can_decide", "The sandbox approver token approves and rejects", "c_approver_can_approve"),
         ("audit", "Hash chain verifies; the quote and order events are logged", "c_audit"),
         ("stock_buckets", "Live quote lines carry stock_level, no exact stock", "c_stock"),
         ("stock_buckets_seeded", "The seeded sandbox quote follows the same stock policy", "c_stock_seeded"),
+        ("stock_oracle", "A 10^6-unit request reveals no exact stock outside a mandate", "c_stock_oracle"),
     ]
 
     def run_all(self) -> dict:
