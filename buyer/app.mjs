@@ -496,6 +496,7 @@ async function renderOrder(current, order) {
 async function showOrder(gateway, order, quote) {
   clearTimeout(statusTimer);
   state.order = { gateway, id: order.id, quote, snapshot: order };
+  notice($('order-sync'));
   await renderOrder(state.order, order);
   scheduleStatus();
 }
@@ -510,7 +511,7 @@ async function pollPendingOrder() {
   if (state.order?.snapshot.status !== 'pending_approval') return;
   clearTimeout(statusTimer);
   if (!document.hidden && !state.busy) {
-    try { await refreshOrder(); } catch { /* Retry transient failures on the next poll. */ }
+    try { await refreshOrder(); } catch { /* refreshOrder shows the failure and the next poll retries. */ }
   }
   scheduleStatus();
 }
@@ -533,6 +534,12 @@ async function refreshOrder(force = false) {
       await renderOrder(current, order);
       current.snapshot = order;
     }
+    if (current === state.order) notice($('order-sync'));
+  } catch (error) {
+    if (current === state.order) {
+      notice($('order-sync'), 'Could not refresh this order. The status shown may be out of date. Automatic checks will retry while approval is pending.', true);
+    }
+    throw error;
   } finally {
     current.refreshing = false;
   }
