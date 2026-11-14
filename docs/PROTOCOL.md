@@ -1110,6 +1110,7 @@ Totals are public; `by_buyer` (lost value and Valio-side lost value per buyer) o
 
 ## 32. Purpose per item (`sous/purpose.py`)
 
+In a professional kitchen, coffee cream can be any brand, but whipping cream for a recipe may not whip the same (additives such as lecithin change it), and in an allergy recipe often only one exact product works. Knowing what a product is for decides whether a substitute is fine.
 
 - **Where it is said.** A quote item (and a standing-order item) takes `purpose` (free text: `coffee`, `recipe: lasagne`, `allergy menu`) and `substitution`: `exact` (only these products), `ask` (a substitute needs the buyer's yes) or `allowed` (the mandate's `substitutions` tier applies). Without `substitution`, it is read from the purpose: recipe and dish words mean `ask`, allergy and "only this" words mean `exact`, coffee and "any brand" mean `allowed`. The buyer's human can pin it per product in the mandate (`product_purposes`), which binds every agent and Valio Aimo's side.
 - **Strictest wins.** Mandate, standing item and quote item are combined and the strictest level wins, so an agent can only make an item stricter, never looser than the buyer said.

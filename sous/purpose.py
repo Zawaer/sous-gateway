@@ -1,5 +1,6 @@
 """What a product is for, and so how strictly it may be substituted.
 
+A kitchen's everyday reality: coffee cream can be any brand, but whipping cream for a recipe may not
 whip the same (additives like lecithin change it), and in an allergy recipe often only one exact product works.
 So each item can say what it is for:
 

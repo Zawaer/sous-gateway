@@ -57,6 +57,9 @@ Because "same as usual" is where creep hides. Each renewal is quoted live and co
 
 ---
 
+**Customer control and substitution**
+- *"How do you keep the customer in control?"* Trust between a wholesaler and its customer is worth more than any agent feature, because a new customer is expensive to win. So held orders are decided by the customer on the buyer side, never by the seller's staff, every link in a notification goes there, autonomy is only widened when the buyer accepts a proposal backed by their own approval record, and a change in the buyer's needs re-checks everything already running.
+- *"Which substitutes are OK?"* It depends on what the product is for: coffee cream any brand, whipping cream for a dessert maybe not (stabilisers change how it whips), an allergy recipe only the exact product. Items and mandates carry a purpose and a use; a recipe substitute waits for the buyer, an exact one is refused, and the seller's own suggestions and substitutions at pick follow the same rule.
 - *"What about payment?"* Contract customers pay by invoice, so there is deliberately no payment step.
 
 ---

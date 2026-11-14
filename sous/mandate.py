@@ -505,6 +505,7 @@ def evaluate(
                     f"{fi.allergens(mandate.avoid_allergens)}. Tuntematonta ei pidetä turvallisena.")
 
         if pid in subs:
+            # What the replaced product is for (coffee cream: any brand; recipe cream: maybe not)
             lvl, why = purposes.for_product(mandate, subs[pid], (l.get("purpose"), l.get("substitution")))
             orig_name = readable_name((catalog.get(subs[pid]) or {}).get("name") or subs[pid])
             if lvl == "exact":
