@@ -14,7 +14,7 @@ A mandate may name its own channels (attributes `notify_webhook_url`, `notify_nt
 they win over the environment. A failed notification never blocks or fails an order: each
 delivery is audited as notification.sent or notification.failed.
 
-Events: order.notify, order.ask (to the buyer's human), order.decided (FYI to the agent
+Events: order.notify, order.ask, order.block (refused by the mandate: nothing ordered; to the buyer's human), order.decided (FYI to the agent
 side after a human approves or rejects), product.held (Valio put a product on hold that the buyer has
 open, standing or, for a recall, recently placed orders for; sous/holds.py), order.expired (a held order
 passed its approve_by: delivery lost, next date suggested), test.
@@ -37,7 +37,8 @@ from .mandate import Mandate
 
 log = logging.getLogger(__name__)
 
-AUDIENCE = {"order.notify": "buyer", "order.ask": "buyer", "order.decided": "agent", "product.held": "buyer",
+AUDIENCE = {"order.notify": "buyer", "order.ask": "buyer", "order.block": "buyer", "order.decided": "agent",
+            "product.held": "buyer",
             "order.expired": "buyer",
             "test": "buyer"}
 
@@ -132,6 +133,14 @@ def compose(event: str, order: dict, mandate: Mandate) -> dict:
                "If nobody answers, it expires and nothing is ordered.")
         return {"title": f"Approval needed: {oid} ({total})", "message": msg,
                 "url": order.get("approval_url") or url, "deadline": cut}
+    if event == "order.block":
+        fs = _findings(order, "block")
+        reason = _sentence(fs[0]["message"]) if fs else "It is outside what the mandate allows"
+        more = f" (+{len(fs) - 1} more reason{'s' if len(fs) > 2 else ''})" if len(fs) > 1 else ""
+        return {"title": f"Refused: {oid}", "message":
+                f"Your agent's order was refused and nothing was ordered: {reason}{more}. "
+                f"Order: {what(order)}. Ask your agent for another product or date, or change the mandate.",
+                "url": url}
     if event == "order.expired":
         x = order.get("expiry") or {}
         lost, nxt = x.get("lost_delivery_date"), x.get("next_delivery_date")
@@ -205,7 +214,7 @@ def _ntfy(topic: str, n: dict) -> int:
     server = _env("SOUS_NTFY_SERVER", "https://ntfy.sh").rstrip("/")
     ask = n["event"] == "order.ask"
     msg = {"topic": topic, "title": n["title"], "message": n["message"], "priority": 4 if ask else 3,
-           "tags": ["warning"] if ask else ["shopping_cart"]}
+           "tags": ["warning"] if ask else ["no_entry"] if n["event"] == "order.block" else ["shopping_cart"]}
     if (url := n.get("url")) and url.startswith("http"):
         msg["click"] = url
         if ask:

@@ -130,13 +130,23 @@ def test_ask_tier_has_deadline_default_and_approve_action(env, monkeypatch):
     assert len(env.calls) == 1  # agent-side FYI doesn't go to the human's phone
 
 
-def test_silent_and_block_send_nothing(env):
+def test_silent_sends_nothing(env):
     mandate()
     S.place_order("a", "M", quote("Q-1", 10))
-    mandate(hard_limit_eur=10)
-    S.place_order("a", "M", quote("Q-2", 100))
     wait()
     assert notifications_store.list_() == [] and env.calls == []
+
+
+def test_block_tells_the_buyer(env, monkeypatch):
+    monkeypatch.setenv("SOUS_NTFY_TOPIC", "t")
+    mandate(hard_limit_eur=10)
+    o = S.place_order("a", "M", quote("Q-2", 100))
+    wait()
+    [n] = notifications_store.list_()
+    assert n["event"] == "order.block" and n["audience"] == "buyer" and n["order_id"] == o["id"]
+    assert n["title"] == f"Refused: {o['id']}" and "nothing was ordered" in n["message"]
+    [c] = env.calls
+    assert c["json"]["tags"] == ["no_entry"]
 
 
 def test_webhook_is_signed(env, monkeypatch):

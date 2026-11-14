@@ -694,8 +694,9 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
     with _order_lock:
         order, mandate = _place_order(agent_id, mandate_id, quote_id, idempotency_key, extra_findings,
                                       clean_rationale(rationale))
-    if mandate is not None and order["decision"]["outcome"] in ("notify", "ask"):
-        notify.send(f"order.{order['decision']['outcome']}", order, mandate)  # FYI / approval request; never blocks
+    if mandate is not None and order["decision"]["outcome"] in ("notify", "ask", "block"):
+        # FYI / approval request / refusal: the buyer always hears when an order of theirs was refused; never blocks
+        notify.send(f"order.{order['decision']['outcome']}", order, mandate)
     return erp.submit(order) if order["status"] == "ordered" else order  # to Valio's ERP via the outbox (erp.py)
 
 
