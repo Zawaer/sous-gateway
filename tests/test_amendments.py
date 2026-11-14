@@ -32,16 +32,21 @@ def _product(pid, name, contains):
 
 
 PRODUCTS = {"OAT": _product("OAT", "Oat drink 1 l", []), "OAT2": _product("OAT2", "Oat drink barista 1 l", []),
-            "CREAM": _product("CREAM", "Cream 1 l", ["AM"])}
+            "CREAM": _product("CREAM", "Cream 1 l", ["AM"]), "SODA": _product("SODA", "Soda 1 l", [])}
+VAT = {"SODA": 25.5}  # everything else 13.5 %
 
 
 def fake_offers(product_ids, requested, need=None, need_unit=None):
-    pr = {"catalogPrice": {"value": 1.0, "valueWithTax": 1.14, "validTo": None}, "comparisonPrice": {"value": 1.0},
-          "comparisonUnit": "L", "tax": {"taxRate": 13.5}, "error": False}
-    av = {"logisticModel": "Stock", "closingTime": "2026-11-15T17:00:00+0200", "salesBlock": False,
-          "scheduleLines": [{"salesBlock": False, "availableAmount": 99999, "availableDate": "2026-11-16",
-                             "salesUnit": "ST"}]}
-    return [Q.build_offer(PRODUCTS[p], pr, av, requested, need, need_unit, NOW) for p in product_ids], NOW
+    out = []
+    for p in product_ids:
+        rate = VAT.get(p, 13.5)
+        pr = {"catalogPrice": {"value": 1.0, "valueWithTax": round(1 + rate / 100, 4), "validTo": None},
+              "comparisonPrice": {"value": 1.0}, "comparisonUnit": "L", "tax": {"taxRate": rate}, "error": False}
+        av = {"logisticModel": "Stock", "closingTime": "2026-11-15T17:00:00+0200", "salesBlock": False,
+              "scheduleLines": [{"salesBlock": False, "availableAmount": 99999, "availableDate": "2026-11-16",
+                                 "salesUnit": "ST"}]}
+        out.append(Q.build_offer(PRODUCTS[p], pr, av, requested, need, need_unit, NOW))
+    return out, NOW
 
 
 SENT: list[tuple[str, dict]] = []
@@ -291,3 +296,65 @@ def test_erp_change_message_is_idempotent_and_orderchg_shaped():
     assert p["E1EDP01"][0]["ACTION"] == "002" and p["E1EDP01"][0]["MENGE"] == "8"
     assert erp.enqueue_change(store.get_order(o["id"]), a)["payload_hash"] == doc["erp"]["payload_hash"]
     assert erp.document(o["id"])["payload"]["E1EDP01"][0]["MENGE"] == "10"  # the original stays as it was sent
+
+
+# --- regressions (rene-codex-qa, board 11:06Z and 11:16Z) ---------------------------------------------------------
+
+def two_rate_order():
+    """10 x OAT (13.5 %) + 10 x SODA (25.5 %), EUR 1.00 ex VAT each: gross 11.35 + 12.55 = 23.90."""
+    q = S.request_quote(S.QuoteRequest(agent_id="a", mandate_id="M", delivery_date=MON, items=[
+        S.QuoteItem(product_ids=["OAT"], amount=10, unit="SALES_UNIT"),
+        S.QuoteItem(product_ids=["SODA"], amount=10, unit="SALES_UNIT")]))
+    o = S.place_order("a", "M", q["quote"]["id"])
+    assert o["status"] == "ordered" and o["total_inc_vat"] == 23.9 and [l["product_id"] for l in o["lines"]] == ["OAT", "SODA"]
+    return o
+
+
+def test_mixed_vat_basket_inc_vat_total_is_recomputed_per_line():
+    issue()
+    o = report(two_rate_order()["id"], kind="cancel_line", line=0)
+    assert o["total_ex_vat"] == 10.0 and o["total_inc_vat"] == 12.55  # not 23.90 * 10/20 = 11.95
+    assert o["lines"][1]["vat_rate"] == 25.5 and o["lines"][0]["line_total_inc_vat"] == 0.0
+    o = report(o["id"], kind="short_pick", line=1, delivered_quantity=4)
+    assert o["total_inc_vat"] == 5.02  # 4 x 1.255
+    o2 = report(two_rate_order()["id"], kind="short_pick", line=1, delivered_quantity=6)
+    assert o2["total_inc_vat"] == round(11.35 + 6 * 1.255, 2)
+
+
+def test_amendment_and_its_erp_change_message_commit_together(monkeypatch):
+    """A transient failure writing the change message rolls the amendment back (nothing signed, nothing applied);
+    the retry then applies it with its ORDCHG queued and sent."""
+    import sqlite3
+    issue()
+    o = order(10)
+    assert erp.status(o["id"])["status"] == "confirmed"
+    real = erp.write
+
+    def flaky(row):
+        if row is not None and "/" in row[0]:
+            raise sqlite3.OperationalError("database is locked")
+        return real(row)
+    monkeypatch.setattr(erp, "write", flaky)
+    with pytest.raises(sqlite3.OperationalError):
+        report(o["id"], kind="short_pick", line=0, delivered_quantity=6)
+    cur = store.get_order(o["id"])
+    assert cur["total_ex_vat"] == 10.0 and not cur.get("amendments")  # rolled back: no signed, applied amendment
+    assert not events("order.amended")
+    monkeypatch.setattr(erp, "write", real)
+    o = report(o["id"], kind="short_pick", line=0, delivered_quantity=6)
+    key = erp.change_key(o["id"], last(o)["id"])
+    assert erp.status(key)["status"] == "confirmed" and erp.document(key)["payload"]["E1EDP01"][0]["MENGE"] == "6"
+
+
+def test_sweep_reconciles_an_applied_amendment_missing_its_change_message():
+    issue()
+    o = report(order(10)["id"], kind="short_pick", line=0, delivered_quantity=6)
+    key = erp.change_key(o["id"], last(o)["id"])
+    store._exec("DELETE FROM erp_outbox WHERE order_id = ?", (key,))  # lost (e.g. written before the fix)
+    assert erp.status(key) is None
+    erp.process_due()
+    assert erp.status(key)["status"] == "confirmed"
+    assert erp.document(key)["payload"]["E1EDP01"][0]["MENGE"] == "6"
+    assert any(e["data"].get("amendment_id") == last(o)["id"] for e in events("order.erp_reconciled"))
+    erp.process_due()  # idempotent: nothing more to queue
+    assert len([e for e in events("order.erp_reconciled") if e["data"].get("amendment_id")]) == 1

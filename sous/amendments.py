@@ -23,7 +23,8 @@ an ask-tier amendment; nobody may accept a block-tier one until the mandate allo
 vka_ credential) may reject, and may accept only what the mandate, re-checked at that moment, would let through
 without a human (notify or silent). Rejecting a substitution or a delay cancels the line(s) concerned, with a
 credit. The order keeps status `ordered`; its receipt is re-signed with the new total, `original_total_ex_vat`
-and `credit_notes[]`. Every change to the lines goes to the ERP outbox as one ORDCHG message (erp.enqueue_change).
+and `credit_notes[]`. Every change to the lines goes to the ERP outbox as one ORDCHG message,
+queued in the same transaction as the amended order (erp.prepare_change; erp.reconcile_changes as a backstop).
 """
 
 from __future__ import annotations
@@ -142,6 +143,25 @@ def _cancel(o: dict, i: int, aid: str, credits: list[dict], reason: str) -> None
                     "quantity": -l["quantity"], "amount_ex_vat": -(l.get("line_total_ex_vat") or 0),
                     "reason": reason})
     o["lines"][i] = {**l, "quantity": 0, "line_total_ex_vat": 0.0, "cancelled": True, "amended_by": aid}
+    if "line_total_inc_vat" in l:
+        o["lines"][i]["line_total_inc_vat"] = 0.0
+
+
+def _with_vat(o: dict) -> None:
+    """Give each order line its own VAT from the signed quote (vat_rate, unit_price_inc_vat, line_total_inc_vat),
+    once, so the tax-inclusive total is recomputed per line: baskets mix VAT rates (13.5 % food, 25.5 % other).
+    Order lines are the quote's lines in the same order; when that can't be confirmed nothing is added."""
+    if any("vat_rate" in l for l in o["lines"]):
+        return
+    row = store.get_quote(o.get("quote_id") or "")
+    q = signing.verify(row["_jws"], "sous-quote+jws") if row else None
+    ql = (q or {}).get("lines") or []
+    if len(ql) != len(o["lines"]) or any(a["product_id"] != b.get("product_id") for a, b in zip(o["lines"], ql)):
+        return
+    for l, x in zip(o["lines"], ql):
+        if x.get("vat_rate") is not None and x.get("line_total_inc_vat") is not None:
+            l |= {"vat_rate": x["vat_rate"], "unit_price_inc_vat": x.get("unit_price_inc_vat"),
+                  "line_total_inc_vat": x["line_total_inc_vat"]}
 
 
 def _apply(o: dict, a: dict, accepted: bool) -> dict:
@@ -150,6 +170,7 @@ def _apply(o: dict, a: dict, accepted: bool) -> dict:
     o.setdefault("original_total_ex_vat", o["total_ex_vat"])
     o.setdefault("original_total_inc_vat", o.get("total_inc_vat"))
     o["lines"] = [dict(l) for l in o["lines"]]
+    _with_vat(o)
     credits: list[dict] = []
     aid, kind = a["id"], a["kind"]
     if not accepted:  # a rejected substitution or delay: the line(s) won't be delivered as ordered
@@ -166,6 +187,11 @@ def _apply(o: dict, a: dict, accepted: bool) -> dict:
                         "reason": a["reason"]})
         o["lines"][a["line"]] = {**l, "quantity": a["delivered_quantity"], "line_total_ex_vat": new_total,
                                  "ordered_quantity": l.get("ordered_quantity", l["quantity"]), "amended_by": aid}
+        if "line_total_inc_vat" in l:
+            unit_inc = l.get("unit_price_inc_vat")
+            o["lines"][a["line"]]["line_total_inc_vat"] = (
+                round(unit_inc * a["delivered_quantity"], 2) if unit_inc is not None
+                else round(new_total * (1 + l["vat_rate"] / 100), 2))
     elif kind == "delay":
         for i in _lines_of(o, a):
             if o["lines"][i].get("quantity"):
@@ -184,8 +210,13 @@ def _apply(o: dict, a: dict, accepted: bool) -> dict:
                                                             "delivery_date", "logistic_model", "order_cutoff")},
                                  "substituted_for": {"product_id": old["product_id"], "name": old["name"],
                                                      "quantity": old["quantity"]}, "amended_by": aid}
+        if "vat_rate" in old:  # same kind of goods: the original line's VAT rate
+            o["lines"][a["line"]] |= {"vat_rate": old["vat_rate"], "line_total_inc_vat":
+                                      round(new["line_total_ex_vat"] * (1 + old["vat_rate"] / 100), 2)}
     o["total_ex_vat"] = _sum(o["lines"])
-    if o.get("original_total_inc_vat") and o["original_total_ex_vat"]:  # order lines carry no VAT: keep the ratio
+    if all("line_total_inc_vat" in l for l in o["lines"]):  # per line, at each line's own VAT rate
+        o["total_inc_vat"] = round(sum(l["line_total_inc_vat"] or 0 for l in o["lines"]), 2)
+    elif o.get("original_total_inc_vat") and o["original_total_ex_vat"]:  # no per-line VAT known: order's ratio
         o["total_inc_vat"] = round(o["original_total_inc_vat"] * o["total_ex_vat"] / o["original_total_ex_vat"], 2)
     o["credit_notes"] = (o.get("credit_notes") or []) + credits
     return {"order_total_before": before, "order_total_after": o["total_ex_vat"],
@@ -203,19 +234,21 @@ def receipt_summary(o: dict) -> list[dict]:
              "jws_sha256": hashlib.sha256(a["jws"].encode()).hexdigest()} for a in o.get("amendments") or []]
 
 
-def _store(o: dict, now_iso: str) -> None:
+def _store(o: dict, a: dict, now_iso: str) -> None:
+    """Store the amended order and, when the amendment changed its lines, the ERP change message: one
+    transaction, so a signed, applied amendment never exists without its queued ORDCHG (or the reverse)."""
     o["updated_at"] = now_iso
     o["receipt_jws"] = S._receipt(o)
-    if not store.update_order(o, expected_status="ordered"):
-        raise _err("not_ordered", f"Order {o['id']} changed meanwhile; read it again.")
+    change = erp.prepare_change(o, a) if a["status"] in erp.CHANGED else None  # reads only, before the transaction
+    with store.transaction():
+        if not store.update_order(o, expected_status="ordered"):
+            raise _err("not_ordered", f"Order {o['id']} changed meanwhile; read it again.")
+        erp.write(change)
 
 
 def _after(o: dict, a: dict, event: str, mandate: Mandate, changed: bool) -> dict:
     if changed:
-        try:
-            erp.submit_change(o, a)
-        except Exception:  # noqa: BLE001 - never fail the amendment over the outbox; enqueue_change audits
-            pass
+        erp.send_change(o, a)  # queued in _store's transaction; a failed send is retried by the sweep
     notify.send(event, {**o, "amendment": a}, mandate)
     return view(store.get_order(o["id"]) or o)
 
@@ -282,7 +315,7 @@ def report(order_id: str, req: AmendmentIn, authority: str) -> dict:
             a["effect"] = _apply(o, a, True)
         a = _sign(a)
         o["amendments"] = (o.get("amendments") or []) + [a]
-        _store(o, now)
+        _store(o, a, now)
         store.audit("order.amended", a["reported_by"], "human", order_id, o["buyer"],
                     {"order_id": order_id, "amendment_id": a["id"], "kind": a["kind"], "line": a.get("line"),
                      "tier": tier, "status": a["status"], "reason": a["reason"], "authority": authority,
@@ -327,7 +360,7 @@ def resolve(order_id: str, amendment_id: str, accept: bool, res: Resolution, *, 
         a["effect"] = _apply(o, a, accept)
         a = _sign(a)
         o["amendments"] = [*o["amendments"][:i], a, *o["amendments"][i + 1:]]
-        _store(o, now)
+        _store(o, a, now)
         store.audit("order.amendment_accepted" if accept else "order.amendment_rejected", res.by,
                     "agent" if agent else "human", order_id, o["buyer"],
                     {"order_id": order_id, "amendment_id": amendment_id, "kind": a["kind"], "authority": authority,

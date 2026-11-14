@@ -306,41 +306,70 @@ def to_ordchg(order: dict, amendment: dict, customer_number: str | None) -> dict
     return doc
 
 
-def enqueue_change(order: dict, amendment: dict) -> dict | None:
-    """Queue the change message for an amendment that changed the lines, once per amendment (idempotent), only
-    when the order itself went through the outbox (an order the ERP never got has nothing to change)."""
+CHANGED = ("applied", "accepted", "rejected")  # amendment statuses that changed the order's lines
+
+
+def prepare_change(order: dict, amendment: dict) -> tuple | None:
+    """The outbox row for an amendment's change message, built BEFORE the transaction that stores the amended
+    order (reads only; erp.write inserts it inside that transaction, sous/amendments.py). None when the order
+    itself never went through the outbox (nothing to change) or the change is already queued."""
     _ensure()
     base = _get(order["id"])
-    if base is None or base["status"] == "legacy":
-        return None
     key = change_key(order["id"], amendment["id"])
-    if (row := _get(key)) is not None:
-        return row
+    if base is None or base["status"] == "legacy" or _get(key) is not None:
+        return None
     payload = to_ordchg(order, amendment, base["data"].get("customer_number"))
     data = {**{k: base["data"].get(k) for k in ("endpoint", "customer_number", "buyer", "target")},
             "confirmation_id": None, "last_error": None, "sent_at": None, "confirmed_at": None,
             "change_of": order["id"], "amendment_id": amendment["id"]}
+    now = store.now_iso()
+    return (key, "pending", 0, _clock(), json.dumps(payload, ensure_ascii=False), payload_hash(payload),
+            json.dumps(data), now, now)
+
+
+def enqueue_change(order: dict, amendment: dict) -> dict | None:
+    """Queue an amendment's change message on its own (idempotent per amendment); used by reconcile_changes."""
     try:
-        store._exec("INSERT INTO erp_outbox (order_id, status, attempts, next_ts, payload, payload_hash, data, "
-                    "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-                    (key, "pending", 0, _clock(), json.dumps(payload, ensure_ascii=False), payload_hash(payload),
-                     json.dumps(data), store.now_iso(), store.now_iso()))
+        write(prepare_change(order, amendment))
     except Exception as e:  # another thread enqueued it first
         if type(e).__name__ != "IntegrityError":
             raise
-    return _get(key)
+    return _get(change_key(order["id"], amendment["id"]))
 
 
-def submit_change(order: dict, amendment: dict) -> dict | None:
-    """Queue and try to send an amendment's change message now; a failure stays queued for the sweep."""
+def send_change(order: dict, amendment: dict) -> dict | None:
+    """Try to send a queued change message now (after the amendment's transaction committed); a failure stays
+    queued for the sweep."""
     try:
-        if enqueue_change(order, amendment) is not None:
-            return attempt(change_key(order["id"], amendment["id"]))
+        return attempt(change_key(order["id"], amendment["id"]))
     except Exception as e:  # noqa: BLE001
         store.audit("order.erp_failed", "erp-adapter", "system", order["id"], order.get("buyer"),
-                    {"order_id": order["id"], "amendment_id": amendment["id"], "stage": "enqueue_change",
+                    {"order_id": order["id"], "amendment_id": amendment["id"], "stage": "send_change",
                      "error": f"{type(e).__name__}: {e}"[:300]})
     return None
+
+
+def reconcile_changes(limit: int = 200) -> int:
+    """Queue the change message of every amendment that changed an ordered order but has none in the outbox.
+    Returns how many were queued."""
+    _ensure()
+    rows = store._exec("SELECT id FROM purchase_order WHERE status = 'ordered' AND data LIKE ?",
+                       ('%"amendments"%',))[0]
+    n = 0
+    for r in rows:
+        o = store.get_order(r["id"]) or {}
+        if _get(o.get("id") or "") is None:
+            continue  # the order itself isn't queued yet: reconcile() does that first
+        for a in o.get("amendments") or []:
+            if n >= limit:
+                return n
+            if a.get("status") in CHANGED and _get(change_key(o["id"], a["id"])) is None \
+                    and enqueue_change(o, a) is not None:
+                n += 1
+                store.audit("order.erp_reconciled", "erp-adapter", "system", o["id"], o.get("buyer"),
+                            {"order_id": o["id"], "amendment_id": a["id"], "reason": "amendment changed the "
+                             "order but its change message was not in the ERP outbox: queued by the sweep"})
+    return n
 
 
 def attempt(order_id: str) -> dict | None:
@@ -393,7 +422,8 @@ def process_due(limit: int = 50) -> int:
     """Queue what is missing (reconcile), then send or retry what is due (the background sweep calls this at
     startup and every minute). Returns how many were attempted."""
     reconcile()
-    rows = store._exec("SELECT order_id, data FROM erp_outbox WHERE status IN ('pending', 'failed') AND next_ts <= ? "
+    reconcile_changes()
+    rows =store._exec("SELECT order_id, data FROM erp_outbox WHERE status IN ('pending', 'failed') AND next_ts <= ? "
                        "ORDER BY next_ts LIMIT ?", (_clock(), limit))[0]
     n = 0
     for r in rows:
