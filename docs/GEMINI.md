@@ -137,9 +137,9 @@ key; the gateway only ever sees that signed credential.
   possible" is listed as something a mandate can't do (organic is a package label, and a preference can't be a
   pass / hold / refuse rule); weekly budgets, origin and brands likewise.
 - **Works offline.** Without a key (or if the call fails) a small rule-based parser handles common Finnish and
-  English phrasings, so the page and the tests need no model. `evals/draft_cases.yaml` has 19 sentences, including
+  English phrasings, so the page and the tests need no model. `evals/draft_cases.yaml` has 23 sentences, including
   vague limits, unsupported asks, conflicts and injection attempts; `scripts/draft_eval.py` scores the rule parser
-  (19/19, run in `tests/test_draft.py`) and, with `--provider gemini`, the Gemini path through the same validator.
+  (23/23, run in `tests/test_draft.py`) and, with `--provider gemini`, the Gemini path through the same validator.
   The CI job `draft-eval` runs both ([docs/CI.md](CI.md)). **Gemini 4 Hydrogen: 15/19** in
   [run 43562850006](https://github.com/Zawaer/sous/actions/runs/43562850006) (19 calls, 26,519 tokens in, 2,260
   out, about $0.06; results in `evals/draft_results.gemini.json`). Every miss was caught by the eval, none loosened
@@ -171,6 +171,18 @@ key; the gateway only ever sees that signed credential.
   tokens per run). With the tighter prompt Gemini now gets these right on its own. It avoids gluten (AW), asks
   about the weekly budget, and asks about peanuts instead of adding them. The validator is the guarantee when it
   doesn't.
+- **QA's rule-parser findings, D20 to D23.** These are also validator rules, plus fixes in the parser and prompt:
+  - "Never approve any order above 500 euros" means refuse over 500. If a drafter reads it as "alone up to 500",
+    which would raise the agent's own authority, the validator rewrites it to a hard limit. "Don't approve over
+    500 € yourself, ask me" still means ask above 500.
+  - An allergen the text allows is not avoided: "No peanuts, milk is fine" avoids only AP, and "kaikki käy paitsi
+    kala" avoids only fish. With "no nuts except almonds", AN stays, and the human is asked because the nut family
+    includes almonds.
+  - A preference ("prefer dairy-free when possible") is never a hard avoid or a required claim. It goes to
+    unsupported, with a question asking whether to refuse such products outright.
+
+  [Run 43566010358](https://github.com/Zawaer/sous/actions/runs/43566010358) (d158f4c): rules 23/23 and
+  **Gemini 23/23** (23 calls, 41,773 tokens in, 2,808 out, about $0.08).
 
 ## Run it
 
