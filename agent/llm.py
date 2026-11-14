@@ -56,6 +56,8 @@ PRESETS: dict[str, dict] = {
     # Gemma 4 (open weights, Apache 2.0) served by the Gemini API: no thinking level on this model.
     "gemma": {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai/", "key_env": "GEMINI_API_KEY",
               "model": "gemma-4-31b-it", "reasoning_effort": None,
+              # the Gemini API's Gemma quota is per-minute tokens: unpaced, 12/48 eval cases ended in HTTP 429
+              "min_interval_s": 30.0,
               "where": "Google Gemini API serving Gemma 4 (open-weight model; could run on our own Verda GPU)"},
     # Claude through Anthropic's OpenAI-compatible endpoint. Opus/Haiku 5.5 reject sampling parameters, so no
     # temperature; thinking stays at the model's default (adaptive, effort medium).
