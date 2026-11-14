@@ -9,6 +9,9 @@ One small httpx client covers every provider we use, because they all speak the 
             (also the LLM eval's buyer agent, text + tools; nemotron-3-super-120b-a12b answered 404 to our key)
     verda-selfhosted  $SOUS_SELFHOSTED_URL (our vLLM on a Verda GPU)  SOUS_SELFHOSTED_KEY  $SOUS_SELFHOSTED_MODEL
             (default Qwen/Qwen3-30B-A3B-Instruct-2507)
+    gemma   (the Gemini API's OpenAI endpoint)                        GEMINI_API_KEY           gemma-4-31b-it
+    anthropic https://api.anthropic.com/v1                             ANTHROPIC_API_KEY        claude-opus-5-5
+    openai  https://api.openai.com/v1                                  OPENAI_API_KEY           (set --model)
     local   $LLM_BASE_URL (vLLM, Ollama, llama.cpp server, ...)       LLM_API_KEY (optional)   $LLM_MODEL
 
 LLM_BASE_URL / LLM_API_KEY / LLM_MODEL override any preset; LLM_PROVIDER picks the preset when none is
@@ -50,6 +53,19 @@ PRESETS: dict[str, dict] = {
                          "model": "Qwen/Qwen3-30B-A3B-Instruct-2507", "model_env": "SOUS_SELFHOSTED_MODEL",
                          "reasoning_effort": None,
                          "where": "self-hosted open-weight model, vLLM on our own Verda GPU (Finland)"},
+    # Gemma 4 (open weights, Apache 2.0) served by the Gemini API: no thinking level on this model.
+    "gemma": {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai/", "key_env": "GEMINI_API_KEY",
+              "model": "gemma-4-31b-it", "reasoning_effort": None,
+              "where": "Google Gemini API serving Gemma 4 (open-weight model; could run on our own Verda GPU)"},
+    # Claude through Anthropic's OpenAI-compatible endpoint. Opus/Haiku 5.5 reject sampling parameters, so no
+    # temperature; thinking stays at the model's default (adaptive, effort medium).
+    "anthropic": {"base_url": "https://api.anthropic.com/v1", "key_env": "ANTHROPIC_API_KEY",
+                  "model": "claude-opus-5-5", "reasoning_effort": None, "temperature": None,
+                  "where": "Anthropic API (Claude; US)"},
+    # OpenAI reasoning models take max_completion_tokens and only the default temperature.
+    "openai": {"base_url": "https://api.openai.com/v1", "key_env": "OPENAI_API_KEY", "model": "",
+               "reasoning_effort": "low", "temperature": None, "max_tokens_field": "max_completion_tokens",
+               "where": "OpenAI API (US)"},
     "local": {"base_url": "http://127.0.0.1:8000/v1", "key_env": "LLM_API_KEY", "model": "",
               "reasoning_effort": None, "where": "self-hosted OpenAI-compatible server (e.g. vLLM on a Verda GPU)"},
 }
@@ -64,6 +80,8 @@ PRICES: dict[str, tuple[float, float]] = {
     # NVIDIA API catalog free tier: rate-limited (~40 requests/min), no per-token charge
     "nvidia/nemotron-3-super-120b-a12b": (0.0, 0.0),
     "nvidia/nemotron-3.5-super-vl-120b-a12b": (0.0, 0.0),
+    "claude-opus-5-5": (4.00, 20.00),
+    "claude-haiku-5-5": (0.10, 0.50),
 }
 
 RETRY_STATUS = {408, 409, 425, 429, 500, 502, 503, 504, 529}
@@ -89,6 +107,7 @@ class LLMConfig:
     where: str = ""
     extra_body: dict | None = None  # provider-specific body fields (e.g. NVIDIA's chat_template_kwargs)
     min_interval_s: float = 0.0     # at least this long between request starts (provider rate limits)
+    max_tokens_field: str = "max_tokens"  # OpenAI's reasoning models want max_completion_tokens
 
     @property
     def label(self) -> str:
@@ -124,7 +143,8 @@ def config_from_env(provider: str | None = None, model: str | None = None, env: 
         raise ValueError(f"Set {p.get('base_url_env') or 'LLM_BASE_URL'} for provider {provider!r}.")
     return LLMConfig(provider=provider, base_url=base_url.rstrip("/"),
                      model=model, api_key=env.get("LLM_API_KEY") or env.get(p["key_env"], ""),
-                     reasoning_effort=effort,
+                     reasoning_effort=effort, temperature=p.get("temperature", 0.0),
+                     max_tokens_field=p.get("max_tokens_field", "max_tokens"),
                      price_in=price_in, price_out=price_out, where=p["where"], extra_body=extra or None,
                      min_interval_s=interval)
 
@@ -189,7 +209,7 @@ class ChatClient:
         if c.temperature is not None:
             body["temperature"] = c.temperature
         if c.max_tokens:
-            body["max_tokens"] = c.max_tokens
+            body[c.max_tokens_field] = c.max_tokens
         if c.reasoning_effort:
             body["reasoning_effort"] = c.reasoning_effort
         if c.extra_body:
