@@ -15,7 +15,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from . import account, agent_auth, aimo, allergen_ai, catalog, clock, config, credentials, deadline, erp, exposure, holds, notify, options as OPT, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
-from .mandate import Mandate, evaluate
+from .mandate import Mandate, evaluate, product_refusals
 
 
 class GatewayError(Exception):
@@ -461,9 +461,17 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
         # Sized to known stock, even for one named product: what isn't in stock goes to `uncovered` (and options),
         # never into a line a human could approve for stock that doesn't exist. Only the type asked for is
         # chosen silently (coffee milk is not milk).
-        pool, off_type, mismatch = _type_pool(offers, item.product_type)
+        # Mandate-aware: a candidate the mandate refuses for what it is (an avoided allergen, a category or claim it
+        # doesn't allow, a held product) is left out when another candidate can be ordered, so it can't block the
+        # whole quote; it is listed in alternatives_considered with the reason. With no other orderable candidate
+        # it stays in, and the mandate check (run on the chosen lines as always) refuses it by name.
+        refused = {o["product_id"]: product_refusals(mandate, o, now) for o in offers} if mandate else {}
+        refused = {pid: fs for pid, fs in refused.items() if fs}
+        screened = [o for o in offers if o["product_id"] not in refused]
+        cands = screened if refused and any(o["orderable"] for o in screened) else offers
+        pool, off_type, mismatch = _type_pool(cands, item.product_type)
         chosen, uncovered = Q.plan(item.amount, unit, pool, sized)
-        if not chosen and (blocked := [o for o in offers if not o["orderable"]]):
+        if not chosen and (blocked := [o for o in cands if not o["orderable"]]):
             # Nothing orderable for this need: keep the products that can't be ordered as (unorderable) lines,
             # so the mandate engine checks them and the refusal names the real reasons (allergen, undeliverable,
             # cut-off), not just "nothing orderable". Same as for a single named product: lines, no gap.
@@ -477,17 +485,15 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
                 l["substitute_for"] = item.substitute_for
             lines.append(l)
         picked = {l["product_id"] for l in chosen}
-        considered += [{"product_id": o["product_id"], "name": o["name"], "item_index": item_index,
-                        "comparison_price": o["comparison_price"], "orderable": o["orderable"],
-                        "why_not": [r for r in [off_type.get(o["product_id"])] if r]
-                        + [i["message"] for i in o["issues"] if i["severity"] == "blocking"]
-                        or ["More expensive per unit than the chosen option."]}
-                       for o in sorted(offers, key=lambda o: (o["product_id"] not in off_type, Q.rank_key(o)))
+        considered += [_considered(o, item_index, off_type.get(o["product_id"]), refused.get(o["product_id"]),
+                                   chosen)
+                       for o in sorted(offers, key=lambda o: (o["product_id"] not in refused,
+                                                              o["product_id"] not in off_type, Q.rank_key(o)))
                        if o["product_id"] not in picked][:6]
         if uncovered > 0:
             gaps.append({"item": item.model_dump(), "item_index": item_index, "uncovered": uncovered, "unit": item.unit})
         if sized and item_index not in skip_options and OPT.trouble(chosen, uncovered, req.delivery_date):
-            troubled.append((item_index, item, [o for o in offers if o["product_id"] not in off_type], chosen))
+            troubled.append((item_index, item, [o for o in cands if o["product_id"] not in off_type], chosen))
 
     # Lines that can't be ordered are shown for their reasons but never bought, so they cost nothing.
     total_ex = round(sum(l["line_total_ex_vat"] or 0 for l in lines if l["orderable"]), 2)
@@ -536,6 +542,26 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
                     for l in lines], "uncovered": gaps, "preview": body.get("mandate_preview", {}).get("outcome"),
                  "valio_api_calls": body["valio_api_calls"], "rationale": body.get("rationale")})
     return {"quote": body, "jws": jws, **({"approver_view": sidecar} if sidecar else {})}
+
+
+def _considered(o: dict, item_index: int, off_type: str | None, refusals: list | None, chosen: list[dict]) -> dict:
+    """One alternatives_considered entry: why this candidate wasn't chosen. A product the mandate refuses is never
+    shown as orderable; 'more expensive per unit' only when both prices per unit are known in the same unit."""
+    why = ([off_type] if off_type else []) + [f"{x.message} (rule {x.rule})" for x in refusals or []] \
+        + [i["message"] for i in o["issues"] if i["severity"] == "blocking"]
+    if not why:
+        mine = o.get("comparison_price") or {}
+        best = next((l.get("comparison_price") or {} for l in chosen if l.get("orderable")), {})
+        if mine.get("ex_vat") is not None and best.get("ex_vat") is not None and mine.get("per") == best.get("per"):
+            why = ["More expensive per unit than the chosen option."]
+        else:
+            why = ["Price per unit not comparable with the chosen option (no price per L/KG in the same unit), "
+                   "so it was not chosen."]
+    out = {"product_id": o["product_id"], "name": o["name"], "item_index": item_index,
+           "comparison_price": o["comparison_price"], "orderable": o["orderable"] and not refusals, "why_not": why}
+    if refusals:
+        out["mandate_refuses"] = [x.rule for x in refusals]
+    return out
 
 
 def _type_pool(offers: list[dict], hint: str | None) -> tuple[list[dict], dict[str, str], dict[str, str]]:

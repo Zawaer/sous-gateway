@@ -374,3 +374,31 @@ def evaluate(
     if outcome in ("silent", "notify"):
         add("mandate.ok", outcome, f"Within mandate {mandate.id}: €{total:,.2f} ex VAT, all checks passed.")
     return outcome, f
+
+
+# Rules that refuse a product for what it is, whatever the quantity, date or total: the planner leaves such a
+# candidate out when another one can be ordered (sous/service.py), so one bad cheapest product doesn't block a
+# quote that a safe candidate could fill. The full evaluate() still runs on the chosen lines.
+PRODUCT_RULES = ("product.held", "product.category", "product.claims",
+                 "allergen.contains", "allergen.may_contain", "allergen.unknown")
+
+
+def product_refusals(mandate: Mandate, line: dict, now: datetime) -> list[Finding]:
+    """The findings with which `mandate` would block this product on its own (PRODUCT_RULES at tier block), decided
+    by evaluate() itself so the planner and the check can't disagree. Allergen messages also say what the mandate
+    avoids: 'Bread contains wheat (UW); Test school avoids cereals containing gluten (AW).'"""
+    _, found = evaluate(mandate, mandate.agent_id, [line], requested_date=now.date(), now=now)
+    out = []
+    for x in found:
+        if x.outcome != "block" or x.rule not in PRODUCT_RULES:
+            continue
+        if x.rule in ("allergen.contains", "allergen.may_contain"):
+            st = catalog.allergen_status(catalog.get(line["product_id"]) or {}, mandate.avoid_allergens,
+                                         mandate.allow_may_contain)
+            what = ", ".join(f"{catalog.ALLERGENS.get(c, c)} ({c})" for c in st["codes"])
+            avoid = ", ".join(f"{catalog.ALLERGENS.get(c, c)} ({c})" for c in mandate.avoid_allergens)
+            verb = "contains" if x.rule == "allergen.contains" else "may contain"
+            x = x.model_copy(update={"message": f"{readable_name(line['name'])} {verb} {what}; "
+                                                f"{mandate.buyer} avoids {avoid}."})
+        out.append(x)
+    return out
