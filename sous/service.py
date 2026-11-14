@@ -786,12 +786,15 @@ def _receipt(order: dict) -> str:
                         "sous-order+jws")
 
 
-def decide(order_id: str, approver: str, approve: bool, note: str | None = None, authority: str | None = None) -> dict:
+def decide(order_id: str, approver: str, approve: bool, note: str | None = None, authority: str | None = None,
+           evidence: dict | None = None) -> dict:
     """`approver` is the name the human gives (free text); `authority` is which credential let them decide
-    ("global approver code", "sandbox approver SBX-..."), recorded alongside so the audit shows authority."""
+    ("global approver code", "sandbox approver SBX-...", "passkey <name> (credential …last8)"), recorded alongside
+    so the audit shows authority. `evidence`: a verified passkey assertion (sous/passkey.py), stored in the audit
+    event; mandates with approval_method "passkey" can only be approved with one."""
     expire_if_overdue(store.get_order(order_id))
     with _order_lock:
-        o, mandate = _decide(order_id, approver, approve, note, authority)
+        o, mandate = _decide(order_id, approver, approve, note, authority, evidence)
     notify.send("order.decided", o, mandate)  # FYI to the agent side
     return erp.submit(o) if o["status"] == "ordered" else o
 
@@ -912,7 +915,7 @@ def _approval_blocker(o: dict, mandate: Mandate, now: datetime) -> tuple[str, st
 
 
 def _decide(order_id: str, approver: str, approve: bool, note: str | None,
-            authority: str | None = None) -> tuple[dict, Mandate]:
+            authority: str | None = None, evidence: dict | None = None) -> tuple[dict, Mandate]:
     o = store.get_order(order_id)
     if not o:
         raise GatewayError("order_not_found", f"No order {order_id}.", 404)
@@ -925,6 +928,10 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
         raise GatewayError("not_pending", f"Order {order_id} is {o['status']}, not waiting for approval.", 409)
     now = _now()
     mandate = _mandate(o["mandate_id"])
+    if approve and mandate.approval_method == "passkey" and not evidence:
+        raise GatewayError("passkey_required", f"Mandate {mandate.id} requires passkey approval: approve order "
+                           f"{order_id} with a registered passkey (POST /orders/{order_id}/approve/options, then "
+                           "/approve/passkey; page /ui/approve.html). The approver code can still reject it.", 403)
     holds.invalidate()  # under _order_lock, like holds.create: _approval_blocker sees every hold made so far
     status = "ordered" if approve else "rejected"
     reason = note
@@ -933,6 +940,8 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
     o["status"] = status
     o["approval"] = {"by": approver, "authority": authority, "approved": approve, "note": note, "at": now.isoformat(timespec="milliseconds"),
                      "result_reason": reason, "clock": clock.info(now)}
+    if evidence:
+        o["approval"]["passkey"] = {k: evidence[k] for k in ("credential_id", "challenge", "rp_id", "user_verified")}
     o["updated_at"] = now.isoformat(timespec="milliseconds")
     o["approval_url"] = None
     o["receipt_jws"] = _receipt(o)
@@ -943,7 +952,7 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
                            f"Order {order_id} is {current.get('status')}, not waiting for approval.", 409)
     store.audit("order.approved" if approve else "order.rejected_by_human", approver, "human", order_id,
                 o["buyer"], {"order_id": order_id, "note": note, "resulting_status": status, "reason": reason,
-                 "authority": authority})
+                 "authority": authority, **({"passkey": evidence} if evidence else {})})
     return o, mandate
 
 

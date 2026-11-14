@@ -75,6 +75,10 @@ class Mandate(BaseModel):
     unusual_quantity_factor: float | None = Field(
         3.0, gt=1, description="Ask when a product family's quantity is more than this many times the median of the "
         "buyer's past orders of it (at least 3 past orders); None = off")
+    approval_method: Literal["any", "passkey"] = Field(
+        "any", description="How a held order may be approved: 'any' (approver code, sandbox approver token or a "
+        "passkey) or 'passkey' (only a registered approver's passkey, bound to the exact order; rejecting still "
+        "works with the code)")
     sandbox: str | None = Field(None, description="Judge sandbox id (e.g. SBX-7Q2K) for a visitor's copy; see sous/sandbox.py")
 
     @field_validator("max_comparison_price_eur", "comparison_price_caps")

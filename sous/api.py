@@ -540,6 +540,10 @@ def reject(order_id: str, d: Decision, authority: str = Depends(require_approver
     return S.decide(order_id, d.by, False, d.note, authority=authority)
 
 
+from .passkey_routes import router as passkey_router  # noqa: E402  passkey approval (sous/passkey.py)
+app.include_router(passkey_router)
+
+
 # --- rule register ----------------------------------------------------------
 
 @app.get("/rules", tags=["rules"])

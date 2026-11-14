@@ -224,6 +224,18 @@ def _build() -> list[dict]:
         _r("agent_cannot_approve", "refusal", ["block"], "gateway", "An agent credential was presented to approve "
            "or reject an order. Only a human decides held orders; the attempt is refused and audited "
            "(agent.approval_attempt_refused). The MCP server has no approve tool at all.", None, status=403),
+        _r("passkey_required", "refusal", ["block"], "buyer", "The mandate requires passkey approval: a held order "
+           "can only be approved with a registered approver's passkey, signed over this exact order (id, quote, "
+           "total, lines, approve_by). The shared approver code can still reject it.", "approval_method",
+           status=403),
+        _r("passkey_invalid", "refusal", ["block"], "gateway", "A passkey approval that doesn't verify: wrong "
+           "signature, a challenge issued for another order or action, a challenge already used (replay), an "
+           "expired challenge, an order that changed since the challenge, or a passkey not registered for this "
+           "order's mandate or buyer.", None, status=403),
+        _r("passkey_not_registered", "refusal", ["block"], "gateway", "Passkey approval was asked for an order "
+           "whose mandate and buyer have no registered passkey; register one first (POST "
+           "/approvers/register/options, with the approver code or the sandbox's approver token).", None,
+           status=409),
         _r("quote_used", "refusal", ["block"], "gateway", "A quote can be ordered once: a second order on it (a "
            "retry with a new key, or many agents racing) is refused. Concurrent orders are serialised.",
            None, status=409),
