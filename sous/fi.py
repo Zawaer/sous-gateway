@@ -175,6 +175,9 @@ AVAILABILITY = {
     "UNIT_MISMATCH": "Tarve on litroina, mutta tuotetta myydään painon mukaan (tai toisin päin). Sous ei arvaa "
                      "muunnosta.",
     "CONTENT_UNKNOWN": "Sous ei tiedä, paljonko yhdessä pakkauksessa on, joten määrää ei voi laskea.",
+    "OFFER_VAT_UNKNOWN": "Valio Aimon erikoistarjouksella hinnoitellulle riville ei tullut Valiolta alv-kantaa eikä "
+                         "verollista hintaa, josta sen voisi laskea. Sous ei koskaan oleta 0 %:a, joten rivi "
+                         "estetään (sous/offers.py).",
 }
 
 RULES = {
