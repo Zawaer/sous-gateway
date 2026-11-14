@@ -399,6 +399,7 @@ function renderQuote(quote) {
       line.orderable ? money(line.line_total_ex_vat, quote.currency) : 'Unavailable for this order',
     ];
     row.append(element('small', details.filter(Boolean).join(' · ')));
+    if (line.origin_name) row.append(element('small', `Origin: ${line.origin_name} (supplier declared)`));
     if (line.unit_note) row.append(element('small', line.unit_note));
     for (const issue of line.issues) row.append(element('small', issue.message));
     list.append(row);
