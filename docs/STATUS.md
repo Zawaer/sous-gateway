@@ -22,8 +22,8 @@ Things that exist on `main` but not on production are features of the code, not 
 
 - **Mock API dates.** Valio's mock has fixed dates; after Sun 15.11 17:00 every Stock product reads as cut-off passed. The demo clock (off by default, disclosed when on) is the workaround.
 - **Identity is demo-grade.** One shared approver code for humans; agents hold bearer tokens, not keys. See Next.
-- **No real order API.** `ordered` means accepted and signed by Sous; nothing is sent to Valio Aimo's order system (the challenge provides none).
-- **List prices only.** The mock ignores the customer number, so there are no contract prices.
+- **No real order API.** `ordered` means accepted and signed by Sous. Each ordered order is mapped to an SAP ORDERS05-shaped document and handed through an outbox with retries (sous/erp.py) to `SOUS_ERP_URL`, which defaults to an in-process stub: nothing reaches Valio Aimo's real order system (the challenge provides none). Customer accounts (credit limit, payment block, delivery days; sous/account.py) are a mock seeded per demo buyer. See [INTEGRATION.md](INTEGRATION.md).
+- **List prices only.** The mock ignores the customer number, so there are no contract prices ([INTEGRATION.md](INTEGRATION.md), Prices).
 - **Evals use our own cases.** The scripted and LLM cases, the search-quality queries and the vision pages were written by the team while building; none is a held-out set from Valio Aimo or real kitchens.
 - **Fixed: authorization gap (QA board 02:20Z/02:24Z).** `GET /mandates/{id}/suggestions` and substitute suggestions with a `mandate_id` (REST and MCP) are now read-scoped like `GET /mandates/{id}`, checked before any mandate or product lookup: 401 `agent_auth_required` for any non-public id when no credential grants anything, 404 when a credential grants something else, so a private mandate's existence isn't revealed (PROTOCOL section 22, tests/test_read_scopes.py). Deployed to staging (8a7ee74); prod pending.
 - **Vision pages are rendered by us** (`scripts/vision_make_images.py`), not photos from real kitchens.

@@ -250,6 +250,8 @@ def create(ip: str, base_url: str = "") -> dict:
         m = Mandate(**{**t.model_dump(), "id": mandates[name], "agent_id": data["agents"][name],
                        "buyer": data["buyers"][name], "valid_until": valid_until, "revoked": False,
                        "require_agent_auth": True, "sandbox": sid,
+                       # its own mock customer account (sous/account.py), so sandbox credit is never the demo buyer's
+                       "customer_number": t.customer_number and f"{t.customer_number}-{sid}",
                        "demo_public": False})  # private to the sandbox's token holders (sous/access.py)
         S.issue_mandate(m, False)
         token = agent_auth.mint(m, f"sandbox {sid}", token=token)["token"]

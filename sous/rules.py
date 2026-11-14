@@ -87,6 +87,20 @@ def _build() -> list[dict]:
            "Valio Aimo has paused agent ordering for every buyer or for this buyer (GET /agent-ordering): no "
            "order goes through and no held order can be approved until Valio Aimo resumes it. Search and "
            "quotes still work.", None),
+        # --- the customer account (sous/account.py; mock customer master, SAP KNA1/KNVV + credit in production)
+        _r("account.payment_block", "finding", ["block"], "valio",
+           "Valio Aimo has put a payment block on the customer account (e.g. overdue invoices): no order goes "
+           "through and no held order can be approved into an order until it is lifted.", "customer_number"),
+        _r("account.credit_limit", "finding", ["ask"], "valio",
+           "The order (incl. VAT) is more than the credit left on the customer account: the credit limit minus the "
+           "open balance and the account's Sous orders still to be delivered. A human confirms it.",
+           "customer_number"),
+        _r("account.delivery_day", "finding", ["block"], "valio",
+           "The delivery date isn't one of the customer's delivery days, or the cut-off of the customer's delivery "
+           "route for that date has passed.", "customer_number"),
+        _r("account.unknown", "finding", ["block"], "gateway",
+           "No customer account for the mandate's buyer. Only when the gateway runs with SOUS_REQUIRE_ACCOUNT=1 "
+           "(production); otherwise a buyer without an account gets no account checks.", "customer_number"),
         # --- money
         _r("spend.hard_limit", "finding", ["block"], "buyer",
            "An order above the hard limit (ex VAT) is refused outright.", "hard_limit_eur"),

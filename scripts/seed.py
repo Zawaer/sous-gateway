@@ -47,6 +47,7 @@ MANDATES = [
     Mandate(
         id="M-HOTEL-AURORA",
         buyer="Hotel Aurora, Helsinki",
+        customer_number="0000104711",
         agent_id="aurora-purchasing-agent",
         demo_public=True,
         issued_by="Anna Virtanen, F&B manager",
@@ -66,6 +67,7 @@ MANDATES = [
     Mandate(
         id="M-HOSPITAL-KITCHEN",
         buyer="Meilahti hospital central kitchen",
+        customer_number="0000207315",
         agent_id="meilahti-kitchen-agent",
         demo_public=True,
         issued_by="Mikko Laine, head of catering",
@@ -85,6 +87,7 @@ MANDATES = [
     Mandate(
         id="M-SCHOOL-ESPOO",
         buyer="Espoo school kitchens",
+        customer_number="0000309822",
         agent_id="espoo-school-agent",
         demo_public=True,
         issued_by="Liisa Korhonen, food services",
@@ -101,6 +104,7 @@ MANDATES = [
     Mandate(
         id="M-KAARNA-CATERING",
         buyer="Kaarna Catering Oy, Espoo",
+        customer_number="0000411208",
         agent_id="kaarna-event-agent",
         demo_public=True,
         issued_by="Laura Niemi, kitchen manager",
@@ -123,6 +127,7 @@ MANDATES = [
     Mandate(
         id="M-HOTEL-AURORA-SECURE",
         buyer="Hotel Aurora, Helsinki",
+        customer_number="0000104711",
         agent_id="aurora-secure-agent",
         demo_public=True,
         issued_by="Anna Virtanen, F&B manager",
@@ -145,7 +150,7 @@ MANDATES = [
 
 # Demo policy fields the seed brings existing deployments up to date on (re-signed at startup when they differ).
 POLICY_FIELDS = ("substitutions", "first_time_products", "usual_products", "weekly_limit_eur",
-                 "max_comparison_price_eur", "comparison_price_caps")
+                 "max_comparison_price_eur", "comparison_price_caps", "customer_number")
 
 
 def _print_credential(mid: str, cred: dict) -> None:

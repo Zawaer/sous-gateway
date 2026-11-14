@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
-from . import access, agent_auth, aimo, catalog, clock, config, exposure, holds, pause, proof, quote as Q, rules, sandbox, service as S, signing, standing, store
+from . import access, account, agent_auth, aimo, catalog, clock, config, erp, exposure, holds, pause, proof, quote as Q, rules, sandbox, service as S, signing, standing, store
 from .mandate import Mandate
 from .mcp_server import mcp
 
@@ -53,6 +53,10 @@ async def _sweep_overdue(every: float = 60):
         try:
             await asyncio.to_thread(S.sweep_overdue)
         except Exception:  # noqa: BLE001 - reads expire lazily too; never kill the app over the sweep
+            pass
+        try:  # orders whose hand-off to Valio's ERP failed are retried from the outbox (sous/erp.py)
+            await asyncio.to_thread(erp.process_due)
+        except Exception:  # noqa: BLE001
             pass
         await asyncio.sleep(every)
 
@@ -470,6 +474,48 @@ def list_orders(status: Literal["ordered", "pending_approval", "refused", "rejec
 def get_order(order_id: str):
     """The order. agent_claim labels the agent's rationale: its own words, unverified, never used by a rule."""
     return access.label_order(S.get_order(order_id))
+
+
+@app.get("/orders/{order_id}/erp", tags=["ordering"], dependencies=[Depends(_read_order)])
+def order_erp(order_id: str):
+    """The ORDERS05-shaped document handed to Valio Aimo's ERP for this order (a stub by default) and its status:
+    pending, sent, confirmed or failed (retried from the outbox). 404 erp_not_sent: not ordered, or ordered
+    before the adapter existed. See docs/INTEGRATION.md."""
+    S.get_order(order_id)
+    if (d := erp.document(order_id)) is None:
+        raise S.GatewayError("erp_not_sent", f"Order {order_id} has not been handed to the ERP.", 404)
+    return d
+
+
+@app.get("/accounts/{customer_number}", tags=["ordering"], dependencies=[Depends(require_global_approver)])
+def get_account(customer_number: str):
+    """Valio Aimo's (mock) customer account: credit limit, open balance and credit left, payment block, delivery
+    days and route (sous/account.py). Global approver only."""
+    a = account.backend.get(customer_number)
+    if a is None:
+        raise S.GatewayError("account_not_found", f"No customer account {customer_number}.", 404)
+    return {**a.model_dump(mode="json"), "credit": account.credit(a, clock.now().astimezone(config.TZ).date())}
+
+
+class AccountUpdate(BaseModel):
+    credit_limit_eur: float | None = None
+    open_balance_eur: float | None = None
+    payment_block: bool | None = None
+    payment_block_reason: str | None = Field(None, max_length=200)
+    delivery_days: list[Literal["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]] | None = None
+
+
+@app.patch("/accounts/{customer_number}", tags=["ordering"], dependencies=[Depends(require_global_approver)])
+def patch_account(customer_number: str, u: AccountUpdate):
+    """Change the MOCK customer account (demo of account.credit_limit / payment_block / delivery_day). In
+    production these facts come from Valio's customer master and credit management, not from this call."""
+    a = account.backend.get(customer_number)
+    if a is None:
+        raise S.GatewayError("account_not_found", f"No customer account {customer_number}.", 404)
+    changes = u.model_dump(exclude_unset=True)
+    a = account.backend.put(account.Account(**{**a.model_dump(), **changes}))
+    store.audit("account.updated", "valio", "human", customer_number, a.buyer, {"changes": changes})
+    return a.model_dump(mode="json")
 
 
 @app.get("/orders/{order_id}/history", tags=["audit"], dependencies=[Depends(_read_order)])

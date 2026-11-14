@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import agent_auth, aimo, allergen_ai, catalog, clock, config, credentials, deadline, exposure, holds, notify, options as OPT, quote as Q, sandbox, signing, store, substitutes, usual
+from . import account, agent_auth, aimo, allergen_ai, catalog, clock, config, credentials, deadline, erp, exposure, holds, notify, options as OPT, quote as Q, sandbox, signing, store, substitutes, usual
 from .mandate import Mandate, evaluate
 
 
@@ -641,6 +641,8 @@ def _evaluate(mandate: Mandate, agent_id: str, q: dict, now: datetime, extra_fin
         u = g.get("unit") or (g.get("item") or {}).get("unit") or "SALES_UNIT"
         uncovered[u] = uncovered.get(u, 0.0) + g["uncovered"]
     subs = {l["product_id"]: l["substitute_for"] for l in q["lines"] if l.get("substitute_for")}
+    # Valio's own facts about the customer (credit, payment block, delivery days): sous/account.py
+    extra_findings = list(extra_findings or []) + account.findings(mandate, q, now)
     return evaluate(mandate, agent_id, q["lines"], requested_date=date.fromisoformat(q["requested_delivery_date"]),
                     substitute_for=subs, uncovered=uncovered,
                     spent_today_eur=store.spent_today(mandate.id, now.date().isoformat()), now=now,
@@ -694,7 +696,7 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
                                       clean_rationale(rationale))
     if mandate is not None and order["decision"]["outcome"] in ("notify", "ask"):
         notify.send(f"order.{order['decision']['outcome']}", order, mandate)  # FYI / approval request; never blocks
-    return order
+    return erp.submit(order) if order["status"] == "ordered" else order  # to Valio's ERP via the outbox (erp.py)
 
 
 def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: str | None,
@@ -790,7 +792,7 @@ def decide(order_id: str, approver: str, approve: bool, note: str | None = None,
     with _order_lock:
         o, mandate = _decide(order_id, approver, approve, note, authority)
     notify.send("order.decided", o, mandate)  # FYI to the agent side
-    return o
+    return erp.submit(o) if o["status"] == "ordered" else o
 
 
 def expire_if_overdue(o: dict | None, now: datetime | None = None) -> dict | None:
@@ -948,7 +950,7 @@ def get_order(order_id: str) -> dict:
     o = expire_if_overdue(store.get_order(order_id))
     if not o:
         raise GatewayError("order_not_found", f"No order {order_id}.", 404)
-    return o
+    return erp.attach(o)
 
 
 # --- substitutes ------------------------------------------------------------

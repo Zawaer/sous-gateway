@@ -27,6 +27,10 @@ Tier = Literal["silent", "notify", "ask", "block"]
 class Mandate(BaseModel):
     id: str
     buyer: str = Field(description="Organisation the agent buys for")
+    customer_number: str | None = Field(
+        None, max_length=64, description="Valio Aimo customer number of the buyer (customer master; SAP KUNNR in "
+        "production): which customer account's credit, payment block and delivery days apply (sous/account.py). "
+        "None = looked up by buyer name")
     agent_id: str = Field(description="The agent this mandate is issued to")
     issued_by: str = Field(description="The human who issued the mandate")
     valid_until: datetime | None = None
