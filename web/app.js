@@ -114,7 +114,12 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
 // Buyer names without the "(sandbox SBX-…)" suffix (the banner already says it).
 const bn = (b) => String(b ?? "").replace(/\s*\(sandbox SBX-[A-Z0-9]+\)$/i, "");
 // Engine messages say "€1,560.00"; show money the same way as the rest of the UI ("1 560,00 €").
-const msg = (t) => esc(t).replace(/€(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)/g,
+// ... and ALL-CAPS catalogue names inside them ("BRAVO CHEF 10KG CRUSHED TOMATOES") in sentence case:
+// a run of 3+ upper-case words, at least two of them real words, so codes like "UHT" or "AM, AN" stay.
+const CAPS_RUN = /\b[A-ZÅÄÖ0-9][A-ZÅÄÖ0-9.,%/&'-]*(?:\s+[A-ZÅÄÖ0-9][A-ZÅÄÖ0-9.,%/&'-]*){2,}\b/g;
+const decap = (t) => t.replace(CAPS_RUN, (run) =>
+  (run.match(/\b[A-ZÅÄÖ]{3,}\b/g) || []).length >= 2 ? run.charAt(0) + run.slice(1).toLowerCase() : run);
+const msg = (t) => decap(esc(t)).replace(/€(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)/g,
   (_, n) => eur(parseFloat(n.replace(/,/g, ""))));
 // SAP sales units -> words; ALL-CAPS catalogue names -> sentence case.
 const UNIT = { ST: "pcs", KPL: "pcs", PRK: "packs", KI: "cartons", PSS: "bags", BOT: "bottles", PLO: "bottles", RAS: "tins", SK: "cases" };
@@ -476,7 +481,7 @@ async function openOrder(id) {
     <div class="big">${eur(o.total_ex_vat)} <span class="muted small">ex VAT · ${eur(o.total_inc_vat)} incl.</span></div>
     ${claimBlock(o)}
     ${o.status === "pending_approval" ? `<div class="ask-summary">
-      <p>${esc(((d.findings || []).find((f) => f.outcome === "ask") || {}).message || "Held by the mandate for a human decision.")}</p>
+      <p>${msg(((d.findings || []).find((f) => f.outcome === "ask") || {}).message || "Held by the mandate for a human decision.")}</p>
       ${earliestCutoff(o) ? `<p class="small">${decideBy(earliestCutoff(o))}</p>` : ""}</div>` : ""}
     <dl class="kv small">
       <dt>Agent</dt><dd class="mono">${esc(o.agent_id)}</dd>
