@@ -204,3 +204,10 @@ def test_rename_compat_env_and_legacy_jws(monkeypatch):
     legacy = signing.sign({"id": "M-1"}, "valtakirja-mandate+jws")
     assert signing.verify(legacy, typ="sous-mandate+jws") == {"id": "M-1"}
     assert signing.verify(signing.sign({"id": "Q"}, "sous-quote+jws"), typ="sous-mandate+jws") is None
+
+
+def test_name_pack_count_not_multiplied_twice():
+    """'4x1kg' sold per KI of 4 bags is 4 kg per KI, not 16 (no comparison price to cross-check)."""
+    p = product(names={"fi": "Paulig Presidentti 4x1kg kahvipavut", "en": "", "sv": ""},
+                sales_unit="KI", base_unit="BAG", units={"BAG": 1.0, "KI": 4.0}, size_from_name=(4.0, "KG"))
+    assert Q.content_per_sales_unit(p, None)[:2] == (4.0, "KG")

@@ -36,6 +36,16 @@ def _dt(s: str | None) -> datetime | None:
     return d if d.tzinfo else d.replace(tzinfo=config.TZ)
 
 
+def _name_pack_count(product: dict) -> int | None:
+    """The N in an "N x size" pack written in the product name, if any."""
+    names = product.get("names") or {}
+    for text in (names.get("fi"), names.get("en"), product.get("name")):
+        for m in catalog._SIZE_RE.finditer(text or ""):
+            if m.group(1):
+                return int(m.group(1))
+    return None
+
+
 def content_per_sales_unit(product: dict, price: dict | None) -> tuple[float, str, str] | None:
     """How many L or KG one sales unit holds: (amount, unit, source).
 
@@ -48,6 +58,9 @@ def content_per_sales_unit(product: dict, price: dict | None) -> tuple[float, st
         size, unit = product["size_from_name"]
         units = product["units"]
         factor = units.get(product["sales_unit"], 1.0) / units.get(product["base_unit"], 1.0)
+        # "4x1kg" sold per KI of 4 bags: the name already describes the whole sales unit; don't multiply again.
+        if factor > 1 and _name_pack_count(product) == round(factor):
+            factor = 1.0
         from_name = (size * factor, unit)
     from_price = None
     if price and not price.get("error") and price.get("comparisonUnit"):
