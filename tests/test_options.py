@@ -389,6 +389,8 @@ def test_single_product_past_cutoff_gets_substitute_and_next_date_options(monkey
     cutoff_passed_on_sunday(monkeypatch, [("S", "better", "compatible", ["milk drink"])])
     q = quote(["A"], day=SUN)["quote"]
     assert q["mandate_preview"]["outcome"] == "block"
+    # nothing orderable: the orderable total is 0, the indicative total still prices the line (100 L x EUR 1)
+    assert q["total_ex_vat"] == 0 and q["indicative_total_ex_vat"] == 100.0
     by_kind = {o["kind"]: o for o in q["options"]}
     assert kinds(q["options"]) == ["next_date", "substitute"]  # both later than Sunday: same product first
     nxt = by_kind["next_date"]

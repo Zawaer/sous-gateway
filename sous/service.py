@@ -496,8 +496,10 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
         "currency": "EUR",
         "items": [item.model_dump() for item in req.items],
         "lines": lines,
-        "total_ex_vat": total_ex,
+        "total_ex_vat": total_ex,  # the orderable total: what placing this quote would charge
         "total_inc_vat": total_inc,
+        # every line's price, unorderable ones too: what the need would cost, for reference only
+        "indicative_total_ex_vat": round(sum(l["line_total_ex_vat"] or 0 for l in lines), 2),
         "uncovered": gaps,
         "alternatives_considered": considered,
         "valio_api_calls": {k: aimo.stats[k] - before[k] for k in aimo.stats},

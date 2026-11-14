@@ -588,7 +588,7 @@ function flowSteps(o, q, searches, events) {
     q?.seeded ? `<span class="claim-warn" style="color:var(--ink-80)">Sandbox example: ${esc(q.seeded.note || "priced from reference prices stored in the gateway, not a live Valio Aimo quote.")}</span>
       Signed quote <span class="mono">${esc(q.id)}</span>, ${eur(q.total_ex_vat)} ex VAT.`
     : q ? `Live price and availability${calls != null ? ` (${calls ? `${calls} Valio API call${calls === 1 ? "" : "s"}` : "from the gateway's short-lived cache, 0 Valio API calls"})` : ""} →
-      signed quote <span class="mono">${esc(q.id)}</span>, ${eur(q.total_ex_vat)} ex VAT, valid until ${when(q.expires_at)}.
+      signed quote <span class="mono">${esc(q.id)}</span>, orderable total ${eur(q.total_ex_vat)} ex VAT${q.indicative_total_ex_vat != null && q.indicative_total_ex_vat !== q.total_ex_vat ? ` (indicative ${eur(q.indicative_total_ex_vat)} incl. lines that can't be ordered)` : ""}, valid until ${when(q.expires_at)}.
       ${(q.lines || []).map((l) => `Chose ${esc(l.quantity)} × ${esc(pname(l.name))}${l.logistic_model ? ` (${esc(l.logistic_model)})` : ""}.`).join(" ")}
       ${skipped.length ? `Passed over ${skipped.length}: ${skipped.slice(0, 2).map((s) => `${esc(pname(s.name))} (${esc(((s.why_not || [])[0] || "").replace(/\.$/, ""))})`).join("; ")}${skipped.length > 2 ? ` and ${skipped.length - 2} more` : ""}.` : ""}
       ${gaps.length ? `<span style="color:var(--ask)">Could not cover ${gaps.map((g) => `${esc(g.uncovered)} ${esc(g.unit || "")}${g.item?.note ? ` of “${esc(g.item.note)}”` : ""}`).join(", ")}: nothing among its candidates can be delivered in time.</span>` : ""}`

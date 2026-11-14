@@ -143,7 +143,8 @@ Response: `{"quote": {...}, "jws": "<compact JWS of quote>"}`. Quote fields:
 | `items[]` | The requested items, signed with the quote, so a buyer can match each line to its need. |
 | `currency` | `EUR` |
 | `lines[]` | One per chosen product (below). |
-| `total_ex_vat`, `total_inc_vat` | Sums of line totals. |
+| `total_ex_vat`, `total_inc_vat` | The **orderable total**: sums of the orderable lines only, what placing the quote would charge (0 when nothing can be ordered). |
+| `indicative_total_ex_vat` | Indicative total of every line, unorderable ones included: what the need would cost, for reference; never charged. |
 | `uncovered[]` | Needs that couldn't be filled: `{item, item_index, uncovered, unit}` or `{item, item_index, uncovered, reason}`. |
 | `alternatives_considered[]` | Up to 6 per item: `{product_id, name, item_index, comparison_price, orderable, why_not[]}`. |
 | `valio_api_calls` | Live calls this quote cost: `{price_calls, availability_calls, cache_hits}`. |

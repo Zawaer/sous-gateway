@@ -513,8 +513,12 @@ class QuoteDoc(_Open):
     currency: Literal["EUR"]
     items: list[dict]
     lines: list[QuoteLineDoc]
-    total_ex_vat: float
-    total_inc_vat: float
+    total_ex_vat: float = Field(description="Orderable total ex VAT: the sum of the orderable lines only, what "
+                                            "placing this quote would charge. 0 when no line can be ordered.")
+    total_inc_vat: float = Field(description="Orderable total incl. VAT (orderable lines only).")
+    indicative_total_ex_vat: float | None = Field(
+        None, description="Indicative total ex VAT of every line, unorderable ones included: what the need "
+                          "would cost, for reference. Never charged; compare with total_ex_vat.")
     uncovered: list[dict]
     alternatives_considered: list[dict]
     valio_api_calls: dict[str, int]
@@ -542,7 +546,10 @@ class DecisionDoc(_Open):
 
 
 class ApprovalDoc(_Open):
-    by: str
+    by: str = Field(description="The name the approver gave (free text)")
+    authority: str | None = Field(None, description="The credential that let them decide: 'global approver "
+                                                    "code', 'sandbox approver SBX-...', or 'open (no approver "
+                                                    "code configured)'")
     approved: bool
     note: str | None = None
     at: str
