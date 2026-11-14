@@ -52,3 +52,28 @@ def test_finnish_unsalted_synonyms_still_match_stock():
     assert len(need.items) == 1
     assert need.items[0].amount == 10
     assert need.items[0].on_hand == 4
+
+
+@pytest.mark.parametrize("requested,stock", [
+    ("unsalted", "salted"), ("salted", "unsalted"),
+    ("reduced-salt", "salted"), ("salted", "reduced-salt"),
+])
+def test_stock_without_food_name_still_respects_explicit_spec(requested, stock):
+    need = parse_need(
+        f"We need 14 kg {requested} butter in total; we have 4 kg {stock} in stock",
+        date(2026, 11, 14), date(2026, 11, 16),
+    )
+    assert len(need.items) == 1
+    assert need.items[0].amount == 14
+    assert need.items[0].on_hand is None
+
+
+@pytest.mark.parametrize("stock", ["unsalted", ""])
+def test_matching_or_unspecified_unnamed_stock_still_subtracts(stock):
+    need = parse_need(
+        f"We need 14 kg unsalted butter in total; we have 4 kg {stock} in stock",
+        date(2026, 11, 14), date(2026, 11, 16),
+    )
+    assert len(need.items) == 1
+    assert need.items[0].amount == 10
+    assert need.items[0].on_hand == 4

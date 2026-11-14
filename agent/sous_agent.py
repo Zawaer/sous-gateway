@@ -623,7 +623,10 @@ def _subtract_stock(n: Need, entries: list[dict]) -> None:
                 it = item_of.get(id(e))
                 if it is None or it not in n.items:
                     continue
-                if s["foods"] and not (e["foods"] & s["foods"] and _stock_sig(e["text"]) == sig):
+                if s["foods"] and not e["foods"] & s["foods"]:
+                    continue
+                # A stock clause may omit the food ("4 kg salted in stock") but still specify its type.
+                if (s["foods"] or sig) and _stock_sig(e["text"]) != sig:
                     continue
                 cands.append((abs(j - k) + (0.5 if j > k else 0), it))
             target = min(cands, key=lambda x: x[0])[1] if cands else None
