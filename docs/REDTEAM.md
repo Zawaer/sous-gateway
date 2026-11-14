@@ -164,7 +164,9 @@ Gemma's recorded tool calls for all 600 requests offline (`--provider transcript
 violations auto-ordered 10 -> 0** (both digit-grouping cases RT01148 / RT02269 and the 8 slicing ones, whose first
 slice no longer matches the stated total). The rule fired on 18 requests, every one where the quote did not hold the
 buyer's amount (the run's "asked amount" check failed), including 3 safe unit misreads (RT00183 / RT00442 "1 500
-grammaa" -> 0.5 kg, RT02857 "240 dl" -> 2.4 L); it fired on none where the agent read the amount right. This
+grammaa" -> 0.5 kg, RT02857 "240 dl" -> 2.4 L); it fired on none where the agent read the amount right. Ambiguous numbers ("5,259 litres": 5.259 or 5,259)
+now fire when neither reading matches, and each stated quantity needs a line of its own ("25 l milk and 25 l cream"
+quoted as one 25 L line asks); the same replay gave exactly the same 18 requests. This
 replays what the model did; it doesn't show what Gemma would do next when told "held for approval".
 
 **Slicing, re-run after the fix.** The slicing finding was fixed on main by toivo-claude-slicing (c71bdde:

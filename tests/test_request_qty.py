@@ -172,6 +172,28 @@ def test_unit_misreadings_from_the_replay_ask():
     assert fired(quote(2.4, pid="MILK", words="Order 240 dl milk on Tuesday for the kitchen.")["quote"])
 
 
+def quote_items(words, *items):
+    return S.request_quote(S.QuoteRequest(
+        agent_id="a", mandate_id="M", delivery_date=MON, buyer_request=words,
+        items=[S.QuoteItem(product_ids=[p], amount=a, unit=u) for p, a, u in items]))["quote"]
+
+
+TWO_25 = "25 l milk and 25 l cream by Monday"
+
+
+def test_equal_amounts_need_a_line_each():
+    """rene-codex-qa's repro: two 25 L products, a quote with one 25 L line: one of them has no line of its own."""
+    q = quote_items(TWO_25, ("MILK", 25, "L"))
+    [f] = fired(q)
+    assert q["mandate_preview"]["outcome"] == "ask" and "already taken by another quantity" in f["message"]
+    assert sorted(s["status"] for s in q["mandate_preview"]["request_quantities"]) == ["matched", "mismatch"]
+    assert not fired(quote_items(TWO_25, ("MILK", 25, "L"), ("CREAM10", 25, "L")))  # a line each
+    assert not fired(quote_items(TWO_25, ("MILK", 50, "L")))  # one line holding their sum
+    # different amounts still each need their own: 40 l milk, 20 l cream, quoted 40 L only
+    assert fired(quote_items("40 l milk and 20 l cream", ("MILK", 40, "L"), ("MILK", 20, "L"))) == []
+    assert fired(quote_items("40 l milk and 30 l cream", ("MILK", 40, "L")))
+
+
 def test_over_reading_asks_too():
     """The other direction: the buyer asked 40 L, the agent quoted 400 L."""
     q = quote(400, pid="MILK", words="40 l maitoa")["quote"]
@@ -183,11 +205,26 @@ def test_a_lone_pack_size_is_still_checked_as_the_amount():
     assert fired(quote(100, pid="CREAM10", words="Cream 10 l")["quote"])
 
 
-def test_ambiguous_numbers_are_listed_never_fired():
-    q = quote(539, words="1,539 l coffee milk")["quote"]
+def test_ambiguous_number_neither_reading_matches_asks():
+    """'1,539 litres' quoted as 539 L: neither 1.539 L nor 1,539 L is near, so a person checks; both shown."""
+    r = quote(539, words="Please order 1,539 litres of coffee milk")
+    q = r["quote"]
+    [f] = fired(q)
+    assert q["mandate_preview"]["outcome"] == "ask"
+    assert "could mean 1,539 L or 1.539 L" in f["message"] and "the quote asks for 539 L" in f["message"]
+    fi_text = r["explanations_fi"]["findings"][str(q["mandate_preview"]["findings"].index(f))]
+    assert "voi tarkoittaa 1 539 l tai 1,539 l" in fi_text and "tarjouksessa 539 l" in fi_text
+    [s] = q["mandate_preview"]["request_quantities"]
+    assert s["status"] == "mismatch" and s["ambiguous"] and s["values"] == [1.539, 1539.0]
+    assert fired(quote(539, words="1.539 l coffee milk")["quote"])
+
+
+@pytest.mark.parametrize("amount", [1539, 1.539])
+def test_ambiguous_number_either_reading_matching_stays_silent(amount):
+    q = quote(amount, words="1,539 l coffee milk")["quote"]
     assert not fired(q)
     [s] = q["mandate_preview"]["request_quantities"]
-    assert s["status"] == "ambiguous" and s["values"] == [1.539, 1539.0]
+    assert s["status"] == "matched" and s["ambiguous"]
 
 
 def test_never_lowers_a_tier_and_absent_words_change_nothing():

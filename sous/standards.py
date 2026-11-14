@@ -739,7 +739,7 @@ class MandatePreviewDoc(_Open):
     findings: list[Finding]
     request_quantities: list[dict] | None = Field(
         None, description="Quantities read from buyer_request (sous/request_qty.py): {text, family L|KG|PACK, "
-                          "values, ambiguous, status matched|pack_size|ambiguous|mismatch}; mismatch is finding "
+                          "values, ambiguous, status matched|pack_size|mismatch}; mismatch is finding "
                           "quantity.request_mismatch (ask)")
 
 

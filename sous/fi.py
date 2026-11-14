@@ -393,8 +393,8 @@ RULES = {
     "quantity.request_mismatch": "Ostajan omissa sanoissa (buyer_request) mainittua määrää ei vastaa mikään "
                                  "tarjouksen tuote tai rivi (2 % alle tai pakkausylityksen verran yli, litrat, kilot ja "
                                  "pakkaukset erikseen): agentti on voinut lukea pyynnön väärin (\"1 539 litraa\" "
-                                 "luettu 539 litraksi), joten ihminen tarkistaa. Monitulkintaista lukua (\"1,539 l\") "
-                                 "ei pidetä virheenä, se vain näytetään.",
+                                 "luettu 539 litraksi), joten ihminen tarkistaa. Monitulkintainen luku (\"1,539 l\") "
+                                 "luetaan molemmin tavoin: sääntö laukeaa vain, jos kumpikaan ei vastaa tarjousta.",
     "standing.quantity_creep": "Kestotilauksen tuotteen määrä on yli {creep} suurempi kuin viimeisten {n} "
                                "uusinnan mediaani.",
     "standing.quantity_trend": "Kestotilauksen tuotteen määrä on kasvanut {run} uusinnassa peräkkäin.",

@@ -360,7 +360,8 @@ def _build() -> list[dict]:
            "The buyer's own words (buyer_request on request_quote / place_order) state a quantity that no item or "
            "line of the quote is near (2 % below to the pack-oversize margin above, per unit family L / kg / packs): "
            "the agent may have misread the buyer (\"1 539 litraa\" read as 539 L), so a person checks. Read "
-           "deterministically (sous/request_qty.py); an ambiguous number (\"1,539 l\") is only listed, never fired.",
+           "deterministically (sous/request_qty.py); an ambiguous number (\"1,539 l\") is read both ways and "
+           "fires only when neither reading matches.",
            None),
     ]
     R += [_r(f"availability.{c.lower()}", "finding", ["block"], "valio", t) for c, t in _VALIO_BLOCKING.items()]

@@ -15,8 +15,10 @@ per item and summed. It matches when one of those is from 2 % below to config.PA
 rounding within the oversize rule). A stated quantity with no match is finding quantity.request_mismatch (ask):
 the buyer's words quoted, the number as read. It joins the decision like any rule, so it can only raise the tier.
 
+An ambiguous number ("1,539 l" / "1.539 l": a decimal or a thousands separator?) is checked with both readings:
+silent when either matches, the finding (showing both readings) when neither does.
+
 Not a finding, but listed in mandate_preview.request_quantities:
-  * ambiguous numbers: "1,539 l" / "1.539 l" (a decimal or a thousands separator?) whose readings both miss;
   * product sizes (status pack_size): when the request states another quantity too, one no larger than a sales
     unit's content ("coffee milk 5 dl"), under 1 L / kg ("370 g / 283 ml") or at most half of another in its
     family ("87 kiloa ... penne 3kg", also when the agent took a substitute with another pack). "10 l cream" alone
@@ -130,14 +132,18 @@ def _family(unit: str | None) -> str:
     return unit if unit in ("L", "KG") else "PACK"
 
 
-def amounts(q: dict) -> tuple[dict[str, set[float]], dict[str, set[float]], dict[str, list[float]]]:
-    """What the quote has, per family: (amounts an order quantity can match, pack contents, item amounts)."""
+def amounts(q: dict) -> tuple[dict[str, set[float]], dict[str, set[float]], dict[str, list[float]], dict]:
+    """What the quote has, per family: (amounts an order quantity can match, pack contents, item amounts, slots).
+    slots[family][item index] are the amounts one item holds, slots[family]["ALL"] the whole quote's: each stated
+    quantity needs a slot of its own (check), so "25 l milk and 25 l cream" can't both match one 25 L item."""
     have: dict[str, set[float]] = {"L": set(), "KG": set(), "PACK": set()}
+    slots: dict[str, dict] = {"L": {}, "KG": {}, "PACK": {}}
     packs: dict[str, set[float]] = {"L": set(), "KG": set(), "PACK": set()}
     items: dict[str, list[float]] = {"L": [], "KG": [], "PACK": []}
-    for it in q.get("items") or []:
+    for i, it in enumerate(q.get("items") or []):
         if it.get("amount") is not None:
             items[_family(it.get("unit"))].append(float(it["amount"]))
+            slots[_family(it.get("unit"))].setdefault(i, set()).add(round(float(it["amount"]), 6))
     sums: dict[tuple, float] = {}  # per (item, kind, family) and per (kind, family): split lines add up
 
     def add(fam: str, v: float | None, i: int | None, kind: str) -> None:
@@ -150,6 +156,7 @@ def amounts(q: dict) -> tuple[dict[str, set[float]], dict[str, set[float]], dict
         have[fam] |= {round(v, 6) for v in vals}
         if vals:
             have[fam].add(round(sum(vals), 6))
+            slots[fam].setdefault("ALL", set()).add(round(sum(vals), 6))
     for l in q.get("lines") or []:
         i = l.get("item_index")
         if (c := l.get("covers")) and c.get("amount"):
@@ -168,7 +175,8 @@ def amounts(q: dict) -> tuple[dict[str, set[float]], dict[str, set[float]], dict
                     add(fam, qty * a, i, "content")
     for key, v in sums.items():
         have[key[-1]].add(round(v, 6))
-    return have, packs, items
+        slots[key[-1]].setdefault(key[0] if len(key) == 3 else "ALL", set()).add(round(v, 6))
+    return have, packs, items, slots
 
 
 def _near(stated: float, vals: set[float]) -> bool:
@@ -190,24 +198,74 @@ def _size_like(s: dict, stated: list[dict], packs: dict[str, set[float]]) -> boo
 
 
 def check(q: dict, text: str | None = None) -> list[dict]:
-    """The stated quantities, each with status matched | pack_size | ambiguous | mismatch."""
+    """The stated quantities, each with status matched | pack_size | mismatch (an ambiguous number
+    matches when either reading does)."""
     stated = parse(text if text is not None else q.get("buyer_request"))
     if not stated:
         return []
-    have, packs, _ = amounts(q)
+    have, packs, _, slots = amounts(q)
+    hits = [any(_near(v, have[s["family"]]) for v in s["values"]) for s in stated]
+    alone = {id(s) for s in stated if s.get("packs") is not None and _near(s["packs"], have["PACK"])}  # "2 x 10 l"
+    got: set[int] = set(alone)  # each with a slot of its own (or sharing one whose amount is their sum)
+    for fam in slots:
+        fallback = {id(s) for s, h in zip(stated, hits) if h}
+        got |= _assign([s for s in stated if s["family"] == fam and id(s) not in alone], slots[fam], fallback)
+    taken = {id(s) for s, h in zip(stated, hits) if h} - got  # near a line, but it went to another quantity
     out = []
-    for s in stated:
-        fam = s["family"]
-        hit = any(_near(v, have[fam]) for v in s["values"]) or (
-            s.get("packs") is not None and _near(s["packs"], have["PACK"]))
-        if hit:
+    for s, hit in zip(stated, hits):
+        if id(s) in got:
             status = "matched"
         elif _size_like(s, stated, packs):
             status = "pack_size"
         else:
-            status = "ambiguous" if s["ambiguous"] else "mismatch"
-        out.append({**s, "status": status})
+            status = "mismatch"  # an ambiguous number too, when neither reading matches
+        out.append({**s, "status": status, **({"shared": True} if id(s) in taken and status == "mismatch" else {})})
     return out
+
+
+MAX_ASSIGN = 60  # stated x slots above this (or over 6 stated): each quantity is only checked on its own
+
+
+def _assign(cands: list[dict], slots: dict, fallback: set[int]) -> set[int]:
+    """The largest set of stated quantities (ids) that each get a slot of their own: an item, or the whole quote
+    ("ALL", then no item on its own), where several may share a slot when their sum is near it ("25 l milk and
+    25 l cream" in one 50 L item). One-to-one, so two equal amounts need two items or one holding their sum."""
+    if not cands:
+        return set()
+    if len(cands) * len(slots) > MAX_ASSIGN or len(cands) > 6:
+        return {id(s) for s in cands} & fallback
+    keys = list(slots)
+    tops = {k: max(slots[k]) * (1 + BELOW) + 1e-6 for k in keys}
+    best: list = [set()]
+
+    def ok(load: dict) -> bool:
+        if "ALL" in load and len(load) > 1:
+            return False
+        return all(_near(sum(vs), slots[k]) for k, vs in load.items())
+
+    def walk(k: int, load: dict, got: set) -> None:
+        if len(got) + len(cands) - k <= len(best[0]):
+            return
+        if k == len(cands):
+            if ok(load):
+                best[0] = set(got)
+            return
+        s = cands[k]
+        for key in keys:
+            for v in s["values"]:
+                if sum(load.get(key, [])) + v > tops[key]:
+                    continue
+                load.setdefault(key, []).append(v)
+                walk(k + 1, load, got | {id(s)})
+                load[key].pop()
+                if not load[key]:
+                    del load[key]
+                if len(best[0]) == len(cands):
+                    return
+        walk(k + 1, load, got)
+
+    walk(0, {}, set())
+    return best[0]
 
 
 def _fmt(x: float) -> str:
@@ -221,7 +279,7 @@ def _num_fi(x: float) -> str:
 
 def _has(q: dict, fam: str) -> tuple[str, str]:
     """What the quote's items ask for in this family, in English and Finnish ('539 L', '539 l')."""
-    _, _, items = amounts(q)
+    _, _, items, _ = amounts(q)
     vals = items[fam]
     if not vals:
         return f"nothing in {FAMILY_EN[fam]}", f"ei mitään yksikössä {FAMILY_FI[fam]}"
@@ -241,14 +299,26 @@ def findings(q: dict, texts: list[str | None] | None = None) -> list:
                 continue
             seen.add(key)
             n += 1
-            v, fam = s["values"][0], s["family"]
+            fam = s["family"]
             en, fi_ = _has(q, fam)
+            if s["ambiguous"]:  # "1,539 l": 1,539 L or 1.539 L, and the quote has neither
+                big, small = max(s["values"]), min(s["values"])
+                read_en = f"could mean {_fmt(big)} {FAMILY_EN[fam]} or {_fmt(small)} {FAMILY_EN[fam]}"
+                read_fi = f"voi tarkoittaa {_num_fi(big)} {FAMILY_FI[fam]} tai {_num_fi(small)} {FAMILY_FI[fam]}"
+                near_en, near_fi = "neither is near any item or line of this quote", "kumpaakaan ei vastaa mikään tarjouksen määrä"
+            else:
+                v = s["values"][0]
+                read_en, read_fi = f"read as {_fmt(v)} {FAMILY_EN[fam]}", f"luettu: {_num_fi(v)} {FAMILY_FI[fam]}"
+                near_en, near_fi = "no item or line of this quote is near it", "sitä ei vastaa mikään tarjouksen määrä"
+            if s.get("shared"):  # "25 l milk and 25 l cream", one 25 L item
+                near_en = ("the only item or line of this quote near it is already taken by another quantity the "
+                           "buyer stated")
+                near_fi = "ainoa sitä vastaava tarjouksen määrä on jo käytetty toiseen ostajan mainitsemaan määrään"
             out.append(Finding(
                 rule="quantity.request_mismatch", outcome="ask",
-                message=(f'The buyer wrote "{s["text"]}" (read as {_fmt(v)} {FAMILY_EN[fam]}), but no item or line '
-                         f"of this quote is near it (the quote asks for {en}): the agent may have misread the "
-                         "buyer, so a person checks the quantity."),
-                message_fi=(f'Ostaja kirjoitti "{s["text"]}" (luettu: {_num_fi(v)} {FAMILY_FI[fam]}), mutta '
-                            f"tarjouksessa ei ole sitä vastaavaa määrää (tarjouksessa {fi_}). Agentti on voinut "
-                            "lukea pyynnön väärin, joten ihminen tarkistaa määrän.")))
+                message=(f'The buyer wrote "{s["text"]}" ({read_en}), but {near_en} (the quote asks for {en}): '
+                         "the agent may have misread the buyer, so a person checks the quantity."),
+                message_fi=(f'Ostaja kirjoitti "{s["text"]}" ({read_fi}), mutta {near_fi} '
+                            f"(tarjouksessa {fi_}). Agentti on voinut lukea pyynnön väärin, joten ihminen "
+                            "tarkistaa määrän.")))
     return out

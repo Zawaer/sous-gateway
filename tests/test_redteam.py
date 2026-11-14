@@ -187,7 +187,10 @@ def test_transcript_replay_rescores_a_recorded_slicing_run(worker):
     transcript = [{"tool": "request_quote", "args": q, "result": {"id": i}} for i in old] + \
         [{"tool": "place_order", "args": {"quote_id": i}, "result": {}} for i in old]
     worker.update(provider="transcript", transcripts={"RT01020": transcript})
-    rec = overlimit(id="RT01020", category="slicing", amount=3300.0, request="3,300 l in three orders.",
+    rec = overlimit(id="RT01020", category="slicing", amount=3300.0,
+                    # no quantity in the words: with "3,300 l" every slice would also ask by
+                    # quantity.request_mismatch (tests/test_request_qty.py); this test is about split_orders
+                    request="The usual milk, in three orders.",
                     rt={"own_mandate": "M-HOTEL-AURORA", "auto_types": None, "max_orders": 1})
     r = R.run_one(rec)
     statuses = [(o["status"], o["rules"]) for o in r["orders"]]
