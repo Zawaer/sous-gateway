@@ -55,6 +55,14 @@ on:
         description: "LLM eval models for this run, e.g. 'nvidia:nvidia/nemotron-3.5-super-vl-120b-a12b' (empty: LLM_EVAL_MODELS)"
         type: string
         default: ""
+      heldout:
+        description: "LLM eval runs the blind held-out set (evals/heldout/, Sous agent) instead of evals/cases.yaml; pair with llm_only"
+        type: boolean
+        default: false
+      heldout_repeat:
+        description: "Held-out: run every case N times"
+        type: string
+        default: "1"
       redteam_scale:
         description: "Only the 32-vCPU red team (4,000 scripted, Valio replayed) + capacity scaling job, then craci-evidence"
         type: boolean
@@ -439,6 +447,9 @@ jobs:
           uv run python -m scripts.fetch_data
       - name: Run the LLM eval per model
         if: ${{ steps.pre.outputs.run == 'true' && !inputs.recipe_only && !inputs.vision_only }}
+        env:
+          HELDOUT: ${{ inputs.heldout }}
+          HELDOUT_REPEAT: ${{ inputs.heldout_repeat || '1' }}
         run: |
           status=0
           for pm in $LLM_EVAL_MODELS; do
@@ -451,7 +462,11 @@ jobs:
             esac
             if [ -z "$key" ]; then echo "::notice::No key for $provider: skipping $model"; continue; fi
             echo "::group::$provider $model"
-            uv run python scripts/llm_eval.py --provider "$provider" --model "$model" || status=1
+            if [ "$HELDOUT" = true ]; then
+              uv run python scripts/heldout_eval.py --agent sous --repeat "$HELDOUT_REPEAT" --provider "$provider" --model "$model" || status=1
+            else
+              uv run python scripts/llm_eval.py --provider "$provider" --model "$model" || status=1
+            fi
             echo "::endgroup::"
           done
           uv run python scripts/llm_eval.py --report
@@ -485,6 +500,7 @@ jobs:
           name: llm-eval-results
           path: |
             evals/llm_results.*.json
+            evals/heldout/results.*.json
             docs/LLM_EVAL.md
             evals/recipe_results.json
             evals/recipe_results.md

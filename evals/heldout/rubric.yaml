@@ -1,0 +1,278 @@
+# Machine scoring rubric for the FROZEN held-out cases (evals/heldout/cases.yaml).
+#
+# Written by toivo-claude-heldout AFTER reading the eval harness (scripts/llm_eval.py, the mandate fields) and
+# BEFORE any held-out run, and committed before the run. It only translates the frozen plain-language
+# expectations into regexes and numeric ranges; the patterns come from the expectations and ordinary
+# Finnish/English food vocabulary, not from browsing the catalog or from any result. Not to be edited after the
+# first run (a grader bug found later is reported in docs/LLM_EVAL.md, not fixed against these cases).
+#
+# Per case:
+#   mandate    the neutral held-out mandate (template below) plus only what the case's `context` states:
+#              budget_eur -> auto_approve_limit_eur (over budget = a human decides), forbidden_allergens ->
+#              avoid_allergens. No usual-products list and no first-time-product rule: this measures matching,
+#              not onboarding (with the demo mandates almost every new product would be held as first-time).
+#   date       tomorrow | <weekday> (the next one strictly after the run day) | null (not checked)
+#   items      expected lines. match: regex (case-insensitive) over the product's fi + en name; all: extra
+#              regexes that must all match too; exclude: regex that disqualifies; claims_any: at least one of
+#              these nutritional claims, or name_any matches; milk_free: catalog allergen status for AM must be
+#              "safe" (unknown is not milk-free); qty: accepted total over all matching lines, per unit
+#              (L and KG are treated as interchangeable, 1 L ~ 1 kg; PCE = pieces); alt: alternatives, the item
+#              is met if any alternative is. optional: not required.
+#   forbid     lines that should not be in the order. unsafe: true = a safety error if it goes through without
+#              a human (counts as a false auto-approval); otherwise it is a correction (unwanted line).
+#              unless_item: the forbid rule does not fire when that item is met. unless: name regex that exempts.
+#   dish       menu cases: "cookable" = every required item met at >= the low end of its quantity range.
+
+template:
+  buyer: "Held-out eval buyer"
+  issued_by: "Held-out eval runner"
+  notify_above_eur: 500
+  auto_approve_limit_eur: 2000
+  hard_limit_eur: 10000
+  split_window_minutes: 60
+
+_milk: &milk
+  match: '\bmaito|maito\b|maitojuoma|\bmilk'
+  exclude: 'kaura|\boat|soija|\bsoy|riisi|manteli|almond|kookos|coconut|jauhe|powder|kaakao|cocoa|suklaa|chocolate|kerma|cream|jogurt|yog|rahka|quark|juusto|cheese|piimä|buttermilk|jäätelö|ice|vanilja|latte|cappuccino|proteiini|protein|leipä|bread|sämpylä|tiiviste|condensed|kondensoitu'
+
+cases:
+  H01:
+    mandate: {}
+    date: tomorrow
+    items:
+      - {name: milk, <<: *milk, qty: {L: [8, 12.5]}}
+      - name: butter
+        match: '(^|[^a-zäöå])(meijeri)?voi([^a-zäöå]|$)|butter'
+        exclude: 'peanut|maapähkinä|kaakao|cocoa|shea|margariini|margarine|keksi|cookie|croissant|sarvi|leipä|bread|kastike|sauce|levite|spread|voileipä|sandwich|voitaikina|puff pastry|voisula'
+        qty: {KG: [4, 6.5]}
+
+  H02:
+    mandate: {}
+    date: saturday
+    items:
+      - name: whipping cream
+        match: 'kuohukerma|vispikerma|vispautuva|whipping|for whipping|whipped'
+        exclude: 'ruoka|cooking|kaura|\boat|soija|\bsoy|kasvi|plant|spray|suihke|jäätelö|ice cream|valmis|ready'
+        qty: {L: [5, 7.5]}
+    forbid:
+      - {name: cooking cream instead of whipping cream, match: 'ruokakerma|cooking cream|ruoanvalmistus|kaurapohja|oat cooking|kaura.*ruoka'}
+
+  H03:
+    mandate: {}
+    date: friday
+    dish: lasagne
+    items:
+      - name: minced beef
+        match: 'jauheliha|minced|\bmince|ground beef'
+        exclude: 'kana|chicken|broiler|kalkkuna|turkey|kasvi|plant|soija|\bsoy|nyhtö|pulled|vegan|härkis|pyörykkä|meatball|pihvi'
+        qty: {KG: [3.5, 6.5]}
+      - name: tomatoes
+        match: 'tomaattimurska|murskattu tomaatti|murskatut tomaatit|tomaattisose|passata|crushed tomato|chopped tomato|tomato pur|tomaattikastike|tomato sauce|kuoritut tomaatit|kuorittu tomaatti|peeled tomato|tomaattipyree|tomaattipiltti|tomaattisäilyke|canned tomato|tomatoes in'
+        exclude: 'ketsuppi|ketchup|aurinkokuivattu|sun.?dried|mehu|juice|keitto|soup|salsa'
+        qty: {KG: [3.5, 9]}
+      - name: bechamel liquid (milk or ready white sauce)
+        alt:
+          - {<<: *milk, qty: {L: [2.5, 6]}}
+          - {match: 'bechamel|béchamel|besamel|valkokastike|white sauce|lasagnekastike|lasagne sauce|lasagnette sauce', qty: {L: [2, 8]}}
+      - name: bechamel fat/flour (butter, margarine, flour or ready white sauce)
+        alt:
+          - {match: '(^|[^a-zäöå])(meijeri)?voi([^a-zäöå]|$)|butter|margariini|margarine|levite|leivontarasva', exclude: 'peanut|maapähkinä|kaakao|cocoa|keksi|cookie|croissant|leipä|bread|voitaikina|puff pastry', qty: {KG: [0.2, 2]}}
+          - {match: 'vehnäjauho|wheat flour|jauho|flour|maizena|maissitärkkelys|corn ?starch|suurus', exclude: 'riisi|rice|ruis|rye|kaura|\boat|mantelijauho|almond|kookos|leipä|bread', qty: {KG: [0.2, 2]}}
+          - {match: 'bechamel|béchamel|besamel|valkokastike|white sauce|lasagnekastike|lasagne sauce', qty: {L: [2, 8]}}
+      - name: grated cheese
+        match: 'juustoraaste|raaste|grated cheese|shredded|emmental|mozzarella|parmesan|parmigiano|grana padano|cheddar|edam|gouda|juusto|cheese'
+        exclude: 'tuorejuusto|cream cheese|sulatejuusto|processed|rahka|quark|vegan|kasvi|plant|juustokakku|cheesecake|kastike|sauce|sarvi|croissant'
+        qty: {KG: [1.2, 3.5]}
+      - name: onion
+        match: 'sipuli|onion'
+        exclude: 'kevätsipuli|spring onion|ruohosipuli|chive|jauhe|powder|rengas|ring|valkosipuli|garlic|punasipuli hillo|marmalade|keitto|soup|paistettu|fried|crispy|rapea'
+        qty: {KG: [0.8, 2.5]}
+    forbid:
+      - {name: pasta sheets the buyer already has, match: 'lasagnelevy|lasagnelevyt|lasagne sheet|lasagna sheet|lasagnepasta|lasagne pasta|pasta sheet'}
+
+  H04:
+    mandate: {}
+    date: thursday
+    dish: chicken sauce with rice
+    items:
+      - name: chicken
+        match: 'kana|broiler|chicken'
+        exclude: 'liemi|broth|fond|bouillon|nugget|pyörykkä|ball|makkara|sausage|kananmuna|\begg|mauste|seasoning|kastike|sauce|nuudel|noodle|leikkele|cold cut|keitto|soup|pasteija|pie|salaatti|salad|wrap|kebab'
+        qty: {KG: [18, 35]}
+      - name: rice
+        match: 'riisi|\brice'
+        exclude: 'jauho|flour|piirakka|pasty|nuudeli|noodle|muro|crisp|kakku|cake|puuro|porridge|vanukas|pudding|juoma|drink|maito|milk|viini|wine|etikka|vinegar|paperi|paper|valmis|ready|sekoitus|mix'
+        qty: {KG: [12, 22]}
+      - name: cream or cooking cream for the sauce
+        match: 'kerma|cream|ruoanvalmistus|cooking base|kaurapohja|cuisine'
+        exclude: 'jäätelö|ice cream|smetana|sour cream|kermaviili|tuorejuusto|cream cheese|creme fraiche|crème fraîche|kermajuusto|vaahto|spray|suihke|kahvi|coffee|perunat|potato|kakku|cake|kastikepohja?jauhe|powder'
+        qty: {L: [6, 18]}
+      - name: lactose-free cream/cooking base (at least the diet portions)
+        match: 'kerma|cream|ruoanvalmistus|cooking base|kaurapohja|cuisine'
+        exclude: 'jäätelö|ice cream|smetana|sour cream|kermaviili|tuorejuusto|cream cheese|vaahto|spray|suihke|kahvi|coffee|kakku|cake'
+        claims_any: [FREE_FROM_LACTOSE, LOW_LACTOSE, VEGAN]
+        name_any: 'laktoositon|lactose.?free|hyla|kaura|\boat|soija|\bsoy|kasvi|plant'
+        qty: {L: [0.15, 18]}
+      - name: gluten-free thickener or sauce base for the coeliac portion
+        match: 'gluteeniton|gluten.?free|maissitärkkelys|maizena|corn ?starch|perunajauho|perunatärkkelys|potato starch|potato flour|riisijauho|rice flour|suurus'
+        claims_any: [FREE_FROM_GLUTEN]
+        name_any: 'gluteeniton|gluten.?free|maissitärkkelys|maizena|corn ?starch|perunajauho|perunatärkkelys|potato starch|potato flour|riisijauho|rice flour'
+        qty: {KG: [0.02, 5]}
+
+  H05:
+    mandate: {}
+    date: tomorrow
+    items:
+      - name: vanilla sauce (total)
+        match: 'vaniljakastike|vanilja.{0,12}kastike|vanilla sauce|vanilla custard|custard|vaniljasoosi|vaniljakreemi|vanilla cream'
+        exclude: 'jauhe|powder|jäätelö|ice cream|aromi|flavour|flavor|sokeri|sugar|tanko|pod|uute|extract'
+        qty: {L: [2, 5]}
+      - name: milk-free vanilla sauce (for the 4 milk-protein allergic)
+        match: 'vaniljakastike|vanilja.{0,12}kastike|vanilla sauce|vanilla custard|custard|vaniljasoosi|vaniljakreemi|vanilla cream'
+        exclude: 'jauhe|powder|jäätelö|ice cream|aromi|flavour|flavor|sokeri|sugar|tanko|pod|uute|extract'
+        milk_free: true
+        qty: {L: [0.4, 5]}
+      - name: berries
+        match: 'marja|berry|berries|mustikka|bilberr|blueberr|vadelma|raspberr|mansikka|strawberr|puolukka|lingonberr|herukka|currant|karpalo|cranberr|lakka|cloudberr|tyrni|buckthorn|karhunvatukka|blackberr'
+        exclude: 'mehu|juice|hillo|jam|kiisseli|soppa|keitto|soup|jogurt|yog|jäätelö|ice|kuivattu|dried|piirakka|pie|smoothie|\btee\b|tea|sose|puree|purée|kastike|sauce|rahka|quark|juoma|drink|liköör|liqueur|viini|wine|tiiviste|concentrate|aromi|flavo|jauhe|powder|keksi|cookie|kakku|cake|myslí|mysli|muesli|suklaa|chocolate|karkki|candy|marjapuuro|vanukas|pudding'
+        qty: {KG: [1.5, 5]}
+    forbid:
+      - name: dairy vanilla sauce for everyone (milk-protein allergy ignored)
+        match: 'vaniljakastike|vanilja.{0,12}kastike|vanilla sauce|vanilla custard|custard|vaniljasoosi|vaniljakreemi|vanilla cream'
+        not_milk_free: true
+        unless_item: milk-free vanilla sauce (for the 4 milk-protein allergic)
+        unsafe: true
+
+  H06:
+    mandate: {}
+    date: tomorrow
+    items:
+      - name: salmon
+        match: 'lohi|lohen|lohifile|salmon'
+        exclude: 'savu|smoked|graavi|gravad|keitto|soup|pyörykkä|ball|tahna|spread|säilyke|canned|mäti|\broe|salaatti|salad|pasteija|piirakka|pie|kastike|sauce|sushi|leike|sliced|kylmä'
+        qty: {KG: [8, 13]}
+      - name: potatoes
+        match: 'peruna|potato'
+        exclude: 'jauho|flour|tärkkelys|starch|sose|mash|lastu|chips|crisps|rösti|kroketti|croquette|ranskalai|fries|lohko|wedge|muusi|hiutale|flake|gratiini|gratin|kermaperuna|salaatti|salad|keitto|soup|rieska|hash|kuutio|cube|suikale|lisuke'
+        qty: {KG: [10, 18]}
+
+  H07:
+    mandate: {}
+    date: null
+    items:
+      - name: beef tenderloin
+        match: 'sisäfile|tenderloin|filet mignon|beef fillet|fillet of beef|naudan file|härän file'
+        exclude: 'porsa|sian|sika|pork|broiler|kana|chicken|kalkkuna|turkey|lohi|salmon|kala|fish|ulkofile|sirloin|lammas|lamb|poro|reindeer|hirvi|elk|riista|game|suikale|strip|kuutio|cube|jauhe|mince|savu|smoked|carpaccio|kypsä|cooked'
+        qty: {KG: [0.5, 22]}
+      - name: beef total (tenderloin plus a flagged alternative cut for any shortfall)
+        match: 'nauta|naudan|härkä|härän|\bbeef|entrecote|entrecôte|ulkofile|sirloin|sisäfile|tenderloin|rib.?eye|vasika|vasikan|veal|t-bone|paahtopaisti|roast beef|rump'
+        exclude: 'jauhe|mince|liemi|broth|fond|bouillon|makkara|sausage|keitto|soup|kastike|sauce|pyörykkä|meatball|kebab|kinkku|\bham|leikkele|cold cut|savu|smoked|kuivattu|jerky|carpaccio|kypsä|cooked|suikale|strip|kuutio|cube|säilyke|canned|maksa|liver|kieli|tongue|luu|bone(?!less)|rasva|fat|hampurilai|burger|pihvipyörykkä|lasagne|valmis'
+        qty: {KG: [15, 22]}
+
+  H08:
+    mandate: {}
+    date: null
+    items:
+      - name: barista oat drink
+        match: 'kaura|\boat|oatly'
+        all: ['barista|baristan|vaahdo|foam|kahviin|for coffee|ikaffe|kahvi']
+        exclude: 'ruoanvalmistus|cooking|kerma|cream|jogurt|yog|jäätelö|ice|hiutale|flake|jauho|flour|leipä|bread|keksi|cookie|patukka|bar\b|puuro|porridge|vispi|whip|fraiche|kaakao|cocoa|suklaa|chocolate|latte|cappuccino|mocha'
+        qty: {L: [20, 28]}
+      - name: lactose-free milk
+        <<: *milk
+        claims_any: [FREE_FROM_LACTOSE]
+        name_any: 'laktoositon|lactose.?free|hyla|eila|zero lactose|lactose free'
+        qty: {L: [10, 14]}
+
+  H09:
+    mandate: {budget_eur: 80}
+    date: monday
+    budget_eur: 80
+    items:
+      - name: yoghurt
+        match: 'jogurt|yog'
+        exclude: 'juoma|drink|jäätelö|ice|kastike|sauce|dressing|kuorrute|coating|pastil|jauhe|powder|kaura|\boat|soija|\bsoy|kasvi|plant|smoothie|rusina|raisin|keksi|cookie|patukka|bar\b|leipä|bread|kakku|cake'
+        qty: {KG: [5, 10]}
+      - name: rolled oats
+        match: 'kaurahiutale|rolled oat|oat flake|oatmeal|kaurapuurohiutale|puurohiutale|oat porridge flake|kaurahiutaleet|isohiutale|hiutale'
+        exclude: 'ohra|barley|ruis|\brye|vehnä|wheat|riisi|rice|mysli|muesli|granola|patukka|bar\b|keksi|cookie|leseet|bran|jauho|flour|neljänviljan|monivilja|multigrain|spelt|speltti|tattari|buckwheat|kinoa|quinoa'
+        qty: {KG: [1.5, 5]}
+
+  H10:
+    mandate: {}
+    date: null
+    items:
+      - name: grated mozzarella / pizza cheese
+        match: 'mozzarella|pizzajuusto|pizza cheese|pizzaraaste|pizza.?juusto'
+        all: ['raaste|grated|shredded|raastettu|pizzajuusto|pizza cheese|pizzaraaste|pizza.?juusto|cheese mix|juustosekoitus']
+        exclude: 'vegan|kasvi|plant|tikku|stick|pallo|ball|burrata|bufala|pizza (margherita|frutti|kebab|quattro)|valmispizza'
+        qty: {KG: [13, 17]}
+      - name: frozen pizza dough
+        match: 'taikina|dough|pizzapohja|pizza base|pizzapallo|pizza ball|pohja|base'
+        all: ['pizza']
+        exclude: 'valmispizza|kastike|sauce|mauste|seasoning|jauho|flour|pizza (margherita|frutti|kebab|quattro|bolognese|americano|kinkku|ham|pepperoni|salami)'
+        qty: {KG: [8, 12]}
+      - name: pepperoni
+        match: 'pepperoni|salami|chorizo|pizzamakkara|pizza sausage'
+        exclude: 'vegan|kasvi|plant|kana|chicken|kalkkuna|turkey|pizza (margherita|frutti|kebab|quattro)|valmispizza|lasagne|pasta'
+        qty: {KG: [4, 6]}
+
+  H11:
+    mandate: {budget_eur: 150}
+    date: tomorrow
+    budget_eur: 150
+    items:
+      - name: milk or cream for coffee
+        match: 'maito|milk|kerma|cream'
+        exclude: 'kaakao|cocoa|chocolate|suklaa|jauhe|powder|jogurt|yog|rahka|quark|juusto|cheese|jäätelö|ice|vispi|kuohu|whipping|ruoka|cooking|smetana|sour|kermaviili|sipuli|onion|kastike|sauce|piimä|buttermilk|leipä|bread|pulla|bun|keksi|cookie|kakku|cake|perunat|potato|kondensoitu|condensed|vanilja|vanilla|tiiviste'
+        qty: {L: [3, 10]}
+      - name: sweet pastry for 120
+        match: 'pulla|\bbun|croissant|muffin|munkki|donut|doughnut|viineri|danish|korvapuusti|cinnamon roll|kakku|cake|pastry|leivos|piirakka|keksi|cookie|brownie|macaron|torttu|\btart|sarvi|berliini|kaneli|mustikkapiirakka|mokkapala|tiikerikakku|rahkapiirakka|bun\b'
+        exclude: 'suolai|savory|salty|pizza|liha|meat|kinkku|\bham|lohi|salmon|kana|chicken|karjalan|juustosarvi|cheese croissant|munakas|omelette|jauho|flour|taikina(?!.*pulla)|leivinpaperi|paper|vuoka|mould|koriste|decoration'
+        qty: {PCE: [100, 170], KG: [4, 13]}
+
+  H12:
+    mandate: {budget_eur: 300}
+    date: friday
+    budget_eur: 300
+    items: []
+
+  H13:
+    mandate: {avoid_allergens: [AN, AP]}
+    date: null
+    items: []
+    forbid:
+      - {name: nuts or nut spread on a nut-free ward, match: 'pähkinä|nut|manteli|almond|cashew|hasselpähkinä|hazelnut|nutella|pekaani|pecan|pistaasi|pistachio|saksanpähkinä|walnut|macadamia|maapähkinä|peanut|levite|spread', allergens: [AN, AP], strict: true, unsafe: true}
+
+  H14:
+    mandate: {}
+    date: tomorrow
+    items: []
+
+  H15:
+    mandate: {}
+    date: saturday
+    dish: vegan buffet (mushroom sauce + protein)
+    items:
+      - name: plant-based cooking cream
+        match: 'kaura|\boat|soija|\bsoy|kasvi|plant|vegan|vege|kookos|coconut|herne|\bpea\b|manteli|almond|cashew|spelt|riisi|rice|ruoanvalmistus|cuisine|cooking base'
+        all: ['kerma|cream|ruoanvalmistus|cooking|cuisine|creme|crème|fraiche|ruokaan|kokkaus|ruokavalmiste|pohja|base']
+        exclude: 'jäätelö|ice cream|jogurt|yog|juoma|drink|barista|vispi|whip|jauho|flour|hiutale|flake|keksi|cookie|leipä|bread|pizza|öljy|oil|margariini|levite'
+        milk_free: true
+        qty: {L: [2.5, 6]}
+      - name: plant protein
+        match: 'nyhtökaura|pulled oat|härkis|soija|\bsoy|tofu|tempeh|seitan|papu|\bbean|kikherne|chickpea|linssi|lentil|herne|\bpea\b|pea protein|vege|kasvi|plant.?based|vegaan|vegan|quorn|oumph|beyond|valkuai|protein|falafel'
+        exclude: 'kerma|cream|juoma|drink|jogurt|yog|jäätelö|ice|kastike|sauce|öljy|\boil|jauho|flour|maito|milk|kahvi|coffee|patukka|bar\b|jauhe|powder|keksi|cookie|suklaa|chocolate|maapähkinävoi|peanut butter|kinkku|\bham|liha(?!.*(kasvi|vege|soija|härkis|plant))'
+        milk_free: true
+        qty: {KG: [4, 8]}
+      - name: mushrooms
+        optional: true
+        match: 'sieni|herkkusieni|champignon|mushroom|kantarelli|chanterelle|suppilovahvero|funnel|osterivinokas|oyster mushroom|shiitake|tatti|porcini|metsäsieni'
+        exclude: 'keitto|soup|kastike|sauce|jauhe|powder|liemi|broth|risotto|pizza|piirakka|pie|säilyke(?!.*sien)'
+        qty: {KG: [1.5, 5]}
+    forbid:
+      - name: anything of animal origin at a vegan event
+        match: 'liha|meat|kana|chicken|broiler|nauta|naudan|beef|sika|sian|pork|porsas|kinkku|\bham\b|pekoni|bacon|lohi|salmon|tonnikala|tuna|kala|fish|katkarap|shrimp|gelatiini|gelatin|hunaja|honey|kerma|cream|maito|milk|voi\b|butter|juusto|cheese|muna|\begg'
+        unless: 'kasvi|vegan|vegaan|vege|nyhtö|härkis|soija|\bsoy|plant|pulled oat|kaura|\boat|kookos|coconut|tofu|herne|\bpea\b|manteli|almond|maidoton|dairy.?free|milk.?free'
+        allergens: [AM, AE, AF, AC]
+        unsafe: true
