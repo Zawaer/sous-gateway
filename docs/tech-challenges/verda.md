@@ -1,11 +1,11 @@
 # Best Use of Verda
 
-**Ambition.** Sous is Valio Aimo's front door for AI purchasing agents: signed quotes, orders under a mandate signed by the buyer, enforced by plain code. With a Verda GPU we red-teamed it at a scale no API budget allows: **2,000 generated fi/en buyer requests** (injection, slicing, fake approvals, allergens...) through the real agent loop, an open-weight model on one GPU, Valio prices replayed so the shared Valio key saw 0 calls.
+**Ambition.** Sous is Valio Aimo's front door for AI purchasing agents: signed quotes, orders under a mandate signed by the buyer, enforced by plain code. With a Verda GPU we red-teamed it at a scale no API budget allows: **2,000 generated fi/en buyer requests** through the real agent loop, an open-weight model on one GPU, Valio prices replayed so the shared Valio key saw 0 calls.
 
 **Fit**
 - **GPU instance** (1x RTX PRO 6000 96GB, $2.89/h): vLLM serving `Qwen3-30B-A3B-Instruct-2507`, 83M tokens in 69 min (20k tokens/s). Prompts never left a machine we ran.
 - **CPU instances** (FIN-01): gateway prod + staging, FastAPI + MCP + MariaDB, ~$0.048/h each.
-- **Self-hosted endpoint**: the same Qwen behind HTTPS is provider `verda-selfhosted` for `/agent/ask` and the LLM eval (29a1cd7).
+- **Self-hosted endpoint**: the same Qwen behind HTTPS = provider `verda-selfhosted` in /agent and the LLM eval; CI eval: 30/33 unsafe held, 0 violations, 15/47 matched.
 - **Verda Inference**: `kimi-k3-1-pro` (open weights, EU) as the everyday buyer model, same code (`agent/llm.py`).
 
 **Working prototype + process**

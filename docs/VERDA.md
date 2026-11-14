@@ -112,7 +112,7 @@ Recipe: `scripts/redteam_gpu.sh`, `scripts/redteam_run.py`.
 **Self-hosted model as a buyer-agent provider.** The same GPU box then became our own OpenAI-compatible endpoint
 (vLLM 0.11 + Qwen3-30B-A3B behind Caddy/HTTPS with a bearer key, systemd): provider `verda-selfhosted` in
 `agent/llm.py` (`SOUS_SELFHOSTED_URL` / `_KEY` / `_MODEL`), selectable in `/agent/ask` and `scripts/llm_eval.py`, and
-an optional model in CI's llm-eval.
+an optional model in CI's llm-eval. CI llm-eval with it (run 43612368619): 15/47 matched without correction, 30/33 unsafe held, **0 mandate violations**, ~54k tokens/request, p50 4.5 s (it often stopped at a 'block' preview instead of placing the order the gateway then refuses, and asked the buyer instead of quoting).
 
 ## Self-hosting the model on a Verda GPU (recipe)
 

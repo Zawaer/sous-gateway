@@ -44,13 +44,14 @@ runs:
   - {when: "2026-11-14 12:38", provider: verda, model: gpu-a100-80gb, purpose: "red team: 2 A100 80GB boxes that never booted (same dead IP), deleted by infra", tokens_in: 0, tokens_out: 0, usd: 1.30, note: "from rene-claude-infra's instance records"}
   - {when: "2026-11-14 13:37", provider: verda, model: gpu-rtx-pro-6000-96gb, purpose: "red team: Qwen3-30B-A3B (vLLM) on 1x RTX PRO 6000 96GB, 2,000 requests, 83.0M tokens in / 0.79M out (docs/REDTEAM.md); 2.35 h x $2.89", tokens_in: 0, tokens_out: 0, usd: 6.79, note: "self-hosted: tokens cost GPU time, not per token; Gemma 4 setup attempts included"}
   - {when: "2026-11-14 15:20", provider: verda, model: gpu-a100-80gb, purpose: "red team: Gemma 4 26B-A4B-it (vLLM 0.33) on 1x A100 80GB FIN-02, 600 requests + 100 slicing re-run after the fix, 35.6M tokens in / 0.30M out (docs/REDTEAM.md); 1.12 h x $2.39", tokens_in: 0, tokens_out: 0, usd: 2.68, note: "self-hosted: GPU time, not per token"}
+  - {when: "2026-11-14 15:58", provider: verda, model: qwen3-30b-a3b-selfhosted, purpose: "buyer LLM eval, 48 cases / 47 run, provider verda-selfhosted (our vLLM on sous-redteam-gpu3; CI run 43612368619)", tokens_in: 2527687, tokens_out: 18777, usd: 0, note: "self-hosted: no per-token charge; the GPU is billed as the service line below"}
 
+  - {when: "2026-11-14 17:05", provider: verda, model: gpu-rtx-pro-6000-96gb, purpose: "sous-redteam-gpu3 kept as the self-hosted model endpoint (vLLM 0.11 + Caddy, provider verda-selfhosted), ~13:55-17:05Z scheduled", tokens_in: 0, tokens_out: 0, usd: 9.15, note: "estimate: 3.17 h x $2.89 to the scheduled stop; lower if infra stops it earlier (asked at 15:58Z)"}
 services:                      # running infrastructure, prorated
   - {provider: aiven, item: "Valkey, Developer plan (shared Valio budget)", usd_per_month: 15, since: "2026-11-13 22:30", note: "paid from Aiven's $50 trial credits"}
   - {provider: verda, item: "CPU instance CPU.4V.16G, prod (FIN-01)", usd_per_hour: 0.048, since: "2026-11-13 21:15", note: "Verda on-demand price from the instance record"}
   - {provider: verda, item: "CPU instance CPU.4V.16G, staging (FIN-01)", usd_per_hour: 0.048, since: "2026-11-13 21:40", note: "Verda on-demand price from the instance record"}
   - {provider: craci, item: "CI runners (test, docker, smoke, eval, llm-eval)", usd_per_hour: null, since: "2026-11-13 21:40", note: "paid from CRACI's per-team compute credits; see the CRACI dashboard"}
-
 notes:
   - "Google issued one Gemini key per team and the Verda account is shared across the team's projects, so provider dashboards can't be split per project: every Sous figure here is computed from our own logged tokens and run ids."
   - "Valio Aimo's API is free for the challenge (rate-limited, not billed)."
