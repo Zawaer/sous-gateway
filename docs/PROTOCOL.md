@@ -292,7 +292,7 @@ The register is the single source of truth: `tests/test_adopt.py` scans `sous/` 
 
 All steps run under one lock, so concurrent requests can't double order, overrun the daily limit, or both approve and reject the same order.
 
-1. If `idempotency_key` matches an existing order with the same `agent_id`, `mandate_id` and `quote_id`, returns that order unchanged. Use one key per quote so retries never order twice. The same key with any other agent, mandate or quote is `idempotency_key_reused`.
+1. If `idempotency_key` matches an existing order **of the same agent** with the same `mandate_id` and `quote_id`, returns that order unchanged. Use one key per quote so retries never order twice. The same agent reusing a key for another mandate or quote is `idempotency_key_reused`. Keys are scoped per `agent_id` (the store has `UNIQUE (agent_id, idempotency_key)`): another agent's identical key is unrelated, so agents can't collide with, block or probe each other's keys. Per agent rather than per mandate because the agent is the client that generates and retries the key, and one agent reusing a key across its mandates is still a client bug worth a 409.
 2. Loads the mandate and verifies its signature (`mandate_signature`); the signed payload is what the engine uses.
 3. Loads the quote and verifies its signature (`quote_signature`); everything below works from the signed payload.
 4. Checks the quote was issued to this `agent_id` and `mandate_id` (`quote_mismatch`).
@@ -346,7 +346,7 @@ The `receipt_jws` is signed when the order is placed and **re-signed after the h
 | `quote_mismatch` | 409 | The quote was issued to another agent or mandate. | no |
 | `quote_used` | 409 | The quote already has an order. | no |
 | `quote_expired` | 409 | Past `expires_at`; ask for a new quote. | no |
-| `idempotency_key_reused` | 409 | The key belongs to a different order. Use a fresh key. | no |
+| `idempotency_key_reused` | 409 | This agent already used the key for a different order. Use a fresh key. | no |
 | `not_pending` | 409 | Approve or reject on an order that isn't `pending_approval`. | no |
 | `standing_paused` | 409 | Renewal of a paused standing order. | no |
 | `already_renewed` | 409 | This standing order already has an ordered or pending renewal for that delivery date. | no |
@@ -652,8 +652,9 @@ So that anyone (judges, peer reviewers) can try Sous on the public gateway witho
 - `mandates`: copies of the hotel, hospital and school demo mandates, ids `M-HOTEL-AURORA-SBX-7Q2K`, `M-HOSPITAL-KITCHEN-SBX-7Q2K`, `M-SCHOOL-ESPOO-SBX-7Q2K`, agents `aurora-purchasing-agent-sbx-7q2k` etc., buyer names ending in `(sandbox SBX-7Q2K)`. Each is signed, has `require_agent_auth: true`, `valid_until` = now + 24 h and `sandbox: "SBX-7Q2K"`.
 - `agent_token`: one bearer credential valid for the three mandates (section 16; stored as a hash).
 - `approver_token` (`sbxa_...`): works as `X-Approver-Code` on `POST /orders/{id}/approve` and `/reject`, **only** for orders under this sandbox's mandates, while it is active. Every other human action still needs the real approver code.
-- `quickstart`: the `claude mcp add ...` line, curl for quote, order and approve, and the UIs filtered to the sandbox (`/ui/?sandbox=SBX-7Q2K#/inbox`, `/buyer/?sandbox=SBX-7Q2K`).
-- `prompts`: four things to ask an agent (hotel milk, hospital substitute, past the cut-off, over the budget), each with what to expect.
+- `quickstart`: the `claude mcp add ...` line, curl for quote, order and approve, and the UIs filtered to the sandbox (`/ui/?sandbox=SBX-7Q2K#/inbox`, `/buyer/?sandbox=SBX-7Q2K`). `curl_order` uses `<quote.id>` twice: as `quote_id` and inside the idempotency key `sbx-7q2k-<quote.id>`, so a re-run returns the same order and two visitors never share a key.
+- `prompts`: four things to ask an agent (hotel milk, hospital substitute, past the cut-off, over the budget), each with an `expect` naming the tier and rules the mandate guarantees. Products and totals are live data and vary, so `expect` never promises a price or product.
+- `seeded`: `{note, standing_order_id, held_order_id, status: "pending_approval", why, reasons[], order_url}`, or `null` if seeding failed (the sandbox still works). Every sandbox starts with a hotel standing order ("Hotel Aurora weekly dairy (seeded demo)": milk and butter, `seeded: true`) with four simulated past renewals (milk 420 -> 455 L), and this week's renewal (515 L) placed through the normal drift check and order engine, so it is held (`standing.quantity_creep`, `standing.quantity_trend`, `standing.cost_drift`). No Valio call: its quotes are built from reference prices stored in the gateway (`sous/sandbox.py` `SEED_PRICES`), signed like any quote, and marked `seeded` in the payload, a `SEEDED` warning on each line, and the order's rationale. They don't count against `quotes_limit`.
 
 Limits: `SOUS_SANDBOX_PER_IP_HOUR` new sandboxes per client IP per hour (default 3; `sandbox_rate_limited`), `SOUS_SANDBOX_MAX_ACTIVE` active at once (default 50; `sandbox_full`). `SOUS_SANDBOX=0` turns the route off; `SOUS_SANDBOX_TTL_HOURS` (default 24).
 

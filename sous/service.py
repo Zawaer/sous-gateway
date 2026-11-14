@@ -613,10 +613,10 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
 
 def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: str | None,
                  extra_findings=None, rationale: str | None = None) -> tuple[dict, Mandate | None]:
-    if idempotency_key and (prev := store.order_by_idempotency_key(idempotency_key)):
-        if prev["agent_id"] != agent_id or prev["mandate_id"] != mandate_id or prev["quote_id"] != quote_id:
+    if idempotency_key and (prev := store.order_by_idempotency_key(agent_id, idempotency_key)):
+        if prev["mandate_id"] != mandate_id or prev["quote_id"] != quote_id:
             raise GatewayError("idempotency_key_reused",
-                               "This idempotency key was already used for a different order; use a fresh key.", 409)
+                               "You already used this idempotency key for a different order; use a fresh key.", 409)
         return prev, None
     mandate = _mandate(mandate_id)
     row = store.get_quote(quote_id)
@@ -671,7 +671,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
     except store.Conflict:
         store.release_quote(quote_id, oid)
         raise GatewayError("idempotency_key_reused",
-                           "This idempotency key is already taken by another order; use a fresh key.", 409)
+                           "You already used this idempotency key for another order; use a fresh key.", 409)
     except Exception:
         store.release_quote(quote_id, oid)
         raise

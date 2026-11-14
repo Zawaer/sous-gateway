@@ -18,6 +18,11 @@ reached Valio; cached answers are free), and all sandboxes share SOUS_SANDBOX_CA
 minute (default half the gateway's budget), enforced in aimo._take_budget through `metered`. Over either
 limit the visitor gets a friendly 429 with retry_after.
 
+Seed (no Valio calls): each new sandbox gets a hotel standing order with four weeks of simulated history whose
+milk amount creeps up, and this week's renewal already held for approval by the drift rules, so the seller UI
+shows the standing-order and approval controls at once. Its quote is signed like any other but priced from
+SEED_PRICES (reference prices, not a live quote) and says so in `seeded`, the line issues and the rationale.
+
 Cleanup: expired sandboxes are swept lazily (their mandates revoked, their data hidden);
 DELETE /sandbox/{id} (approver) ends one early. Nothing is deleted from the audit log.
 """
@@ -26,6 +31,7 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import logging
 import hmac
 import json
 import re
@@ -36,6 +42,8 @@ from datetime import date, datetime, timedelta
 
 from . import agent_auth, aimo, config, store
 from .mandate import Mandate
+
+log = logging.getLogger(__name__)
 
 ID_RE = re.compile(r"^SBX-[0-9A-Z]{4}$")
 _ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"  # no 0/O, 1/I/L
@@ -250,6 +258,7 @@ def create(ip: str, base_url: str = "") -> dict:
     store.audit("sandbox.created", "sandbox", "system", sid, None,
                 {"sandbox": sid, "mandates": list(mandates.values()), "expires_at": _iso(expires),
                  "quotes_limit": config.SANDBOX_QUOTES})
+    seeded = seed(sid, mandates["hotel"], token)
     base_url = (config.PUBLIC_BASE_URL or base_url).rstrip("/")
     return {
         "sandbox": {"id": sid, "status": "active", "expires_at": _iso(expires),
@@ -261,9 +270,123 @@ def create(ip: str, base_url: str = "") -> dict:
                         "rejects orders under these mandates only: send it as X-Approver-Code, or paste it when "
                         "the UI asks for the approver code."),
         "mandates": out_mandates,
+        "seeded": seeded,
         "quickstart": quickstart(sid, base_url, token, approver, out_mandates),
         "prompts": prompts(out_mandates),
     }
+
+
+# --- seed data ------------------------------------------------------------------
+
+# Reference prices for the seed (ex VAT per sales unit, Finnish food VAT 13.5 %), close to what Valio Aimo
+# quoted for these products during the hackathon. Seed data only: never used for a live quote.
+SEED_PRICES = [
+    {"label": "milk", "product_id": "464201", "name": "Valio semi skimmed milk 1 l lactose free UHT",
+     "unit": "L", "content": 1.0, "price": 1.56},
+    {"label": "butter", "product_id": "464411", "name": "Valio butter 500 g unsalted",
+     "unit": "KG", "content": 0.5, "price": 4.80},
+]
+SEED_HISTORY = [[420, 20], [430, 20], [440, 21], [455, 21]]  # oldest first; milk creeps up (scripts/demo_standing.py)
+SEED_THIS_WEEK = [515, 22]  # milk +18 % vs the median and up 4 weeks running, total +16 %: drift -> held
+SEED_NOTE = ("Seeded demo data: priced from reference prices stored in the gateway, not a live Valio Aimo quote. "
+             "No Valio call was made.")
+SEED_VAT = 13.5
+
+
+def _seed_name(pid: str, fallback: str) -> str:
+    from . import catalog
+    try:
+        return (catalog.get(pid) or {}).get("name") or fallback
+    except Exception:  # no catalog on this machine: the stored name will do
+        return fallback
+
+
+def _seed_quote(sid: str, so: dict, items: list[dict], when: date) -> dict:
+    """A signed quote for this week's renewal, built from SEED_PRICES (no Valio call). Same shape and
+    signature as a live quote, so the order engine, receipts and approval checks treat it like any other."""
+    from . import clock, service as S, signing
+    now = S._now()
+    lines = []
+    for i, (p, it) in enumerate(zip(SEED_PRICES, items)):
+        qty = float(round(it["amount"] / p["content"]))
+        inc = round(p["price"] * (1 + SEED_VAT / 100), 2)
+        lines.append({
+            "product_id": p["product_id"], "name": _seed_name(p["product_id"], p["name"]), "brand": "Valio",
+            "sales_unit": "ST", "allowed_lot_size": 1.0,
+            "content_per_sales_unit": {"amount": p["content"], "unit": p["unit"], "source": "name"},
+            "quantity": qty, "covers": {"amount": round(qty * p["content"], 2), "unit": p["unit"]},
+            "unit_price_ex_vat": p["price"], "unit_price_inc_vat": inc, "vat_rate": SEED_VAT,
+            "comparison_price": {"ex_vat": round(p["price"] / p["content"], 2), "per": p["unit"]},
+            "list_price_ex_vat": None,
+            "line_total_ex_vat": round(p["price"] * qty, 2), "line_total_inc_vat": round(inc * qty, 2),
+            "logistic_model": "Stock", "available_amount": None, "stock": "plenty",
+            "available_date": when.isoformat(), "delivery_date": when.isoformat(), "order_cutoff": None,
+            "delivery_reliability": None, "co2_estimate_kg": None, "co2_note": None,
+            "labels": [], "claims": [], "allergens": None, "temperature": "chilled", "orderable": True,
+            "issues": [{"code": "SEEDED", "severity": "warning", "message": SEED_NOTE}], "item_index": i})
+    qid = S._id("Q")
+    body = {
+        "id": qid, "agent_id": so["agent_id"], "mandate_id": so["mandate_id"],
+        "issued_at": now.isoformat(timespec="milliseconds"),
+        "expires_at": (now + timedelta(minutes=30)).isoformat(timespec="milliseconds"),
+        "requested_delivery_date": when.isoformat(), "currency": "EUR",
+        "items": [{"product_ids": it["product_ids"], "amount": it["amount"], "unit": it["unit"]} for it in items],
+        "lines": lines,
+        "total_ex_vat": round(sum(l["line_total_ex_vat"] for l in lines), 2),
+        "total_inc_vat": round(sum(l["line_total_inc_vat"] for l in lines), 2),
+        "uncovered": [], "alternatives_considered": [],
+        "valio_api_calls": {"price_calls": 0, "availability_calls": 0, "cache_hits": 0},
+        "clock": clock.info(now),
+        "rationale": f"Weekly renewal of standing order {so['name']}",
+        "seeded": {"sandbox": sid, "note": SEED_NOTE},
+    }
+    outcome, findings = S._evaluate(S._mandate(so["mandate_id"]), so["agent_id"], body, now)
+    body["mandate_preview"] = {"outcome": outcome, "findings": [f.model_dump() for f in findings]}
+    jws = signing.sign(body, "sous-quote+jws")
+    store.put_quote(body, jws)
+    store.audit("quote.issued", so["agent_id"], "agent", qid, so["buyer"],
+                {"quote_id": qid, "total_ex_vat": body["total_ex_vat"], "seeded": True, "note": SEED_NOTE,
+                 "lines": [{"product_id": l["product_id"], "quantity": l["quantity"], "issues": ["SEEDED"]}
+                           for l in lines], "valio_api_calls": body["valio_api_calls"]})
+    return body
+
+
+def seed(sid: str, mandate_id: str, token: str) -> dict | None:
+    """Give a new sandbox a standing order with drifted history and one order held for approval (see the
+    module docstring). No Valio calls. A failure here never fails the sandbox itself."""
+    from . import service as S, standing, standing_store as SS
+    try:
+        m = S._mandate(mandate_id)
+        now = S._now().isoformat(timespec="milliseconds")
+        so = {"id": S._id("SO"), "mandate_id": m.id, "agent_id": m.agent_id, "buyer": m.buyer,
+              "name": "Hotel Aurora weekly dairy (seeded demo)",
+              "items": [{"product_ids": [p["product_id"]], "amount": float(a), "unit": p["unit"],
+                         "label": p["label"]} for p, a in zip(SEED_PRICES, SEED_HISTORY[-1])],
+              "cadence": {"every": "week", "weekday": "mon"}, "active": True, "seeded": True,
+              "created_at": now, "updated_at": now}
+        SS.put(so)
+        store.audit("standing.created", m.agent_id, "agent", so["id"], m.buyer,
+                    {"standing_order": so, "seeded": True, "note": SEED_NOTE})
+        when = standing.next_delivery(so)
+        items = [{**it, "amount": float(a)} for it, a in zip(so["items"], SEED_THIS_WEEK)]
+        # simulate_history prices past weeks from a quote for the usual amounts; this week's quote is separate
+        usual = _seed_quote(sid, so, so["items"], when)
+        standing.simulate_history(so["id"], usual["id"], SEED_HISTORY, by="sandbox seed",
+                                  priced_from="the seeded reference-price quote")
+        q = _seed_quote(sid, so, items, when)
+        r = standing.place_renewal(
+            so, items, q, when, [standing._with_status(x) for x in SS.renewals(so["id"])], agent_token=token,
+            rationale="Seeded demo order: this week's standing-order renewal, held because the amounts drifted. "
+                      "Approve or reject it with your approver token. " + SEED_NOTE,
+            mark={"seeded": True})
+    except Exception:  # noqa: BLE001 - the sandbox works without its seed
+        log.exception("sandbox %s: seeding failed", sid)
+        return None
+    o = r["order"]
+    return {"note": SEED_NOTE, "standing_order_id": so["id"], "held_order_id": o["id"], "status": o["status"],
+            "why": r["drift"]["summary"],
+            "reasons": [f["message"] for f in o["decision"]["findings"] if f["outcome"] != "silent"],
+            "order_url": o["order_url"]}
 
 
 def _rules(m: Mandate) -> str:
@@ -290,7 +413,7 @@ def quickstart(sid: str, base: str, token: str, approver: str, mandates: list[di
                        f"-H 'Content-Type: application/json' -d '{body}'"),
         "curl_order": (f"curl -s {base}/orders -H 'Authorization: Bearer {token}' -H 'Content-Type: application/json' "
                        f"-d '{{\"agent_id\": \"{hotel['agent_id']}\", \"mandate_id\": \"{hotel['mandate_id']}\", "
-                       f"\"quote_id\": \"<quote.id>\", \"idempotency_key\": \"try-1\"}}'"),
+                       f"\"quote_id\": \"<quote.id>\", \"idempotency_key\": \"{sid.lower()}-<quote.id>\"}}'"),
         "curl_approve": (f"curl -s -X POST {base}/orders/<PO-id>/approve -H 'X-Approver-Code: {approver}' "
                          "-H 'Content-Type: application/json' -d '{\"by\": \"<your name>\"}'"),
         "seller_ui": f"{base}/ui/?sandbox={sid}#/inbox",
@@ -311,25 +434,32 @@ def prompts(mandates: list[dict]) -> list[dict]:
     return [
         {"title": "Hotel: milk within the mandate",
          "prompt": who("hotel") + f"order 1,000 litres of lactose-free milk for delivery on {when}.",
-         "expect": "Searched free, priced live, split across pack sizes; ordered with an FYI to the hotel "
-                   "(notify tier: over €1,000, under the €2,500 the agent may spend alone)."},
+         "expect": "Catalog search is free; the quote is priced live, so products and prices vary. Only plain "
+                   "lactose-free milk is chosen silently (the product-type guard keeps out coffee milk, cream "
+                   "and milk drinks), sized to cover 1,000 L. The tier follows the total: between €1,000 and "
+                   "€2,500 (the usual case) it is ordered with an FYI to the hotel (spend.notify); above €2,500 "
+                   "or above the €2.50/L price cap it is held for a human."},
         {"title": "Hospital: a substitute needs a human",
          "prompt": who("hospital") + "our usual Bravo Chef chopped tomatoes 400 g (product 468376) won't do this "
                    f"week. Find substitutes for 40 packs for {when}, pick the best one and order 4 packs of it "
                    "as a substitute.",
-         "expect": "Good/better/best substitutes with their compromises; the order is held for a human "
-                   "(ask tier: substitutes need approval, and any product without allergen data is flagged). "
-                   "Approve or reject it in the seller UI with your approver token."},
+         "expect": "Ranked substitutes with their compromises (which ones depends on live stock). An order for "
+                   "a substitute is held for a human (substitution: the hospital's mandate asks), and a product "
+                   "without allergen data is flagged too (allergen.unknown); one containing milk or nuts is "
+                   "refused. Approve or reject the held order in the seller UI with your approver token."},
         {"title": "Past the cut-off",
          "prompt": who("hotel") + f"order 50 litres of exactly product 464119 for delivery tomorrow "
                    f"({tomorrow.isoformat()}), no other product.",
-         "expect": "Refused with the rule that fired when the order cut-off for tomorrow has passed "
-                   "(availability.cutoff_passed), or a later delivery date flagged for a human. Never ordered "
-                   "silently."},
+         "expect": "Depends on the clock. After tomorrow's order cut-off: refused with the rule that fired "
+                   "(availability.cutoff_passed); if Valio can only deliver later, the later date is flagged for "
+                   "a human (delivery.later_date). Before the cut-off it is a small ordinary order, ordered "
+                   "silently (mandate.ok)."},
         {"title": "School: over the budget",
          "prompt": who("school") + f"order 1,500 litres of lactose-free milk for {when}.",
-         "expect": "Refused: the total is above the school's €1,500 hard limit (spend.hard_limit). The agent "
-                   "cannot override it."},
+         "expect": "Refused whenever the total is above the school's €1,500 hard limit (spend.hard_limit), "
+                   "which it is at any milk price over €1/L; the agent cannot override it. At a lower price it "
+                   "would still be held for a human (over the €300 the agent may spend alone). Never ordered "
+                   "silently."},
     ]
 
 

@@ -191,9 +191,11 @@ def test_lists_hide_sandboxes_by_default_and_show_one_with_the_param(c):
     assert oa["status"] == "ordered" and oa["decision"]["outcome"] == "notify"
 
     assert [o["id"] for o in c.get("/orders").json()["orders"]] == [co["id"]]
-    assert [o["id"] for o in c.get("/orders", params={"sandbox": sa}).json()["orders"]] == [oa["id"]]
-    assert [o["id"] for o in c.get("/orders", params={"sandbox": sb.lower()}).json()["orders"]] == [ob["id"]]
-    assert c.get("/orders", params={"mandate_id": oa["mandate_id"]}).json()["orders"][0]["id"] == oa["id"]
+    assert {o["id"] for o in c.get("/orders", params={"sandbox": sa}).json()["orders"]} == \
+        {oa["id"], a["seeded"]["held_order_id"]}
+    assert {o["id"] for o in c.get("/orders", params={"sandbox": sb.lower()}).json()["orders"]} == \
+        {ob["id"], b["seeded"]["held_order_id"]}
+    assert oa["id"] in [o["id"] for o in c.get("/orders", params={"mandate_id": oa["mandate_id"]}).json()["orders"]]
     assert c.get(f"/orders/{oa['id']}").status_code == 200  # direct links still work
 
     mids = [m["id"] for m in c.get("/mandates").json()["mandates"]]
@@ -212,14 +214,14 @@ def test_lists_hide_sandboxes_by_default_and_show_one_with_the_param(c):
 
     assert "SBX-" not in blob("/notifications") and co["id"] in blob("/notifications")
     feed = c.get("/notifications", params={"sandbox": sa}).json()["notifications"]
-    assert [n["order_id"] for n in feed] == [oa["id"]]
+    assert [n["order_id"] for n in feed] == [oa["id"], a["seeded"]["held_order_id"]]  # newest first
 
     so = c.post("/standing-orders", json={"mandate_id": a["mandates"][0]["mandate_id"],
                                           "agent_id": a["mandates"][0]["agent_id"], "name": "weekly",
                                           "items": [{"product_ids": ["OAT"], "amount": 10, "unit": "L"}]})
     assert so.status_code == 200, so.text
     assert c.get("/standing-orders").json()["standing_orders"] == []
-    assert len(c.get("/standing-orders", params={"sandbox": sa}).json()["standing_orders"]) == 1
+    assert len(c.get("/standing-orders", params={"sandbox": sa}).json()["standing_orders"]) == 2  # + the seeded one
 
     assert c.get("/orders", params={"sandbox": "nope"}).status_code == 400
     assert c.get("/orders", params={"sandbox": "SBX-ZZZZ"}).json()["orders"] == []
@@ -322,7 +324,7 @@ def test_expired_sandbox_is_hidden_and_its_mandates_revoked(c, monkeypatch):
     later = time.time() + 25 * 3600
     monkeypatch.setattr(sandbox, "_clock", lambda: later)
     st = c.get(f"/sandbox/{sid}").json()
-    assert st["status"] == "expired" and st["orders"]["total"] == 1
+    assert st["status"] == "expired" and st["orders"]["total"] == 2  # the seeded held order + this one
     assert all(S._mandate(m["mandate_id"]).revoked for m in s["mandates"])
     assert c.get("/orders", params={"sandbox": sid}).json()["orders"] == []
     r = quote(c, s)
@@ -405,7 +407,75 @@ def test_hiding_follows_the_sandbox_registry_not_names(c):
     # none of it shows inside the real sandbox's view
     sbx = c.get("/audit", params={"limit": 1000, "sandbox": sid}).json()["events"]
     assert sbx and not any(e["subject"] in (o["id"], "M-LOOKALIKE-SBX-AAAA") for e in sbx)
-    assert c.get("/orders", params={"sandbox": sid}).json()["orders"] == []
+    assert [x["id"] for x in c.get("/orders", params={"sandbox": sid}).json()["orders"]] == \
+        [s["seeded"]["held_order_id"]]
     # ownership comes from the registry, so a sandbox approver token can't touch lookalikes
     assert sandbox.owner("M-LOOKALIKE-SBX-AAAA") is None and sandbox.owner("M-CLAIM") is None
     assert sandbox.owner(s["mandates"][0]["mandate_id"]) == sid
+
+
+# --- seed, quickstart key, idempotency scope ------------------------------------------------
+
+def test_new_sandbox_is_seeded_with_a_drifted_standing_order_and_a_held_order_without_valio_calls(c, env):
+    from sous import standing
+    s = new(c)
+    sid, seeded = s["sandbox"]["id"], s["seeded"]
+    assert env.calls == 0  # no live Valio call at creation
+    assert c.get(f"/sandbox/{sid}").json()["quotes_used"] == 0
+    assert seeded["status"] == "pending_approval" and "No Valio call" in seeded["note"]
+    o = store.get_order(seeded["held_order_id"])
+    rules = {f["rule"] for f in o["decision"]["findings"]}
+    assert {"standing.quantity_creep", "standing.quantity_trend", "standing.cost_drift"} <= rules, rules
+    assert o["decision"]["outcome"] == "ask" and "Seeded demo data" in o["agent_rationale"]
+    # the seeded quote and the receipt are signed and verify like any other
+    q = signing.verify(store.get_quote(o["quote_id"])["_jws"], "sous-quote+jws")
+    assert q["seeded"]["sandbox"] == sid and q["valio_api_calls"]["price_calls"] == 0
+    assert signing.verify(o["receipt_jws"], "sous-order+jws")["id"] == o["id"]
+    so = standing.get(seeded["standing_order_id"])
+    assert so["baseline"]["weeks"] == 4 and all(x["simulated"] for x in so["baseline"]["from"])
+    assert so["renewals"][0]["order_id"] == o["id"] and so["renewals"][0]["seeded"]
+    c.headers["Authorization"] = f"Bearer {s['agent_token']}"
+    assert [x["id"] for x in c.get("/standing-orders", params={"sandbox": sid}).json()["standing_orders"]] == \
+        [seeded["standing_order_id"]]
+    assert c.get("/standing-orders").json()["standing_orders"] == []  # hidden from the curated view
+    del c.headers["Authorization"]  # the judge approves it with the sandbox approver token
+    r = c.post(f"/orders/{o['id']}/approve", json={"by": "judge"}, headers={"X-Approver-Code": s["approver_token"]})
+    assert r.status_code == 200 and r.json()["status"] == "ordered", r.text
+
+
+def test_quickstart_order_key_is_per_sandbox_and_keys_are_scoped_per_agent(c):
+    a, b = new(c, "10.0.0.1"), new(c, "10.0.0.2")
+    for s in (a, b):
+        assert f'"idempotency_key": "{s["sandbox"]["id"].lower()}-<quote.id>"' in s["quickstart"]["curl_order"]
+
+    def post(s, quote_id, key):
+        m = s["mandates"][0]
+        return c.post("/orders", json={"agent_id": m["agent_id"], "mandate_id": m["mandate_id"],
+                                       "quote_id": quote_id, "idempotency_key": key},
+                      headers={"Authorization": f"Bearer {s['agent_token']}"})
+
+    qa = quote(c, a).json()["quote"]["id"]
+    oa, ob = post(a, qa, "try-1"), post(b, quote(c, b).json()["quote"]["id"], "try-1")
+    assert oa.status_code == ob.status_code == 200, (oa.text, ob.text)  # same key, other agent: independent
+    assert oa.json()["id"] != ob.json()["id"]
+    assert post(a, qa, "try-1").json()["id"] == oa.json()["id"]  # same agent + key + quote: the same order
+    again = post(a, quote(c, a).json()["quote"]["id"], "try-1")  # same agent and key, another quote
+    assert again.status_code == 409 and again.json()["error"] == "idempotency_key_reused"
+
+
+def test_sqlite_migration_drops_the_global_idempotency_unique(tmp_path, monkeypatch):
+    import sqlite3
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.executescript(store.SQLITE_SCHEMA.replace("idempotency_key TEXT,", "idempotency_key TEXT UNIQUE,"))
+    old.execute("INSERT INTO purchase_order VALUES ('PO-1','Q-1','M','a1','ordered',1.0,'{}','k','t','t')")
+    old.commit()
+    old.close()
+    monkeypatch.setattr(config, "STATE_DB", path)
+    for _ in range(2):  # idempotent on restart
+        monkeypatch.setattr(store, "_conn", None)
+        store.db()
+    store._exec("INSERT INTO purchase_order VALUES ('PO-2','Q-2','M','a2','ordered',1.0,'{}','k','t','t')")
+    with pytest.raises(sqlite3.IntegrityError):
+        store._exec("INSERT INTO purchase_order VALUES ('PO-3','Q-3','M','a1','ordered',1.0,'{}','k','t','t')")
+    assert [r["id"] for r in store._exec("SELECT id FROM purchase_order ORDER BY id")[0]] == ["PO-1", "PO-2"]

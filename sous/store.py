@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS quote (
 CREATE TABLE IF NOT EXISTS purchase_order (
   id TEXT PRIMARY KEY, quote_id TEXT NOT NULL, mandate_id TEXT NOT NULL, agent_id TEXT NOT NULL,
   status TEXT NOT NULL, total_ex_vat REAL NOT NULL, data TEXT NOT NULL,
-  idempotency_key TEXT UNIQUE, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+  idempotency_key TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS audit_event (
   seq INTEGER PRIMARY KEY, ts TEXT NOT NULL, actor TEXT NOT NULL, actor_type TEXT NOT NULL,
   event TEXT NOT NULL, subject TEXT, buyer TEXT, data TEXT NOT NULL,
@@ -60,9 +60,9 @@ MARIADB_SCHEMA = [
     """CREATE TABLE IF NOT EXISTS purchase_order (
       id VARCHAR(32) PRIMARY KEY, quote_id VARCHAR(32) NOT NULL, mandate_id VARCHAR(64) NOT NULL,
       agent_id VARCHAR(128) NOT NULL, status VARCHAR(32) NOT NULL, total_ex_vat DOUBLE NOT NULL,
-      data LONGTEXT NOT NULL, idempotency_key VARCHAR(191) UNIQUE,
+      data LONGTEXT NOT NULL, idempotency_key VARCHAR(191),
       created_at VARCHAR(40) NOT NULL, updated_at VARCHAR(40) NOT NULL,
-      INDEX (mandate_id), INDEX (status)
+      INDEX (mandate_id), INDEX (status), UNIQUE KEY agent_idempotency (agent_id, idempotency_key)
     ) WITH SYSTEM VERSIONING""",
     """CREATE TABLE IF NOT EXISTS audit_event (
       seq BIGINT AUTO_INCREMENT PRIMARY KEY, ts VARCHAR(40) NOT NULL, actor VARCHAR(191) NOT NULL,
@@ -71,6 +71,49 @@ MARIADB_SCHEMA = [
       INDEX (subject), INDEX (buyer)
     ) WITH SYSTEM VERSIONING""",
 ]
+
+
+IDEM_INDEX = "agent_idempotency"  # idempotency keys are unique per agent: UNIQUE (agent_id, idempotency_key)
+
+
+def _migrate_sqlite(conn) -> None:
+    """Idempotency keys used to be globally UNIQUE (a column constraint SQLite can't drop): rebuild the
+    table once without it. Then make sure the per-agent unique index exists. Safe to run on every start."""
+    old = [r for r in conn.execute("PRAGMA index_list(purchase_order)").fetchall()
+           if r["unique"] and r["origin"] == "u"
+           and [c["name"] for c in conn.execute(f"PRAGMA index_info('{r['name']}')")] == ["idempotency_key"]]
+    if old:
+        cols = ",".join(ORDER_COLS)
+        conn.executescript(f"""
+          BEGIN;
+          CREATE TABLE purchase_order_v2 (
+            id TEXT PRIMARY KEY, quote_id TEXT NOT NULL, mandate_id TEXT NOT NULL, agent_id TEXT NOT NULL,
+            status TEXT NOT NULL, total_ex_vat REAL NOT NULL, data TEXT NOT NULL,
+            idempotency_key TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+          INSERT INTO purchase_order_v2 ({cols}) SELECT {cols} FROM purchase_order;
+          DROP TABLE purchase_order;
+          ALTER TABLE purchase_order_v2 RENAME TO purchase_order;
+          COMMIT;""")
+    conn.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS {IDEM_INDEX} ON purchase_order (agent_id, idempotency_key)")
+
+
+def _migrate_mariadb(c) -> None:
+    """Existing databases: add the per-agent unique index, then drop the old global UNIQUE(idempotency_key)
+    index (named after its column). Index changes only, no data rewritten; safe to run on every start."""
+    c.execute("SELECT INDEX_NAME, COLUMN_NAME, NON_UNIQUE FROM information_schema.STATISTICS "
+              "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'purchase_order'")
+    idx: dict[str, list] = {}
+    for r in c.fetchall():
+        idx.setdefault(r["INDEX_NAME"], []).append((r["COLUMN_NAME"], int(r["NON_UNIQUE"])))
+    old = [n for n, cols in idx.items() if n not in ("PRIMARY", IDEM_INDEX)
+           and [col for col, _ in cols] == ["idempotency_key"] and cols[0][1] == 0]
+    if IDEM_INDEX in idx and not old:
+        return
+    c.execute("SET SESSION system_versioning_alter_history = KEEP")  # ALTER on a SYSTEM VERSIONED table
+    if IDEM_INDEX not in idx:
+        c.execute(f"ALTER TABLE purchase_order ADD UNIQUE KEY {IDEM_INDEX} (agent_id, idempotency_key)")
+    for n in old:
+        c.execute(f"ALTER TABLE purchase_order DROP INDEX `{n}`")
 
 
 def backend() -> str:
@@ -93,11 +136,13 @@ def db():
             with _conn.cursor() as c:
                 for stmt in MARIADB_SCHEMA:
                     c.execute(stmt)
+                _migrate_mariadb(c)
         else:
             config.STATE_DB.parent.mkdir(parents=True, exist_ok=True)
             _conn = sqlite3.connect(config.STATE_DB, check_same_thread=False, isolation_level=None)
             _conn.row_factory = sqlite3.Row
             _conn.executescript(SQLITE_SCHEMA)
+            _migrate_sqlite(_conn)
     elif config.DB_URL:
         _conn.ping(reconnect=True)
     return _conn
@@ -314,8 +359,9 @@ def order_versions(oid: str) -> list[dict]:
     return out
 
 
-def order_by_idempotency_key(key: str) -> dict | None:
-    r = _exec("SELECT data FROM purchase_order WHERE idempotency_key = ?", (key,))[0]
+def order_by_idempotency_key(agent_id: str, key: str) -> dict | None:
+    """Idempotency keys belong to the agent that sent them: another agent's identical key is unrelated."""
+    r = _exec("SELECT data FROM purchase_order WHERE agent_id = ? AND idempotency_key = ?", (agent_id, key))[0]
     return json.loads(r[0]["data"]) if r else None
 
 

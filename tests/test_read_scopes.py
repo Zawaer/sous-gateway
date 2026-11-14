@@ -155,19 +155,20 @@ def test_sandbox_token_reads_its_sandbox_only(c):
     for h in ({"X-Approver-Code": a["approver_token"]}, {"Authorization": f"Bearer {a['approver_token']}"}):
         r = c.get("/orders", params={"sandbox": sa}, headers=h)
         assert r.headers["x-sous-read-scope"] == f"sandbox:{sa}+public_demo"
-        assert [o["id"] for o in r.json()["orders"]] == [oa["id"]]
+        assert {o["id"] for o in r.json()["orders"]} == {oa["id"], a["seeded"]["held_order_id"]}  # + seed
         assert len(c.get("/mandates", params={"sandbox": sa}, headers=h).json()["mandates"]) == 3
         assert c.get(f"/orders/{oa['id']}", headers=h).status_code == 200
         assert c.get(f"/orders/{ob['id']}", headers=h).status_code == 404
         assert c.get("/orders", params={"sandbox": sb}, headers=h).json()["orders"] == []
         feed = c.get("/notifications", params={"sandbox": sa}, headers=h).json()["notifications"]
-        assert [n["order_id"] for n in feed] == [oa["id"]]
+        assert [n["order_id"] for n in feed] == [oa["id"], a["seeded"]["held_order_id"]]
         events = c.get("/audit", params={"sandbox": sa, "limit": 1000}, headers=h).json()["events"]
         assert any(e["event"] == "sandbox.created" for e in events) and oa["id"] in json.dumps(events)
-        assert c.get(f"/sandbox/{sa}", headers=h).json()["orders"]["recent"][0]["id"] == oa["id"]
+        assert oa["id"] in [o["id"] for o in c.get(f"/sandbox/{sa}", headers=h).json()["orders"]["recent"]]
     # the sandbox's agent token reads its mandates too
     h = {"Authorization": f"Bearer {a['agent_token']}"}
-    assert [o["id"] for o in c.get("/orders", params={"sandbox": sa}, headers=h).json()["orders"]] == [oa["id"]]
+    assert {o["id"] for o in c.get("/orders", params={"sandbox": sa}, headers=h).json()["orders"]} == \
+        {oa["id"], a["seeded"]["held_order_id"]}
 
 
 class Ctx:

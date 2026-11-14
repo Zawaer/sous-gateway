@@ -16,11 +16,12 @@ The demo server is production, `https://135-181-8-209.sslip.io`, set as `SOUS` b
 2. **Run the quickstart**: the response's `quickstart.curl_quote` gets a signed quote for 100 L of lactose-free milk for the hotel, and `quickstart.curl_order` orders it.
    ```bash
    Q=$(jq -r .quickstart.curl_quote sandbox.json | sh | jq -r .quote.id)
-   jq -r .quickstart.curl_order sandbox.json | sed "s/<quote.id>/$Q/" | sh | jq 'if .error then . else {id, status, tier: .decision.outcome, rules: [.decision.findings[].rule]} end'
+   jq -r .quickstart.curl_order sandbox.json | sed "s/<quote.id>/$Q/g" | sh | jq 'if .error then . else {id, status, tier: .decision.outcome, rules: [.decision.findings[].rule]} end'
    ```
-   Within the hotel's limits it is `ordered`, tier `silent` (auto), rule `mandate.ok`. Every finding carries a `rule_url`.
-3. **Approve a held order as the human**: open the seller inbox for your sandbox, paste `approver_token` when it asks for the approver code, and approve or reject. Each held order lists the rules that fired. The token works only on your sandbox's orders. If the inbox is empty, the hospital prompt in step 5 makes a held order.
+   Within the hotel's limits it is `ordered`, tier `silent` (auto), rule `mandate.ok`. Every finding carries a `rule_url`. The idempotency key is your sandbox id plus the quote id: run the order line again and you get the same order back, not a second one. Keys are scoped per agent, so no two judges clash.
+3. **Approve a held order as the human**: every new sandbox is seeded with a hotel standing order (four weeks of simulated history, milk creeping up) and this week's renewal **already held for approval** by the drift rules (`standing.quantity_creep`, `standing.quantity_trend`, `standing.cost_drift`); `seeded` in the response names it. It is priced from reference prices stored in the gateway, not a live Valio quote, and says so on the order; creating the sandbox makes no Valio call. Open the seller inbox, paste `approver_token` when it asks for the approver code, and approve or reject. The token works only on your sandbox's orders.
    ```bash
+   jq '.seeded | {held_order_id, why, reasons}' sandbox.json
    jq -r .quickstart.seller_ui sandbox.json     # $SOUS/ui/?sandbox=SBX-....#/inbox
    ```
 4. **Check the rules and the audit chain**:
@@ -30,7 +31,7 @@ The demo server is production, `https://135-181-8-209.sslip.io`, set as `SOUS` b
    curl -s "$SOUS/audit?sandbox=$(jq -r .sandbox.id sandbox.json)&limit=5" \
      -H "Authorization: Bearer $(jq -r .agent_token sandbox.json)" | jq '.events[] | {seq, event, hash, prev_hash}'
    ```
-5. **Connect an MCP client** to `$SOUS/mcp/` with the agent token, then paste one of the four `prompts`: hotel milk (ordered with an FYI), hospital substitute (held for a human), past the cut-off (refused, `availability.cutoff_passed`), school over budget (refused, `spend.hard_limit`).
+5. **Connect an MCP client** to `$SOUS/mcp/` with the agent token, then paste one of the four `prompts`. Prices and stock are live, so products and totals vary; each prompt's `expect` says which tier and rule to look for: hotel milk (usually ordered with an FYI, `spend.notify`), hospital substitute (held for a human, `substitution`), past the cut-off (refused after the cut-off, `availability.cutoff_passed`), school over budget (refused above €1,500, `spend.hard_limit`).
    ```bash
    jq -r .quickstart.claude_code sandbox.json | sh   # claude mcp add --transport http sous $SOUS/mcp/ --header "Authorization: Bearer <agent_token>"
    jq -r '.prompts[] | .title, .prompt, ""' sandbox.json

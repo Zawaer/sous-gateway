@@ -185,7 +185,8 @@ def _build() -> list[dict]:
         _r("mandate_signature", "refusal", ["block"], "gateway",
            "The mandate (or the buyer's credential behind it) doesn't verify.", None, status=409),
         _r("idempotency_key_reused", "refusal", ["block"], "gateway",
-           "The idempotency key belongs to a different order; a same-key retry returns the original order.",
+           "The agent already used this idempotency key for a different order; a same-key retry returns the "
+           "original order. Keys are scoped per agent.",
            None, status=409),
         _r("too_many_candidates", "refusal", ["block"], "gateway",
            f"At most {config.MAX_CANDIDATES_PER_QUOTE} candidate products per quote.", None, status=400),

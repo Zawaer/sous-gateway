@@ -20,7 +20,8 @@ You get (keep this output, the tokens are shown once):
   - **Espoo schools**: €300 alone, nothing over €1,500, no gluten or egg;
 - `agent_token`: your agents' credential (for all three);
 - `approver_token`: lets you approve or reject your own held orders, nobody else's;
-- `quickstart` and `prompts`: everything below, already filled in.
+- `quickstart` and `prompts`: everything below, already filled in;
+- `seeded`: demo data already in your sandbox, so the seller UI isn't empty: a hotel standing order with four weeks of simulated history, and this week's renewal **held for approval** because milk crept up (`standing.quantity_creep`, `standing.quantity_trend`, `standing.cost_drift`). It is priced from reference prices stored in the gateway, not a live Valio quote, and says so on the order. Creating the sandbox makes no Valio call.
 
 ## 2. Connect an agent
 
@@ -30,24 +31,24 @@ With Claude Code, paste `quickstart.claude_code`:
 claude mcp add --transport http sous $SOUS/mcp/ --header "Authorization: Bearer <agent_token>"
 ```
 
-Any MCP client works the same way; or use plain REST with `quickstart.curl_quote` and `curl_order`.
+Any MCP client works the same way; or use plain REST with `quickstart.curl_quote` and `curl_order` (replace `<quote.id>` with the quote's id; the idempotency key is your sandbox id plus the quote id, so a retry returns the same order and keys never clash with other sandboxes).
 
 ## 3. Ask it to buy something
 
-Paste a prompt from `prompts` (they include your mandate and agent ids). What you'll see:
+Paste a prompt from `prompts` (they include your mandate and agent ids). Prices and stock are live Valio Aimo data, so products and totals vary; the tiers and rules below are what the mandates guarantee:
 
 | Prompt | What happens |
 |---|---|
-| Hotel: 1,000 L of lactose-free milk for Monday | Free catalog search, then one signed quote with live Valio prices split across pack sizes. **Ordered, with an FYI** to the hotel (over €1,000, under €2,500). |
-| Hospital: substitute for chopped tomatoes | Good / better / best substitutes with their compromises. The order is **held for a human**: substitutes need approval, and missing allergen data is never treated as safe. |
-| Hotel: one exact product for tomorrow | If the order cut-off has passed, **refused** with the rule (`availability.cutoff_passed`). The agent can't talk its way around it. |
-| School: 1,500 L of milk | **Refused**: over the school's €1,500 hard limit (`spend.hard_limit`). |
+| Hotel: 1,000 L of lactose-free milk for Monday | Free catalog search, then one signed quote with live prices. Only plain lactose-free milk is chosen silently (no coffee milk or milk drinks). Between €1,000 and €2,500, the usual case, it is **ordered with an FYI** (`spend.notify`); above €2,500 or the €2.50/L cap it is held. |
+| Hospital: substitute for chopped tomatoes | Ranked substitutes with their compromises. An order for a substitute is **held for a human** (`substitution`); missing allergen data is flagged, never treated as safe, and milk or nuts are refused. |
+| Hotel: one exact product for tomorrow | Depends on the clock: after the order cut-off, **refused** with the rule (`availability.cutoff_passed`); before it, a small ordinary order. The agent can't talk its way around a passed cut-off. |
+| School: 1,500 L of milk | **Refused** whenever the total is over the school's €1,500 hard limit (`spend.hard_limit`), i.e. at any price above €1/L; never ordered silently. |
 
 Try to break it: ask for something with nuts for the hospital, claim to be another agent, reuse a quote. The mandate engine is plain code, not the LLM.
 
 ## 4. Be the human
 
-Open `quickstart.seller_ui` (`/ui/?sandbox=SBX-7Q2K#/inbox`): your held orders, each with the rules that fired. Approve or reject; when asked for the approver code, paste your `approver_token`. Then look at the order's timeline and the audit log: every step is hash-chained and the receipt is signed (Ed25519), checkable in the browser. `quickstart.buyer_ui` is the buyer's side of the same orders.
+Open `quickstart.seller_ui` (`/ui/?sandbox=SBX-7Q2K#/inbox`): your held orders, each with the rules that fired. The seeded standing-order renewal is already there (`seeded.held_order_id`); its standing order shows the four-week history and the drift. Approve or reject; when asked for the approver code, paste your `approver_token`. Then look at the order's timeline and the audit log: every step is hash-chained and the receipt is signed (Ed25519), checkable in the browser. `quickstart.buyer_ui` is the buyer's side of the same orders.
 
 ## Limits
 

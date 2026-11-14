@@ -283,7 +283,6 @@ def renew(standing_id: str, delivery_date: date | None = None, *, agent_id: str 
             raise S.GatewayError("already_renewed",
                                  f"Standing order {standing_id} was already renewed for {when}: order "
                                  f"{r['order_id']} is {r['status']}.", 409)
-    hist = [r for r in rens if r["status"] == "ordered" and r["delivery_date"] < when.isoformat()]
     items = _items(so, amounts)
 
     q = S.request_quote(S.QuoteRequest(
@@ -291,6 +290,15 @@ def renew(standing_id: str, delivery_date: date | None = None, *, agent_id: str 
         items=[S.QuoteItem(product_ids=it["product_ids"], amount=it["amount"], unit=it["unit"]) for it in items],
         rationale=rationale or f"Weekly renewal of standing order {so['name']}",
     ), agent_token=agent_token)["quote"]
+    return place_renewal(so, items, q, when, rens, agent_token=agent_token, rationale=rationale)
+
+
+def place_renewal(so: dict, items: list[dict], q: dict, when: date, rens: list[dict], *,
+                  agent_token: str | None = None, rationale: str | None = None, mark: dict | None = None) -> dict:
+    """Check a renewal's (already issued, signed) quote for drift and place the order. renew() and the
+    sandbox seed (sous/sandbox.py) both end here."""
+    standing_id = so["id"]
+    hist = [r for r in rens if r["status"] == "ordered" and r["delivery_date"] < when.isoformat()]
     snap = _snapshot(items, q)
     findings, base = drift(so, snap, hist)
     text = summary(findings, snap, base)
@@ -310,7 +318,7 @@ def renew(standing_id: str, delivery_date: date | None = None, *, agent_id: str 
            "quote_id": q["id"], "order_id": order["id"], "status": order["status"],
            "outcome": order["decision"]["outcome"], **snap,
            "drift": [x.model_dump() for x in findings], "summary": text,
-           "created_at": S._now().isoformat(timespec="milliseconds")}
+           "created_at": S._now().isoformat(timespec="milliseconds"), **(mark or {})}
     SS.add_renewal(ren)
     store.audit("standing.renewed", so["agent_id"], "agent", standing_id, so["buyer"],
                 {"standing_id": standing_id, "renewal_id": ren["id"], "order_id": order["id"],
@@ -321,7 +329,8 @@ def renew(standing_id: str, delivery_date: date | None = None, *, agent_id: str 
 
 # --- demo history -----------------------------------------------------------
 
-def simulate_history(standing_id: str, quote_id: str, weeks: list[list[float]], by: str) -> dict:
+def simulate_history(standing_id: str, quote_id: str, weeks: list[list[float]], by: str,
+                     priced_from: str = "live quote") -> dict:
     """Store synthetic past renewals (simulated=True) so a demo has a baseline to drift from.
 
     `weeks` = amounts per item, oldest first, delivered weekly up to the week before the quote's
@@ -346,7 +355,7 @@ def simulate_history(standing_id: str, quote_id: str, weeks: list[list[float]], 
                "delivery_date": (first + timedelta(weeks=w)).isoformat(), "simulated": True,
                "quote_id": None, "order_id": None, "status": "ordered", "outcome": "simulated",
                "items": items, "total_ex_vat": round(sum(x["total_ex_vat"] for x in items), 2), "drift": [],
-               "summary": f"Simulated for the demo: amounts given by {by}, priced at live quote {quote_id}.",
+               "summary": f"Simulated for the demo: amounts given by {by}, priced at {priced_from} {quote_id}.",
                "created_at": S._now().isoformat(timespec="milliseconds")}
         SS.add_renewal(ren)
         out.append(ren)
