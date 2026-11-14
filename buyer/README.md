@@ -24,7 +24,10 @@ To verify a bundle offline with Node 22 or newer, supply public keys obtained in
 
 ```sh
 node scripts/verify_buyer_bundle.mjs order-proof.json trusted-jwks.json
+node scripts/verify_buyer_bundle.mjs --tamper order-proof.json trusted-jwks.json
 ```
+
+The tamper demo first verifies the original, then changes one receipt-signature byte in memory and checks rejection. It preserves the saved bundle.
 
 The verifier checks signatures, document types, quote binding and amendment hashes using the supplied keys. It prints the signed status and total on success and exits with a nonzero status on failure. It makes no network requests and ignores the keys embedded in the bundle for trust.
 

@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import test from 'node:test';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import { Gateway, gatewayUrl, verifyJws, verifyProofBundle } from './gateway.mjs';
 import { helsinkiDate, parseIntent } from './intent.mjs';
@@ -352,6 +357,21 @@ test('exports signed verification material without buyer credentials and refuses
   assert.deepEqual(await verifyJws(bundle.quote_jws, bundle.jwks, 'sous-quote+jws'), quote);
   assert.deepEqual(await verifyJws(bundle.receipt_jws, bundle.jwks, 'sous-order+jws'), payload);
   assert.equal(JSON.stringify(bundle).includes('private-agent-credential'), false);
+  const directory = mkdtempSync(join(tmpdir(), 'sous-proof-tamper-'));
+  try {
+    const proofPath = join(directory, 'proof.json'), keysPath = join(directory, 'keys.json');
+    const saved = JSON.stringify(bundle);
+    writeFileSync(proofPath, saved);
+    writeFileSync(keysPath, JSON.stringify(jwks));
+    const command = new URL('../scripts/verify_buyer_bundle.mjs', import.meta.url);
+    const result = spawnSync(process.execPath, [fileURLToPath(command), '--tamper', proofPath, keysPath], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).original_verified, true);
+    assert.equal(JSON.parse(result.stdout).tamper_rejected, true);
+    assert.equal(readFileSync(proofPath, 'utf8'), saved);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
   await assert.rejects(client.proofBundle({ ...order, receipt_jws: receipt + 'broken' }, quote));
   exportedQuote = { ...quote, total_ex_vat: quote.total_ex_vat + 1 };
   await assert.rejects(client.proofBundle(order, quote), /exported signed quote/);

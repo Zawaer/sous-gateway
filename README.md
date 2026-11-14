@@ -6,6 +6,15 @@ Built at Junction 2026 for Valio Aimo's challenge "Trusted Trade Agents".
 
 **Try it:** watch agents order live at [135-181-8-209.sslip.io](https://135-181-8-209.sslip.io/) · get your own sandbox with ready prompts in 5 minutes: [docs/pitch/try-it.md](docs/pitch/try-it.md) · connect Claude, ChatGPT or any MCP client: [docs/CONNECT.md](docs/CONNECT.md).
 
+Download a verification bundle from an order in the reference buyer, then verify it with independently trusted public keys (Node 22+, no dependencies):
+
+```sh
+node scripts/verify_buyer_bundle.mjs order-proof.json trusted-jwks.json
+node scripts/verify_buyer_bundle.mjs --tamper order-proof.json trusted-jwks.json
+```
+
+The second command demonstrates rejection of an altered receipt and preserves the saved proof.
+
 ## Judge path in 5 minutes
 
 The demo server is production, `https://135-181-8-209.sslip.io`, set as `SOUS` below. It is redeployed from `main` until the Sun 15.11 08:00 Helsinki freeze. Staging, `https://staging.135-181-63-134.sslip.io`, is the fallback if production is ever down and usually runs newer code (on Sat 14.11 14:11Z `/health` showed prod at a431ff6, staging at ea4cd19); [docs/STATUS.md](docs/STATUS.md#deployed-now) says what runs where. Needs `curl` and `jq`.
