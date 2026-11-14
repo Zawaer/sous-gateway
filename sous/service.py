@@ -553,7 +553,9 @@ def _considered(o: dict, item_index: int, off_type: str | None, refusals: list |
         mine = o.get("comparison_price") or {}
         best = next((l.get("comparison_price") or {} for l in chosen if l.get("orderable")), {})
         if mine.get("ex_vat") is not None and best.get("ex_vat") is not None and mine.get("per") == best.get("per"):
-            why = ["More expensive per unit than the chosen option."]
+            why = (["More expensive per unit than the chosen option."] if mine["ex_vat"] >= best["ex_vat"] else
+                   [f"Cheaper per unit, but its packs overshoot the need more; the chosen packs leave less surplus "
+                    f"for at most {config.PACK_OVERSIZE_PRICE_PCT:g}% more in total."])
         else:
             why = ["Price per unit not comparable with the chosen option (no price per L/KG in the same unit), "
                    "so it was not chosen."]

@@ -425,11 +425,51 @@ def plan(need: float, need_unit: str | None, candidates: list[dict], sized: bool
     sized=False (a mandate-less quote under the buckets stock policy, sous/exposure.py): the cheapest orderable
     offer takes the whole need, never capped at its stock, so the line quantity can't reveal the exact stock;
     a short line keeps PARTIAL_STOCK and gets STOCK_SIZING_WITHHELD.
+    A need in L or KG that the cheapest packs overshoot by more than config.PACK_OVERSIZE_PCT (12 kg -> one 20 kg
+    bag) is planned again with each candidate first and smallest packs first; the plan with the least surplus wins
+    when it covers as much and costs at most config.PACK_OVERSIZE_PRICE_PCT more. A plan still over the threshold
+    carries PACK_OVERSIZE (a warning; mandate rule quantity.pack_oversize, notify) on its lines.
     Returns (lines, uncovered amount in need_unit).
     """
+    ranked = sorted(candidates, key=rank_key)
+    lines, left = _greedy(need, need_unit, ranked, sized)
+    if is_packs(need_unit) or not lines or _surplus(lines, need) <= need * config.PACK_OVERSIZE_PCT / 100 + 1e-9:
+        return lines, left
+    cost = _cost(lines)
+    best = (_surplus(lines, need), cost, lines, left)
+    usable = [o for o in ranked if o["orderable"] and o["quantity"] is not None]
+    orders = [[o] + [x for x in ranked if x is not o] for o in usable[1:]]
+    orders.append(sorted(usable, key=lambda o: ((o["content_per_sales_unit"] or {}).get("amount") or math.inf,
+                                                rank_key(o))))
+    for order in orders:
+        alt, alt_left = _greedy(need, need_unit, order, sized)
+        if not alt or alt_left > left + 1e-9 or _cost(alt) > cost * (1 + config.PACK_OVERSIZE_PRICE_PCT / 100) + 1e-9:
+            continue
+        if (s := _surplus(alt, need), c := _cost(alt)) < best[:2]:
+            best = (s, c, alt, alt_left)
+    surplus, _, lines, left = best
+    if surplus > need * config.PACK_OVERSIZE_PCT / 100 + 1e-9:
+        got, u = need + surplus, "kg" if need_unit == "KG" else "L"
+        msg = (f"{round(got, 2):g} {u} for a {round(need, 2):g} {u} need (+{surplus / need:.0%}): the smallest orderable "
+               f"packs that cover it; no other plan comes closer for at most {config.PACK_OVERSIZE_PRICE_PCT:g}% more.")
+        for l in lines:
+            l["issues"] = l["issues"] + [asdict(Issue("PACK_OVERSIZE", WARNING, msg))]
+    return lines, left
+
+
+def _surplus(lines: list[dict], need: float) -> float:
+    return max(0.0, round(sum((l.get("covers") or {}).get("amount") or 0 for l in lines) - need, 3))
+
+
+def _cost(lines: list[dict]) -> float:
+    return round(sum(l["line_total_ex_vat"] or 0 for l in lines), 2)
+
+
+def _greedy(need: float, need_unit: str | None, ranked: list[dict], sized: bool) -> tuple[list[dict], float]:
+    """Fill the need from offers in the given order (see plan)."""
     remaining = need
     lines = []
-    for o in sorted(candidates, key=rank_key):
+    for o in ranked:
         if remaining <= 1e-9 or not o["orderable"] or o["quantity"] is None:
             continue
         product = catalog.get(o["product_id"])

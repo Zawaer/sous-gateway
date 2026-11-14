@@ -127,3 +127,33 @@ def test_no_comparison_price_is_not_called_more_expensive():
     alt = q["alternatives_considered"]
     assert all("More expensive" not in w for a in alt for w in a["why_not"])
     assert any("not comparable" in w for a in alt for w in a["why_not"])
+
+
+# --- 2. pack oversize -----------------------------------------------------------------------------------------------
+
+def test_one_20kg_bag_for_12kg_is_flagged_when_nothing_closer_is_affordable():
+    add("BIG", "Sugar 20 kg", 20.0, 1.0, size_from_name=(20.0, "KG"))
+    add("SMALL", "Sugar 1 kg", 2.0, 2.0)  # 12 x 2.00 = 24.00, 20% dearer than the bag: too dear
+    q = quote(["BIG", "SMALL"], 12)
+    [line] = q["lines"]
+    assert line["product_id"] == "BIG" and line["quantity"] == 1
+    issue = next(i for i in line["issues"] if i["code"] == "PACK_OVERSIZE")
+    assert issue["message"].startswith("20 kg for a 12 kg need (+67%)")
+    assert "quantity.pack_oversize" in {f["rule"] for f in q["mandate_preview"]["findings"]}
+    assert q["mandate_preview"]["outcome"] == "notify"
+
+
+def test_smaller_packs_win_when_within_ten_percent():
+    add("BIG", "Sugar 20 kg", 20.0, 1.0, size_from_name=(20.0, "KG"))
+    add("SMALL", "Sugar 1 kg", 1.8, 1.8)  # 12 x 1.80 = 21.60, within 10% of 20.00
+    q = quote(["BIG", "SMALL"], 12)
+    assert [(l["product_id"], l["quantity"]) for l in q["lines"]] == [("SMALL", 12)]
+    assert not any(i["code"] == "PACK_OVERSIZE" for l in q["lines"] for i in l["issues"])
+    alt = next(a for a in q["alternatives_considered"] if a["product_id"] == "BIG")
+    assert "Cheaper per unit" in alt["why_not"][0]
+
+
+def test_small_rounding_is_not_oversize():
+    add("BAG", "Sugar 5 kg", 5.0, 1.0, size_from_name=(5.0, "KG"))
+    lines = quote(["BAG"], 9)["lines"]  # 10 kg for 9 kg: +11%
+    assert not any(i["code"] == "PACK_OVERSIZE" for l in lines for i in l["issues"])

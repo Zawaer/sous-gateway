@@ -193,6 +193,10 @@ def _build() -> list[dict]:
            "The need's unit isn't one of the product's units (20 ST of a product sold per KI with no single piece "
            "unit), so it was read as sales units: the line says so in unit_note and a human confirms the "
            "quantity. A unit the product defines, or ST on its one piece unit (PRK, BOT, ...), stays silent.", None),
+        _r("quantity.pack_oversize", "finding", ["notify"], "gateway",
+           f"The planned packs exceed a need in L or KG by more than {config.PACK_OVERSIZE_PCT:g}% (12 kg -> one "
+           f"20 kg bag, +67%) and no plan with less surplus costs at most {config.PACK_OVERSIZE_PRICE_PCT:g}% more: "
+           "the order goes through and the buyer is told.", None),
     ]
     R += [_r(f"availability.{c.lower()}", "finding", ["block"], "valio", t) for c, t in _VALIO_BLOCKING.items()]
     R += [_r(f"availability.{c.lower()}", "finding", ["block"], "gateway", t) for c, t in _GATEWAY_BLOCKING.items()]

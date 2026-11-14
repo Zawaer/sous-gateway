@@ -32,6 +32,10 @@ AIMO_CUSTOMER = os.getenv("VALIO_AIMO_CUSTOMER", "123")
 
 TZ = ZoneInfo("Europe/Helsinki")
 QUOTE_TTL_SECONDS = int(env("QUOTE_TTL", "900"))
+# Planning (sous/quote.py plan): a plan whose packs exceed an L/KG need by more than this many percent is flagged
+# PACK_OVERSIZE, after trying plans with less surplus that cost at most PACK_OVERSIZE_PRICE_PCT more.
+PACK_OVERSIZE_PCT = float(env("PACK_OVERSIZE_PCT", "25"))
+PACK_OVERSIZE_PRICE_PCT = float(env("PACK_OVERSIZE_PRICE_PCT", "10"))
 
 # Public deployment
 PUBLIC_BASE_URL = env("PUBLIC_BASE_URL", "").rstrip("/")

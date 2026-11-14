@@ -256,6 +256,7 @@ Each issue is `{code, severity, message}`. A line with any `blocking` issue has 
 | `PARTIAL_STOCK` | warning | Known stock is below the quantity. Removed from lines that `plan` sized to stock (every line of a quote under a mandate is); where it stays (e.g. a line re-checked later), the rule `availability.partial_stock` holds the order for a human. |
 | `STOCK_SIZING_WITHHELD` | warning | A mandate-less quote's line is short of stock; the exact coverable amount is shown only under a mandate (section 5.2). |
 | `LOW_RELIABILITY` | warning | Historical full-delivery rate below 0.9. |
+| `PACK_OVERSIZE` | warning | The planned packs exceed a need in L or KG by more than 25 % (`SOUS_PACK_OVERSIZE_PCT`): "20 kg for a 12 kg need (+67%)". Before flagging, the planner tries plans with less surplus (each candidate first, smallest packs first) and takes the one with the least surplus that covers as much and costs at most 10 % more (`SOUS_PACK_OVERSIZE_PRICE_PCT`). Rule `quantity.pack_oversize` (notify). |
 | `DATA_STALE` | warning | Valio Aimo couldn't be reached live (rate limit, error, or the gateway paused calls after a 429), so the line uses the last copy fetched: price up to 15 min old, availability up to 5 min. The cut-off is still checked against now. Always sends the order to a human (`availability.data_stale`). |
 
 ## 6. Tiers and rules

@@ -289,6 +289,8 @@ def evaluate(
                 add("unit.interpreted", "ask", f"{name}: {issue['message']}", pid)
             elif issue["code"] == "TYPE_MISMATCH":  # not the kind of product asked for (coffee milk for milk)
                 add("product.type_mismatch", "ask", f"{name}: {issue['message']}", pid)
+            elif issue["code"] == "PACK_OVERSIZE":  # 12 kg needed, one 20 kg bag planned: the buyer is told
+                add("quantity.pack_oversize", "notify", f"{name}: {issue['message']}", pid)
 
         if (mandate.first_time_products and ordered_products is not None
                 and pid not in ordered_products and pid not in mandate.usual_products):
