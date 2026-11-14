@@ -168,6 +168,11 @@ def _build() -> list[dict]:
         _r("allergen.unknown", "finding", _field_tiers("unknown_allergens"), "buyer",
            "The product has no allergen data, so it can't be confirmed free of an avoided allergen. Unknown "
            "is never treated as safe.", "unknown_allergens"),
+        _r("allergen.cleared", "finding", ["notify"], "buyer",
+           "The product has no allergen data, but a human of this buyer already confirmed it free of everything the "
+           "mandate avoids when approving an earlier order and asked the gateway to remember it (sous/clearance.py: "
+           "one mandate and product, voided when the product data or the avoided allergens change, expires after "
+           "90 days, revocable). Ordered, and the buyer is told whose clearance was used.", "avoid_allergens"),
         _r("substitution", "finding", _field_tiers("substitutions"), "buyer",
            "A line replaces the product the buyer asked for; the mandate says how much say the human gets.",
            "substitutions"),

@@ -151,16 +151,16 @@ def require_approver(request: Request, x_approver_code: str | None = Header(defa
     An agent credential (vka_..., as bearer or as the code) on approve/reject is refused with 403 and audited,
     even when no approver code is configured: agents never decide their own orders."""
     path = request.url.path
-    if path.endswith(("/approve", "/reject")):
+    if path.endswith(("/approve", "/reject", "/approve-with-changes")):
         presented = [t for t in (agent_auth.bearer(authorization), x_approver_code)
                      if t and t.startswith(agent_auth.PREFIX)]
         if presented:
             raise S.refuse_agent_approval(request.path_params.get("order_id", ""), presented[0],
-                                          "approve" if path.endswith("/approve") else "reject")
+                                          "reject" if path.endswith("/reject") else "approve")
     if config.APPROVER_CODE and access.approver_code_ok(x_approver_code):
         return "global approver code"
     order_id = request.path_params.get("order_id")
-    if path.endswith(("/approve", "/reject")) and sandbox.may_approve(x_approver_code, order_id):
+    if path.endswith(("/approve", "/reject", "/approve-with-changes")) and sandbox.may_approve(x_approver_code, order_id):
         o = store.get_order(order_id) or {}
         return f"sandbox approver {sandbox.owner(o.get('mandate_id'))}"
     if config.APPROVER_CODE:
@@ -564,12 +564,51 @@ def order_history(order_id: str):
 class Decision(BaseModel):
     by: str
     note: str | None = None
+    remember_allergen_clearance: bool = Field(False, description=(
+        "Approve only. The approver confirms the products this order was held for because they have no allergen "
+        "data (allergen.unknown) are free of what the mandate avoids, and asks the gateway to remember it for this "
+        "buyer: the next order of the same product is not held for that again (rule allergen.cleared). Per "
+        "mandate and product; voided when the product data changes; expires after 90 days; DELETE /clearances/{id}."))
 
 
 @app.post("/orders/{order_id}/approve", tags=["approvals"])
 def approve(order_id: str, d: Decision, authority: str = Depends(require_approver)):
     """`by` is the name the approver gives; the order and audit also record which credential approved."""
-    return S.decide(order_id, d.by, True, d.note, authority=authority)
+    o = S.decide(order_id, d.by, True, d.note, authority=authority)
+    if d.remember_allergen_clearance and o.get("status") == "ordered":
+        from . import clearance
+        o = {**o, "allergen_clearances": clearance.record_from_order(o, S._mandate(o["mandate_id"]), d.by,
+                                                                     authority, d.note)}
+    return o
+
+
+from . import approve_changes as AC  # noqa: E402  approve with changes (sous/approve_changes.py)
+
+
+@app.post("/orders/{order_id}/approve-with-changes", tags=["approvals"])
+def approve_with_changes(order_id: str, req: AC.ChangesIn, authority: str = Depends(require_approver)):
+    """Approve a held order with edited quantities (0 removes a line): re-quoted live, re-checked against the
+    mandate, placed as a new order that this approval covers; the original is closed as replaced
+    (sous/approve_changes.py). A refusal changes nothing."""
+    return AC.approve_with_changes(order_id, req, authority)
+
+
+@app.get("/clearances", tags=["approvals"])
+def list_clearances(mandate_id: str | None = None, include_inactive: bool = False,
+                    _: str = Depends(require_global_approver)):
+    """Remembered allergen clearances (sous/clearance.py), newest first."""
+    from . import clearance
+    return {"clearances": clearance.list_for(mandate_id, active_only=not include_inactive)}
+
+
+@app.delete("/clearances/{clearance_id}", tags=["approvals"])
+def revoke_clearance(clearance_id: str, by: str = Query("approver"), authority: str = Depends(require_global_approver)):
+    """Forget a remembered allergen clearance: the product is held for allergen.unknown again."""
+    from . import clearance
+    c = clearance.revoke(clearance_id, by, "global approver code")
+    if not c:
+        raise HTTPException(404, f"No clearance {clearance_id}.")
+    return c
 
 
 @app.post("/orders/{order_id}/reject", tags=["approvals"])

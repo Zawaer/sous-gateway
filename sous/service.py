@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import account, agent_auth, aimo, allergen_ai, autonomy, catalog, clock, config, credentials, deadline, erp, exposure, holds, notify, options as OPT, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
+from . import account, agent_auth, aimo, allergen_ai, autonomy, catalog, clearance, clock, config, credentials, deadline, erp, exposure, holds, notify, options as OPT, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
 from .mandate import Mandate, evaluate, product_refusals
 
 
@@ -716,6 +716,7 @@ def _evaluate(mandate: Mandate, agent_id: str, q: dict, now: datetime, extra_fin
                     families={l["product_id"]: usual.family(l["product_id"]) for l in q["lines"]}
                     if mandate.max_price_change_pct else None,
                     allergen_ai=allergen_ai.assess_lines(q["lines"], mandate.avoid_allergens),
+                    allergen_clearances=clearance.for_lines(mandate, q["lines"], now),
                     **_spend_context(mandate, now))
 
 
@@ -1059,6 +1060,13 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
                 o["buyer"], {"order_id": order_id, "note": note, "resulting_status": status, "reason": reason,
                  "authority": authority, **({"passkey": evidence} if evidence else {})})
     return o, mandate
+
+
+def _decide_locked(order_id: str, approver: str, approve: bool, note: str | None,
+                   authority: str | None = None) -> tuple[dict, Mandate]:
+    """_decide under the order lock, without notifying (sous/approve_changes.py notifies once at the end)."""
+    with _order_lock:
+        return _decide(order_id, approver, approve, note, authority)
 
 
 def get_order(order_id: str) -> dict:

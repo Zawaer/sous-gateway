@@ -185,6 +185,7 @@ def evaluate(
     families: dict[str, tuple[str, str]] | None = None,
     last_comparison_prices: dict[tuple[str, str], dict] | None = None,
     allergen_ai: dict[str, dict[str, dict]] | None = None,
+    allergen_clearances: dict[str, dict] | None = None,
 ) -> tuple[Tier, list[Finding]]:
     """`extra_findings` are checks made outside the mandate (e.g. standing-order drift); they count like any rule.
     `quantities` is this order's amount per (product family, unit), `usual_quantities` the same buyer's past
@@ -196,7 +197,9 @@ def evaluate(
     each line's product family and `last_comparison_prices` the last price per L/KG paid per (family, per) unit
     (price.comparison_changed). Times are when orders went through (store.ordered_at).
     `allergen_ai` is the Gemini Decisions API's {product_id: {code: {p, confidence, model}}} for products that
-    declare no allergens (sous/allergen_ai.py): it can turn allergen.unknown into allergen.likely, never into safe."""
+    declare no allergens (sous/allergen_ai.py): it can turn allergen.unknown into allergen.likely, never into safe.
+    `allergen_clearances` is {product_id: clearance} from sous/clearance.py: a human of this buyer already confirmed
+    the product free of everything the mandate avoids, so allergen.unknown becomes allergen.cleared (notify)."""
     f: list[Finding] = []
 
     def add(rule, outcome, message, pid=None):
@@ -358,6 +361,11 @@ def evaluate(
                     f"{name} declares no allergens, but from its name and ingredients it very likely contains "
                     f"{said}, by Gemini Decisions ({hits[0][1].get('model', 'gemini-decision-1')}). Refused: an "
                     "avoided allergen is too likely to approve.", pid)
+            elif st["status"] == "unknown" and (clr := (allergen_clearances or {}).get(pid)) \
+                    and mandate.unknown_allergens != "block":
+                from .clearance import message as _cleared
+                avoid = ", ".join(catalog.ALLERGENS.get(c, c) for c in mandate.avoid_allergens)
+                add("allergen.cleared", "notify", _cleared(name, clr, avoid), pid)
             elif st["status"] == "unknown":
                 avoid = ", ".join(catalog.ALLERGENS.get(c, c) for c in mandate.avoid_allergens)
                 add("allergen.unknown", mandate.unknown_allergens,
