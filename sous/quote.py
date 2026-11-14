@@ -137,6 +137,7 @@ LOW_RELIABILITY = 0.9
 
 BLOCKING = "blocking"  # the line cannot be ordered as quoted
 WARNING = "warning"  # orderable, but the mandate may require a human to look
+INFO = "info"  # for the reader only; no mandate rule acts on it
 
 
 @dataclass
@@ -378,6 +379,15 @@ def build_offer(
         issues.append(Issue("DATA_STALE", WARNING,
                             f"Live {' and '.join(stale)} couldn't be refreshed ({why}); using data from "
                             f"{mins} min ago. The cut-off is still checked against now."))
+    # --- a judge sandbox over our OWN call budget got a recent copy instead of a refusal (aimo._cached)
+    cached = {k: d for k, d in (("price", price), ("availability", avail)) if d and d.get("_cached_seconds") is not None}
+    cached_at = min((d["_cached_at"] for d in cached.values()), default=None)
+    if cached and not stale:
+        mins = max(1, round(max(d["_cached_seconds"] for d in cached.values()) / 60))
+        issues.append(Issue("DATA_CACHED", INFO,
+                            f"{' and '.join(cached).capitalize()} from the gateway's cache ({cached_at}, {mins} min "
+                            "old, at most 10): the sandbox's live Valio budget for this minute was used up. Valio's "
+                            "mock data is static; the cut-off is still checked against now."))
     rel = product["delivery_reliability"]
     if rel is not None and rel < LOW_RELIABILITY:
         issues.append(Issue("LOW_RELIABILITY", WARNING,
@@ -436,6 +446,7 @@ def build_offer(
         "claims": product["claims"],
         "allergens": product["allergens"],
         "temperature": product["temperature"],
+        **({"cached_at": cached_at} if cached else {}),
         "orderable": not any(i.severity == BLOCKING for i in issues),
         "issues": [asdict(i) for i in issues],
     }

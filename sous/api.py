@@ -47,15 +47,21 @@ async def lifespan(app: FastAPI):
     sweeper.cancel()
 
 
+def _background(fn):
+    """Run a sweep as background work for the Valio budget (aimo.priority): never the interactive slice."""
+    with aimo.background():
+        return fn()
+
+
 async def _sweep_overdue(every: float = 60):
     """Held orders past their approve_by become expired_cutoff (and the buyer is told) within a minute."""
     while True:
         try:
-            await asyncio.to_thread(S.sweep_overdue)
+            await asyncio.to_thread(_background, S.sweep_overdue)
         except Exception:  # noqa: BLE001 - reads expire lazily too; never kill the app over the sweep
             pass
         try:  # orders whose hand-off to Valio's ERP failed are retried from the outbox (sous/erp.py)
-            await asyncio.to_thread(erp.process_due)
+            await asyncio.to_thread(_background, erp.process_due)
         except Exception:  # noqa: BLE001
             pass
         await asyncio.sleep(every)

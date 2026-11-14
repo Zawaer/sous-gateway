@@ -7,6 +7,9 @@ HTTP 429. With SOUS_VALKEY_URL set, the Valio client (sous/aimo.py) uses Valkey 
 - a global call budget: a sliding one-minute window shared by all deployments, with a
   per-role cap (prod may use the whole window, other roles only a share of it, so CI and
   staging can never starve prod);
+- a slice reserved for interactive traffic (SOUS_VALIO_INTERACTIVE_SHARE, default 0.3): background work
+  (standing-order renewals, sweeps, the live demo buyers, CI evals) stops at the rest of the window, so a
+  judge's sandbox quote always finds calls left; interactive (sandbox) calls may use the whole window;
 - a shared circuit breaker: a 429 anywhere pauses every deployment until Retry-After;
 - a shared offer cache: price/availability items per (kind, date, product id), so a
   quote on staging warms prod and vice versa (the in-process cache stays as L1).
@@ -41,6 +44,18 @@ ROLE = (config.env("DEPLOYMENT_ROLE", "dev") or "dev").strip().lower()
 GLOBAL_CALLS_PER_MIN = int(config.env("VALIO_GLOBAL_CALLS_PER_MIN", "60"))
 _share_override = config.env("VALIO_ROLE_SHARE", "")
 
+
+def _share(v: str | None, default: float) -> float:
+    try:
+        return min(0.9, max(0.0, float(v))) if v not in (None, "") else default
+    except ValueError:
+        return default
+
+
+# Slice of every per-minute budget (shared and per-process) background work can never use: kept for interactive
+# traffic (judge sandboxes, a human waiting on a quote). Capped at 0.9 so background work is never shut out.
+INTERACTIVE_SHARE = _share(config.env("VALIO_INTERACTIVE_SHARE", "0.3"), 0.3)
+
 _lock = threading.Lock()
 _client = None  # redis.Redis, created lazily
 _down_until = 0.0
@@ -57,10 +72,13 @@ class OverBudget(Exception):
         self.limit = limit
 
 
-def configure(url: str | None = None, role: str | None = None, limit: int | None = None, client=None) -> None:
+def configure(url: str | None = None, role: str | None = None, limit: int | None = None, client=None,
+              interactive_share: float | None = None) -> None:
     """(Re)configure; tests pass a fakeredis client. url="" turns Valkey off."""
-    global URL, ROLE, GLOBAL_CALLS_PER_MIN, _client, _down_until, _logged_down, _last_error
+    global URL, ROLE, GLOBAL_CALLS_PER_MIN, INTERACTIVE_SHARE, _client, _down_until, _logged_down, _last_error
     with _lock:
+        if interactive_share is not None:
+            INTERACTIVE_SHARE = _share(str(interactive_share), INTERACTIVE_SHARE)
         if url is not None:
             URL = url
         if role is not None:
@@ -87,6 +105,21 @@ def role_limit(role: str | None = None) -> int:
         except ValueError:
             pass
     return max(1, int(GLOBAL_CALLS_PER_MIN * share))
+
+
+def background_cap(total: int) -> int:
+    """The most of a `total` per-minute budget background work may use: the interactive slice stays free."""
+    return max(1, int(total * (1.0 - INTERACTIVE_SHARE)))
+
+
+def limit_for(priority: str = "normal") -> int:
+    """This deployment's cap on the shared window for one class of traffic (aimo.priority()):
+    interactive = the whole window (judges' sandbox quotes come first, whatever the role); normal = the role's cap;
+    background = the role's cap, but never into the interactive slice."""
+    if priority == "interactive":
+        return GLOBAL_CALLS_PER_MIN
+    lim = role_limit()
+    return min(lim, background_cap(GLOBAL_CALLS_PER_MIN)) if priority == "background" else lim
 
 
 def _redis():
@@ -162,18 +195,19 @@ def _used(cur: int, prev: int, elapsed: float) -> float:
     return prev * (1.0 - elapsed) + cur
 
 
-def take() -> bool:
+def take(priority: str = "normal") -> bool:
     """Take one call from the global budget.
 
     Returns True when Valkey accounted for it, False when Valkey is off/down (the caller
-    falls back to its per-process budget). Raises OverBudget when this role's cap is reached."""
+    falls back to its per-process budget). Raises OverBudget when this role's cap (for this
+    class of traffic, limit_for) is reached."""
     r = _redis()
     if r is None:
         return False
     now = time.time()
     minute, elapsed = _window(now)
     cur_key, prev_key = f"{PREFIX}budget:{minute}", f"{PREFIX}budget:{minute - 1}"
-    limit = role_limit()
+    limit = limit_for(priority)
     try:
         p = r.pipeline(transaction=True)
         p.incr(cur_key)
@@ -310,7 +344,9 @@ def health(local_used: int, local_limit: int) -> dict:
     u = usage() if enabled() else None
     if u is not None:
         return {**base, "backend": "valkey", "ok": True, "used_this_minute": u["used_this_minute"],
-                "limit": GLOBAL_CALLS_PER_MIN, "role_limit": role_limit(), "by_role": u["by_role"],
+                "limit": GLOBAL_CALLS_PER_MIN, "role_limit": role_limit(),
+                "background_limit": limit_for("background"), "interactive_share": INTERACTIVE_SHARE,
+                "by_role": u["by_role"],
                 "denied": _stats["denied"], "shared_cache_hits": _stats["cache_hits"]}
     return {**base, "backend": "local", "ok": not enabled(), "used_this_minute": local_used, "limit": local_limit,
             "error": _last_error if enabled() else None}

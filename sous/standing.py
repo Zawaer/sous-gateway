@@ -330,11 +330,12 @@ def renew(standing_id: str, delivery_date: date | None = None, *, agent_id: str 
                                  f"{r['order_id']} is {r['status']}.", 409)
     items = _items(so, amounts)
 
-    q = S.request_quote(S.QuoteRequest(
-        agent_id=so["agent_id"], mandate_id=so["mandate_id"], delivery_date=when,
-        items=[S.QuoteItem(product_ids=it["product_ids"], amount=it["amount"], unit=it["unit"]) for it in items],
-        rationale=rationale or f"Weekly renewal of standing order {so['name']}",
-    ), agent_token=agent_token)["quote"]
+    with S.aimo.background():  # a renewal never takes the Valio calls kept for interactive quotes (a sandbox's do)
+        q = S.request_quote(S.QuoteRequest(
+            agent_id=so["agent_id"], mandate_id=so["mandate_id"], delivery_date=when,
+            items=[S.QuoteItem(product_ids=it["product_ids"], amount=it["amount"], unit=it["unit"]) for it in items],
+            rationale=rationale or f"Weekly renewal of standing order {so['name']}",
+        ), agent_token=agent_token)["quote"]
     return place_renewal(so, items, q, when, rens, agent_token=agent_token, rationale=rationale)
 
 

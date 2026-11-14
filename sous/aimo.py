@@ -21,10 +21,19 @@ breaker and the cache are also shared by every deployment using the key: a globa
 per-minute budget with a prod-first cap per role, a 429 anywhere pauses everyone, and
 offers fetched by one deployment serve the others. If Valkey is unreachable the client
 falls back to the per-process behaviour above.
+
+Interactive first: every budget keeps a slice (shared.INTERACTIVE_SHARE, SOUS_VALIO_INTERACTIVE_SHARE=0.3) that
+background work can't use (priority(): standing-order renewals, sweeps and the live demo buyers run inside
+`background()`, a CI process is background throughout), so a judge's sandbox quote finds calls left. And when a
+sandbox lookup is refused only by our OWN budget (never a Valio 429 or outage), a copy fetched in the last
+CACHED_MAX seconds (this process or the Valkey cache) is served instead, marked item["_cached_seconds"]:
+quote.build_offer turns that into DATA_CACHED, an info issue (Valio's mock data is static all weekend). Without
+such a copy the lookup is refused as before: never a quote on unknown data.
 """
 
 from __future__ import annotations
 
+import contextlib
 import contextvars
 import random
 import threading
@@ -44,13 +53,15 @@ MAX_WAIT = 8.0  # most a request waits on retries before falling back / failing
 MAX_ATTEMPTS = 3
 DEFAULT_PAUSE = 30.0  # circuit-breaker pause after a 429 without Retry-After (Valio: a 429 blocks the client for 30 s)
 MAX_PAUSE = 300.0
+CACHED_MAX = 600  # oldest copy a sandbox lookup refused by our own budget may be served (marked DATA_CACHED)
 
 _lock = threading.Lock()
 # (kind, day, productId) -> (fetched_at, item). Entries are kept past their TTL as the last-known copy.
 _cache: dict[tuple[str, str, str], tuple[float, dict]] = {}
 stats = {"price_calls": 0, "availability_calls": 0, "cache_hits": 0}
 # Kept out of `stats`: callers diff `stats` per request to report the calls a quote cost.
-_health = {"rate_limited": 0, "server_errors": 0, "stale_served": 0, "coalesced": 0, "last_429_at": None}
+_health = {"rate_limited": 0, "server_errors": 0, "stale_served": 0, "cached_served": 0, "coalesced": 0,
+           "last_429_at": None}
 _circuit_until = 0.0
 _inflight: dict[tuple[str, str, frozenset[str]], "_Call"] = {}
 _sleep = time.sleep  # patched in tests
@@ -86,6 +97,30 @@ class Meter:
 
 
 meter: contextvars.ContextVar[Meter | None] = contextvars.ContextVar("aimo_sandbox_meter", default=None)
+_traffic: contextvars.ContextVar[str | None] = contextvars.ContextVar("aimo_traffic", default=None)
+# A whole process can be background (SOUS_VALIO_TRAFFIC=background); a CI process always is (priority()).
+_DEFAULT_TRAFFIC = (config.env("VALIO_TRAFFIC", "") or "").strip().lower()
+
+
+@contextlib.contextmanager
+def background():
+    """Run Valio lookups as background work: they never use the interactive slice of the budget."""
+    token = _traffic.set("background")
+    try:
+        yield
+    finally:
+        _traffic.reset(token)
+
+
+def priority() -> str:
+    """interactive (a judge sandbox's lookup: may use the whole budget), background (renewals, sweeps, live demo
+    buyers, CI: never the interactive slice) or normal (everything else: the role's cap)."""
+    if meter.get() is not None:
+        return "interactive"
+    t = _traffic.get() or _DEFAULT_TRAFFIC
+    if t in ("background", "interactive"):
+        return t
+    return "background" if shared.ROLE == "ci" else "normal"
 _calls: list[float] = []
 _sandbox_calls: list[float] = []  # live calls made for judge sandboxes, their own per-minute sub-budget
 
@@ -101,8 +136,14 @@ def _take_budget() -> None:
     budget shared by every deployment (sous/shared.py)."""
     now = time.time()
     m = meter.get()
+    prio = priority()
     with _lock:
         _prune(_calls, now)
+        if prio == "background" and len(_calls) >= (cap := shared.background_cap(config.AIMO_CALLS_PER_MIN)):
+            raise BudgetLimit(f"Background work may use {cap} of the gateway's {config.AIMO_CALLS_PER_MIN} live "
+                              "Valio Aimo calls per minute (the rest is kept for interactive quotes) and that budget "
+                              "is used up; retry shortly.",
+                              retry_after=max(1, int(60 - (now - _calls[len(_calls) - cap])) + 1), rate_limited=True)
         if m is not None:
             if not m.allowed:
                 raise SandboxLimit(f"Sandbox {m.sandbox} has used its {config.SANDBOX_QUOTES} live Valio Aimo "
@@ -123,7 +164,7 @@ def _take_budget() -> None:
     # Then the budget every deployment shares in Valkey (no-op when unset or unreachable). Outside the lock:
     # it is a network round trip. If it refuses, hand back the local slot this call took.
     try:
-        shared.take()
+        shared.take(prio)
     except shared.OverBudget as e:
         with _lock:
             if now in _calls:
@@ -133,7 +174,8 @@ def _take_budget() -> None:
                     _sandbox_calls.remove(now)
                 m.live = was_live
         raise SharedBudgetLimit(f"The shared budget of live Valio Aimo calls for this minute is used up "
-                        f"({shared.ROLE} may use {e.limit} of {shared.GLOBAL_CALLS_PER_MIN}); retry shortly.",
+                        f"({shared.ROLE} {prio} traffic may use {e.limit} of {shared.GLOBAL_CALLS_PER_MIN}); "
+                        "retry shortly.",
                         retry_after=e.retry_after, rate_limited=True) from None
 
 
@@ -266,7 +308,7 @@ def _fetch_shared(kind: str, day: str, chunk: list[str]) -> list[dict]:
             for item in call.items:
                 _cache[(kind, day, item["productId"])] = (fetched, item)
         shared.put_offers(kind, day, fetched, call.items,
-                          keep=PRICE_STALE_MAX if kind == "price" else AVAILABILITY_STALE_MAX)
+                          keep=max(CACHED_MAX, PRICE_STALE_MAX if kind == "price" else AVAILABILITY_STALE_MAX))
         return call.items
     except Exception as e:
         call.error = e if isinstance(e, AimoError) else AimoError(f"Valio Aimo call failed: {type(e).__name__}")
@@ -324,6 +366,23 @@ def _shared_stale(kind: str, day: str, chunk: list[str]) -> None:
                 _cache[(kind, day, pid)] = (t, item)
 
 
+def _cached(kind: str, day: str, chunk: list[str]) -> dict[str, dict] | None:
+    """A sandbox lookup refused by our own budget: copies of EVERY id in `chunk` at most CACHED_MAX old (this
+    process's or Valkey's), each marked _cached_seconds / _cached_at, or None (then the refusal stands)."""
+    _shared_stale(kind, day, chunk)  # adopt newer copies another deployment fetched
+    now = time.time()
+    out = {}
+    with _lock:
+        for pid in chunk:
+            hit = _cache.get((kind, day, pid))
+            if not hit or now - hit[0] > CACHED_MAX:
+                return None
+            out[pid] = {**hit[1], "_cached_seconds": int(now - hit[0]),
+                        "_cached_at": datetime.fromtimestamp(hit[0], config.TZ).isoformat(timespec="seconds")}
+        _health["cached_served"] += len(out)
+    return out
+
+
 def _post(kind: str, requested: date, ids: list[str], ttl: int, stale_max: int) -> dict[str, dict]:
     if replay.active():  # offline replay (SOUS_VALIO_REPLAY): a recorded snapshot, never the network
         return replay.lookup(kind, ids)
@@ -348,7 +407,11 @@ def _post(kind: str, requested: date, ids: list[str], ttl: int, stale_max: int) 
                 out[item["productId"]] = item
         except AimoError as e:
             if isinstance(e, (SandboxLimit, BudgetLimit)):
-                raise
+                # Our own budget, not Valio: a judge's sandbox gets a recent copy (marked) instead of a refusal.
+                if meter.get() is None or (cached := _cached(kind, day, chunk)) is None:
+                    raise
+                out.update(cached)
+                continue
             _shared_stale(kind, day, chunk)
             stale = _stale(kind, day, chunk, stale_max, e)
             if not stale:
@@ -386,6 +449,8 @@ def health() -> dict:
             "rate_limited_responses": _health["rate_limited"],
             "server_errors": _health["server_errors"],
             "stale_items_served": _health["stale_served"],
+            "cached_items_served": _health["cached_served"],
+            "background_budget_per_minute": shared.background_cap(config.AIMO_CALLS_PER_MIN),
             "coalesced_requests": _health["coalesced"],
             "shared_budget": budget,
             **({"replay": replay.info()} if replay.active() else {}),
@@ -401,4 +466,5 @@ def reset() -> None:
         _sandbox_calls.clear()
         _inflight.clear()
         _circuit_until = 0.0
-        _health.update(rate_limited=0, server_errors=0, stale_served=0, coalesced=0, last_429_at=None)
+        _health.update(rate_limited=0, server_errors=0, stale_served=0, cached_served=0, coalesced=0,
+                       last_429_at=None)

@@ -140,7 +140,8 @@ def test_stale_copy_from_another_deployment(monkeypatch, server):
     # Age the shared copy past the availability TTL but within its stale horizon.
     r = fakeredis.FakeRedis(server=server, decode_responses=True)
     key = f"sous:valio:offer:availability:{DAY.isoformat()}:1"
-    assert aimo.AVAILABILITY_STALE_MAX - 5 < r.ttl(key) <= aimo.AVAILABILITY_STALE_MAX  # kept as last-known copy
+    keep = max(aimo.CACHED_MAX, aimo.AVAILABILITY_STALE_MAX)  # last-known copy, and the sandbox cached answer
+    assert keep - 5 < r.ttl(key) <= keep
     d = json.loads(r.get(key))
     d["t"] -= aimo.AVAILABILITY_TTL + 30
     r.set(key, json.dumps(d), keepttl=True)

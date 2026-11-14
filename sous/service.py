@@ -7,6 +7,7 @@ written to the audit log.
 
 from __future__ import annotations
 
+import contextlib
 import secrets
 import threading
 from datetime import date, datetime, timedelta
@@ -400,10 +401,19 @@ def request_quote(req: QuoteRequest, agent_token: str | None = None, approver: b
         raise GatewayError("too_many_candidates",
                            f"At most {config.MAX_CANDIDATES_PER_QUOTE} candidate products per quote; narrow the search first.")
     try:
-        with sandbox.metered(m):
+        with sandbox.metered(m), _traffic(req.mandate_id):
             return _request_quote(req, skip, approver, fetch_on, offer)
     except aimo.AimoError as e:
         raise valio_error(e)
+
+
+def _traffic(mandate_id: str | None):
+    """The live demo buyers (scripts/live_buyers.py, mandates SOUS_BACKGROUND_MANDATES, default M-LIVE-*) are
+    background work for the Valio budget: they never take the calls kept for interactive quotes (aimo.priority)."""
+    prefixes = [x.strip() for x in (config.env("BACKGROUND_MANDATES", "M-LIVE-") or "").split(",") if x.strip()]
+    if mandate_id and any(mandate_id.startswith(x) for x in prefixes):
+        return aimo.background()
+    return contextlib.nullcontext()
 
 
 def _apply_option(req: QuoteRequest) -> tuple[QuoteRequest, set[int], dict[int, date]]:

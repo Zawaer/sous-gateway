@@ -70,6 +70,7 @@ Valkey is an optimisation for a shared limit, never a dependency of a quote:
 | `SOUS_DEPLOYMENT_ROLE` | `dev` | `prod` on the prod server, `staging`, `ci` in CI, `demo` for demo scripts |
 | `SOUS_VALIO_GLOBAL_CALLS_PER_MIN` | `60` | Shared budget per minute, all deployments together |
 | `SOUS_VALIO_ROLE_SHARE` | (empty) | Override the 0.5 share of non-prod roles |
+| `SOUS_VALIO_INTERACTIVE_SHARE` | `0.3` | Slice of every per-minute budget (shared and per-process) kept for interactive traffic: background work (standing-order renewals, sweeps, the live demo buyers `SOUS_BACKGROUND_MANDATES=M-LIVE-`, every call of a `ci` process or one with `SOUS_VALIO_TRAFFIC=background`) stops at the rest. A judge sandbox's lookups are interactive and may use the whole window, past a non-prod role's cap |
 
 1. Create an Aiven for Valkey service (any plan; ours is in Europe, near Valio Aimo's API) and copy
    its Service URI.

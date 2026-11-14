@@ -707,7 +707,7 @@ class _Open(BaseModel):
 
 class IssueDoc(_Open):
     code: str = Field(description="Stable issue code, e.g. LATER_DATE, CUTOFF_PASSED (PROTOCOL.md section 5)")
-    severity: Literal["blocking", "warning"]
+    severity: Literal["blocking", "warning", "info"]
     message: str
 
 
