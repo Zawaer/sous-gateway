@@ -139,13 +139,26 @@ def run(agents: int = 60, stock: float = 400, policy: str = "first_come", seed: 
         lat_lock = threading.Lock()
         start = threading.Barrier(agents)
 
+        by_agent = {b["agent"]: b for b in buyers}
+        t_start = [0.0]  # set when the threads start: event times are ms since then (the live view replays them)
+
         def call(kind: str, path: str, body: dict) -> dict:
             t = time.perf_counter()
             r = clients[body["agent_id"]].post(path, json=body)
             with lat_lock:
                 lat[kind].append((time.perf_counter() - t) * 1000)
-            return {"status": r.status_code, **(r.json() if r.headers.get("content-type", "").startswith(
+            out = {"status": r.status_code, **(r.json() if r.headers.get("content-type", "").startswith(
                 "application/json") else {})}
+            ev = {"t_ms": round((t - t_start[0]) * 1000), "done_ms": round((time.perf_counter() - t_start[0]) * 1000),
+                  "step": kind}
+            if kind == "order":
+                ev.update(status=out.get("status") if isinstance(out.get("status"), str) else f"http {r.status_code}",
+                          qty=sum(l["quantity"] for l in out.get("lines") or [] if l.get("product_id") == PID),
+                          rules=[f["rule"] for f in (out.get("decision") or {}).get("findings", []) if f["outcome"] in ("ask", "block")])
+            else:
+                ev["qty"] = sum(l["quantity"] for l in (out.get("quote") or {}).get("lines", []) if l.get("orderable"))
+            by_agent[body["agent_id"]].setdefault("events", []).append(ev)
+            return out
 
         def agent(b: dict) -> None:
             r = random.Random(seed * 1000 + int(b["agent"][-2:]))
@@ -185,7 +198,7 @@ def run(agents: int = 60, stock: float = 400, policy: str = "first_come", seed: 
                 request = opts[0]["requote"]
 
         threads = [threading.Thread(target=agent, args=(b,)) for b in buyers]
-        t_all = time.perf_counter()
+        t_all = t_start[0] = time.perf_counter()
         for t in threads:
             t.start()
         for t in threads:
@@ -210,7 +223,7 @@ def run(agents: int = 60, stock: float = 400, policy: str = "first_come", seed: 
             "latency_ms": {k: {"p50": round(_pct(v, 50), 1), "p95": round(_pct(v, 95), 1), "n": len(v)}
                            for k, v in lat.items()},
             "wall_s": round(wall, 2),
-            "buyers": [{k: b.get(k) for k in ("buyer", "need", "history", "got", "status", "steps", "held")}
+            "buyers": [{k: b.get(k) for k in ("buyer", "need", "history", "got", "status", "steps", "held", "events")}
                        for b in buyers],
         }
     finally:
@@ -256,13 +269,22 @@ def main() -> int:
     ap.add_argument("--policy", choices=["first_come", "pro_rata", "both"], default="both")
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--quiet", action="store_true", help="no per-buyer table")
+    ap.add_argument("--json", action="store_true", help="print the result as JSON (the live view's POST /rush/run)")
+    ap.add_argument("--think-ms", default="20,200", help="each agent's pause between quote and order, min,max ms")
     ap.add_argument("--data-dir", default="/dev/shm" if Path("/dev/shm").is_dir() else None,
                     help="where the throwaway SQLite state goes (default tmpfs, so the host disk's fsync per commit "
                          "doesn't dominate the latency; pass /tmp to include it)")
     a = ap.parse_args()
     bad = 0
+    think = tuple(int(x) for x in a.think_ms.split(","))
+    if a.json:
+        import json
+        p = "pro_rata" if a.policy == "both" else a.policy
+        r = run(a.agents, a.stock, p, a.seed, think_ms=think, data_dir=a.data_dir)
+        print(json.dumps({**r, "product": {"id": PID, "name": _product(PID)["name"], "unit_price_ex_vat": PRICE}}))
+        return 1 if r["over_allocated"] > 0 else 0
     for p in (["first_come", "pro_rata"] if a.policy == "both" else [a.policy]):
-        r = run(a.agents, a.stock, p, a.seed, data_dir=a.data_dir)
+        r = run(a.agents, a.stock, p, a.seed, think_ms=think, data_dir=a.data_dir)
         print(f"(state database in {a.data_dir or tempfile.gettempdir()})")
         print(report(r, not a.quiet), "\n")
         bad += r["over_allocated"] > 0 or r["allocated"] > r["stock"]

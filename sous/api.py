@@ -250,6 +250,42 @@ main{max-width:30rem;padding:24px}h1{font:400 2rem Georgia,serif;margin:0 0 8px}
 .then(r=>{if(r.ok)location.replace("/proof?preview=1")})}catch(e){}</script></body></html>"""
 
 
+# --- Monday rush (the live view's demo) ---------------------------------------------------------------------------
+import json as _json  # noqa: E402
+import sys as _sys  # noqa: E402
+import threading as _threading  # noqa: E402
+
+_RUSH = {"lock": _threading.Lock(), "at": 0.0, "result": None}
+RUSH_CACHE_S = 60
+RUSH_ARGS = ["--agents", "40", "--stock", "300", "--policy", "pro_rata", "--think-ms", "300,2500", "--json"]
+
+
+@app.post("/rush/run", tags=["demo"])
+def rush_run():
+    """The Monday rush, for the live view (web/live.html): 40 buyers' agents ask for one short product (300 packs of
+    butter, 700 asked) in the same second, through the real gateway code (quotes, mandates, stock reservations, pro
+    rata share by order history). Offline and isolated: a fake Valio stock and a throwaway database in a separate
+    process (scripts/rush.py), so nothing touches live orders or Valio's API. One run at a time; a run from the last
+    60 s is shared. Returns the result with each buyer's timeline (events: t_ms, step, status, qty)."""
+    if _RUSH["result"] and time.time() - _RUSH["at"] < RUSH_CACHE_S:
+        return {**_RUSH["result"], "cached": True}
+    if not _RUSH["lock"].acquire(blocking=False):
+        raise HTTPException(429, "A rush is running right now; try again in a few seconds.")
+    try:
+        p = subprocess.run([_sys.executable, "-m", "scripts.rush", *RUSH_ARGS], cwd=config.ROOT, capture_output=True,
+                           text=True, timeout=90)
+        if p.returncode != 0 or not p.stdout.strip():
+            raise HTTPException(503, "The rush could not run: " + (p.stderr.strip().splitlines() or ["no output"])[-1][:200])
+        r = _json.loads(p.stdout.strip().splitlines()[-1])
+        r["ran_at"] = clock.now().isoformat(timespec="seconds")
+        _RUSH.update(at=time.time(), result=r)
+        return {**r, "cached": False}
+    except subprocess.TimeoutExpired:
+        raise HTTPException(503, "The rush took too long; try again.")
+    finally:
+        _RUSH["lock"].release()
+
+
 @app.get("/proof", include_in_schema=False)
 def proof_page(preview: bool = False):
     """The evidence page for judges (web/proof.html); it renders GET /proof/data. Until SOUS_PROOF_PUBLIC is set,

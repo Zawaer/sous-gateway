@@ -149,14 +149,14 @@ function frame(now) {
   cx.fillStyle = g; cx.fillRect(0, 0, W, H);
   // paths
   cx.lineWidth = 1;
-  for (const c of companies.values()) {
+  for (const c of rush.on ? [] : companies.values()) {
     const k = ctrl(c, hub, 0.18);
     cx.strokeStyle = "rgba(242,241,234,0.08)"; cx.beginPath(); cx.moveTo(c.x, c.y); cx.quadraticCurveTo(k.x, k.y, hub.x, hub.y); cx.stroke();
   }
   const kv = ctrl(hub, valio, -0.12);
   cx.strokeStyle = "rgba(242,241,234,0.14)"; cx.beginPath(); cx.moveTo(hub.x, hub.y); cx.quadraticCurveTo(kv.x, kv.y, valio.x, valio.y); cx.stroke();
   // ambient packets keep the paths alive
-  if (!reduced && ambient.length < companies.size * 2 && Math.random() < dt * 2) {
+  if (!reduced && !rush.on && ambient.length < companies.size * 2 && Math.random() < dt * 2) {
     const list = [...companies.values()];
     if (list.length) ambient.push({ c: list[(Math.random() * list.length) | 0], t: 0, v: 0.25 + Math.random() * 0.2 });
   }
@@ -167,8 +167,20 @@ function frame(now) {
     cx.beginPath(); cx.arc(q.x, q.y, 1.4, 0, 7); cx.fill();
   }
   for (let i = ambient.length - 1; i >= 0; i--) if (ambient[i].t >= 1) ambient.splice(i, 1);
+  if (rush.on) rushFrame(now, dt);
   // flights
   for (const f of flights) {
+    if (f.rush) {
+      const p = rushStep(f, reduced ? dt * 3 : dt, now);
+      const col = f.phase === "in" && !f.quote ? "#f2f1ea" : f.col;
+      f.trail.push(p); if (f.trail.length > 10) f.trail.shift();
+      for (let i = 1; i < f.trail.length; i++) {
+        cx.strokeStyle = hexA(col, (i / f.trail.length) * (f.quote ? 0.18 : 0.45)); cx.lineWidth = 1.6 * (i / f.trail.length);
+        cx.beginPath(); cx.moveTo(f.trail[i - 1].x, f.trail[i - 1].y); cx.lineTo(f.trail[i].x, f.trail[i].y); cx.stroke();
+      }
+      cx.fillStyle = hexA(col, f.quote ? 0.35 : 1); cx.beginPath(); cx.arc(p.x, p.y, f.quote ? 1.6 : 2.8, 0, 7); cx.fill();
+      continue;
+    }
     step(f, reduced ? dt * 3 : dt);
     const p = posOf(f);
     const col = f.phase === "in" ? "#f2f1ea" : COLOR[f.phase === "back" && f.decided ? "block" : f.tier];
@@ -224,7 +236,7 @@ async function poll() {
       if (!orders.has(o.id) && !firstLoad) fresh.push(o);
       orders.set(o.id, o);
     }
-    fresh.sort((a, b) => a.created_at.localeCompare(b.created_at)).forEach((o, i) => setTimeout(() => launch(o, true), i * 900));
+    fresh.sort((a, b) => a.created_at.localeCompare(b.created_at)).forEach((o, i) => setTimeout(() => { if (!rush.on) launch(o, true); }, i * 900));
     if (fresh.length) lastLive = Date.now();
     firstLoad = false;
     stats();
@@ -236,7 +248,7 @@ async function poll() {
 }
 
 function replay() {
-  if (flights.length > 2 || document.hidden) return;
+  if (rush.on || flights.length > 2 || document.hidden) return;
   const recent = [...orders.values()].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 40);
   if (recent.length) launch(recent[(Math.random() * recent.length) | 0], false);
 }
@@ -305,8 +317,124 @@ function openValio() {
     <div class="links"><a class="btn solid" href="/ui/#/insights">What Valio can fix</a><a class="btn" href="/ui/#/stats">Stats</a></div>`, valio.el);
 }
 
+// --- Monday rush ---------------------------------------------------------------------------------------------------
+// POST /rush/run runs 40 agents against the real gateway code in a separate, offline process (fake Valio stock) and
+// returns each buyer's timeline; we replay it slowed down. Falls back to a recorded run (rush-sample.json).
+const rush = { on: false, buyers: [], t0: 0, scale: 4, events: [], next: 0, allocated: 0, stock: 0, r: null, timer: null };
+
+function rushLayout() {
+  const n = rush.buyers.length;
+  rush.buyers.forEach((b, i) => {
+    if (mobile) { b.x = W * (0.06 + 0.88 * ((i % 10) / 9)); b.y = H * 0.36 + Math.floor(i / 10) * 26; }
+    else {
+      const a = Math.PI * (0.62 + 0.76 * (i / Math.max(1, n - 1)));
+      const R = Math.min(W * 0.34, H * 0.34);
+      b.x = hub.x + Math.cos(a) * R * 1.1; b.y = hub.y - Math.sin(a) * R * 0.92;
+    }
+  });
+}
+
+async function startRush() {
+  if (rush.on) return;
+  const btn = $("#rush-btn"); btn.disabled = true; btn.innerHTML = `<span class="ms">hourglass_top</span>Running…`;
+  let r, recorded = false;
+  try { r = await fetch("/rush/run", { method: "POST" }).then((x) => { if (!x.ok) throw new Error(x.status); return x.json(); }); }
+  catch (e) { r = await get("rush-sample.json"); recorded = true; }
+  btn.disabled = false; btn.innerHTML = `<span class="ms">bolt</span>Monday rush`;
+  $("#close").click();
+  rush.r = r; rush.on = true; rush.allocated = 0; rush.stock = r.stock; rush.next = 0;
+  rush.buyers = r.buyers.map((b) => ({ ...b, col: "#f2f1ea", got: 0, x: 0, y: 0 }));
+  rush.events = r.buyers.flatMap((b, i) => (b.events || []).map((e) => ({ ...e, i }))).sort((a, b) => a.done_ms - b.done_ms);
+  rushLayout();
+  document.body.classList.add("rush");
+  $("#rush-end").classList.remove("show");
+  $("#rush-sub").textContent = `${r.agents} kitchens' agents want ${pname(r.product?.name || "butter")} for the same day, at the same second: `
+    + `${r.demand} packs asked, ${r.stock} in stock.${recorded ? " (Recorded run.)" : ""}`;
+  gauge();
+  rush.t0 = performance.now();
+}
+
+function gauge() {
+  const pct = Math.min(100, (100 * rush.allocated) / Math.max(1, rush.stock));
+  $("#rush-gauge").innerHTML = `allocated <b>${Math.round(rush.allocated)}</b> / ${rush.stock} packs · ${pct.toFixed(0)} %`;
+}
+
+function rushFrame(now, dt) {
+  const t = (now - rush.t0) / rush.scale;
+  while (rush.next < rush.events.length && rush.events[rush.next].t_ms <= t) {
+    const e = rush.events[rush.next++], b = rush.buyers[e.i];
+    if (e.step === "quote") flights.push({ rush: true, from: b, phase: "in", t: 0, col: "#f2f1ea", trail: [], small: true, quote: true });
+    else {
+      const out = e.status === "ordered" ? "out" : e.status === "pending_approval" ? "hold" : "back";
+      const col = e.status === "ordered" ? COLOR.auto : e.status === "pending_approval" ? COLOR.ask : COLOR.block;
+      flights.push({ rush: true, from: b, phase: "in", t: 0, col, end: out, trail: [], small: true, qty: e.qty, b, born: now });
+    }
+  }
+  // buyer dots
+  for (const b of rush.buyers) {
+    cx.fillStyle = b.col; cx.beginPath(); cx.arc(b.x, b.y, 4, 0, 7); cx.fill();
+  }
+  // stock ring around Valio
+  const frac = Math.min(1, rush.allocated / Math.max(1, rush.stock));
+  cx.strokeStyle = "rgba(242,241,234,0.12)"; cx.lineWidth = 4; cx.beginPath(); cx.arc(valio.x, valio.y, 46, 0, 7); cx.stroke();
+  cx.strokeStyle = COLOR.auto; cx.beginPath(); cx.arc(valio.x, valio.y, 46, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2); cx.stroke();
+  if (rush.next >= rush.events.length && !flights.some((f) => f.rush) && !rush.done) { rush.done = true; rushEnd(); }
+}
+
+function rushStep(f, dt, now) {
+  const sp = f.quote ? 1 / 0.5 : 1 / 0.7;
+  if (f.phase === "hold") {
+    f.hold = (f.hold || 0) + dt; if (f.hold > 2.5) f.done = true;
+    const a = now / 300 + f.from.x; return { x: hub.x + Math.cos(a) * 52, y: hub.y + Math.sin(a) * 52 };
+  }
+  f.t += dt * sp;
+  let p;
+  if (f.phase === "in") p = at(f.from, ctrl(f.from, hub, 0.1), hub, ease(Math.min(1, f.t)));
+  else if (f.phase === "out") p = at(hub, ctrl(hub, valio, -0.12), valio, ease(Math.min(1, f.t)));
+  else p = at(hub, ctrl(hub, f.from, 0.1), f.from, ease(Math.min(1, f.t)));
+  if (f.t >= 1) {
+    f.t = 0;
+    if (f.phase === "in") {
+      if (f.quote) { f.done = true; return p; }
+      f.phase = f.end;
+      if (f.end !== "back") { rush.allocated += f.qty || 0; f.b.got += f.qty || 0; gauge(); }
+      if (f.end === "hold") { f.b.col = COLOR.ask; }
+    } else {
+      f.done = true;
+      if (f.phase === "out") { f.b.col = f.b.got >= f.b.need ? COLOR.auto : COLOR.fyi; burst(valio, "auto"); }
+      if (f.phase === "back" && !f.b.got) f.b.col = COLOR.block;
+    }
+  }
+  return p;
+}
+
+function rushEnd() {
+  const r = rush.r;
+  $("#rush-end").innerHTML = `<div class="nums">
+      <div><b>${r.allocated} / ${r.stock}</b><span>packs allocated</span></div>
+      <div><b>${r.over_allocated}</b><span>over-allocated</span></div>
+      <div><b>${r.ordered}</b><span>ordered alone</span></div>
+      <div><b>${r.held}</b><span>got part, asked a human</span></div></div>
+    <p>${r.demand} packs were asked for ${r.stock}. Stock was shared by each kitchen's recent orders (pro rata);
+      ${r.retried} agents re-quoted what was left. The real gateway code decided every order; Valio's stock was simulated,
+      so no live orders or Valio API calls were made.</p>
+    <div class="links" style="margin:0"><button class="btn solid" id="rush-again" type="button"><span class="ms">replay</span>Run again</button>
+      <button class="btn" id="rush-exit" type="button">Back to live orders</button></div>`;
+  $("#rush-end").classList.add("show");
+  $("#rush-again").onclick = () => { stopRush(); setTimeout(startRush, 300); };
+  $("#rush-exit").onclick = stopRush;
+}
+
+function stopRush() {
+  rush.on = false; rush.done = false; rush.buyers = []; rush.events = [];
+  for (let i = flights.length - 1; i >= 0; i--) if (flights[i].rush) flights.splice(i, 1);
+  document.body.classList.remove("rush");
+  $("#rush-end").classList.remove("show");
+}
+$("#rush-btn").addEventListener("click", startRush);
+
 // --- start --------------------------------------------------------------------------------------------------------
-addEventListener("resize", layout);
+addEventListener("resize", () => { layout(); if (rush.on) rushLayout(); });
 (async () => {
   try { await loadStatic(); } catch (e) { $("#mode").textContent = "can't reach the gateway right now"; }
   get("/audit/verify").then((v) => { chainOk = !!v.ok; }).catch(() => {});
