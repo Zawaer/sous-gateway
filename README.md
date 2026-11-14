@@ -79,6 +79,7 @@ The response has your sandbox id (e.g. `SBX-7Q2K`), mandate and agent ids, an ag
 1. Connect Claude Code with the `quickstart.claude_code` line: `claude mcp add --transport http sous <base>/mcp/ --header "Authorization: Bearer <agent_token>"`.
 2. Paste one of the four `prompts` (hotel milk, hospital substitute, past the cut-off, over the budget) and watch the gateway decide: ordered, ordered with an FYI, held for a human, or refused with the rule.
 3. Open `quickstart.seller_ui` (`/ui/?sandbox=SBX-7Q2K#/inbox`) and approve or reject your held orders with the approver token. It works only on your sandbox's orders.
+4. Open `quickstart.break_ui` (`/ui/break.html?sandbox=SBX-7Q2K`), paste your agent token and try seven attacks (self-approval, slicing, prompt injection, a tampered quote, replay, over the limit, a forbidden allergen): each shows the verdict, the rule and the audit events, with no Valio call.
 
 Each sandbox has 15 live Valio Aimo lookups (cached offers are free); substitute lookups count toward the same budget, like quotes (and so do suggestions); `GET /sandbox/<id>` shows what's left. One-page handout: [docs/pitch/try-it.md](docs/pitch/try-it.md); details in [PROTOCOL.md section 18](docs/PROTOCOL.md#18-judge-sandbox).
 

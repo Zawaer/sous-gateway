@@ -775,6 +775,18 @@ def get_sandbox(sandbox_id: str, r: access.Reader = Depends(access.reader)):
     return out
 
 
+@app.post("/sandbox/{sandbox_id}/attacks/{name}", tags=["sandbox"])
+def sandbox_attack(sandbox_id: str, name: Literal["self_approve", "slice", "injection", "tamper_quote",
+                                                  "replay_other_agent", "over_limit", "wrong_allergen"],
+                   token: str | None = Depends(agent_token), x_approver_code: str | None = Header(default=None)):
+    """Try to break it (web/break.html): run one canned attack against your sandbox through the real gateway code,
+    with seeded quotes (no Valio call, no lookup budget). Needs the sandbox's agent token (Bearer vka_...) or its
+    approver token (sbxa_..., bearer or X-Approver-Code); 30 per sandbox per hour. Returns the verdict (blocked /
+    held / refused), the rules (each in /rules) and the audit events; any orders are real, labelled sandbox orders."""
+    from . import attacks
+    return attacks.run(sandbox_id, name, token or x_approver_code)
+
+
 @app.delete("/sandbox/{sandbox_id}", tags=["sandbox"], dependencies=[Depends(require_global_approver)])
 def delete_sandbox(sandbox_id: str, by: str = "approver"):
     """Approver only: end a sandbox now (its mandates are revoked; its audit events stay in the chain)."""

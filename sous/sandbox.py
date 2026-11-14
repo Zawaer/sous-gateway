@@ -301,13 +301,16 @@ def _seed_name(pid: str, fallback: str) -> str:
         return fallback
 
 
-def _seed_quote(sid: str, so: dict, items: list[dict], when: date) -> dict:
+def _seed_quote(sid: str, so: dict, items: list[dict], when: date, *, prices: list[dict] | None = None,
+                rationale: str | None = None, mark: dict | None = None) -> dict:
     """A signed quote for this week's renewal, built from SEED_PRICES (no Valio call). Same shape and
-    signature as a live quote, so the order engine, receipts and approval checks treat it like any other."""
+    signature as a live quote, so the order engine, receipts and approval checks treat it like any other.
+    `prices` pairs with `items` (default SEED_PRICES); `mark` joins the quote's `seeded` block (attack demos,
+    sous/attacks.py, say which attack made the quote)."""
     from . import clock, service as S, signing
     now = S._now()
     lines = []
-    for i, (p, it) in enumerate(zip(SEED_PRICES, items)):
+    for i, (p, it) in enumerate(zip(prices or SEED_PRICES, items)):
         qty = float(round(it["amount"] / p["content"]))
         inc = round(p["price"] * (1 + SEED_VAT / 100), 2)
         lines.append({
@@ -337,15 +340,15 @@ def _seed_quote(sid: str, so: dict, items: list[dict], when: date) -> dict:
         "uncovered": [], "alternatives_considered": [],
         "valio_api_calls": {"price_calls": 0, "availability_calls": 0, "cache_hits": 0},
         "clock": clock.info(now),
-        "rationale": f"Weekly renewal of standing order {so['name']}",
-        "seeded": {"sandbox": sid, "note": SEED_NOTE},
+        "rationale": rationale or f"Weekly renewal of standing order {so['name']}",
+        "seeded": {"sandbox": sid, "note": SEED_NOTE, **(mark or {})},
     }
     outcome, findings = S._evaluate(S._mandate(so["mandate_id"]), so["agent_id"], body, now)
     body["mandate_preview"] = {"outcome": outcome, "findings": [f.model_dump() for f in findings]}
     jws = signing.sign(body, "sous-quote+jws")
     store.put_quote(body, jws)
     store.audit("quote.issued", so["agent_id"], "agent", qid, so["buyer"],
-                {"quote_id": qid, "total_ex_vat": body["total_ex_vat"], "seeded": True, "note": SEED_NOTE,
+                {"quote_id": qid, "total_ex_vat": body["total_ex_vat"], "seeded": True, "note": SEED_NOTE, **(mark or {}),
                  "lines": [{"product_id": l["product_id"], "quantity": l["quantity"], "issues": ["SEEDED"]}
                            for l in lines], "valio_api_calls": body["valio_api_calls"]})
     return body
@@ -427,6 +430,7 @@ def quickstart(sid: str, base: str, token: str, approver: str, mandates: list[di
         "curl_approve": (f"curl -s -X POST {base}/orders/<PO-id>/approve -H 'X-Approver-Code: {approver}' "
                          "-H 'Content-Type: application/json' -d '{\"by\": \"<your name>\"}'"),
         "seller_ui": f"{base}/ui/?sandbox={sid}#/inbox",
+        "break_ui": f"{base}/ui/break.html?sandbox={sid}",
         "buyer_ui": f"{base}/buyer/?sandbox={sid}&mandate={hotel['mandate_id']}&agent={hotel['agent_id']}",
         "status": f"{base}/sandbox/{sid}",
     }
