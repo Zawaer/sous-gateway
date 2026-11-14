@@ -291,6 +291,7 @@ def main() -> int:
             if not ok:
                 print(f"       x {n}: {d}")
 
+    reservations.set_scope(None)  # ends the last case's pool (its Valkey hashes too)
     summary = summarize(results)
     from sous.proof import run_provenance
     out = {"generated_at": datetime.now(config.TZ).isoformat(timespec="seconds"), "provenance": run_provenance(),

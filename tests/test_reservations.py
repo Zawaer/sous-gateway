@@ -209,10 +209,64 @@ def test_eval_style_cases_each_see_full_stock():
     assert quote(1, 80)["lines"][0]["quantity"] == 80  # nothing reached the global pool
 
 
-def test_release_when_valio_unchanged(monkeypatch):
+def at(monkeypatch, t):
+    """Move the gateway's clock (and the fake Valio's reading time) to t."""
+    monkeypatch.setattr(S, "_now", lambda: t)
+    monkeypatch.setattr(Q, "offers", lambda *a, **k: (fake_offers(*a, **k)[0], t))
+
+
+def valkey():
+    server = fakeredis.FakeServer()
+    shared.configure(url="redis://fake", client=fakeredis.FakeRedis(server=server, decode_responses=True))
+    return fakeredis.FakeRedis(server=server, decode_responses=True)
+
+
+@pytest.mark.parametrize("with_valkey", [False, True])
+def test_release_unchanged_needs_a_fresh_reading(monkeypatch, with_valkey):
+    """rene-codex-qa 11:01Z: with the flag on, time passing alone must not release a reservation."""
+    if with_valkey:
+        valkey()
+    monkeypatch.setenv("SOUS_RESERVATION_RELEASE_UNCHANGED", "1")
+    q1, q2 = quote(1, 70), quote(2, 70)
+    assert order(1, q1)["status"] == "ordered"
+    at(monkeypatch, NOW + timedelta(seconds=61))  # no new Valio reading
+    o2 = order(2, q2)
+    assert o2["status"] == "refused" and o2["allocation"]["lines"][0]["left"] == 30
+    assert RES.summary("B1", "2026-11-16", NOW + timedelta(seconds=61))["reserved"] == 70
+
+
+@pytest.mark.parametrize("with_valkey", [False, True])
+def test_release_unchanged_on_a_fresh_unchanged_reading(monkeypatch, with_valkey):
+    if with_valkey:
+        valkey()
     monkeypatch.setenv("SOUS_RESERVATION_RELEASE_UNCHANGED", "1")
     order(1, quote(1, 80))
-    assert quote(2, 80)["lines"][0]["quantity"] == 20  # within aimo's cache window: still reserved
-    later = NOW + timedelta(seconds=61)
-    monkeypatch.setattr(S, "_now", lambda: later)
-    assert RES.summary("B1", "2026-11-16", later)["reserved"] == 0  # a fresh reading still says 100: released
+    assert quote(2, 80)["lines"][0]["quantity"] == 20  # a reading within aimo's cache window: still reserved
+    at(monkeypatch, NOW + timedelta(seconds=61))
+    assert quote(2, 80)["lines"][0]["quantity"] == 80  # a fresh reading still says 100: released
+    assert RES.summary("B1", "2026-11-16", NOW + timedelta(seconds=61))["reserved"] == 0
+
+
+def test_release_unchanged_is_off_by_default(monkeypatch):
+    order(1, quote(1, 80))
+    at(monkeypatch, NOW + timedelta(seconds=61))
+    assert quote(2, 80)["lines"][0]["quantity"] == 20
+
+
+def test_eval_scopes_with_valkey_never_bleed():
+    """rene-claude-evals 11:24Z: with a shared Valkey, one case's orders must not reach the next case or run."""
+    fr = valkey()
+    try:
+        RES.set_scope("eval-run1-H01")
+        assert order(1, quote(1, 90))["status"] == "ordered"
+        keys = [k for k in fr.keys("*resv:*") if "eval-run1-H01" in k]
+        assert len(keys) == 1 and f":{shared.ROLE}:" in keys[0]
+        assert 0 < fr.ttl(keys[0]) <= RES.EVAL_SCOPE_TTL
+        RES.set_scope("eval-run1-H02")  # leaving H01 ends its pool
+        assert not fr.exists(keys[0])
+        assert quote(1, 90)["lines"][0]["quantity"] == 90
+        assert order(1, quote(1, 90))["status"] == "ordered"
+    finally:
+        RES.set_scope(None)
+    assert not [k for k in fr.keys("*resv:*") if "eval-run1" in k]
+    assert quote(1, 100)["lines"][0]["quantity"] == 100  # nothing in the global pool either

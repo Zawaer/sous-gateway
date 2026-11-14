@@ -103,11 +103,48 @@ def ttl() -> timedelta:
         return timedelta(minutes=30)
 
 
+EVAL_SCOPE_TTL = 900  # seconds a runner scope's Valkey hash may outlive its last write (crashed runner)
+_scope_keys: set[tuple[str, str]] = set()  # (pool key, day) written under the current runner scope
+
+
 def set_scope(name: str | None) -> None:
     """Eval runners: put the orders of mandates outside a sandbox in their own pool (one per case), or back in
-    the global one (None)."""
+    the global one (None). Leaving a scope ends its reservations (database and Valkey): nothing of one case
+    survives into the next, nor into another run sharing the Valkey."""
     global _override
-    _override = (name or "").replace("/", "-")
+    new = (name or "").replace("/", "-")
+    if _override and new != _override:
+        end_scope(_override)
+    _override = new
+
+
+def end_scope(scope: str) -> None:
+    """End every reservation of a runner scope and delete its Valkey hashes."""
+    if not scope:
+        return
+    try:
+        _ensure()
+        store._exec("UPDATE stock_reservation SET status = ? WHERE product_id LIKE ? AND status = ?",
+                    ("scope_ended", f"{scope}/%", "active"))
+    except Exception:  # noqa: BLE001 - best effort: the scope's keys expire anyway
+        pass
+    keys = [_key(pk, day) for pk, day in _scope_keys if pk.startswith(scope + "/")]
+    _scope_keys.difference_update({(pk, day) for pk, day in _scope_keys if pk.startswith(scope + "/")})
+    r = shared._redis()
+    if r is not None and keys:
+        try:
+            r.delete(*keys)
+            shared._ok()
+        except Exception as e:  # noqa: BLE001
+            shared._failed(e)
+
+
+def _hash_ttl(pk: str) -> int:
+    """Valkey expiry of a pool's hash: the reservation TTL, and short for a runner scope's."""
+    t = int(ttl().total_seconds())
+    if _override and pk.startswith(_override + "/"):
+        return min(t, EVAL_SCOPE_TTL)
+    return t
 
 
 def pool_of(mandate) -> str:
@@ -176,7 +213,9 @@ def observe(pid: str, day: str, amount: float, now: datetime) -> None:
     """Record what Valio reports now and end the reservations it reflects."""
     _ensure()
     if _seen.get(("obs", pid, day)) == float(amount):
-        return  # unchanged since we last recorded it: nothing new is reflected either
+        if _release_unchanged():  # an unchanged fresh reading is what ends a reservation under this setting
+            _settle_global(pid, day, float(amount), now)
+        return  # otherwise nothing new: no rewrite
     _seen[("obs", pid, day)] = float(amount)
     store._upsert("stock_observation", ["product_id", "delivery_date", "amount", "observed_at"],
                   (pid, day, float(amount), _iso(now)))
@@ -188,7 +227,33 @@ def observe(pid: str, day: str, amount: float, now: datetime) -> None:
             shared._ok()
         except Exception as e:  # noqa: BLE001 - fail open
             shared._failed(e)
-    _settle_db(pid, day, float(amount), now)  # the global pool's reflected reservations end now
+    _settle_global(pid, day, float(amount), now)  # the global pool's reflected reservations end now
+
+
+def _settle_global(pid: str, day: str, amount: float, now: datetime) -> None:
+    """A Valio reading just came in (`now`): settle the global pool against it, in the database and Valkey.
+    Only here may a reservation end as 'unchanged' (SOUS_RESERVATION_RELEASE_UNCHANGED): never on the stored
+    observation alone, which may be older than the reservation."""
+    _settle_db(pid, day, amount, now, fresh_at=now)
+    r = shared._redis()
+    if r is None or not _release_unchanged():
+        return
+
+    def tx(pipe):
+        raw = pipe.hgetall(_key(pid, day))
+        active, ended = _settle([json.loads(v) for v in raw.values()], amount, now, fresh_at=now)
+        pipe.multi()
+        if ended:
+            pipe.hdel(_key(pid, day), *ended)
+        for y in active:
+            if y.pop("_rebased", None):
+                pipe.hset(_key(pid, day), y["id"], json.dumps(y))
+
+    try:
+        r.transaction(tx, _key(pid, day))
+        shared._ok()
+    except Exception as e:  # noqa: BLE001
+        shared._failed(e)
 
 
 def last_amount(pid: str, day: str) -> float | None:
@@ -208,19 +273,22 @@ def last_amount(pid: str, day: str) -> float | None:
     return db_amount
 
 
-def _settle(resv: list[dict], amount: float | None, now: datetime) -> tuple[list[dict], dict[str, str]]:
+def _settle(resv: list[dict], amount: float | None, now: datetime,
+            fresh_at: datetime | None = None) -> tuple[list[dict], dict[str, str]]:
     """(still active, {id: 'expired'|'reflected'}). Reflected: Valio's stock fell since the oldest open
     reservation was made; that fall covers reservations oldest first. The ones still active get their `base`
     lowered by what was reflected (Valio's amount with those orders counted), so a fall is never counted twice;
-    a changed base is marked x["_rebased"] for the caller to persist."""
+    a changed base is marked x["_rebased"] for the caller to persist. `fresh_at`: when `amount` is a Valio
+    reading that just came in; only then may SOUS_RESERVATION_RELEASE_UNCHANGED end a reservation, and only if
+    the reading is from after it (past aimo's 60 s cache)."""
     ended: dict[str, str] = {}
     active = []
     unchanged_after = timedelta(seconds=60)  # aimo.AVAILABILITY_TTL: a reading after it is fresh from Valio
     for x in sorted(resv, key=lambda x: x["created_at"]):
         if _dt(x["expires_at"]) <= now:
             ended[x["id"]] = "expired"
-        elif (amount is not None and _release_unchanged() and abs(amount - x["base"]) < EPS
-              and now - _dt(x["created_at"]) >= unchanged_after):
+        elif (fresh_at is not None and amount is not None and _release_unchanged()
+              and abs(amount - x["base"]) < EPS and fresh_at - _dt(x["created_at"]) >= unchanged_after):
             ended[x["id"]] = "unchanged"
         else:
             active.append(x)
@@ -250,8 +318,9 @@ def _valio(pk: str, amount: float | None) -> float | None:
     return None if "/" in pk else amount
 
 
-def _settle_db(pid: str, day: str, amount: float | None, now: datetime) -> list[dict]:
-    active, ended = _settle(_rows(pid, day), _valio(pid, amount), now)
+def _settle_db(pid: str, day: str, amount: float | None, now: datetime,
+               fresh_at: datetime | None = None) -> list[dict]:
+    active, ended = _settle(_rows(pid, day), _valio(pid, amount), now, fresh_at if "/" not in pid else None)
     for rid, why in ended.items():
         store._exec("UPDATE stock_reservation SET status = ?, updated_at = ? WHERE id = ?", (why, _iso(now), rid))
     for x in active:
@@ -437,6 +506,8 @@ def reserve(order_id: str, lines: list[dict], buyer: str | None, now: datetime, 
 def _put(x: dict, amount: float, now: datetime) -> tuple[float, str] | None:
     """Store one reservation if it fits; else (left, why). Valkey: atomic check-and-set across deployments."""
     pid, day, buyer = x["product_id"], x["delivery_date"], x["buyer"]
+    if _override and pid.startswith(_override + "/"):
+        _scope_keys.add((pid, day))
     r = shared._redis()
     if r is not None:
         out: dict = {}
@@ -455,7 +526,7 @@ def _put(x: dict, amount: float, now: datetime) -> tuple[float, str] | None:
                 out["short"] = (left, why)
                 return
             pipe.hset(_key(pid, day), x["id"], json.dumps(x))
-            pipe.expire(_key(pid, day), int(ttl().total_seconds()) + 3600)
+            pipe.expire(_key(pid, day), _hash_ttl(pid))
 
         try:
             r.transaction(tx, _key(pid, day))

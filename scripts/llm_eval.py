@@ -597,6 +597,8 @@ def main(argv=None) -> int:
                 if not ok:
                     print(f"       x {n}: {d}")
 
+    from sous import reservations
+    reservations.set_scope(None)  # ends the last case's pool (its Valkey hashes too)
     summary = summarize(results, cfg)
     out = Path(a.out or ROOT / "evals" / f"llm_results.{slug(cfg.model if provider != 'oracle' else 'oracle')}.json")
     from sous.proof import run_provenance
