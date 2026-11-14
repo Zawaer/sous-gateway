@@ -3,86 +3,211 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f8f8f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141412" media="(prefers-color-scheme: dark)">
 <title>Sign a mandate · Sous</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Fragment+Mono&display=swap">
+<link rel="stylesheet" href="tokens.css">
 <style>
-  :root { color-scheme: light dark; --paper:#f8f8f3; --ink:#111; --dim:rgba(0,0,0,.55); --rule:rgba(0,0,0,.12);
-          --ok:#2e6b3c; --bad:#a8321f; --panel:rgba(0,0,0,.035); }
-  @media (prefers-color-scheme: dark) { :root { --paper:#141412; --ink:#eee; --dim:rgba(255,255,255,.55);
-          --rule:rgba(255,255,255,.14); --ok:#7cc58c; --bad:#f08a76; --panel:rgba(255,255,255,.05); } }
+  :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 680px; margin: 0 auto; padding: 24px 18px 60px; }
-  h1 { font-size: 24px; font-weight: 500; margin: 0 0 4px; }
-  h2 { font-size: 16px; font-weight: 600; margin: 28px 0 8px; }
-  p.lead, .dim { color: var(--dim); }
-  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; word-break: break-all; }
-  .box { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; }
-  label { display: block; margin: 10px 0 2px; font-size: 13px; color: var(--dim); }
-  input[type=text], input[type=number] { width: 100%; padding: 8px 10px; font: inherit; color: inherit;
-          background: transparent; border: 1px solid var(--rule); border-radius: 8px; }
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
-  .checks label { display: inline-flex; gap: 6px; margin-right: 14px; color: var(--ink); font-size: 14px; }
-  button { font: inherit; padding: 9px 16px; border-radius: 999px; border: 1px solid var(--rule); cursor: pointer;
-           background: var(--ink); color: var(--paper); margin-top: 16px; }
-  button.ghost { background: transparent; color: var(--ink); }
-  button:disabled { opacity: .5; cursor: default; }
-  .ok { color: var(--ok); } .bad { color: var(--bad); }
-  ul.checks-out { list-style: none; padding: 0; margin: 8px 0 0; }
-  ul.checks-out li { margin: 4px 0; }
-  details { margin-top: 10px; } summary { cursor: pointer; color: var(--dim); font-size: 13px; }
-  a { color: inherit; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 400 16px/1.55 var(--sans); -webkit-font-smoothing: antialiased; }
+  a { color: var(--ink); text-underline-offset: 3px; text-decoration-color: var(--ink-40); }
+  a:hover { text-decoration-color: var(--ink); }
+  .top { border-bottom: 1px solid var(--rule); }
+  .top-in, main { max-width: 720px; margin: 0 auto; padding-left: 20px; padding-right: 20px; }
+  .top-in { display: flex; align-items: center; justify-content: space-between; min-height: 56px; }
+  .brand { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; font: 400 1.25rem/1 var(--serif); }
+  .brand small { font: 400 .85rem/1 var(--sans); color: var(--ink-60); margin-left: 4px; }
+  main { padding-top: 28px; padding-bottom: 32px; }
+  h1 { font: 400 2.1rem/1.1 var(--serif); letter-spacing: -.01em; margin: 0 0 10px; }
+  .lead { color: var(--ink-80); margin: 0 0 6px; max-width: 60ch; }
+  h2 { font: 400 1.3rem/1.2 var(--serif); margin: 0 0 4px; }
+  .step { border-top: 1px solid var(--rule); padding: 22px 0 6px; margin-top: 22px; }
+  .hint { color: var(--ink-60); font-size: .9rem; margin: 0 0 10px; }
+  .mono { font-family: var(--mono); font-size: .82rem; word-break: break-all; }
+  label.f { display: block; font-weight: 500; font-size: .92rem; margin: 14px 0 6px; }
+  label.f .opt { font-weight: 400; color: var(--ink-60); }
+  input[type=text], input[type=number], select {
+    width: 100%; min-height: var(--tap); padding: 10px 12px; font: inherit; color: inherit;
+    background: var(--paper); border: 1px solid var(--ink-40); border-radius: 8px; }
+  .money { position: relative; }
+  .money input { padding-left: 30px; }
+  .money::before { content: "€"; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-60); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+  .row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 14px; }
+  @media (max-width: 560px) { .row, .row3 { grid-template-columns: 1fr; } h1 { font-size: 1.75rem; } }
+  .err { color: var(--block-ink); font-size: .88rem; margin: 6px 0 0; font-weight: 500; }
+  input[aria-invalid=true] { border-color: var(--block-ink); border-width: 2px; }
+
+  /* the live preview of what the agent may do, one row per tier */
+  .ladder { list-style: none; padding: 0; margin: 16px 0 0; border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }
+  .ladder li { display: grid; grid-template-columns: 9.5rem 1fr; gap: 12px; align-items: center; padding: 12px 14px; border-top: 1px solid var(--rule); }
+  .ladder li:first-child { border-top: 0; }
+  .ladder .range { font-variant-numeric: tabular-nums; }
+  .ladder .what { color: var(--ink-60); font-size: .9rem; display: block; }
+  .ladder li[hidden] { display: none; }
+  @media (max-width: 560px) { .ladder li { grid-template-columns: 1fr; gap: 4px; } }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; min-height: var(--tap); padding: 0 14px 0 10px;
+    border: 1px solid var(--ink-40); border-radius: 999px; cursor: pointer; user-select: none; }
+  .chip input { width: 18px; height: 18px; margin: 0; accent-color: var(--solid); }
+  .chip:has(input:checked) { background: var(--solid); color: var(--on-solid); border-color: var(--solid); }
+  .chip:has(input:checked) input { accent-color: var(--on-solid); }
+
+  .check { display: flex; gap: 10px; align-items: flex-start; min-height: var(--tap); padding-top: 10px; cursor: pointer; }
+  .check input { width: 20px; height: 20px; margin: 2px 0 0; flex: none; accent-color: var(--solid); }
+
+  .box { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius); padding: 14px 16px; }
+  details { margin-top: 14px; }
+  summary { cursor: pointer; min-height: var(--tap); display: flex; align-items: center; gap: 8px; color: var(--ink-80); font-weight: 500; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "\25B8"; font-size: .8em; transition: transform .15s; }
+  details[open] > summary::before { transform: rotate(90deg); }
+  details .box { margin-top: 4px; }
+
+  .btn { white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: var(--tap); padding: 0 22px;
+    font: 500 1rem/1 var(--sans); border-radius: 999px; border: 1px solid transparent; cursor: pointer; text-decoration: none; }
+  .btn.primary { background: var(--solid); color: var(--on-solid); }
+  .btn.plain { background: var(--pill); color: var(--ink); }
+  .btn.plain:hover { background: var(--pill-hover); }
+  .btn.danger { background: transparent; color: var(--block-ink); border-color: var(--block-ink); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .actionbar { margin: 26px -20px 0; }
+  .actionbar .summary { flex: 1 1 auto; min-height: 0; font-size: .88rem; color: var(--ink-80); }
+  @media (min-width: 561px) { .actionbar { position: static; border-top: 0; padding: 0 20px; margin-top: 24px; } .actionbar .btn { flex: 0 0 auto; } }
+  .actionbar .btn { flex: 0 0 auto; padding: 0 26px; }
+
+  #result { scroll-margin-top: 16px; }
+  .verdict { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .verdict h2 { margin: 0; }
+  ul.checks-out { list-style: none; padding: 0; margin: 14px 0 0; }
+  ul.checks-out li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; padding: 8px 0; border-top: 1px solid var(--rule); }
+  ul.checks-out li:first-child { border-top: 0; }
+  ul.checks-out .mk { font-weight: 700; }
+  ul.checks-out .ok .mk { color: var(--silent); }
+  ul.checks-out .bad .mk { color: var(--block-ink); }
+  .note { font-size: .88rem; color: var(--ink-60); }
+  .token { margin-top: 12px; padding: 12px 14px; border: 2px solid var(--ask-line); border-radius: var(--radius); background: var(--panel); }
+  .after { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+  .foot { border-top: 1px solid var(--rule); margin-top: 40px; padding: 18px 0 30px; font-size: .85rem; color: var(--ink-60); }
 </style>
 </head>
 <body>
-<main>
-  <h1>Sign a mandate with your own key</h1>
-  <p class="lead">You, the buyer's human, sign the mandate (valtakirja) for your purchasing agent. Your browser makes a
-    P-256 key that cannot be exported and never leaves this device; the gateway only sees your public key, as a
-    <span class="mono">did:key</span>. The signed mandate is a W3C Verifiable Credential (<span class="mono">vc+jwt</span>, ES256).
-    The gateway checks your signature and countersigns. <a href="/ui/">Back to Sous</a></p>
-
-  <h2>1. Your key</h2>
-  <div class="box">
-    <div class="dim" style="font-size:13px">Your identifier (did:key)</div>
-    <div id="did" class="mono">…</div>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="/ui/">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 4h4l5 11 5-11h4l-7.5 16h-3z" fill="currentColor"/></svg>
+      Sous <small>Sign a mandate</small>
+    </a>
+    <a href="/ui/#/mandates">All mandates</a>
   </div>
-  <button id="newkey" class="ghost" type="button">Make a new key</button>
+</header>
 
-  <h2>2. The mandate</h2>
-  <form id="f">
-    <div class="row">
-      <div><label for="buyer">Organisation (buyer)</label><input id="buyer" type="text" required></div>
-      <div><label for="issued_by">Your name</label><input id="issued_by" type="text" value="Aino (owner)" required></div>
-      <div><label for="id">Mandate id</label><input id="id" type="text" required></div>
-      <div><label for="agent_id">Agent id</label><input id="agent_id" type="text" value="kitchen-agent" required></div>
-      <div><label for="auto">Agent may spend alone up to (€, ex VAT)</label><input id="auto" type="number" min="0" step="1" value="150"></div>
-      <div><label for="hard">Never above (€, ex VAT)</label><input id="hard" type="number" min="0" step="1" value="800"></div>
-      <div><label for="days">Valid for (days)</label><input id="days" type="number" min="1" max="366" value="30"></div>
+<main>
+  <h1>Give your purchasing agent a mandate</h1>
+  <p class="lead">A mandate (<i>valtakirja</i>) says what your agent may buy on its own. Valio Aimo's gateway checks every order
+    against it: small orders go straight through, bigger ones wait for you, and anything over your ceiling is refused.</p>
+  <p class="hint">You sign it in this browser with a key that never leaves this device. Nobody else, not even the gateway, can sign in your name.</p>
+
+  <form id="f" novalidate>
+    <section class="step" aria-labelledby="h-who">
+      <h2 id="h-who">Who it's for</h2>
+      <div class="row">
+        <div><label class="f" for="buyer">Organisation</label><input id="buyer" type="text" autocomplete="organization" required></div>
+        <div><label class="f" for="issued_by">Your name and role</label><input id="issued_by" type="text" value="Aino Laine, kitchen manager" autocomplete="name" required></div>
+      </div>
+    </section>
+
+    <section class="step" aria-labelledby="h-money">
+      <h2 id="h-money">Spending limits</h2>
+      <p class="hint">Per order, excluding VAT.</p>
+      <div class="row3">
+        <div><label class="f" for="auto">Agent orders alone up to</label><div class="money"><input id="auto" type="number" inputmode="decimal" min="0" step="1" value="150" aria-describedby="e-auto"></div></div>
+        <div><label class="f" for="notify">FYI to me above</label><div class="money"><input id="notify" type="number" inputmode="decimal" min="0" step="1" placeholder="optional" aria-describedby="e-notify"></div></div>
+        <div><label class="f" for="hard">Refuse anything over</label><div class="money"><input id="hard" type="number" inputmode="decimal" min="0" step="1" value="800" aria-describedby="e-hard"></div></div>
+      </div>
+      <p id="e-auto" class="err" hidden></p><p id="e-notify" class="err" hidden></p><p id="e-hard" class="err" hidden></p>
+      <ul class="ladder" id="ladder" aria-label="What the agent may do, by order total">
+        <li id="l-silent"><span class="range"></span><span><span class="tier tier-silent">Auto</span> <span class="what">Ordered. No message to you.</span></span></li>
+        <li id="l-notify"><span class="range"></span><span><span class="tier tier-notify">Auto + FYI</span> <span class="what">Ordered, and you get an FYI.</span></span></li>
+        <li id="l-ask"><span class="range"></span><span><span class="tier tier-ask">Needs approval</span> <span class="what">Waits for you to approve or reject.</span></span></li>
+        <li id="l-block"><span class="range"></span><span><span class="tier tier-block">Refused</span> <span class="what">Never ordered, whatever the agent says.</span></span></li>
+      </ul>
+    </section>
+
+    <section class="step" aria-labelledby="h-food">
+      <h2 id="h-food">Food safety</h2>
+      <p class="hint">Never buy products that contain:</p>
+      <div class="chips" id="allergens">
+        <label class="chip"><input type="checkbox" value="AM" checked> Milk</label>
+        <label class="chip"><input type="checkbox" value="AW"> Gluten</label>
+        <label class="chip"><input type="checkbox" value="AN"> Tree nuts</label>
+        <label class="chip"><input type="checkbox" value="AP"> Peanuts</label>
+        <label class="chip"><input type="checkbox" value="AE"> Egg</label>
+        <label class="chip"><input type="checkbox" value="AF"> Fish</label>
+        <label class="chip"><input type="checkbox" value="AY"> Soy</label>
+        <label class="chip"><input type="checkbox" value="AS"> Sesame</label>
+      </div>
+      <div class="row">
+        <div><label class="f" for="unknown">If a product has no allergen data</label>
+          <select id="unknown"><option value="ask" selected>Wait for my approval</option><option value="block">Refuse it</option></select></div>
+        <div><label class="f" for="subs">If the agent picks a substitute</label>
+          <select id="subs"><option value="ask" selected>Wait for my approval</option><option value="notify">Order it and tell me</option><option value="silent">Order it</option></select></div>
+      </div>
+      <p class="hint" style="margin-top:10px">Missing allergen data is never treated as safe. Over half of the catalog has none.</p>
+    </section>
+
+    <section class="step" aria-labelledby="h-time">
+      <h2 id="h-time">How long</h2>
+      <div class="row"><div><label class="f" for="days">Valid for (days)</label><input id="days" type="number" inputmode="numeric" min="1" max="366" value="30"></div></div>
+      <details>
+        <summary>Agent and identifiers</summary>
+        <div class="box">
+          <div class="row">
+            <div><label class="f" for="agent_id">Agent id</label><input id="agent_id" type="text" value="kitchen-agent" required></div>
+            <div><label class="f" for="id">Mandate id</label><input id="id" type="text" required></div>
+          </div>
+          <label class="check"><input id="auth" type="checkbox"> <span>The agent must log in with its own token<br><span class="note">You'll see the token once, after signing.</span></span></label>
+        </div>
+      </details>
+      <details>
+        <summary>Your signing key and how it works</summary>
+        <div class="box">
+          <div class="note">Your identifier</div>
+          <div id="did" class="mono">…</div>
+          <p class="note">Your browser made a P-256 key that can't be exported; the gateway only sees the public half, as a
+            <span class="mono">did:key</span>. The mandate is a W3C Verifiable Credential (<span class="mono">vc+jwt</span>, ES256).
+            The gateway checks your signature, countersigns it (Ed25519) and records it in the audit log.</p>
+          <button id="newkey" class="btn plain" type="button">Make a new key</button>
+        </div>
+      </details>
+    </section>
+
+    <p id="e-form" class="err" role="alert" hidden></p>
+    <div class="actionbar">
+      <span class="summary" id="summary"></span>
+      <button id="sign" class="btn primary" type="submit">Sign mandate</button>
     </div>
-    <label>Never buy products containing</label>
-    <div class="checks">
-      <label><input type="checkbox" value="AM" checked> milk</label>
-      <label><input type="checkbox" value="AW"> gluten</label>
-      <label><input type="checkbox" value="AN"> nuts</label>
-      <label><input type="checkbox" value="AE"> egg</label>
-      <label><input type="checkbox" value="AP"> peanuts</label>
-    </div>
-    <div class="checks" style="margin-top:8px">
-      <label><input id="auth" type="checkbox"> Agent must authenticate (bearer token, shown once)</label>
-    </div>
-    <button id="sign" type="submit">Sign and send</button>
   </form>
 
-  <section id="result" hidden>
-    <h2>3. Result</h2>
-    <div class="box">
-      <div id="headline"></div>
-      <ul id="checks" class="checks-out"></ul>
-      <div id="token" class="mono" style="margin-top:8px"></div>
-      <details><summary>The signed credential (vc+jwt)</summary><pre id="vc" class="mono" style="white-space:pre-wrap"></pre></details>
+  <section id="result" class="step" hidden aria-live="polite">
+    <div class="verdict"><h2 id="headline"></h2><span id="verdict-tag"></span></div>
+    <p id="explain" class="note"></p>
+    <ul id="checks" class="checks-out"></ul>
+    <div id="token" class="token" hidden></div>
+    <details><summary>The signed credential (vc+jwt)</summary><pre id="vc" class="mono box" style="white-space:pre-wrap"></pre></details>
+    <div class="after">
+      <a id="see" class="btn plain" href="/ui/#/mandates">See it in Mandates</a>
+      <button id="revoke" class="btn danger" type="button">Revoke this mandate</button>
     </div>
-    <button id="revoke" class="ghost" type="button">Revoke this mandate (signed by you)</button>
   </section>
+
+  <footer class="foot">Sous · an open gateway for purchasing agents at Valio Aimo · <a href="/ui/">Seller view</a> · <a href="/.well-known/jwks.json">Gateway key</a></footer>
 </main>
 <script>
 "use strict";
@@ -158,6 +283,43 @@ const isoSec = (d) => {  // local time with offset, seconds precision
     `${o >= 0 ? "+" : "-"}${p(Math.floor(Math.abs(o) / 60))}:${p(Math.abs(o) % 60)}`;
 };
 
+
+const fmtEur = (n) => new Intl.NumberFormat("fi-FI", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
+const num = (id) => { const v = $(id).value.trim(); return v === "" ? null : Number(v); };
+
+function setErr(id, msg) {
+  const e = $("e-" + id);
+  e.textContent = msg || ""; e.hidden = !msg;
+  $(id).setAttribute("aria-invalid", msg ? "true" : "false");
+}
+
+// Checks the limits and redraws the ladder; returns true when they make sense.
+function limits() {
+  const auto = num("auto"), notify = num("notify"), hard = num("hard");
+  let ok = true;
+  setErr("auto", null); setErr("notify", null); setErr("hard", null);
+  if (auto === null || !(auto >= 0)) { setErr("auto", "Enter how much the agent may spend alone, e.g. 150."); ok = false; }
+  if (hard === null || !(hard > 0)) { setErr("hard", "Enter the most any order may cost, e.g. 800."); ok = false; }
+  else if (auto !== null && hard < auto) { setErr("hard", `The ceiling (${fmtEur(hard)}) must be at least the agent's own limit (${fmtEur(auto)}).`); ok = false; }
+  if (notify !== null && auto !== null && !(notify >= 0 && notify < auto)) {
+    setErr("notify", `The FYI line must be below ${fmtEur(auto)}, or leave it empty.`); ok = false;
+  }
+  const useNotify = ok && notify !== null;
+  const rows = {
+    silent: ok ? (useNotify ? `0 – ${fmtEur(notify)}` : `0 – ${fmtEur(auto)}`) : "",
+    notify: useNotify ? `${fmtEur(notify)} – ${fmtEur(auto)}` : "",
+    ask: ok && hard > auto ? `${fmtEur(auto)} – ${fmtEur(hard)}` : "",
+    block: ok ? `over ${fmtEur(hard)}` : "",
+  };
+  for (const [k, v] of Object.entries(rows)) {
+    const li = $("l-" + k);
+    li.hidden = !v; li.querySelector(".range").textContent = v;
+  }
+  $("summary").textContent = ok ? `Alone up to ${fmtEur(auto)} · refuse over ${fmtEur(hard)}` : "";
+  return ok;
+}
+["auto", "notify", "hard"].forEach((id) => $(id).addEventListener("input", limits));
+
 let current = null; // {id, credential}
 
 async function showKey() {
@@ -176,9 +338,21 @@ $("newkey").onclick = async () => {
   await showKey();
 };
 
+function formError(msg) {
+  $("e-form").textContent = msg || ""; $("e-form").hidden = !msg;
+}
+
 $("f").onsubmit = async (e) => {
   e.preventDefault();
-  $("sign").disabled = true;
+  formError(null);
+  if (!limits()) { formError("Check the spending limits above."); $("auto").focus(); return; }
+  for (const id of ["buyer", "issued_by", "agent_id", "id"]) {
+    if (!$(id).value.trim()) {
+      if (id === "agent_id" || id === "id") $(id).closest("details").open = true;
+      formError(`Fill in "${document.querySelector(`label[for=${id}]`).textContent}".`); $(id).focus(); return;
+    }
+  }
+  $("sign").disabled = true; $("sign").textContent = "Signing…";
   try {
     const did = await showKey();
     const now = new Date(); now.setMilliseconds(0);
@@ -186,10 +360,12 @@ $("f").onsubmit = async (e) => {
     const mandate = {
       id: $("id").value.trim(), buyer: $("buyer").value.trim(), agent_id: $("agent_id").value.trim(),
       issued_by: $("issued_by").value.trim(),
-      auto_approve_limit_eur: Number($("auto").value), hard_limit_eur: Number($("hard").value),
-      avoid_allergens: [...document.querySelectorAll(".checks input[value]:checked")].map((x) => x.value),
+      auto_approve_limit_eur: num("auto"), hard_limit_eur: num("hard"),
+      avoid_allergens: [...document.querySelectorAll("#allergens input:checked")].map((x) => x.value),
+      unknown_allergens: $("unknown").value, substitutions: $("subs").value,
       require_agent_auth: $("auth").checked,
     };
+    if (num("notify") !== null) mandate.notify_above_eur = num("notify");
     const vc = {
       "@context": ["https://www.w3.org/ns/credentials/v2"],
       id: `urn:sous:mandate:${mandate.id}`,
@@ -201,65 +377,85 @@ $("f").onsubmit = async (e) => {
     const credential = await jws(vc, "vc+jwt", { cty: "vc" });
     const r = await fetch(API + "/mandates/credential", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ credential }) });
-    const body = await r.json();
+    const body = await r.json().catch(() => ({}));
     $("result").hidden = false;
     $("vc").textContent = credential;
-    $("token").textContent = body.agent_credential ? `Agent credential (shown once): ${body.agent_credential.header}` : "";
+    const tok = body.agent_credential && body.agent_credential.header;
+    $("token").hidden = !tok;
+    if (tok) {
+      $("token").replaceChildren(Object.assign(document.createElement("strong"), { textContent: "Your agent's token. Copy it now, it is shown only once." }),
+        Object.assign(document.createElement("div"), { className: "mono", textContent: tok }));
+    }
     if (!r.ok) {
-      $("headline").innerHTML = "";
-      $("headline").append(Object.assign(document.createElement("strong"), { className: "bad", textContent: "Refused: " }),
-        `${body.error}: ${body.message}`);
+      $("headline").textContent = "The gateway didn't accept this mandate";
+      $("verdict-tag").replaceChildren(Object.assign(document.createElement("span"), { className: "tier tier-block", textContent: "Refused" }));
+      const plain = {
+        issuer_not_authorised: `"${$("buyer").value.trim()}" already signs its mandates with another key. Use a different organisation name, or ask a Valio Aimo approver to add this key.`,
+      }[body.error];
+      $("explain").textContent = plain ? `${plain} (${body.error})` : `${body.message || "No reason given."} (${body.error || r.status})`;
       $("checks").replaceChildren();
+      $("revoke").hidden = true; $("see").hidden = true;
+      $("result").scrollIntoView({ behavior: "smooth" });
       return;
     }
     current = { id: body.mandate.id, credential };
+    $("see").href = `/ui/#/mandates`;
     await showVerify();
+    $("result").scrollIntoView({ behavior: "smooth" });
   } catch (err) {
-    alert(err.message || err);
+    formError(`Signing failed: ${err.message || err}. Nothing was sent.`);
   } finally {
-    $("sign").disabled = false;
+    $("sign").disabled = false; $("sign").textContent = "Sign mandate";
   }
 };
 
 async function showVerify() {
   const v = await (await fetch(API + `/mandates/${encodeURIComponent(current.id)}/verify`)).json();
   const me = $("did").textContent;
-  const head = $("headline");
-  head.replaceChildren();
-  const strong = document.createElement("strong");
-  strong.className = v.verdict === "valid" ? "ok" : "bad";
-  strong.textContent = `Mandate ${v.mandate_id}: ${v.verdict}`;
-  head.append(strong, document.createElement("br"),
-    `Signed by ${v.issuer.did}${v.issuer.did === me ? " (you)" : ""}, countersigned by the gateway ${v.gateway_signature.did}.`);
-  const li = (ok, text) => Object.assign(document.createElement("li"), { textContent: `${ok ? "✓" : "✗"} ${text}`, className: ok ? "ok" : "bad" });
+  const valid = v.verdict === "valid";
+  $("headline").textContent = valid ? `Mandate ${v.mandate_id} is in force` : `Mandate ${v.mandate_id}: ${v.verdict}`;
+  $("verdict-tag").replaceChildren(Object.assign(document.createElement("span"),
+    { className: `tier ${valid ? "tier-silent" : "tier-block"}`, textContent: valid ? "Valid" : (v.revoked ? "Revoked" : "Not valid") }));
+  $("explain").textContent = valid
+    ? "Your agent can order under it now. The gateway checked the five things below; anyone can repeat the check."
+    : "The agent can't order under this mandate.";
+  const li = (ok, text) => {
+    const el = document.createElement("li"); el.className = ok ? "ok" : "bad";
+    el.append(Object.assign(document.createElement("span"), { className: "mk", textContent: ok ? "✓" : "✕", ariaHidden: "true" }),
+      Object.assign(document.createElement("span"), { textContent: text }));
+    return el;
+  };
   const bs = v.buyer_signature || {};
-  const vu = v.validity.valid_until ? new Date(v.validity.valid_until).toLocaleString() : "no end";
+  const vu = v.validity.valid_until ? new Date(v.validity.valid_until).toLocaleString("fi-FI") : "no end";
   $("checks").replaceChildren(
-    li(bs.ok, `Your signature (${bs.alg || "?"}, vc+jwt) verifies with your did:key`),
-    li(v.gateway_signature.ok, "Gateway countersignature (EdDSA, sous-mandate+jws) verifies against /.well-known/jwks.json"),
-    li(v.issuer_authorised && v.issuer_authorised.ok, `Your key may sign for ${bs.ok ? v.issuer_authorised.buyer : "this buyer"} (${(v.issuer_authorised || {}).how || "not registered"})`),
-    li(v.validity.in_window, `Valid ${new Date(v.validity.valid_from).toLocaleString()} to ${vu}`),
-    li(!v.revoked, v.revoked ? "Revoked by a signed statement" : "Not revoked"),
+    li(bs.ok, `Signed by you${v.issuer.did === me ? "" : " (a different key)"}: your signature checks out (${bs.alg || "?"}).`),
+    li(v.gateway_signature.ok, "Countersigned by the gateway (Ed25519, public key at /.well-known/jwks.json)."),
+    li(v.issuer_authorised && v.issuer_authorised.ok, `Your key may sign for ${bs.ok ? v.issuer_authorised.buyer : "this buyer"} (${(v.issuer_authorised || {}).how || "not registered"}).`),
+    li(v.validity.in_window, `Valid ${new Date(v.validity.valid_from).toLocaleString("fi-FI")} to ${vu}.`),
+    li(!v.revoked, v.revoked ? "Revoked by a statement you signed." : "Not revoked."),
   );
   const a = Object.assign(document.createElement("a"), { href: API + `/mandates/${encodeURIComponent(v.mandate_id)}/verify`, textContent: "Full verification report (JSON)" });
   const more = document.createElement("li");
-  more.append(a);
+  more.append(document.createElement("span"), a);
   $("checks").append(more);
+  $("revoke").hidden = false; $("see").hidden = false;
   $("revoke").disabled = v.revoked;
 }
 
 $("revoke").onclick = async () => {
-  if (!current || !confirm(`Revoke ${current.id}? The agent can no longer order under it.`)) return;
+  if (!current || !confirm(`Revoke ${current.id}? Your agent can no longer order under it. This can't be undone.`)) return;
   const statement = await jws({ type: "SousMandateRevocation", mandate_id: current.id,
     credential_sha256: await sha256hex(current.credential), iat: Math.floor(Date.now() / 1000) }, "sous-revocation+jws");
   const r = await fetch(API + `/mandates/${encodeURIComponent(current.id)}/revoke-credential`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ revocation: statement }) });
-  if (!r.ok) { const b = await r.json(); alert(`${b.error}: ${b.message}`); return; }
+  if (!r.ok) { const b = await r.json().catch(() => ({})); $("explain").textContent = `Not revoked: ${b.message || r.status}`; return; }
   await showVerify();
 };
 
+limits();
 if (!window.isSecureContext || !crypto.subtle) {
-  $("did").textContent = "WebCrypto needs https (or localhost).";
+  $("did").textContent = "Signing needs https (or localhost).";
+  formError("This page must be opened over https to sign. Nothing can be signed here.");
   $("sign").disabled = true;
 } else {
   showKey().catch((e) => { $("did").textContent = String(e); });
