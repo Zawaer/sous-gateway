@@ -381,6 +381,13 @@ function renderQuote(quote) {
     element('p', `${money(quote.total_ex_vat, quote.currency)} ex VAT · ${money(quote.total_inc_vat, quote.currency)} inc VAT`, 'total'),
     outcomeLine(preview.outcome, tierLabels[preview.outcome], tiers[preview.outcome]),
   );
+  const carbon = quote.co2_summary;
+  if (carbon?.lines_with_data > 0) {
+    content.append(element('p',
+      `Estimated footprint: ${carbon.estimate_kg} kg CO₂e · data for ${carbon.lines_with_data} of ${carbon.lines} orderable lines`,
+      'muted'));
+    if (carbon.basis) content.append(element('p', carbon.basis, 'muted'));
+  }
   const expired = element('p', 'Quote expired. Request a new signed quote to continue.', 'notice');
   expired.id = 'quote-expired';
   expired.setAttribute('role', 'status');
