@@ -319,7 +319,7 @@ def _seed_quote(sid: str, so: dict, items: list[dict], when: date) -> dict:
             "comparison_price": {"ex_vat": round(p["price"] / p["content"], 2), "per": p["unit"]},
             "list_price_ex_vat": None,
             "line_total_ex_vat": round(p["price"] * qty, 2), "line_total_inc_vat": round(inc * qty, 2),
-            "logistic_model": "Stock", "available_amount": None, "stock": "plenty",
+            "logistic_model": "Stock", "available_amount": None, "stock": "unknown", "stock_level": "unknown",
             "available_date": when.isoformat(), "delivery_date": when.isoformat(), "order_cutoff": None,
             "delivery_reliability": None, "co2_estimate_kg": None, "co2_note": None,
             "labels": [], "claims": [], "allergens": None, "temperature": "chilled", "orderable": True,

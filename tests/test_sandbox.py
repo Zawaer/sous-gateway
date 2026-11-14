@@ -441,6 +441,8 @@ def test_new_sandbox_is_seeded_with_a_drifted_standing_order_and_a_held_order_wi
     # the seeded quote and the receipt are signed and verify like any other
     q = signing.verify(store.get_quote(o["quote_id"])["_jws"], "sous-quote+jws")
     assert q["seeded"]["sandbox"] == sid and q["valio_api_calls"]["price_calls"] == 0
+    # seeded lines never imply live stock: no Valio availability was read
+    assert all(l["stock_level"] == "unknown" and l["stock"] == "unknown" for l in q["lines"])
     assert signing.verify(o["receipt_jws"], "sous-order+jws")["id"] == o["id"]
     so = standing.get(seeded["standing_order_id"])
     assert so["baseline"]["weeks"] == 4 and all(x["simulated"] for x in so["baseline"]["from"])
