@@ -256,6 +256,9 @@ _SYNONYM_GROUPS: list[tuple[str, str, str]] = [
     ("kuohukerma/vispikerma", "vispgrädde", "whipping cream/whipped cream"),
     ("ruokakerma", "matlagningsgrädde", "cooking cream"),
     ("kahvikerma", "kaffegrädde", "coffee cream"),
+    # 'Arla Cafè maito' is coffee milk without the word 'kahvimaito'; 'coffee milk' is one concept, not kahvi + maito
+    ("kahvimaito/cafè maito/café maito/cafe maito/baristamaito/barista maito", "kaffemjölk",
+     "coffee milk/barista milk"),
     ("tuorejuusto", "färskost", "cream cheese"),
     ("rahka", "kvarg", "quark"),
     ("laktoositon", "laktosfri", "lactose free"),
@@ -304,7 +307,7 @@ _MAX_PHRASE = max(len(t.split()) for t in _SYNONYMS)
 # chicken). Penalised unless the query itself mentions them.
 _DERIVED = (
     "mauste", "spice", "seasoning", "kastike", "sauce", "liemi", "fond", "bouillon", "aromi",
-    "sipsi", "chips", "keksi", "levite", "spread", "piirak", "laatikko", "keitto", "soup",
+    "sipsi", "chips", "keksi", "cookie", "levite", "spread", "piirak", "laatikko", "keitto", "soup",
     "stabilointi", "kondens", "condensed", "jauhe", "powder", "sose", "ketsuppi", "ketchup",
     "salaatti", "pizza", "lasagne", "pyörykkä", "täyte", "makeinen", "karamelli", "candy",
     "candies", "suklaa", "kroketti", "croquette", "pasteija", "hampurilai", "vuoka", "muusi",
@@ -443,6 +446,46 @@ def _relevance(p: dict, concepts: list[Concept]) -> float:
     return score - min(0.1 * len(extra), 1.0)
 
 
+# Type-aware rerank: the query names a product type ('laktoositon maito' -> milk), read with the same classifier
+# the quote type guard uses (substitutes.type_from_hint / product_type). Within the best-matching window, an
+# exact type keeps its score, a related type in the same family (coffee cream for cream) drops a little, and a
+# different type (coffee milk, milk drink, cocoa drink for milk) drops by less than one whole-word concept
+# match, so a product matching the asked claim ('laktoositon') still beats one that misses it. Nothing is
+# dropped. An explicit qualifier ('kahvimaito', 'coffee milk', 'barista maito') makes that the asked type.
+_TYPE_WINDOW = 200
+_TYPE_PENALTY = {"same": 0.0, "minor": 0.2, "unknown": 0.5, "related": 1.0, "different": 2.5}
+_type_cache: dict[str, dict] = {}
+
+
+def _type_of(p: dict) -> dict:
+    from . import substitutes  # substitutes imports this module
+    t = _type_cache.get(p["id"])
+    if t is None:
+        t = _type_cache[p["id"]] = substitutes.product_type(p)
+    return t
+
+
+def type_match(intended: dict, p: dict) -> str:
+    """'same' | 'minor' (same type, e.g. other fat %) | 'related' (same family) | 'unknown' | 'different'."""
+    from . import substitutes
+    match, minor, _ = substitutes.compare_types(intended, _type_of(p))
+    if match == "same":
+        return "same"
+    if match == "compatible":
+        return "minor" if _type_of(p)["key"] == intended["key"] else "related"
+    return match
+
+
+def _type_rerank(query: str, products: list[dict], scores: dict[str, float]) -> list[dict]:
+    from . import substitutes
+    intended = substitutes.type_from_hint(query)
+    if not intended or not intended.get("key"):
+        return products
+    head, tail = products[:_TYPE_WINDOW], products[_TYPE_WINDOW:]
+    head.sort(key=lambda p: -(scores[p["id"]] - _TYPE_PENALTY[type_match(intended, p)]))
+    return head + tail
+
+
 def search(
     query: str = "",
     *,
@@ -485,8 +528,10 @@ def search(
     if q:
         concepts = _concepts(query)
         prior = 0.0 if food_only is not None else -_FOOD_PRIOR if _wants_non_food(query) else _FOOD_PRIOR
-        # stable sort: relevance first, bm25 order breaks ties
-        products.sort(key=lambda p: -(_relevance(p, concepts) + (prior if is_food(p) else 0.0)))
+        scores = {p["id"]: _relevance(p, concepts) + (prior if is_food(p) else 0.0) for p in products}
+        # stable sort: relevance first, bm25 order breaks ties; then the asked product type first
+        products.sort(key=lambda p: -scores[p["id"]])
+        products = _type_rerank(query, products, scores)
     out = []
     for p in products:
         if p["deleted"]:

@@ -35,8 +35,34 @@ def fi(pattern: str, *, exclude: str | None = None, food: bool | None = True):
     return ok
 
 
+def typed(*keys: str, family: str | None = None, fat: float | None = None, name: str | None = None,
+          lactose_free: bool = False):
+    """Predicate by the gateway's own type classifier (substitutes.product_type, the one the quote type guard
+    uses): 'Arla Cafè maito' is coffee milk even though its name never says 'kahvi'."""
+    rx = re.compile(name, re.I) if name else None
+
+    def ok(p: dict) -> bool:
+        from sous import substitutes
+        t = substitutes.product_type(p)
+        n = p["names"]["fi"] or p["name"]
+        if keys and t["key"] not in keys:
+            return False
+        if family and t["family"] != family:
+            return False
+        if fat is not None and t["fat_pct"] != fat:
+            return False
+        if rx and not rx.search(n):
+            return False
+        return not lactose_free or "FREE_FROM_LACTOSE" in p["claims"] or bool(re.search(r"laktoositon", n, re.I))
+
+    return ok
+
+
 BUTTER = fi(r"(\b|kirnu)voi\b", exclude=r"levite|maapähkinä|pähkinä|pavut")
-MILK = fi(r"maito\b", exclude=r"kondens|jauhe|suklaa|kaakao|juoma|kahvi")
+MILK = typed("maito")  # plain milk: not coffee milk, milk drinks, cocoa or plant drinks
+LF_MILK = typed("maito", lactose_free=True)
+COFFEE_MILK = typed("kahvimaito")
+OAT_DRINK = typed("kasvijuoma", name=r"kaura")
 CREAM = fi(r"kerma\b", exclude=r"jäätelö|juusto|kastike|lautasliina|kookos|kasvi")
 CHEESE = fi(r"juusto\b|juustoraaste|\bjuusto", exclude=r"sipsi|chips|kastike|\bvoi\b|keksi|mac ")
 EGG = fi(r"kananmun|munamassa|\bmunat?\b|keltuai|valkuai", exclude=r"levite|mauste|pasta|nuudel")
@@ -63,22 +89,31 @@ CASES: list[tuple[str, object]] = [
     ("tomato", fi(r"tomaatti\b|tomaatit\b", exclude=r"sose|ketsuppi|kastike|murska")),
     ("olive oil", fi(r"oliiviöljy")),
     ("rapeseed oil", fi(r"rypsiöljy|rapsiöljy")),
-    ("oat milk", fi(r"kaurajuoma|kauramaito")),
-    ("kauramaito", fi(r"kaurajuoma|kauramaito")),
-    ("lactose free milk", fi(r"laktoositon", exclude=r"kondens|jauhe|suklaa|kahvi|juoma|kerma|jogurtti|juusto")),
+    ("oat milk", OAT_DRINK),
+    ("kauramaito", OAT_DRINK),
+    ("lactose free milk", LF_MILK),
+    ("lactose-free milk", LF_MILK),
+    ("coffee milk", COFFEE_MILK),
+    ("barista milk", COFFEE_MILK),
     ("yogurt", fi(r"jogurtti\b")),
     ("whipping cream", fi(r"vispikerma|kuohukerma|vispautuva")),
     ("napkin", fi(r"lautasliina|liina|napkin", food=False)),
     # Finnish
-    ("maito", MILK),
+    ("maito", MILK),  # type-based since the coffee-milk fix: the regex counted 'Arla Cafè maito' as milk
     ("voi", BUTTER),
     ("kerma", CREAM),
     ("juusto", CHEESE),
     ("kananmuna", EGG),
     ("lohi", SALMON),
     ("peruna", POTATO),
-    ("laktoositon maito", fi(r"laktoositon", exclude=r"kondens|jauhe|suklaa|kahvi|juoma|kerma|jogurtti|juusto")),
-    ("kaurajuoma", fi(r"kaurajuoma")),
+    ("laktoositon maito", LF_MILK),
+    ("kaurajuoma", OAT_DRINK),
+    ("kevytmaito", typed("maito", fat=1.5)),
+    ("kahvimaito", COFFEE_MILK),
+    ("barista maito", COFFEE_MILK),
+    ("kuohukerma", typed("kuohukerma")),
+    ("vispikerma", typed("kuohukerma")),
+    ("ruokakerma", typed("ruokakerma")),
     # Swedish
     ("mjölk", MILK),
     ("smör", BUTTER),
