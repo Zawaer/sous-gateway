@@ -1,4 +1,66 @@
-# Demo runbook (2-minute video)
+# Demo runbook
+
+## Sunday 15.11: live demo day (peer review and top-5 pitch)
+
+`scripts/demo_prep.py` gets a server ready and writes everything Toivo needs to one private file:
+
+```bash
+uv run python scripts/demo_prep.py --base $SOUS --check-only   # health + judge links, no sandbox, no Valio call
+uv run python scripts/demo_prep.py --base $SOUS                # + one private demo sandbox, warmed
+uv run python scripts/demo_prep.py --base $SOUS --reset        # a fresh sandbox even if the last one is usable
+```
+
+It checks `/health` (ok, commit, clock mode, Valio shared budget and circuit), `/rules`, `/holds`, `/ui/`,
+`/ui/break.html`, `/buyer/` and MCP `initialize` at `/mcp/`. Then it creates **one** sandbox, checks its seeded held
+order is `pending_approval` with `approve_by` in the future, and warms the cache with 2 live lookups: the
+quickstart's hotel milk quote and the hospital's substitutes for 468376. It places no order and runs no attack
+(those are the live demo). Output: `~/sous-demo-<date>.json` plus a printable `.txt` next to it, mode 600, never
+inside a git checkout (the script refuses). The file has the tokens, the links to open in order, the MCP connect
+command, the four prompts and the stage steps with expected outcomes. Stdout shows only each token's last 4
+characters. Exit 1 with a list means something a judge would hit is broken: fix it or switch to staging.
+
+Rerunning without `--reset` reuses the sandbox from the file if it is still active, has 3 h or more left, and
+its seeded order has not been decided yet. Otherwise it makes a new one and says why.
+
+**Lifetimes.** A sandbox lives **24 h** (`SOUS_SANDBOX_TTL_HOURS`) and has 15 live Valio lookups. Its seeded
+held order expires at Monday delivery's cut-off minus the approval margin, about **Sun 16:45**. The per-mandate
+daily limit (hotel €8,000) fills with each live 1,000 L order. A new sandbox has new mandate copies, so its
+counters start at zero. You can create at most 3 sandboxes per IP per hour, and conformance-kit runs count too.
+
+| Time (Helsinki) | What |
+|---|---|
+| **08:00** | Code freeze. The last deploy to prod is whatever is green. |
+| **~09:30** | `demo_prep.py --base $SOUS` against **prod** (the sandbox is valid until Mon ~09:30). Print the `.txt` or keep it open on the laptop, not on the projector. Open the tabs in the order the file lists them. Paste the approver token in the laptop and phone inboxes and the agent token on the break page. Run the MCP connect command in the Claude Code terminal. If prod fails, run the same command against staging and say so on stage. |
+| **10:00** | Submission. |
+| **10:30–13:00** | Peer review, 3 minutes per table (see below). |
+| **~13:45** | If we are in the top 5: `demo_prep.py --base $SOUS --reset`. This gives fresh mandates (daily limits back to zero) and an undecided seeded order. Then open the tabs again. |
+| **14:15** | Top-5 pitch from our own laptop, following [docs/pitch/stage-pitch.md](pitch/stage-pitch.md). The demo order is in the table below. |
+
+**3 minutes at a peer-review table.** (1) Seller inbox: the held standing-order renewal and its drift reasons,
+one sentence on the four tiers (30 s). (2) Claude Code over MCP: send the hotel milk prompt. It gets a signed live
+quote and orders as Auto + FYI (60 s). (3) Break page: click "agent approves its own order" to get a 403 and the
+audit event (30 s). (4) Leave them the README judge path and `POST /sandbox` so they can try it themselves. Don't approve the
+seeded order at every table: approve it once, then show the live hospital substitute's hold. If the seeded order
+has been decided, rerun `demo_prep.py`: it makes a new sandbox on its own.
+
+**Stage demo order** (beat 2 of the pitch). The `.txt` has the same steps with copy-paste prompts.
+
+| # | Do | Expect |
+|---|---|---|
+| 1 | Claude Code: send the hotel prompt (1,000 L lactose-free milk) | Signed live quote, `ordered`, **Auto + FYI** (`spend.notify`) at €1,000–2,500; above €2,500 or €2.50/L it is held instead |
+| 2 | Claude Code: send the hospital substitute prompt (468376, order 4 packs) | **Held** (substitution, maybe `allergen.unknown`), "decide by" from Valio's cut-off; approve on the phone |
+| 3 | Break page: "agent approves its own order" | **403**, blocked, event in the audit log |
+| 4 | (if time) Seller inbox: seeded renewal | Held by `standing.quantity_creep` / `quantity_trend` / `cost_drift` |
+
+**If the Wi-Fi or Valio fails:** the seeded sandbox (held renewal, standing-order history, audit log) and the
+break page make **no Valio calls**, so they still work as long as the gateway is reachable (use a phone hotspot).
+If Valio's circuit is open, `/health` shows `circuit: open` and quotes fail. In that case show the inbox and the
+break page and say why. If the gateway is unreachable, use deck slides 4, 5 and 9 (production screenshots).
+Never show a token or the approver code on the projector.
+
+---
+
+# 2-minute video (recorded)
 
 Three things on screen: a terminal running `scripts/demo.py`, the gateway UI on a laptop
 (`<base>/ui/`), and a phone with the UI open for the approval. Everything below is live data
