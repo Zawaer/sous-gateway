@@ -1,0 +1,104 @@
+/* Sous shared design tokens. Opt-in: link this file before a page's own CSS.
+   Rationale and sources: docs/UI_PRINCIPLES.md. Screens: docs/ui-review/.
+
+   Keeps the seller UI's look (warm paper, black ink, Newsreader headings, Inter text, Fragment Mono ids)
+   and adds the two things every page needs to agree on:
+   1. Tier badges that stay distinct without colour. Each tier differs in FILL WEIGHT and ICON, not only hue:
+        silent "Auto"           outline      check
+        notify "Auto + FYI"     light tint   envelope/i
+        ask    "Needs approval" yellow fill  pause
+        block  "Refused"        dark fill    cross
+      Under deuteranopia/protanopia the old green/amber/red inks all turn olive (checked with the Machado
+      2009 matrices); fill weight and icon still separate them.
+   2. Touch and contrast minimums: 44px targets, text >= 4.5:1 on paper. */
+
+:root {
+  --paper: #f8f8f3;
+  --panel: rgba(0, 0, 0, .028);
+  --panel-strong: rgba(0, 0, 0, .05);
+  --ink: #111;
+  --ink-80: rgba(0, 0, 0, .8);
+  --ink-60: rgba(0, 0, 0, .62);   /* lowest opacity for body text: 5.6:1 on paper */
+  --ink-40: rgba(0, 0, 0, .4);    /* decoration only, never text */
+  --rule: rgba(0, 0, 0, .12);
+  --pill: rgba(0, 0, 0, .06);
+  --pill-hover: rgba(0, 0, 0, .1);
+  --solid: #111;
+  --on-solid: #f8f8f3;
+  --focus-ring: 0 0 0 3px rgba(0, 86, 112, .45);  /* Valio Aimo petrol */
+
+  /* Valio Aimo brand anchors (valioaimo.fi theme CSS): petrol is a link/accent, never a tier. */
+  --aimo: #005670;
+  --aimo-dark: #003747;
+  --aimo-tint: #e6eef1;
+
+  /* Tier colours. Text colours pass 4.5:1 on --paper. */
+  --silent: #2e6b3c;      --silent-bg: transparent;     --silent-line: rgba(46, 107, 60, .55);
+  --notify: #1f5a96;      --notify-bg: #e3edf7;         --notify-line: #e3edf7;
+  --ask: #23282d;         --ask-bg: #fddb32;            --ask-line: #e9c400;   /* Valio Aimo yellow, dark ink: 10.9:1 */
+  --block: #ffffff;       --block-bg: #a8321f;          --block-line: #a8321f; /* white on red: 6.3:1 */
+  --ask-ink: #8f5600;     /* amber for text outside a badge (countdowns), 5.6:1 */
+  --block-ink: #a8321f;   /* red for text outside a badge, 6.3:1 */
+
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --serif: "Newsreader", Georgia, "Times New Roman", serif;
+  --mono: "Fragment Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --tap: 44px;            /* Apple HIG 44pt; WCAG 2.5.8 floor is 24px */
+  --radius: 10px;
+  --space: 16px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #141412;
+    --panel: rgba(255, 255, 255, .035);
+    --panel-strong: rgba(255, 255, 255, .06);
+    --ink: #f2f1ea;
+    --ink-80: rgba(242, 241, 234, .82);
+    --ink-60: rgba(242, 241, 234, .66);
+    --ink-40: rgba(242, 241, 234, .42);
+    --rule: rgba(242, 241, 234, .14);
+    --pill: rgba(242, 241, 234, .08);
+    --pill-hover: rgba(242, 241, 234, .13);
+    --solid: #f2f1ea;
+    --on-solid: #141412;
+    --focus-ring: 0 0 0 3px rgba(138, 200, 220, .55);
+    --aimo: #8ac8dc;
+    --aimo-tint: rgba(138, 200, 220, .1);
+    --silent: #7cc68e;      --silent-line: rgba(124, 198, 142, .55);
+    --notify: #a9cdf2;      --notify-bg: rgba(138, 184, 236, .16); --notify-line: transparent;
+    --ask-ink: #e3ad52;
+    --block-ink: #ef8a76;
+  }
+}
+
+/* Tier badge: <span class="tier tier-ask">Needs approval</span>. The icon comes from CSS, so the
+   label text stays the accessible name. Use the same label for a tier on every page. */
+.tier {
+  display: inline-flex; align-items: center; gap: .35em;
+  font: 500 .78rem/1 var(--sans); letter-spacing: .01em; white-space: nowrap;
+  padding: .32em .6em .32em .5em; border-radius: 999px; border: 1px solid transparent;
+  vertical-align: middle;
+}
+.tier::before { font: 700 .95em/1 var(--sans); }
+.tier-silent { color: var(--silent); background: var(--silent-bg); border-color: var(--silent-line); }
+.tier-silent::before { content: "\2713"; }               /* check */
+.tier-notify { color: var(--notify); background: var(--notify-bg); border-color: var(--notify-line); }
+.tier-notify::before { content: "i"; font-style: italic; font-family: var(--serif); }
+.tier-ask { color: var(--ask); background: var(--ask-bg); border-color: var(--ask-line); }
+.tier-ask::before { content: "\2016"; }                  /* pause bars */
+.tier-block { color: var(--block); background: var(--block-bg); border-color: var(--block-line); }
+.tier-block::before { content: "\2715"; }                /* cross */
+
+/* Touch targets and focus, for any page that opts in. */
+.tap { min-height: var(--tap); min-width: var(--tap); }
+:where(a, button, input, select, textarea, summary):focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* A bottom action bar for the one decision on a phone screen (approve / reject, sign). */
+.actionbar {
+  position: sticky; bottom: 0; z-index: 5;
+  display: flex; gap: 10px; align-items: center;
+  padding: 12px var(--space) calc(12px + env(safe-area-inset-bottom));
+  background: var(--paper); border-top: 1px solid var(--rule);
+}
+.actionbar > * { flex: 1; min-height: var(--tap); }
