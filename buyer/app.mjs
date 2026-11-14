@@ -660,12 +660,16 @@ $('load-mandates').addEventListener('click', () => run(async () => {
     notice($('feedback'), 'No readable mandates found. Check the gateway and agent token.');
     return;
   }
-  const placeholder = element('option', 'Choose your buyer mandate');
+  if (gateway.agentToken && !mandates.some(mandate => mandate.yours)) {
+    notice($('feedback'), 'This token matched no owned mandate. Available public or readable mandates are listed below. Check your token before ordering.');
+  }
+  const placeholder = element('option', 'Choose an available mandate');
   placeholder.value = '';
   placeholder.disabled = true;
   placeholder.selected = true;
   $('available-mandates').append(placeholder, ...mandates.map(mandate => {
-    const option = element('option', `${mandate.buyer || mandate.id} · ${mandate.id}${mandate.yours ? ' · your credential' : ''}`);
+    const access = mandate.yours ? 'your credential' : mandate.demo_public ? 'public demo' : 'readable mandate';
+    const option = element('option', `${mandate.buyer || mandate.id} · ${mandate.id} · ${access}`);
     option.value = mandate.id;
     return option;
   }));
