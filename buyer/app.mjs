@@ -386,7 +386,10 @@ function renderQuote(quote) {
     content.append(element('p',
       `Estimated footprint: ${carbon.estimate_kg} kg CO₂e · data for ${carbon.lines_with_data} of ${carbon.lines} orderable lines`,
       'muted'));
-    if (carbon.basis) content.append(element('p', carbon.basis, 'muted'));
+    if (Number.isFinite(carbon.low_kg) && Number.isFinite(carbon.high_kg) && carbon.low_kg < carbon.high_kg) {
+      content.append(element('p', `Shortlisted options span ${carbon.low_kg}–${carbon.high_kg} kg CO₂e for the lines with data.`, 'muted'));
+    }
+    content.append(element('p', 'Estimates use product-group averages and quoted quantities.', 'muted'));
   }
   const expired = element('p', 'Quote expired. Request a new signed quote to continue.', 'notice');
   expired.id = 'quote-expired';
