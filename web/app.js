@@ -1381,7 +1381,7 @@ function lostDemandCard(L, bar) {
       Sandboxes and QA data left out.</div>
     ${rows.map(([k, label, cls]) => bar(label, C[k]?.value_ex_vat || 0, max,
         `${eur(C[k]?.value_ex_vat || 0)} <span class="muted small">(${C[k]?.orders || 0})</span>`,
-        top(k) ? `Rules: ${top(k)}` : "", cls)).join("")}
+        top(k) ? `Rules: ${top(k)}` : "", C[k]?.value_ex_vat ? cls : "")).join("")}
     <h4 style="margin:14px 0 4px">Asked for, but no product could cover it</h4>
     ${unc.length ? unc.map((u) => `<div class="small"><b>${esc(String(u.uncovered))} ${esc(unit(u.unit))}</b> of ${esc(u.item)}
         <span class="muted">· ${u.quotes} quote${u.quotes === 1 ? "" : "s"}</span></div>`).join("")
