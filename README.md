@@ -42,6 +42,20 @@ The demo server is production, `https://135-181-8-209.sslip.io`, set as `SOUS` b
 
 Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it (our own cases, not held out). From one full CI run on CRACI, [43587725624](https://github.com/Zawaer/sous/actions/runs/43587725624) on 11d8448: scripted cases (no LLM, live Valio prices) **60/60**, 43/43 unsafe actions blocked or escalated; LLM buyer agent on 48 one-sentence cases: Kimi K3.1 Pro (Verda Inference) 47/48, Gemini 4 Hydrogen 46/48, Nemotron 3.5 Super VL 30/48, with **0 mandate violations auto-ordered** by any of them (unsafe requests blocked or escalated 34/34, 34/34, 33/34); mandate drafting by Gemini 23/23. Conformance kit 17/17 on staging ([CONFORMANCE.md](docs/CONFORMANCE.md)); check-the-checker catches 47/47 planted violations ([EVAL_INTEGRITY.md](docs/EVAL_INTEGRITY.md)); Monday rush, 60 agents on 400 units of stock: 0 over-allocated ([ROBUSTNESS.md](docs/ROBUSTNESS.md)). Recipe planner, 7 menus (CI [43595658113](https://github.com/Zawaer/sous/actions/runs/43595658113), after the R05 crash fix): recipe table 7/7, Gemini 5/7, Kimi 5/7, every miss a quantity outside our 35 % bar. Red team on a Verda GPU ([REDTEAM.md](docs/REDTEAM.md), 51b139d): 2,000 generated requests through a self-hosted Qwen3-30B-A3B (vLLM), 976/997 unsafe held or refused; it found 3 order-slicing misses in the gateway (demo mandates had the split window off), fix in progress. Spend so far: $38.26 known ([COSTS.md](docs/COSTS.md)).
 
+## Valio's brief → where it is in Sous
+
+| Valio's brief | In Sous | Number or link |
+|---|---|---|
+| **Flow** Request → Lookup → Order → Approval | `POST /sandbox` quickstart above: search → `POST /quotes` → `POST /orders` → `/ui/approve.html` | CI eval: 60/60 scripted cases end to end ([STATUS](docs/STATUS.md#evaluation)) |
+| **1. Lookup**: structured search of products, prices, availability | `GET /products` / MCP `search_products` (local index, 0 API calls); live price + availability only on the quote | 17,546 products fi/sv/en; avg **0.47** Valio calls per request, max 2 (CI 43587725624) |
+| **2. Request and order** at a fixed price | `POST /quotes` returns an Ed25519-signed quote with an expiry; `POST /orders` accepts only that signed payload, once | 20 parallel orders on one quote → 1 ordered, 19 rejected |
+| **3. Permissions and approval**: agent alone vs human sign-off | Signed mandate → tiers silent / notify / ask / block, every rule at `GET /rules`; humans approve on `/ui/approve.html`, agents get 403 | 43/43 unsafe blocked or escalated; red team 976/997 ([REDTEAM.md](docs/REDTEAM.md)) |
+| **Bonus**: more than price | Quote lines carry delivery reliability, labels/certifications, CO₂ estimate (range across options), origin | low reliability (< 90 %) is flagged on the line |
+| **Bonus**: exceptions | Partial availability → signed options (part now + rest later, later date, substitute), type-aware substitutes, post-order amendments | eval cases O01–O06; [PROTOCOL 5.1](docs/PROTOCOL.md) |
+| **Bonus**: explain decisions | Every finding has a rule id, plain-language reason and `rule_url`; hash-chained audit at `GET /audit` (`/audit/verify`); reasons also in Finnish (`/rules?lang=fi`) | `/audit/verify` ok on prod at a431ff6 (365 events, 13:09Z) |
+| **Good to know**: not a chatbot; query APIs only when needed | MCP/OpenAPI for any agent; Valio is called only for a quote's shortlist, cached, with a shared budget (Aiven Valkey) | 0.47 calls/request; never a full-catalog fetch |
+| **Good to know**: not production-ready in 48 h | Demo-grade identity, list prices, ERP hand-off stub labelled simulated | [Known limits](docs/STATUS.md#known-limits) |
+
 ## Where to read more
 
 - [docs/pitch/try-it.md](docs/pitch/try-it.md): the sandbox walk-through as a one-page handout.
