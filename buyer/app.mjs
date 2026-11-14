@@ -393,6 +393,9 @@ async function renderOrder(current, order) {
   const content = document.createDocumentFragment();
   const status = statuses[order.status] || order.status;
   const tier = statusTier[order.status] || order.decision?.outcome;
+  if (quote.seeded?.sandbox) {
+    content.append(element('p', 'Sandbox example priced from stored reference data.', 'notice'));
+  }
   content.append(outcomeLine(tier, (order.status === 'ordered' && tierLabels[tier]) || statusLabels[order.status] || status, `${order.id} · ${status}`, 'outcome total'));
   renderCoverage(content, quote, [], (_, row, container) => showOrderAlternatives(gateway, quote, row, container));
   appendList(content, 'Gateway decision', order.decision.findings.map((finding) => finding.message));
