@@ -94,6 +94,12 @@ class Mandate(BaseModel):
         "ask", description="Tier for a product whose product master has no usable country of origin while "
         "allowed_origins or avoid_origins is set: unknown is never treated as allowed")
     substitutions: Tier = "ask"
+    substitution_by_use: dict[str, dict[str, Literal["exact", "same_spec", "type"]]] = Field(
+        default_factory=dict, description="Overrides the use-sensitivity table (sous/use_sensitivity.py): {product "
+        "type key ('kuohukerma'), family ('cream', 'milk'), category code or '*': {use: level}}, uses coffee, "
+        "whipping, laminated_pastry, baking, melting, cooking, drinking; levels exact (same product only: any "
+        "substitute asks a human, also when substitutions allows it), same_spec (same kind, fat % and claims, any "
+        "brand) or type (same kind). The most specific key wins; unset cells keep the table")
     terminal_products: Tier = "silent"
     min_delivery_reliability: float | None = 0.9
     later_delivery: Literal["notify", "ask", "block"] = "ask"
@@ -131,6 +137,12 @@ class Mandate(BaseModel):
     @classmethod
     def _origins(cls, v: list[str] | None) -> list[str] | None:
         return origins.normalize(v)
+
+    @field_validator("substitution_by_use", mode="before")
+    @classmethod
+    def _by_use(cls, v):
+        from .use_sensitivity import validate_override
+        return validate_override(v or {})
 
     @field_validator("valid_until")
     @classmethod
@@ -512,8 +524,17 @@ def evaluate(
             msg_fi = {"block": "valtakirja ei salli korvaavia tuotteita",
                       "ask": "korvaava tuote vaatii hyväksynnän", "notify": "ostajalle kerrotaan",
                       "silent": "korvaavat tuotteet ovat sallittuja"}[mandate.substitutions]
-            add("substitution", mandate.substitutions, f"{name} replaces {subs[pid]}; {msg}.", pid,
-                f"{name} korvaa tuotteen {subs[pid]}; {msg_fi}.")
+            # What the product is used for (sous/use_sensitivity.py): whipping cream for a dessert asks a person
+            # for any other brand, even when the mandate lets substitutes through; cream for coffee doesn't.
+            from .use_sensitivity import judge
+            verdict = judge(catalog.get(subs[pid]), p, l.get("use"), mandate)
+            ok_use = f" {verdict['reason']}" if verdict and verdict["ok"] else ""
+            ok_use_fi = f" {verdict['reason_fi']}" if verdict and verdict["ok"] else ""
+            add("substitution", mandate.substitutions, f"{name} replaces {subs[pid]}; {msg}.{ok_use}", pid,
+                f"{name} korvaa tuotteen {subs[pid]}; {msg_fi}.{ok_use_fi}")
+            if verdict and not verdict["ok"]:
+                add("substitution.use_sensitive", "ask", f"{name} replaces {subs[pid]}. {verdict['reason']}", pid,
+                    f"{name} korvaa tuotteen {subs[pid]}. {verdict['reason_fi']}")
 
         if l.get("logistic_model") == "Terminal":
             if mandate.terminal_products != "silent":

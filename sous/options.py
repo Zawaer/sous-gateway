@@ -42,7 +42,7 @@ _TIER_RANK = {"best": 0, "better": 1, "good": 2}
 _MATCH_RANK = {"same": 0, "compatible": 1, "unknown": 2, "different": 3}
 _COMPACT = ("product_id", "name", "quantity", "sales_unit", "unit_price_ex_vat", "line_total_ex_vat",
             "line_total_inc_vat", "covers", "available_amount", "stock_level", "delivery_date", "order_cutoff",
-            "logistic_model", "substitute_for")
+            "logistic_model", "substitute_for", "use")
 
 
 def trouble(lines: list[dict], uncovered: float, requested: date) -> list[str]:
@@ -137,6 +137,14 @@ def _say(phrases: list[str]) -> str:
 
 def _names(lines: list[dict]) -> str:
     return ", ".join(dict.fromkeys(l["name"] for l in lines))
+
+
+def _sub_info(s: dict, original_id: str) -> dict:
+    """An option's `substitute`: tier, compromises, type match and, when the use is known
+    (sous/use_sensitivity.py), use / use_sensitivity / use_ok / use_reason."""
+    return {"tier": s["tier"], "for": original_id, "compromises": s["compromises"],
+            "match": (s.get("type") or {}).get("match"),
+            **{k: s[k] for k in ("use", "use_sensitivity", "use_ok", "use_reason") if k in s}}
 
 
 def build(
@@ -260,8 +268,7 @@ def build(
                     f"{now_n:g} {u} of {_names(now_lines)} on {req}; the remaining "
                     f"{what(gap, sub_lines) if per_pack else f'{got:g} {u} from'} {_names(sub_lines)}, a substitute"
                     f"{': ' + _say(s0['compromises']) if s0['compromises'] else ' with no compromises'}.",
-                    {"tier": s0["tier"], "for": original_id, "compromises": s0["compromises"],
-                     "match": (s0.get("type") or {}).get("match")},
+                    _sub_info(s0, original_id),
                     round(now_n + in_packs(got), 3) if per_pack else None,
                     {"amount": round(now_n * per_pack[0] + got, 3), "unit": s_unit} if per_pack else None)
         for s in subs:
@@ -272,13 +279,13 @@ def build(
                     f"{s['tier'].capitalize()} substitute: all {what(amount, lines) if per_pack else f'{amount:g} {u} of'} "
                     f"{s['name']} instead, arriving {when}; "
                     f"{_say(s['compromises']) if s['compromises'] else 'no compromises'}.",
-                    {"tier": s["tier"], "for": original_id, "compromises": s["compromises"],
-                     "match": (s.get("type") or {}).get("match")},
+                    _sub_info(s, original_id),
                     in_packs(got) if per_pack else None, {"amount": got, "unit": s_unit} if per_pack else None)
 
     out.sort(key=lambda o: (o["substitute"] is not None or o["kind"] == "next_date", o["_timing"],
                             o["kind"] != "split_with_substitute",
                             _TIER_RANK.get((o["substitute"] or {}).get("tier"), 0),
+                            (o["substitute"] or {}).get("use_ok") is False,
                             _MATCH_RANK.get((o["substitute"] or {}).get("match"), 0),
                             len((o["substitute"] or {}).get("compromises") or []), o["total_ex_vat"]))
     return out[:MAX_PER_ITEM]
@@ -294,7 +301,8 @@ def finish(options: list[dict], quote_id: str, preview: Callable[[dict], tuple[s
         if preview:
             tier, rules = preview(o | {"_lines": lines})
             o["mandate_preview"] = {"outcome": tier, "rules": rules}
-        o["lines"] = [{k: l.get(k) for k in _COMPACT} | {"issues": [i["code"] for i in l["issues"]]} for l in lines]
+        o["lines"] = [{k: l.get(k) for k in _COMPACT if k != "use" or l.get("use")}
+                      | {"issues": [i["code"] for i in l["issues"]]} for l in lines]
         out.append(o)
     out.sort(key=lambda o: (o["item_index"], (o.get("mandate_preview") or {}).get("outcome") == "block"))
     ranks: dict[int, int] = {}

@@ -749,7 +749,12 @@ def suggest(
     limit: int = 3,
     purpose: str | None = None,
     substitution: str | None = None,
+    use: str | None = None,
+    use_source: str | None = None,
 ) -> dict:
+    """`use`: what the product is used for (sous/use_sensitivity.py). When the table knows the product type and use,
+    each option says whether it is acceptable for it (use_sensitivity, use_ok, use_reason); one that isn't gets a
+    major compromise, and same-brand / same-spec candidates rank first."""
     orig = catalog.get(product_id)
     if not orig:
         raise KeyError(product_id)
@@ -762,6 +767,8 @@ def suggest(
                 "considered": {"in_category": 0, "excluded": {}, "priced_live": 0},
                 "options": [], "no_safe_substitute": msg, "not_offered": [],
                 "next_step": "Order the product itself (another date or a split), or ask the buyer."}
+    from . import use_sensitivity as USE  # lazy: it imports this module lazily too
+    sens = USE.lookup(orig, use, mandate)
     avoid = sorted(set(avoid_allergens or []) | set(mandate.avoid_allergens if mandate else []))
     required_claims = set(orig["claims"]) & {
         "FREE_FROM_LACTOSE", "FREE_FROM_GLUTEN", "VEGAN", "VEGETARIAN", "LOW_LACTOSE", "FREE_FROM_MILK",
@@ -883,6 +890,9 @@ def suggest(
         if allergen["status"] == "unknown":
             major.append("no allergen data: a human must confirm it is free of "
                          + ", ".join(catalog.ALLERGENS.get(a, a) for a in avoid))
+        verdict = USE.judge(orig, c, use, mandate) if sens else None
+        if verdict and not verdict["ok"]:
+            major.append(verdict["compromise"])
         tier = "best" if not minor and not major else ("better" if not major else "good")
         options.append({
             "tier": tier,
@@ -902,12 +912,18 @@ def suggest(
                                     if o.get("line_total_ex_vat") is not None and ref_total is not None else None),
             "compromises": major + minor,
             "allergen_check": allergen,
+            **({"use": use, "use_sensitivity": verdict["use_sensitivity"], "use_ok": verdict["ok"],
+                "use_reason": verdict["reason"], "use_reason_fi": verdict["reason_fi"]} if verdict else {}),
             "offer": o,
         })
     rank = {"best": 0, "better": 1, "good": 2}
     type_rank = {"same": 0, "compatible": 1, "unknown": 2, "different": 3}
     # within a tier, the same kind of product first: milk with more fat beats a milk drink for milk
-    options.sort(key=lambda x: (rank[x["tier"]], type_rank[x["type"]["match"]], x["type"]["key"] != otype["key"],
+    # for a use where the product matters (whipping cream for a dessert), acceptable ones first, then the same brand
+    strict = bool(sens and sens["level"] in ("exact", "same_spec"))
+    options.sort(key=lambda x: (rank[x["tier"]], x.get("use_ok") is False,
+                                strict and not (x["brand"] and x["brand"] == orig["brand"]),
+                                type_rank[x["type"]["match"]], x["type"]["key"] != otype["key"],
                                 len(x["compromises"]), -x["match_score"],
                                 (x["offer"]["comparison_price"] or {}).get("ex_vat") or 1e9))
     # pick one per tier first (best / better / good), then the rest; show them best first
@@ -936,6 +952,11 @@ def suggest(
                              "the buyer's yes (purpose.ask)."} if lvl == "ask" else {}),
         "considered": {"in_category": len(pool) + sum(excluded.values()), "excluded": excluded,
                        "priced_live": len(shortlist)},
+        **({"use": {"use": use, "source": use_source, "classes": USE.classify(use),
+                    "sensitivity": sens and sens["level"], "sensitivity_source": sens and sens["source"],
+                    "why": sens and sens["why"],
+                    "note": None if sens else "the use-sensitivity table says nothing for this product and use: "
+                                              "ordinary substitution rules"}} if use else {}),
         "options": picked,
         # never a different kind of product or a negative match score: then nothing, said plainly
         "no_safe_substitute": None if picked else NO_SAFE_SUBSTITUTE,

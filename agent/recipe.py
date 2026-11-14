@@ -668,6 +668,7 @@ def _first_substitute(r: dict, mandate: dict, need: float | None = None) -> dict
     """The gateway's best-ranked option that can be delivered, preferring declared-safe allergens and a pack
     that fits the need (not 3 kg of oregano for 20 g)."""
     safe = [o for o in r.get("options", []) if (o.get("offer") or {}).get("orderable")]
+    safe = [o for o in safe if o.get("use_ok") is not False] or safe  # one that suits the dish, if any
     if mandate.get("avoid_allergens"):
         known = [o for o in safe if (o.get("allergen_check") or {}).get("status") == "safe"]
         safe = known or safe
@@ -681,7 +682,8 @@ def _first_substitute(r: dict, mandate: dict, need: float | None = None) -> dict
 
 def _sub_view(orig_id: str, orig_name: str, o: dict, amount: float, unit: str) -> dict:
     return {"for_product_id": orig_id, "for_name": orig_name, "product_id": o["product_id"], "name": o["name"],
-            "tier": o["tier"], "compromises": o["compromises"], "amount": amount, "unit": unit}
+            "tier": o["tier"], "compromises": o["compromises"], "amount": amount, "unit": unit,
+            **({"use_reason": o["use_reason"]} if o.get("use_reason") else {})}
 
 
 # --- the plan ---------------------------------------------------------------------------------------
@@ -911,7 +913,7 @@ def plan(request_text: str, *, gateway, mandate_id: str, agent_id: str, llm=None
             sub_calls += 1
             err, s = _call(gateway, p.trace, "suggest_substitutes", {
                 "agent_id": agent_id, "mandate_id": mandate_id, "product_id": orig[0], "delivery_date": dd,
-                "amount": missing, "unit": item["unit"]})
+                "amount": missing, "unit": item["unit"], "purpose": _purpose(n)})
             o = None if err else _first_substitute(s, mandate, missing)
             if not o:
                 if not undeliverable:

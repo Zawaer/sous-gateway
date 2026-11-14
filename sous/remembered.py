@@ -11,7 +11,9 @@ Narrow on purpose (the pattern of sous/clearance.py, which does the same for all
   product.type_mismatch (REMEMBERABLE). Nothing else is ever softened: allergens, hard/daily/weekly/split limits,
   holds, payment block, revoked or expired mandates, autonomy and every block-tier finding stay as they are, and a
   finding the mandate itself sets to block (substitutions: block) is never touched;
-- one mandate and the exact product(s): a substitution is remembered for that original -> substitute pair only;
+- one mandate and the exact product(s): a substitution is remembered for that original -> substitute pair only,
+  and for what it is used for (the line's `use`, sous/use_sensitivity.py): a substitute approved for coffee asks
+  again in a dessert; substitution.use_sensitive itself is never softened;
 - tied to the product data the human saw (a fingerprint of names, units and category per product) and, for unit
   and type findings, to the gateway's reading (its message without the numbers): when either changes, ask again;
 - expires (DEFAULT_DAYS, at most MAX_DAYS), optional caps on the line's quantity and total, revocable;
@@ -31,6 +33,7 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
 
 from . import catalog, config, signing, store
+from .use_sensitivity import use_key
 
 DEFAULT_DAYS = 30
 MAX_DAYS = 90
@@ -119,7 +122,7 @@ def list_for(mandate_id: str, active_only: bool = True, now: datetime | None = N
 
 def summary(r: dict) -> dict:
     """The short form for GET /mandates/{id}/remembered and MCP my_mandates / get_mandate."""
-    return {k: r.get(k) for k in ("id", "rule", "product_id", "original_product_id", "name", "by", "authority",
+    return {k: r.get(k) for k in ("id", "rule", "product_id", "original_product_id", "use", "name", "by", "authority",
                                   "order_id", "created_at", "expires_at", "max_quantity", "max_line_total_eur",
                                   "active", "revoked_at", "revoked_by", "jws")}
 
@@ -145,6 +148,9 @@ def _matches(r: dict, f, line: dict) -> bool:
     if r["rule"] != f.rule or r["product_id"] != f.product_id:
         return False
     if f.rule == "substitution" and r.get("original_product_id") != line.get("substitute_for"):
+        return False
+    # what the substitute is used for (sous/use_sensitivity.py): one approved for coffee is not one for a dessert
+    if f.rule == "substitution" and r.get("use") != use_key(line.get("use")):
         return False
     if f.rule in _READING and r.get("reading") != reading(f.message):
         return False
@@ -215,6 +221,7 @@ def record(order: dict, mandate, picks: list[RememberIn], by: str, authority: st
     row = store.get_quote(order["quote_id"]) if order.get("quote_id") else None
     q = signing.verify(row["_jws"], "sous-quote+jws") if row else None
     originals = {l["product_id"]: l.get("substitute_for") for l in (q or {}).get("lines", [])}
+    uses = {l["product_id"]: l.get("use") for l in (q or {}).get("lines", [])}
     for p in picks:
         f = findings.get((p.rule, p.product_id))
         if not f:
@@ -232,6 +239,7 @@ def record(order: dict, mandate, picks: list[RememberIn], by: str, authority: st
              "name": line.get("name") or (catalog.get(p.product_id) or {}).get("name") or p.product_id,
              "fingerprints": {pid: fingerprint(catalog.get(pid)) for pid in pids},
              "reading": reading(f.get("message")) if p.rule in _READING else None,
+             **({"use": use_key(line.get("use") or uses.get(p.product_id))} if p.rule == "substitution" else {}),
              "approved_line": {k: line.get(k) for k in ("quantity", "sales_unit", "line_total_ex_vat", "unit_note")},
              "max_quantity": p.max_quantity, "max_line_total_eur": p.max_line_total_eur,
              "by": by, "authority": authority, "order_id": order["id"], "active": True,

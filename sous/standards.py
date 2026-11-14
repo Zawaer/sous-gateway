@@ -728,6 +728,10 @@ class QuoteLineDoc(_Open):
     issues: list[IssueDoc]
     item_index: int | None = None
     substitute_for: str | None = None
+    use: str | None = Field(None, description="What the product is used for (stated, or read from the buyer's "
+                            "history); a substitute is judged for it (sous/use_sensitivity.py)")
+    use_source: str | None = Field(None, description="'request', or 'history: order PO-...' / "
+                                   "'history: standing order SO-...'")
 
 
 class MandatePreviewDoc(_Open):

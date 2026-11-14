@@ -314,6 +314,13 @@ RULES = {
                      "pysäytetään, odottava tilaus saa tämän havainnon, jo lähetetty tilaus merkitään "
                      "tarkistettavaksi, ja nyt vaarallinen muistettu hyväksyntä tai allergeenivarmistus perutaan. "
                      "Mitään ei muuteta tai pudoteta hiljaa; lievennys ei koskaan laajenna mitään itsestään.",
+    "substitution.use_sensitive": "Korvaava tuote ei käy siihen, mihin tuotetta käytetään (rivin käyttötarkoitus: "
+                                  "pyynnöstä, reseptistä tai ostajan historiasta): toisen merkin kuohukerma "
+                                  "jälkiruokaan (stabilointiaineet muuttavat vaahtoutumista), voi kerrostaikinaan, "
+                                  "juotava maito eri rasvaprosentilla. Ihminen vahvistaa, vaikka valtakirja sallisi "
+                                  "korvaavat tuotteet itsestään. Tuotetyyppien ja käyttötarkoitusten taulukko on "
+                                  "tiedostossa sous/use_sensitivity.py; tuntemattomille käytöille ja tyypeille pätee "
+                                  "tavallinen korvaavuussääntö. Muistettu korvaus ei koskaan pehmennä tätä.",
     "product.held": "Valio Aimo on pysäyttänyt tuotteen (takaisinveto, laatupidätys tai myyntikielto; GET "
                     "/holds): sitä ei voi tarjota tilattavana, tilata eikä hyväksyä, ei edes ennen pysäytystä "
                     "annetulla tarjouksella.",
@@ -666,6 +673,11 @@ def summary_text(m, rule: str | None, idx: int = 0) -> str | None:
             pid, pp = hits[idx]
             return (f"{(_cat.get(pid) or {}).get('name') or pid} ({pp.purpose}): "
                     + ("vain juuri tämä tuote" if lvl == "exact" else "korvaava vaatii ostajan hyväksynnän"))
+    if rule == "substitution.use_sensitive":
+        lv = {"exact": "vain sama tuote", "same_spec": "sama tyyppi, rasva ja merkinnät", "type": "sama tyyppi"}
+        from .use_sensitivity import USES
+        return "korvaavat käyttötarkoituksen mukaan: " + "; ".join(
+            f"{k} {USES[u][1]}: {lv[x]}" for k, per in m.substitution_by_use.items() for u, x in per.items())
     if rule == "supply.terminal":
         return f"toimittajan varastosta tulevat tuotteet {TIER_SAYS[m.terminal_products]}"
     if rule == "supply.reliability":

@@ -253,6 +253,13 @@ def _build() -> list[dict]:
            "order is flagged for review, and a remembered approval or allergen clearance that would now be unsafe "
            "is revoked. Nothing is changed or dropped silently; loosening never expands anything automatically "
            "(sous/needs.py).", "avoid_allergens", condition="mandate update"),
+        _r("substitution.use_sensitive", "finding", ["ask"], "buyer",
+           "A substitute that is not acceptable for what the product is used for (the line's use: stated, from the "
+           "recipe, or from the buyer's history): whipping cream for a dessert from another brand (stabilisers change "
+           "how it whips), butter for laminated pastry, milk to drink with another fat %. A person confirms, even when "
+           "the mandate lets substitutes through on their own. The table of product types x uses is in "
+           "sous/use_sensitivity.py; unknown uses and types keep the ordinary substitution rule. A remembered "
+           "substitution never softens it.", "substitution_by_use"),
         _r("product.held", "finding", ["block"], "valio",
            "Valio Aimo has put the product on hold (recall, quality hold or sales stop; GET /holds): it can't be "
            "quoted as orderable, ordered, or approved into an order, also on a quote issued before the hold.", None),
@@ -499,6 +506,9 @@ def mandate_summary(m: Mandate) -> list[dict]:
         lvl = purposes.resolve(pp.purpose, pp.substitution)
         if lvl in ("exact", "ask"):
             add(f"purpose.{lvl}", f"{(catalog.get(pid) or {}).get('name') or pid} ({pp.purpose}): {purposes.LABEL[lvl]}")
+    if m.substitution_by_use:
+        add("substitution.use_sensitive", "substitutes by use: " + "; ".join(
+            f"{k} for {u}: {lv.replace('_', ' ')}" for k, per in m.substitution_by_use.items() for u, lv in per.items()))
     if m.terminal_products != "silent":
         add("supply.terminal", f"supplier-shipped products {_TIER_SAYS[m.terminal_products]}")
     if m.min_delivery_reliability is not None:

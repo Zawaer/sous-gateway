@@ -519,6 +519,9 @@ def suggest_substitutes(
     avoid_allergens: list[str] = Query(default=[]),
     limit: int = Query(3, ge=1, le=6),
     agent_id: str = "anonymous-agent",
+    use: str | None = Query(None, max_length=200, description="What the product is used for (coffee, whipping, "
+                            "dessert, baking, cooking, drinking, melting, ingredient-in-recipe:<dish>): options say "
+                            "whether they are acceptable for it (sous/use_sensitivity.py)"),
     token: str | None = Depends(agent_token),
     r: access.Reader = Depends(access.reader),
     purpose: str | None = Query(None, max_length=120, description="What the product is for ('coffee', 'recipe: "
@@ -530,7 +533,7 @@ def suggest_substitutes(
     product_purposes or the purpose given) there are none; for `ask`, every option needs the buyer's yes."""
     return S.suggest_substitutes(agent_id, product_id, delivery_date, amount, unit, mandate_id,
                                  avoid_allergens or None, limit, agent_token=token, reader=r, purpose=purpose,
-                                 substitution=substitution)
+                                 substitution=substitution, use=use)
 
 
 # --- quotes and orders ------------------------------------------------------

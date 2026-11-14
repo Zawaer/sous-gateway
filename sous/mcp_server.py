@@ -551,7 +551,9 @@ def request_quote(
     """Get a signed, expiring quote with live prices and availability from Valio Aimo. Places no order.
 
     delivery_date: YYYY-MM-DD.
-    items: one per need: {product_ids: [...], amount, unit: 'L' | 'KG' | 'SALES_UNIT', substitute_for?}
+    items: one per need: {product_ids: [...], amount, unit: 'L' | 'KG' | 'SALES_UNIT', substitute_for?, use?}
+    (use: what the product is for, e.g. 'coffee', 'dessert', 'ingredient-in-recipe:Tiramisu'; a substitute that
+    doesn't suit it, like another brand of whipping cream for a dessert, waits for a person)
     (pack, packs mean SALES_UNIT = cartons/packs as sold; 'ST' (PCS, KPL) counts pieces when the product has
     them: 20 ST of a carton of 6 = 4 cartons, rounded up, and the line says so in unit_note).
       Give several candidate ids per need and an amount in L or KG: the gateway picks the cheapest orderable
@@ -633,6 +635,7 @@ def suggest_substitutes(
     avoid_allergens: list[str] | None = None,
     limit: int = 3,
     agent_token: str | None = None,
+    use: str | None = None,
     ctx: Context | None = None,
     purpose: str | None = None,
     substitution: str | None = None,
@@ -649,10 +652,14 @@ def suggest_substitutes(
     Another kind of product is never offered: with nothing acceptable, no_safe_substitute says to ask a human and
     not_offered lists what was ruled out and why. delivery_date null = the next delivery day.
     With mandate_id it is read-scoped like get_mandate (send your Authorization: Bearer header or agent_token).
+    use: what the product is used for (coffee, whipping, dessert, baking, cooking, drinking, melting,
+      ingredient-in-recipe:<dish>). Whipping cream for a dessert needs the same product (another brand whips
+      differently); for coffee any brand will do. Options then carry use_sensitivity, use_ok and use_reason.
     """
     return S.suggest_substitutes(agent_id, product_id, _date(delivery_date) if delivery_date else None, amount, unit,
                                  mandate_id, avoid_allergens, limit, agent_token=_agent_token(ctx, agent_token),
-                                 reader=_reader(ctx, agent_token), purpose=purpose, substitution=substitution)
+                                 reader=_reader(ctx, agent_token), purpose=purpose, substitution=substitution,
+                                 use=use)
 
 
 @_tool(OrderOut, title="Core 4/4: Place the order",

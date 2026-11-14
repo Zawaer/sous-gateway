@@ -15,6 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from . import use_sensitivity as USE
 from . import account, agent_auth, aimo, allergen_ai, autonomy, catalog, clearance, clock, config, remembered, credentials, deadline, erp, exposure, fi, carbon, holds, notify, offers as OFFERS, options as OPT, origin, purpose as purposes, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
 from .mandate import Mandate, evaluate, product_refusals, readable_name
 
@@ -368,6 +369,12 @@ class QuoteItem(BaseModel):
     product_type: str | None = Field(None, description="The kind of product the buyer asked for, e.g. 'milk' or "
                                      "'maito'. Candidates of another type (coffee milk for milk) are never chosen "
                                      "silently. Default: the most common type among the candidates")
+    use: str | None = Field(None, max_length=200, description=(
+        "What the product is used for, e.g. 'coffee', 'whipping', 'dessert', 'baking', 'laminated_pastry', "
+        "'sauce', 'cooking', 'drinking', 'melting' or 'ingredient-in-recipe:<dish>' (free text works too). A "
+        "substitute's acceptability depends on it (sous/use_sensitivity.py): whipping cream for a dessert from "
+        "another brand asks a person (rule substitution.use_sensitive); for coffee the brand doesn't matter. "
+        "Left out: read from the buyer's history (standing orders, past orders) when the item is a substitute"))
     note: str | None = None
     purpose: str | None = Field(None, max_length=120, description="What this item is for, e.g. 'coffee', 'recipe: "
                                 "lasagne', 'allergy menu'. Decides how strictly it may be substituted (see substitution)")
@@ -375,6 +382,13 @@ class QuoteItem(BaseModel):
         None, description="exact = only these products (no substitute is proposed or ordered); ask = a substitute "
         "needs the buyer's yes; allowed = the mandate's substitutions tier. Default: read from the purpose. An agent "
         "can only make an item stricter than the buyer's mandate (product_purposes), never looser")
+
+    def dump(self) -> dict:
+        """The signed form: `use` only when given, so quotes without one keep their earlier shape."""
+        d = self.model_dump()
+        if d.get("use") is None:
+            d.pop("use", None)
+        return d
 
 
 RATIONALE_DOC = ("The agent's business reason for this call, in a sentence (e.g. 'weekly breakfast milk for 400 "
@@ -484,6 +498,7 @@ def _apply_option(req: QuoteRequest) -> tuple[QuoteRequest, set[int], dict[int, 
                 fetch_on[len(items)] = date.fromisoformat(l["delivery_date"])
             items.append(QuoteItem(product_ids=[l["product_id"]], amount=l["quantity"], unit="SALES_UNIT",
                                    substitute_for=l.get("substitute_for") or it.get("substitute_for"),
+                                   use=l.get("use") or it.get("use"),
                                    note=f"{opt['id']} ({opt['kind']})"))
     return req.model_copy(update={
         "items": items, "delivery_date": date.fromisoformat(q["requested_delivery_date"]),
@@ -511,13 +526,16 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
         Q.prefetch([pid for i in req.items for pid in i.product_ids], req.delivery_date)
     for item_index, item in enumerate(req.items):
         unit = None if item.unit == "SALES_UNIT" else item.unit
+        use, use_source = _item_use(item, mandate)
+        if use and not item.use:
+            item = item.model_copy(update={"use": use})  # for options; the signed items keep what was asked
         day = (fetch_on or {}).get(item_index, req.delivery_date)
         offers, now = Q.offers(item.product_ids, day, item.amount, unit)
         RES.adjust_offers(offers, mandate.buyer if mandate else None, now, RES.pool_of(mandate), day)  # minus reserved
         if day > req.delivery_date:
             OPT.flag_later(offers, req.delivery_date, f"chosen option {req.option_id}")
         if not offers:
-            gaps.append({"item": item.model_dump(), "item_index": item_index, "uncovered": item.amount, "unit": item.unit,
+            gaps.append({"item": item.dump(), "item_index": item_index, "uncovered": item.amount, "unit": item.unit,
                          "reason": "No such product ids."})
             continue
         # Sized to known stock, even for one named product: what isn't in stock goes to `uncovered` (and options),
@@ -560,6 +578,8 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
                                               "message": mismatch[l["product_id"]]}]
             if item.substitute_for:
                 l["substitute_for"] = item.substitute_for
+            if use:
+                l["use"], l["use_source"] = use, use_source
             lines.append(l)
         picked = {l["product_id"] for l in chosen}
         considered += [_considered(o, item_index, off_type.get(o["product_id"]), refused.get(o["product_id"]),
@@ -568,11 +588,11 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
                                                               o["product_id"] not in off_type, Q.rank_key(o)))
                        if o["product_id"] not in picked][:6]
         if uncovered > 0:
-            gaps.append({"item": item.model_dump(), "item_index": item_index, "uncovered": uncovered, "unit": item.unit})
+            gaps.append({"item": item.dump(), "item_index": item_index, "uncovered": uncovered, "unit": item.unit})
         elif chosen and (step := _unit_dead_end(chosen, item.unit)):
             # The unit can't be read for any candidate (kg of a product measured in L with no known density): not a
             # silent dead end, the item is uncovered with the reason and what to ask instead.
-            gaps.append({"item": item.model_dump(), "item_index": item_index, "uncovered": item.amount,
+            gaps.append({"item": item.dump(), "item_index": item_index, "uncovered": item.amount,
                          "unit": item.unit, **step})
         if sized and item_index not in skip_options and OPT.trouble(chosen, uncovered, req.delivery_date):
             troubled.append((item_index, item, [o for o in cands if o["product_id"] not in off_type], chosen))
@@ -590,7 +610,7 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
         "expires_at": Q.quote_expiry(now, [l for l in lines if l["orderable"]]).isoformat(timespec="milliseconds"),
         "requested_delivery_date": req.delivery_date.isoformat(),
         "currency": "EUR",
-        "items": [item.model_dump() for item in req.items],
+        "items": [item.dump() for item in req.items],
         "lines": lines,
         "total_ex_vat": total_ex,  # the orderable total: what placing this quote would charge
         "total_inc_vat": total_inc,
@@ -632,6 +652,20 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
     # Finnish twins of the preview's findings and the lines' unit notes (sous/fi.py): unsigned, beside the JWS
     return {"quote": body, "jws": jws, **({"approver_view": sidecar} if sidecar else {}),
             "explanations_fi": fi.explanations(findings, body)}
+
+
+def _item_use(item: QuoteItem, mandate: Mandate | None) -> tuple[str | None, str | None]:
+    """(use, source) of an item: as asked ('request'), else for a substitute what the buyer's history said the
+    original was used for ('history: ...', sous/use_sensitivity.py); else (None, None): unknown."""
+    if item.use:
+        return item.use, "request"
+    if item.purpose:  # the item's purpose ('coffee', 'recipe: lasagne') is its use too
+        return item.purpose, "request (purpose)"
+    if item.substitute_for and mandate is not None:
+        found = USE.from_history(mandate.id, [item.substitute_for] + list(item.product_ids))
+        if found:
+            return found
+    return None, None
 
 
 def _unit_dead_end(chosen: list[dict], unit: str) -> dict | None:
@@ -736,7 +770,8 @@ def _options(body: dict, troubled: list, requested: date, mandate: Mandate | Non
         if not exact and not any(o["on_time"] for o in opts) and lookups < MAX_SUBSTITUTE_LOOKUPS and catalog.get(original):
             lookups += 1
             try:
-                subs = substitutes.suggest(original, requested, item.amount, unit, mandate, None, 4)["options"]
+                subs = substitutes.suggest(original, requested, item.amount, unit, mandate, None, 4,
+                                           **({"use": item.use} if item.use else {}))["options"]
             except aimo.BudgetLimit:  # our own per-minute budget: a retryable wait, not "no substitutes"
                 raise
             except (aimo.AimoError, KeyError):
@@ -744,6 +779,10 @@ def _options(body: dict, troubled: list, requested: date, mandate: Mandate | Non
             subs = [s for s in subs if s["product_id"] not in item.product_ids]
             opts = OPT.build(item_index, item.amount, unit, offers, chosen, requested, subs, original, nxt)
         for o in opts:
+            if item.use:  # a substitute line is judged for what the product is used for (preview included)
+                for l in o["_lines"]:
+                    if l.get("substitute_for"):
+                        l["use"] = item.use
             if o["kind"] == "next_date":
                 o["order_cutoff"] = _next_date_cutoff(o["_lines"], offers)
         out += opts
@@ -1225,7 +1264,7 @@ def suggest_substitutes(agent_id: str, product_id: str, delivery_date: date | No
                         unit: str = "SALES_UNIT", mandate_id: str | None = None,
                         avoid_allergens: list[str] | None = None, limit: int = 3,
                         agent_token: str | None = None, reader=None, purpose: str | None = None,
-                        substitution: str | None = None) -> dict:
+                        substitution: str | None = None, use: str | None = None) -> dict:
     from . import access
     if substitution is not None and substitution not in ("exact", "ask", "allowed"):
         raise GatewayError("invalid_request", "substitution must be exact, ask or allowed.", 422)
@@ -1239,12 +1278,17 @@ def suggest_substitutes(agent_id: str, product_id: str, delivery_date: date | No
         sandbox.authorize(mandate, agent_id, agent_token, "suggest_substitutes")
     defaulted = delivery_date is None
     delivery_date = delivery_date or sandbox.next_delivery_day()
+    use = " ".join((use or purpose or "").split())[:200] or None
+    use_source = ("request" if not purpose or use != purpose else "request (purpose)") if use else None
+    if not use and mandate is not None and (found := USE.from_history(mandate.id, [product_id])):
+        use, use_source = found
     before = dict(aimo.stats)
     try:
         with sandbox.metered(mandate):
             r = substitutes.suggest(product_id, delivery_date, amount, None if unit == "SALES_UNIT" else unit,
                                     mandate, avoid_allergens, limit=min(limit, 6),
-                                    **{k: v for k, v in (("purpose", purpose), ("substitution", substitution)) if v})
+                                    **{k: v for k, v in (("purpose", purpose), ("substitution", substitution)) if v},
+                                    **({"use": use, "use_source": use_source} if use else {}))
     except KeyError:
         raise GatewayError("product_not_found", f"No product {product_id}.", 404)
     except aimo.AimoError as e:

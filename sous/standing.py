@@ -52,6 +52,9 @@ class StandingItem(BaseModel):
                                 "whipped desserts'; decides how strictly a renewal may substitute it")
     substitution: Literal["exact", "ask", "allowed"] | None = Field(
         None, description="exact | ask | allowed (default read from the purpose); see QuoteItem.substitution")
+    use: str | None = Field(None, max_length=200, description="What it is used for (e.g. 'coffee', 'dessert'): "
+                            "quotes of these products, and substitutes for them, are judged for it "
+                            "(sous/use_sensitivity.py)")
 
 
 class StandingOrderIn(BaseModel):
@@ -78,7 +81,7 @@ def create(req: StandingOrderIn) -> dict:
         missing = [p for p in it.product_ids if not catalog.get(p)]
         if missing:
             raise S.GatewayError("product_not_found", f"No product {', '.join(missing)}.", 404)
-        items.append({**it.model_dump(), "label": it.label or catalog.get(it.product_ids[0])["name"]})
+        items.append({**it.model_dump(exclude=set() if it.use else {"use"}), "label": it.label or catalog.get(it.product_ids[0])["name"]})
     now = S._now().isoformat(timespec="milliseconds")
     so = {"id": S._id("SO"), "mandate_id": m.id, "agent_id": req.agent_id, "buyer": m.buyer, "name": req.name,
           "items": items, "cadence": {"every": "week", "weekday": req.weekday}, "active": True,
@@ -341,7 +344,8 @@ def renew(standing_id: str, delivery_date: date | None = None, *, agent_id: str 
         q = S.request_quote(S.QuoteRequest(
             agent_id=so["agent_id"], mandate_id=so["mandate_id"], delivery_date=when,
             items=[S.QuoteItem(product_ids=it["product_ids"], amount=it["amount"], unit=it["unit"],
-                               purpose=it.get("purpose"), substitution=it.get("substitution")) for it in items],
+                               purpose=it.get("purpose"), substitution=it.get("substitution"),
+                               use=it.get("use")) for it in items],
             rationale=rationale or f"Weekly renewal of standing order {so['name']}",
         ), agent_token=agent_token)["quote"]
     return place_renewal(so, items, q, when, rens, agent_token=agent_token, rationale=rationale)

@@ -289,6 +289,10 @@ def test_llm_plan_respects_mandate_allergens_with_a_gateway_substitute(gw, monke
     assert lines["120"]["purpose"].startswith("recipe") and lines["120"]["substitution"] == "ask"
     assert p.quote["mandate_preview"]["outcome"] == "ask"
     assert "purpose.ask" in {f["rule"] for f in p.quote["mandate_preview"]["findings"]}
+    # and the gateway says why: cream in a soup must keep its kind and fat % (sous/use_sensitivity.py: cream for
+    # cooking is same_spec), oat drink is another kind of product
+    assert "another kind of product" in {f["rule"]: f for f in p.quote["mandate_preview"]["findings"]}[
+        "substitution.use_sensitive"]["message"]
     # the onion: 0.8 kg needed, the 10 kg sack is left out
     assert "103" not in lines and lines["104"]["quantity"] == 1
 
