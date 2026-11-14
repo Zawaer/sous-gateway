@@ -170,7 +170,7 @@ AVAILABILITY = {
     "SALES_BLOCK": "Valio Aimo on estänyt tuotteen myynnin.",
     "UNDELIVERABLE": "Valio Aimo ei pysty toimittamaan tuotetta minään päivänä.",
     "OUT_OF_STOCK": "Loppu varastosta: Valio Aimolla ei ole sille toimituspäivää.",
-    "CUTOFF_PASSED": "Toimituspäivän tilausaika on jo umpeutunut. Se tarkistetaan kellosta, ja uudelleen "
+    "CUTOFF_PASSED": "Toimituspäivän tilausaika on jo umpeutunut. Se tarkistetaan kelloa vasten, ja uudelleen "
                      "tilattaessa ja hyväksyttäessä.",
     "UNIT_MISMATCH": "Tarve on litroina, mutta tuotetta myydään painon mukaan (tai toisin päin). Sous ei arvaa "
                      "muunnosta.",
@@ -185,9 +185,9 @@ RULES = {
     "mandate.ok": "Kaikki tarkistukset menivät läpi: tilaus tehdään (ja ostaja saa ilmoituksen, jos jokin "
                   "ilmoitussääntö laukesi).",
     "order.empty": "Pyyntöön ei löytynyt mitään tilattavaa.",
-    "autonomy.advise": "Valtakirja antaa agentin vain neuvoa: se saa hakea ja pyytää tarjouksia, mutta jokainen "
+    "autonomy.advise": "Valtakirjan mukaan agentti saa vain neuvoa: se saa hakea ja pyytää tarjouksia, mutta jokainen "
                        "tilaus odottaa ihmisen hyväksyntää.",
-    "autonomy.reorder": "Valtakirja antaa agentin tilata itse vain ostajan tavallisia tuotteita (tilattu tällä "
+    "autonomy.reorder": "Valtakirjan mukaan agentti saa tilata itse vain ostajan tavallisia tuotteita (tilattu tällä "
                         "valtakirjalla ennenkin tai usual_products-listalla). Muut tuotteet odottavat ihmisen "
                         "hyväksyntää.",
     "autonomy.capped": "Valio Aimo on rajannut tämän ostajan (tai kaikkien ostajien) agentit valtakirjaa "
@@ -249,16 +249,16 @@ RULES = {
     "allergen.likely": "Tuote ei ilmoita allergeeneja, mutta Gemini Decisions API (gemini-decision-1) arvioi "
                        "tuotteen nimien, merkin ja pääraaka-aineiden perusteella jonkin vältettävän allergeenin "
                        "todennäköisyydeksi vähintään 80 % (yksi kyllä/ei-kysymys allergeenia kohden): tilaus "
-                       "estetään, eikä ihminenkään voi hyväksyä sitä. Alle 80 %:n tuote jää tilaan "
-                       "allergen.unknown; mallin vastaus ei koskaan tee tuotteesta turvallista.",
+                       "estetään, eikä ihminenkään voi hyväksyä sitä. Alle 80 %:n todennäköisyydellä tuote jää "
+                       "tilaan allergen.unknown; mallin vastaus ei koskaan tee tuotteesta turvallista.",
     "allergen.unknown": "Tuotteelta puuttuvat allergeenitiedot, joten ei voida varmistaa, ettei siinä ole "
                         "vältettävää allergeenia. Tuntematonta ei koskaan pidetä turvallisena.",
-    "allergen.cleared": "Tuotteelta puuttuvat allergeenitiedot, mutta ostajan ihminen on jo aiemman tilauksen "
+    "allergen.cleared": "Tuotteelta puuttuvat allergeenitiedot, mutta ostajan hyväksyjä on jo aiemman tilauksen "
                         "hyväksynnässä vahvistanut sen vapaaksi kaikesta, mitä valtakirja välttää, ja pyytänyt "
                         "Sousia muistamaan sen (sous/clearance.py: yksi valtakirja ja tuote; raukeaa, jos "
                         "tuotetiedot tai vältettävät allergeenit muuttuvat; vanhenee 90 päivässä; voidaan perua). "
                         "Tuote tilataan, ja ostajalle kerrotaan, kenen vahvistusta käytettiin.",
-    "substitution": "Rivillä on korvaava tuote pyydetyn tilalla; valtakirja kertoo, paljonko ihminen saa sanoa.",
+    "substitution": "Rivillä on korvaava tuote pyydetyn tilalla; valtakirja määrää, kuinka paljon ihminen saa siihen sanoa.",
     "product.held": "Valio Aimo on pysäyttänyt tuotteen (takaisinveto, laatupidätys tai myyntikielto; GET "
                     "/holds): sitä ei voi tarjota tilattavana, tilata eikä hyväksyä, ei edes ennen pysäytystä "
                     "annetulla tarjouksella.",
@@ -269,7 +269,7 @@ RULES = {
     "amendment.delay": "Valio Aimo siirtää toimituksen myöhemmäksi, ja valtakirjan later_delivery on notify: "
                        "muutos tehdään, ostajalle kerrotaan.",
     "amendment.delay_beyond_mandate": "Valio Aimo siirtää toimituksen myöhemmäksi, ja valtakirjan later_delivery "
-                                      "on ask tai block: ostajan ihmisen on hyväksyttävä muutos (block: kukaan ei "
+                                      "on ask tai block: ostajan hyväksyjän on hyväksyttävä muutos (block: kukaan ei "
                                       "voi hyväksyä, ennen kuin valtakirja sallii sen). Hylkääminen peruu rivit "
                                       "hyvityksellä.",
     "amendment.substitution": "Valio Aimo keräsi toisen tuotteen, ja valtakirja (tarkistettuna korvaavalle "
@@ -293,10 +293,10 @@ RULES = {
                               "määrän. Kun SOUS_ALLOCATION=pro_rata (Valion asetus, ei valtakirjan), ja kysyntä "
                               "ylittää varaston, kukin ostaja saa osuuden viimeisen 4 viikon tilaustensa "
                               "suhteessa.",
-    "price.expires": "Valio Aimon hinta on voimassa vain toimituspäivää edeltävään päivään asti.",
+    "price.expires": "Valio Aimon hinta vanhenee ennen toimituspäivää.",
     "availability.data_stale": "Valio Aimoon ei saatu yhteyttä, joten tarjous käyttää viimeisintä tiedossa olevaa "
                                "hintaa tai saldoa: ihminen päättää.",
-    "product.type_mismatch": "Toimittaa voidaan vain toisenlaista tuotetta kuin pyydettiin (kahvimaitoa maidon "
+    "product.type_mismatch": "Saatavilla on vain toisenlaista tuotetta kuin pyydettiin (kahvimaitoa maidon "
                              "sijaan): se tarjotaan, mutta ihminen vahvistaa sen.",
     "unit.interpreted": "Tarpeen yksikkö ei ole tuotteen yksiköitä (20 ST tuotteesta, jota myydään laatikoittain "
                         "ilman yksittäiskappaleen yksikköä), joten se luettiin myyntiyksiköiksi: rivin unit_note "
@@ -304,11 +304,11 @@ RULES = {
                         "kappaleyksikölle (PRK, BOT, ...), ei laukaise sääntöä. Laukeaa myös, kun nesteen kilot "
                         "(40 kg kermaa) luetaan litroiksi tai toisin päin tuotetyypin tyypillisellä tiheydellä.",
     "quantity.pack_oversize": "Suunnitellut pakkaukset ylittävät litra- tai kilotarpeen yli {over} (12 kg -> "
-                              "yksi 20 kg:n säkki, +67 %), eikä yksikään vähemmän ylijäämää tuottava suunnitelma "
-                              "maksa enintään {price} enempää: tilaus tehdään, ja ostajalle kerrotaan.",
+                              "yksi 20 kg:n säkki, +67 %), eikä pienemmän ylijäämän suunnitelmaa saa korkeintaan "
+                              "{price} kalliimmalla: tilaus tehdään, ja ostajalle kerrotaan.",
     "standing.quantity_creep": "Kestotilauksen tuotteen määrä on yli {creep} suurempi kuin viimeisten {n} "
                                "uusinnan mediaani.",
-    "standing.quantity_trend": "Kestotilauksen tuotteen määrä on kasvanut {run} uusintaa peräkkäin.",
+    "standing.quantity_trend": "Kestotilauksen tuotteen määrä on kasvanut {run} uusinnassa peräkkäin.",
     "standing.price_drift": "Tuotteen yksikköhinta on yli {drift} korkeampi kuin viimeisten {n} uusinnan "
                             "mediaani.",
     "standing.cost_drift": "Uusinnan kokonaissumma on yli {drift} suurempi kuin viimeisten {n} uusinnan mediaani.",
@@ -350,8 +350,28 @@ RULES = {
     "mandate_signature": "Valtakirja (tai sen takana oleva ostajan todiste) ei täsmää allekirjoitukseensa.",
     "idempotency_key_reused": "Agentti on jo käyttänyt tätä idempotenssiavainta toiseen tilaukseen; uusi yritys "
                               "samalla avaimella palauttaa alkuperäisen tilauksen. Avaimet ovat agenttikohtaisia.",
+    "offer.applied": "Rivin hinta perustuu Valio Aimon erikoistarjoukseen (request_quote ja offer_id): agentti "
+                     "käytti myyjän kaupallista tarjousta, joten ostajalle kerrotaan. Kaikki muut säännöt pätevät "
+                     "yhä; erikoistarjous ei koskaan ohita rajoja, allergeeneja, tuoteryhmiä eikä uusien tuotteiden "
+                     "sääntöä.",
+    "offer.expired": "Valio Aimon erikoistarjous, jonka hinnalla tarjous laskettiin, on vanhentunut tai peruttu "
+                     "ennen kuin tilaus tehtiin tai hyväksyttiin: pyydä uusi tarjous.",
+    "offer.over_cap": "Valio Aimon erikoistarjouksella tehdyt tilaukset ylittäisivät sen määräkaton (kaikki ostajat "
+                      "yhteensä; tehdyt ja hyväksyntää odottavat tilaukset lasketaan).",
+    "offer_not_found": "Tälle valtakirjalle ei ole tällaista erikoistarjousta (toiselle ostajalle tehty "
+                       "erikoistarjous vastaa samoin).",
+    "offer_expired": "Erikoistarjous on vanhentunut, peruttu tai loppunut.",
+    "offer_not_applicable": "Mikään erikoistarjouksen tuotteista ei ole tarjouksen tilattava rivi.",
+    "offer_over_cap": "Tarjous pyytää erikoistarjouksen tuotetta enemmän kuin sen määräkatosta on jäljellä.",
+    "offer_requires_mandate": "Erikoistarjouksen hinnan saa vain sillä valtakirjalla, jolle se on tehty (anna "
+                              "mandate_id).",
+    "offer_above_list": "Valion puoli: erikoistarjous, jonka hinta on yli Valion nykyisen hinnan, hylätään; "
+                        "erikoistarjous saa vain laskea hintaa.",
+    "offer_no_targets": "Valion puoli: suojausten jälkeen ei jäänyt yhtään valtakirjaa, jolle erikoistarjouksen voisi "
+                        "tehdä (valtakirjan säännöt, kuten vältettävät allergeenit, tai ostajakohtainen "
+                        "aktiivisten erikoistarjousten raja).",
     "too_many_candidates": "Enintään {max} ehdokastuotetta tarjousta kohden.",
-    "sandbox_limit": "Tuomariston testiympäristö on käyttänyt osuutensa Valion oikeasta avaimesta.",
+    "sandbox_limit": "Tuomariston testiympäristö on käyttänyt osuutensa Valion oikean rajapinta-avaimen kutsuista.",
     "sandbox_expired": "Tuomariston testiympäristö on vanhentunut tai suljettu.",
     "approval_deadline_passed": "Odottavan tilauksen voi hyväksyä vain approve_by-aikaan asti: rivien aikaisin "
                                 "tilausaika miinus {margin} minuuttia (tai toimituspäivän alku). Sen jälkeen tila "
@@ -411,7 +431,7 @@ def issue(code: str, line: dict, requested: date | None) -> str:
         return (f"varasto ei riitä tarvittavaan {num(qty)} {su}." if qty is not None
                 else "Valio Aimolla on varastossa vähemmän kuin tarvitaan.")
     if code == "PRICE_EXPIRES":
-        return (f"hinta on voimassa vain toimituspäivää {day(requested)} edeltävään päivään asti."
+        return (f"hinta vanhenee ennen toimituspäivää {day(requested)}."
                 if requested else RULES["price.expires"])
     if code == "DATA_STALE":
         return ("Valio Aimon tuoreita tietoja ei saatu, joten käytetään viimeisintä tiedossa olevaa hintaa tai "
