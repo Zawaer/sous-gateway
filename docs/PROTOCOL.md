@@ -214,6 +214,24 @@ Applies to quote lines and option lines, substitute offers and compromises, and 
 
 **Anonymous quotes are not sized to stock.** A quote without a `mandate_id` needs no credential, so a line sized to stock (its `quantity`, `covers`, line total, `uncovered`) would hand anyone the exact amount (ask for 99999 and read the split). In `buckets`, and in `approver_exact` for callers without the approver code, a mandate-less quote therefore puts the whole requested quantity on the cheapest orderable product, never splits it by stock, and carries no `options[]` (they are sized to stock too). A short line says so: `stock_level: short`, `PARTIAL_STOCK` (redacted message) and `STOCK_SIZING_WITHHELD`. The exact coverable amount and the split appear only to a caller quoting under a mandate (authorized as section 16 describes: the agent's `vka_` token, a sandbox token, or the mandate's own rules when it needs no token) or with the global approver code under `approver_exact`. The JWS signs this same view. `exact` mode is unchanged. (Security review, Codex run 01a1d86a.)
 
+### 5.3 Stock reservations and fair share (`sous/reservations.py`, `SOUS_ALLOCATION`)
+
+Why: a quote is sized to the stock Valio reports, but N buyers' quotes made before any order each see all of it, so N orders could together exceed what Valio has (the "Monday rush").
+
+- **Reserve.** An order that goes through reserves its lines' quantities per (product, delivery date) against Valio's last known `availableAmount` (recorded at every quote). A held order (`pending_approval`) reserves *tentatively* until its `approve_by`; approval makes it firm, rejection or expiry releases it. Only lines with known stock (`logisticModel: Stock`) reserve; Terminal lines stay unknown.
+- **What's left.** Every later quote and order sees `left = Valio's amount - active reservations`. Quotes are sized to it (a line with nothing left gets the blocking issue `ALLOCATED`). An order asking for more than is left is **refused** with `ALLOCATED` (rule `availability.allocated`, owner valio, block); the order carries `allocation: {policy, lines: [{product_id, delivery_date, asked, left, why}]}` and `options: [{id, kind: "allocated_left", product_id, quantity, delivery_date, requote: {delivery_date, items}}]`: `requote` is a ready `POST /quotes` body for what's left. Check and reserve run under the order lock, and with Valkey also as one WATCH/MULTI transaction, so two orders can't both take the last units.
+- **A reservation ends** when Valio's own availability reflects it (a newer observation shows the stock fell by at least the reserved amount since the oldest open reservation: our orders arriving at Valio, oldest first), when its TTL passes (`SOUS_RESERVATION_TTL_MINUTES`, default 30), or when its order is rejected, expires or is refused at approval.
+- **Shared.** Stored in the `stock_reservation`, `stock_observation` and `stock_demand` tables; with `SOUS_VALKEY_URL` also mirrored in one Valkey hash per (product, date), so several deployments see one another's reservations. Valkey down falls back to the database (fail-open, like the Valio budget).
+
+**Fair share when short.** Valio sets the policy, not a buyer's mandate: `SOUS_ALLOCATION`
+
+| Policy | When demand exceeds stock |
+|---|---|
+| `first_come` (default) | Whoever orders first gets it, up to what's left. |
+| `pro_rata` | Each buyer is capped at a share of the stock in proportion to their last 4 weeks' ordered volume of the product (a buyer with no history counts as the smallest regular buyer). A buyer asking for less than their share gets what they asked for and the rest is shared among the others by the same weights (weighted water filling). Demand = what buyers asked for in quotes and orders of the last `SOUS_RESERVATION_TTL_MINUTES`. When demand fits the stock there is no cap. `why: "share"` in `allocation` says the cap, not the stock, limited the order. |
+
+Measured with 60 concurrent agents in docs/ROBUSTNESS.md ("Monday rush"; `scripts/rush.py`).
+
 ### Issue codes (`sous/quote.py`)
 
 Each issue is `{code, severity, message}`. A line with any `blocking` issue has `orderable: false`.
@@ -229,6 +247,7 @@ Each issue is `{code, severity, message}`. A line with any `blocking` issue has 
 | `OUT_OF_STOCK` | blocking | No available date, or available amount 0. |
 | `CUTOFF_PASSED` | blocking | The order cut-off (`closingTime`) for the quoted date is in the past, even if the API still reports the date. Also added at order time if the cut-off passed after the quote was issued. |
 | `PRODUCT_HELD` | blocking | Valio Aimo has the product on hold (recall, quality hold, sales stop; section 23). Rule `product.held`, not `availability.*`. |
+| `ALLOCATED` | blocking | Valio's stock for the date is already reserved by orders placed or held through Sous, or (under `pro_rata`) this buyer's share is used (section 5.3). Rule `availability.allocated`; a refused order's `options` offer what's left. |
 | `CUTOFF_UNKNOWN` | warning | Valio Aimo reported a cut-off only for an earlier available date, so the cut-off for the requested date isn't known. The line gets no `order_cutoff` and doesn't shorten the quote's expiry. |
 | `LOT_SIZE` | warning | Sold in lots; quantity rounded up. |
 | `PRICE_EXPIRES` | warning | Price `validTo` is before the delivery date. |

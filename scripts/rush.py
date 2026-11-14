@@ -242,10 +242,10 @@ def report(r: dict, per_buyer: bool = True) -> str:
                                       for k, v in r["latency_ms"].items())
            + f"; wall {r['wall_s']} s; fake Valio calls {r['valio_calls']}"]
     if per_buyer:
-        out.append("buyer       4w-vol  need   got  status            steps")
+        out.append("buyer       4w-vol  need   got  status                       steps")
         for b in r["buyers"]:
             out.append(f"{b['buyer']:<11} {b['history']:>6} {b['need']:>5} {b['got']:>5g}  "
-                       f"{b['status'] + (' (held)' if b['held'] else ''):<17} {' -> '.join(b['steps'])}")
+                       f"{b['status'] + (' (5 EUR limit)' if b['held'] else ''):<28} {' -> '.join(b['steps'])}")
     return "\n".join(out)
 
 
