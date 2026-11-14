@@ -229,6 +229,7 @@ function renderMandate(mandate) {
   };
   if (mandate.autonomy) content.append(element('p', autonomy[mandate.autonomy] || mandate.autonomy));
   const limits = [
+    ['notify_above_eur', 'Notify buyer above'],
     ['auto_approve_limit_eur', 'Automatic order limit'],
     ['hard_limit_eur', 'Hard order limit'],
     ['daily_limit_eur', 'Daily approval threshold'],
@@ -238,6 +239,8 @@ function renderMandate(mandate) {
   appendList(content, 'Spending rules', limits);
   appendList(content, 'Product constraints', [
     mandate.avoid_allergens?.length && `Avoid allergens: ${mandate.avoid_allergens.join(', ')}`,
+    mandate.avoid_allergens?.length && typeof mandate.allow_may_contain === 'boolean' &&
+      `May-contain declarations: ${mandate.allow_may_contain ? 'allowed by this mandate' : 'checked against avoided allergens'}`,
     mandate.required_claims?.length && `Required claims: ${mandate.required_claims.map(claimLabel).join(', ')}`,
     mandate.allowed_categories && `Allowed categories: ${mandate.allowed_categories.join(', ') || 'none'}`,
     mandate.substitutions && `Substitutions: ${tierLabels[mandate.substitutions] || mandate.substitutions}`,
