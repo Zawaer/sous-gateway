@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sous chat cards</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="style.css">
+<style>
+  body { background: var(--paper, #fbfaf6); }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+  .turn { margin: 22px 0; }
+  .who { font-size: 12px; color: var(--ink-40, #888); margin-bottom: 6px; }
+  .bubble { background: var(--pill, #f0ede4); border-radius: 12px; padding: 10px 14px; display: inline-block; max-width: 100%; }
+  .call { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--ink-40, #888); margin: 8px 0 6px; }
+  iframe { width: 100%; border: 0; display: block; height: 120px; background: transparent; }
+  .pick { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+  select { font: inherit; padding: 4px 8px; }
+  .fine { font-size: 12px; color: var(--ink-40, #888); }
+</style>
+</head>
+<body>
+<main>
+  <h1 style="font-weight:500">Order cards in the chat</h1>
+  <p>When a buyer's agent works through Sous in a chat that supports <b>MCP Apps</b> (Claude on web, desktop and phone),
+    every quote, order and substitute arrives as a card under the tool call. The card is served by the gateway itself
+    (<code>ui://sous/card.html</code>), shows the mandate's decision rule by rule, and <b>checks the gateway's signature
+    in the chat</b> with the public key that comes in the result. This page is a small chat host of our own, with no model:
+    it draws real demo orders from this gateway with the same card and the same protocol.</p>
+  <div class="pick"><label>Demo order <select id="pick"></select></label> <span class="fine" id="status"></span></div>
+  <div id="chat"></div>
+  <p class="fine">Connect Claude yourself: <code>claude mcp add --transport http sous &lt;gateway&gt;/mcp/</code> (or add it as a
+    custom connector), then ask it to buy something. Get a private sandbox and token at <code>POST /sandbox</code>.</p>
+</main>
+<script>
+"use strict";
+const API = location.origin;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const get = (p) => fetch(API + p, { headers: { Accept: "application/json" } }).then((r) => { if (!r.ok) throw new Error(p + " " + r.status); return r.json(); });
+let jwks = null;
+
+// One card per tool call: an iframe with the gateway's card, driven over postMessage (MCP Apps host side).
+function card(container, toolName, args, result) {
+  const f = document.createElement("iframe");
+  f.setAttribute("sandbox", "allow-scripts");
+  f.src = "mcp-card.html";
+  container.appendChild(f);
+  const reply = (id, result) => f.contentWindow.postMessage({ jsonrpc: "2.0", id, result }, "*");
+  const send = (method, params) => f.contentWindow.postMessage({ jsonrpc: "2.0", method, params }, "*");
+  window.addEventListener("message", (ev) => {
+    if (ev.source !== f.contentWindow) return;
+    const m = ev.data || {};
+    if (m.method === "ui/initialize") reply(m.id, { protocolVersion: "2026-01-26", hostInfo: { name: "sous-demo-host", version: "1.0.0" },
+      hostCapabilities: { openLinks: {} }, hostContext: { theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light", displayMode: "inline" } });
+    else if (m.method === "ui/notifications/initialized") { send("ui/notifications/tool-input", { arguments: args }); send("ui/notifications/tool-result", result); }
+    else if (m.method === "ui/notifications/size-changed") f.style.height = Math.max(60, Math.ceil(m.params?.height || 0)) + "px";
+    else if (m.method === "ui/open-link") { window.open(m.params?.url, "_blank", "noopener"); reply(m.id, {}); }
+  });
+}
+const result = (obj) => ({ content: [{ type: "text", text: JSON.stringify(obj) }], structuredContent: obj,
+  _meta: { "sous/card": { jwks, gateway: API } } });
+
+function turn(who, html) {
+  const t = document.createElement("div");
+  t.className = "turn";
+  t.innerHTML = `<div class="who">${esc(who)}</div>${html}`;
+  $("chat").appendChild(t);
+  return t;
+}
+
+async function show(order) {
+  $("chat").innerHTML = "";
+  turn("Buyer", `<div class="bubble">${esc(order.agent_rationale || "Order for " + order.buyer)}</div>`);
+  const t1 = turn("Agent", `<div class="call">request_quote(mandate_id="${esc(order.mandate_id)}", …)</div>`);
+  try {
+    const q = await get("/quotes/" + encodeURIComponent(order.quote_id));
+    card(t1, "request_quote", { mandate_id: order.mandate_id }, result(q));
+  } catch (e) { t1.insertAdjacentHTML("beforeend", `<div class="fine">Quote not readable here (${esc(e.message)}).</div>`); }
+  const t2 = turn("Agent", `<div class="call">place_order(quote_id="${esc(order.quote_id)}", idempotency_key=…)</div>`);
+  card(t2, "place_order", { quote_id: order.quote_id }, result(order));
+}
+
+(async () => {
+  try {
+    jwks = await get("/.well-known/jwks.json");
+    const lists = await Promise.all(["M-HOTEL-AURORA", "M-HOSPITAL-KITCHEN", "M-SCHOOL-ESPOO", "M-KAARNA-CATERING"]
+      .map((m) => get("/orders?mandate_id=" + m).then((r) => r.orders).catch(() => [])));
+    const orders = lists.flat().filter((o) => !/^qa[-_:]/i.test(o.agent_id || ""))
+      .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || "")).slice(0, 25);
+    if (!orders.length) { $("status").textContent = "No demo orders on this gateway yet."; return; }
+    const label = { ordered: "ordered", pending_approval: "waiting for a person", refused: "refused", rejected: "rejected", expired: "expired", expired_cutoff: "expired" };
+    $("pick").innerHTML = orders.map((o, i) => `<option value="${i}">${esc(o.id)} · ${esc(o.buyer)} · ${esc(label[o.status] || o.status)} · €${(o.total_ex_vat ?? 0).toFixed(2)}</option>`).join("");
+    $("pick").onchange = () => show(orders[+$("pick").value]);
+    const first = orders.findIndex((o) => o.status === "pending_approval");
+    $("pick").value = String(first >= 0 ? first : 0);
+    show(orders[+$("pick").value]);
+  } catch (e) { $("status").textContent = "Couldn't load demo orders: " + e.message; }
+})();
+</script>
+</body>
+</html>

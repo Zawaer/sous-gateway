@@ -24,11 +24,12 @@ from typing import Any, Literal
 
 import pydantic_core
 from jsonschema.validators import validator_for
+from mcp.server.apps import Apps
 from mcp.server.mcpserver import Context, MCPServer
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import access, agent_auth, catalog, clock, exposure, holds, offers, origin as origin_mod, oauth, rules, sandbox, service as S, standing, store
+from . import access, agent_auth, catalog, clock, config, exposure, signing, holds, offers, origin as origin_mod, oauth, rules, sandbox, service as S, standing, store
 from .mandate import Finding, Mandate
 from .standards import OrderDoc, QuoteDoc
 
@@ -70,8 +71,22 @@ if clock.is_demo():
                      "because Valio's mock API returns fixed dates. Quotes and orders carry clock.mode='demo'; "
                      "tell the user this is a demo clock if you mention dates or cut-offs.")
 
+# MCP Apps (io.modelcontextprotocol/ui): quotes, orders, substitutes and renewals carry a card that chat hosts
+# (Claude on web, desktop and phone) render under the tool call: web/mcp-card.html, served as ui://sous/card.html.
+# The card gets the gateway's public keys in the result's _meta (hosts give _meta to the card, not to the model)
+# and checks every signature itself. Clients without Apps support get the same JSON as before.
+CARD_URI = "ui://sous/card.html"
+CARD_META_KEY = "sous/card"
+UI_TOOLS = {"request_quote", "place_order", "get_order", "suggest_substitutes", "renew_standing_order"}
+_card_html = (config.ROOT / "web" / "mcp-card.html")
+apps = Apps()
+apps.add_html_resource(
+    CARD_URI, _card_html.read_text(encoding="utf-8") if _card_html.is_file() else "<p>Sous card unavailable.</p>",
+    name="sous-cards", title="Sous order cards",
+    description="Quote, order, approval and substitute cards for the Sous gateway's tool results (MCP Apps).")
+
 mcp = MCPServer(name="sous", title="Sous: Valio Aimo agent gateway", instructions=INSTRUCTIONS,
-                version="0.2.0")
+                version="0.2.0", extensions=[apps])
 
 
 # --- errors -----------------------------------------------------------------
@@ -349,8 +364,9 @@ def _result(name: str, body: Any) -> CallToolResult:
         # Clients may reject the result; log it so the schema gets fixed, but never hide the result itself.
         log.warning("MCP tool %s: structuredContent does not match its outputSchema: %s at %s",
                     name, err.message, "/".join(map(str, err.absolute_path)))
+    meta = {CARD_META_KEY: {"jwks": signing.jwks(), "gateway": config.PUBLIC_BASE_URL}} if name in UI_TOOLS else None
     return CallToolResult(content=[TextContent(type="text", text=json.dumps(data, ensure_ascii=False, indent=2))],
-                          structured_content=data)
+                          structured_content=data, _meta=meta)
 
 
 def _tool(output: type[BaseModel], *, title: str, annotations: ToolAnnotations):
@@ -377,7 +393,8 @@ def _tool(output: type[BaseModel], *, title: str, annotations: ToolAnnotations):
 
         # structured_output=False: the SDK neither derives a schema from the annotation nor validates; we publish
         # our own schema (FuncMetadata.output_schema is read live) and return CallToolResult ourselves.
-        mcp.add_tool(wrapper, title=title, annotations=annotations, structured_output=False)
+        ui = {"ui": {"resourceUri": CARD_URI}, "ui/resourceUri": CARD_URI} if fn.__name__ in UI_TOOLS else None
+        mcp.add_tool(wrapper, title=title, annotations=annotations, structured_output=False, meta=ui)
         schema = output_schema(output)
         mcp._tool_manager.get_tool(fn.__name__).fn_metadata.output_schema = schema  # noqa: SLF001
         _validators[fn.__name__] = validator_for(schema)(schema)

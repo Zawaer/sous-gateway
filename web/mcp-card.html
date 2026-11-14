@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sous order card</title>
+<!--
+  Sous order card: an MCP Apps view (io.modelcontextprotocol/ui), served over MCP as ui://sous/card.html.
+  A chat host (Claude, or /ui/cards.html) renders it in a sandboxed frame under a request_quote, place_order,
+  get_order, suggest_substitutes or renew_standing_order call and hands it the tool result over postMessage.
+  No network and no libraries: everything comes from the tool result. The gateway's public keys travel in the
+  result's _meta (which hosts give to the card, not to the model), so the card checks every signature itself.
+-->
+<style>
+  :root { --bg: #fbfaf6; --card: #ffffff; --ink: #1d1c19; --muted: #6d6a62; --rule: #e7e3d8; --pill: #f0ede4;
+    --silent: #2f7d4f; --notify: #2f63a8; --ask: #b06d00; --block: #b3261e; --ok-bg: #eaf5ee; --bad-bg: #fbeaea; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #191917; --card: #22211e; --ink: #f2f1ea;
+    --muted: #a8a59b; --rule: #34322d; --pill: #2c2a26; --silent: #6fc28f; --notify: #7aa7e8; --ask: #e8b04a; --block: #f07a72;
+    --ok-bg: #1f3327; --bad-bg: #3a2220; } }
+  :root[data-theme="dark"] { --bg: #191917; --card: #22211e; --ink: #f2f1ea; --muted: #a8a59b; --rule: #34322d; --pill: #2c2a26;
+    --silent: #6fc28f; --notify: #7aa7e8; --ask: #e8b04a; --block: #f07a72; --ok-bg: #1f3327; --bad-bg: #3a2220; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: transparent; color: var(--ink);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .card { background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; }
+  .top { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; flex-wrap: wrap; }
+  .brand { font-size: 12px; color: var(--muted); letter-spacing: .02em; }
+  h1 { font-size: 16px; margin: 2px 0 0; font-weight: 600; }
+  .tier { display: inline-flex; gap: 6px; align-items: center; font-weight: 600; font-size: 13px; padding: 3px 9px;
+    border-radius: 999px; background: var(--pill); white-space: nowrap; }
+  .tier i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .t-silent i { background: var(--silent); } .t-notify i { background: var(--notify); }
+  .t-ask i { background: var(--ask); } .t-block i { background: var(--block); }
+  .muted { color: var(--muted); } .small { font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+  th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 4px 6px 4px 0; border-bottom: 1px solid var(--rule); }
+  td { padding: 6px 6px 6px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .total { display: flex; justify-content: space-between; margin-top: 8px; font-weight: 600; }
+  .findings { margin: 10px 0 0; padding: 0; list-style: none; }
+  .findings li { display: grid; grid-template-columns: 10px 1fr; gap: 8px; padding: 5px 0; }
+  .findings li i { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; }
+  .rule { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--muted); }
+  .issue { color: var(--block); font-size: 12px; } .issue.soft { color: var(--ask); }
+  .sig { margin-top: 10px; font-size: 12px; padding: 6px 9px; border-radius: 6px; background: var(--pill); }
+  .sig.ok { background: var(--ok-bg); } .sig.bad { background: var(--bad-bg); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  button.link { border: 1px solid var(--rule); background: var(--pill); color: var(--ink); border-radius: 7px; padding: 6px 10px;
+    font: inherit; font-size: 13px; cursor: pointer; }
+  button.primary { background: var(--ink); color: var(--card); border-color: var(--ink); }
+  .note { margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .opt { border-top: 1px solid var(--rule); padding: 8px 0; }
+  .opt:first-child { border-top: 0; }
+  .empty { color: var(--muted); padding: 6px 0; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 12px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="card" id="root"><div class="empty">Waiting for the gateway's answer…</div></div>
+<script>
+"use strict";
+const META_KEY = "sous/card";
+const S = { result: null, input: null, meta: {} };
+const $root = document.getElementById("root");
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const eur = (v) => v == null ? "–" : new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" }).format(v);
+const num = (v) => v == null ? "–" : (Math.round(v * 1000) / 1000).toLocaleString("en-IE");
+const date = (d) => { if (!d) return "–"; const x = new Date(d.length === 10 ? d + "T12:00:00" : d); return isNaN(x) ? d : x.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }); };
+const time = (d) => { const x = new Date(d); return isNaN(x) ? (d || "–") : x.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); };
+
+// ------------------------------------------------------------------ host protocol (JSON-RPC 2.0 over postMessage)
+let seq = 0;
+const pending = new Map();
+const post = (m) => { try { window.parent.postMessage(m, "*"); } catch (e) { /* not framed */ } };
+const notify = (method, params) => post({ jsonrpc: "2.0", method, params: params || {} });
+const request = (method, params, ms = 15000) => new Promise((resolve, reject) => {
+  const id = ++seq;
+  pending.set(id, { resolve, reject });
+  post({ jsonrpc: "2.0", id, method, params: params || {} });
+  setTimeout(() => { if (pending.delete(id)) reject(new Error("timeout")); }, ms);
+});
+window.addEventListener("message", (ev) => {
+  const m = ev.data;
+  if (!m || m.jsonrpc !== "2.0") return;
+  if (m.id !== undefined && pending.has(m.id) && (m.result !== undefined || m.error !== undefined)) {
+    const p = pending.get(m.id); pending.delete(m.id);
+    m.error ? p.reject(new Error(m.error.message || "error")) : p.resolve(m.result);
+    return;
+  }
+  const p = m.params || {};
+  if (m.method === "ui/notifications/tool-input") { S.input = p.arguments || {}; if (!S.result) render(); }
+  else if (m.method === "ui/notifications/tool-result") { S.result = p; render(); }
+  else if (m.method === "ui/notifications/tool-cancelled") { $root.innerHTML = `<div class="empty">The call was cancelled.</div>`; size(); }
+  else if (m.method === "ui/notifications/host-context-changed") applyContext(p);
+  else if (m.method === "ui/resource-teardown" && m.id !== undefined) post({ jsonrpc: "2.0", id: m.id, result: {} });
+});
+const applyContext = (c) => { const t = c && (c.theme || (c.hostContext && c.hostContext.theme)); if (t === "dark" || t === "light") document.documentElement.dataset.theme = t; };
+let lastH = 0;
+const size = () => { const h = Math.ceil(document.documentElement.getBoundingClientRect().height); if (h !== lastH) { lastH = h; notify("ui/notifications/size-changed", { width: Math.ceil(document.documentElement.scrollWidth), height: h }); } };
+new ResizeObserver(size).observe(document.body);
+const openLink = async (url) => { try { await request("ui/open-link", { url }); } catch (e) { window.open(url, "_blank", "noopener"); } };
+document.addEventListener("click", (ev) => { const b = ev.target.closest("[data-href]"); if (b) { ev.preventDefault(); openLink(b.dataset.href); } });
+
+// ------------------------------------------------------------------ signatures (Ed25519 compact JWS, keys from _meta)
+const unb64 = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(s.length / 4) * 4, "=")), (c) => c.charCodeAt(0));
+async function verifyJws(jws, jwks) {
+  if (!jws) return { state: "none" };
+  const parts = jws.split(".");
+  if (parts.length !== 3) return { state: "bad", why: "not a compact JWS" };
+  let header, payload;
+  try { header = JSON.parse(new TextDecoder().decode(unb64(parts[0]))); payload = JSON.parse(new TextDecoder().decode(unb64(parts[1]))); }
+  catch (e) { return { state: "bad", why: "unreadable" }; }
+  const key = (jwks?.keys || []).find((k) => !header.kid || k.kid === header.kid);
+  if (!key) return { state: "unchecked", header, payload, why: "the gateway's public key did not reach this card" };
+  try {
+    const k = await crypto.subtle.importKey("jwk", { kty: key.kty, crv: key.crv, x: key.x }, { name: "Ed25519" }, false, ["verify"]);
+    const ok = await crypto.subtle.verify({ name: "Ed25519" }, k, unb64(parts[2]), new TextEncoder().encode(parts[0] + "." + parts[1]));
+    return ok ? { state: "ok", header, payload, kid: key.kid } : { state: "bad", header, payload, why: "signature does not match" };
+  } catch (e) { return { state: "unchecked", header, payload, why: "this browser can't check Ed25519 signatures" }; }
+}
+function sigLine(v, what, mismatch) {
+  if (v.state === "none") return "";
+  if (v.state === "ok" && !mismatch) return `<div class="sig ok">✓ ${esc(what)} signed by Valio Aimo's gateway, checked in this card (Ed25519, key ${esc(v.kid)}).</div>`;
+  if (v.state === "ok" && mismatch) return `<div class="sig bad">✗ The signature is valid but says something else: ${esc(mismatch)}.</div>`;
+  if (v.state === "bad") return `<div class="sig bad">✗ ${esc(what)}: ${esc(v.why)}. Don't rely on it.</div>`;
+  return `<div class="sig">${esc(what)} is signed (${esc(v.header?.typ || "JWS")}); not checked here: ${esc(v.why)}. Check it against ${esc(S.meta.gateway || "the gateway")}/.well-known/jwks.json.</div>`;
+}
+
+// ------------------------------------------------------------------ pieces
+const TIER = {
+  silent: ["t-silent", "Ordered automatically"], notify: ["t-notify", "Ordered · the buyer gets an FYI"],
+  ask: ["t-ask", "Waiting for the buyer's human"], block: ["t-block", "Refused"],
+};
+const tierPill = (t, prefix = "") => { const [cls, txt] = TIER[t] || ["", t || "unknown"]; return `<span class="tier ${cls}"><i></i>${esc(prefix + txt)}</span>`; };
+const STATUS = { ordered: "silent", pending_approval: "ask", refused: "block", rejected: "block", expired: "block", expired_cutoff: "block" };
+function findings(list) {
+  const shown = (list || []).filter((f) => f.outcome !== "silent" || f.rule === "mandate.ok");
+  if (!shown.length) return "";
+  return `<ul class="findings">${shown.map((f) => `<li><i style="background:var(--${esc(f.outcome)})"></i><div>${esc(f.message)}<div class="rule">${esc(f.rule)}</div></div></li>`).join("")}</ul>`;
+}
+function lines(ls, { quote = false } = {}) {
+  if (!ls || !ls.length) return `<div class="empty">No lines.</div>`;
+  return `<table><thead><tr><th>Product</th><th class="n">Qty</th><th class="n">Price</th><th class="n">Line</th><th>Delivery</th></tr></thead><tbody>${ls.map((l) => {
+    const issues = (l.issues || []).map((i) => typeof i === "string" ? { code: i, message: i, severity: "blocking" } : i);
+    const covers = l.covers && l.covers.amount != null ? `<div class="muted small">= ${esc(num(l.covers.amount))} ${esc(l.covers.unit)}</div>` : "";
+    return `<tr><td>${esc(l.name || l.product_id)}<div class="rule">${esc(l.product_id)}${l.logistic_model ? " · " + esc(l.logistic_model) : ""}${l.substitute_for ? " · replaces " + esc(l.substitute_for) : ""}</div>
+      ${issues.map((i) => `<div class="issue ${i.severity === "blocking" ? "" : "soft"}">${esc(i.message || i.code)}</div>`).join("")}</td>
+      <td class="n">${esc(num(l.quantity))} ${esc(l.sales_unit || "")}${covers}</td><td class="n">${esc(eur(l.unit_price_ex_vat))}</td>
+      <td class="n">${esc(eur(l.line_total_ex_vat))}</td><td>${esc(date(l.delivery_date))}</td></tr>`;
+  }).join("")}</tbody></table>`;
+}
+const head = (title, sub, pill) => `<div class="top"><div><div class="brand">Valio Aimo · Sous gateway</div><h1>${title}</h1>${sub ? `<div class="muted small">${sub}</div>` : ""}</div>${pill || ""}</div>`;
+
+// ------------------------------------------------------------------ cards
+async function quoteCard(r) {
+  const q = r.quote, v = await verifyJws(r.jws, S.meta.jwks);
+  const mismatch = v.payload && (v.payload.id !== q.id || v.payload.total_ex_vat !== q.total_ex_vat) ? `quote ${v.payload.id}, ${eur(v.payload.total_ex_vat)}` : "";
+  const prev = q.mandate_preview || {};
+  const unc = (q.uncovered || []).map((g) => `<div class="issue soft">Not covered: ${esc(num(g.uncovered))} ${esc(g.unit === "SALES_UNIT" ? "packs" : g.unit || "")} of ${esc(g.item?.note || g.item?.product_type || (g.item?.product_ids || []).join(", "))}${g.reason ? " (" + esc(g.reason) + ")" : ""}</div>`).join("");
+  const opts = (q.options || []).slice(0, 4).map((o) => `<div class="small">· ${esc(o.title || o.kind)}${o.preview?.outcome ? " → " + esc((TIER[o.preview.outcome] || [, o.preview.outcome])[1]) : ""}</div>`).join("");
+  return head(`Quote ${esc(q.id)}`, `For ${esc(q.mandate_id || "no mandate")} · valid until ${esc(time(q.expires_at))}${q.rationale ? ` · "${esc(q.rationale)}"` : ""}`,
+      prev.outcome ? tierPill(prev.outcome, "If ordered: ") : "")
+    + lines(q.lines, { quote: true }) + unc
+    + `<div class="total"><span>Total ex VAT</span><span>${esc(eur(q.total_ex_vat))}</span></div><div class="muted small" style="text-align:right">incl. VAT ${esc(eur(q.total_inc_vat))}</div>`
+    + findings(prev.findings)
+    + (opts ? `<div class="note"><b>Ways forward</b>${opts}</div>` : "")
+    + sigLine(v, "This quote", mismatch)
+    + `<div class="note">Nothing is ordered yet. The agent orders it with place_order; the buyer's mandate decides the tier, not the agent.</div>`;
+}
+async function orderCard(o, extra = "") {
+  const v = await verifyJws(o.receipt_jws, S.meta.jwks);
+  const mismatch = v.payload && (v.payload.id !== o.id || v.payload.status !== o.status) ? `order ${v.payload.id}, ${v.payload.status}` : "";
+  const tier = o.decision?.outcome || STATUS[o.status];
+  const titles = { ordered: "Order placed", pending_approval: "Order held for a person", refused: "Order refused", rejected: "Order rejected by the buyer", expired: "Approval came too late", expired_cutoff: "Approval came too late" };
+  const gw = S.meta.gateway || "";
+  const approval = o.status === "pending_approval" && o.approval_url
+    ? `<div class="actions"><button class="link primary" data-href="${esc(o.approval_url)}">Open the approval page</button></div>
+       <div class="note">Only the buyer's person can approve${o.approve_by ? `, by ${esc(time(o.approve_by))}` : ""}. The agent has no approval tool; it can only poll get_order.</div>` : "";
+  const human = o.approval ? `<div class="note">${o.approval.approved ? "Approved" : "Rejected"} by ${esc(o.approval.by)} at ${esc(time(o.approval.at))}${o.approval.note ? `: "${esc(o.approval.note)}"` : ""}${o.approval.result_reason ? ` · ${esc(o.approval.result_reason)}` : ""}</div>` : "";
+  const erp = o.erp?.simulated ? `<div class="note">Placed with Sous; the hand-off to Valio Aimo's order system is simulated in this demo (no real order API).</div>` : "";
+  const peppol = gw && o.id ? `<div class="actions"><button class="link" data-href="${esc(gw)}/orders/${esc(o.id)}/peppol/order.xml">Peppol order</button><button class="link" data-href="${esc(gw)}/orders/${esc(o.id)}/peppol/order-response.xml">Peppol response</button><button class="link" data-href="${esc(gw)}/ui/#/orders/${esc(o.id)}">Audit trail</button></div>` : "";
+  return head(`${esc(titles[o.status] || "Order")} · ${esc(o.id)}`, `${esc(o.buyer || "")} · ${esc(o.mandate_id || "")} · delivery ${esc(date(o.delivery_date))}${o.agent_rationale ? ` · "${esc(o.agent_rationale)}"` : ""}`, tierPill(tier))
+    + extra + lines(o.lines)
+    + `<div class="total"><span>Total ex VAT</span><span>${esc(eur(o.total_ex_vat))}</span></div>`
+    + findings(o.decision?.findings) + approval + human + erp
+    + sigLine(v, "The receipt", mismatch) + peppol;
+}
+function substitutesCard(r) {
+  const orig = r.original || {};
+  const body = (r.options || []).length ? (r.options || []).map((o) => `<div class="opt"><b>${esc(o.tier)}</b> · ${esc(o.name || o.product_id)} <span class="rule">${esc(o.product_id)}</span>
+      ${o.allergen_check?.status && o.allergen_check.status !== "ok" ? `<div class="issue soft">Allergens: ${esc(o.allergen_check.status)}</div>` : ""}
+      <div class="small muted">${esc((o.compromises || []).map((c) => typeof c === "string" ? c : c.text || c.message || JSON.stringify(c)).join("; ") || "No compromises")}</div>
+      ${o.offer?.unit_price_ex_vat != null ? `<div class="small">${esc(eur(o.offer.unit_price_ex_vat))} per ${esc(o.offer.sales_unit || "pack")}</div>` : ""}</div>`).join("")
+    : `<div class="empty">${esc(r.no_safe_substitute || "No safe substitute.")}</div>`;
+  return head(`Substitutes for ${esc(orig.name || orig.product_id || "the product")}`, "Good / better / best; the buyer's allergen rules are never relaxed", tierPill("ask", "Ordering one: "))
+    + `<div style="margin-top:8px">${body}</div><div class="note">A substitute is always quoted with substitute_for, and the demo mandates send it to a person.</div>`;
+}
+function errorCard(r) {
+  return head("The gateway said no", esc(r.error || r.code || "error"), tierPill("block"))
+    + `<div style="margin-top:8px">${esc(r.message || "")}</div>${r.hint ? `<div class="note">${esc(r.hint)}</div>` : ""}`;
+}
+
+async function render() {
+  const res = S.result;
+  if (!res) { $root.innerHTML = `<div class="empty">Asking the gateway…</div>`; return size(); }
+  S.meta = (res._meta && res._meta[META_KEY]) || S.meta || {};
+  let r = res.structuredContent;
+  if (!r) { try { r = JSON.parse((res.content || []).find((c) => c.type === "text")?.text || "null"); } catch (e) { r = null; } }
+  let html;
+  try {
+    if (!r) html = `<div class="empty">No answer to show.</div>`;
+    else if (res.isError || r.error) html = errorCard(r);
+    else if (r.quote && r.jws) html = await quoteCard(r);
+    else if (r.renewal && r.order) html = await orderCard(r.order, r.drift?.summary ? `<div class="note"><b>Standing order check:</b> ${esc(r.drift.summary)}</div>` : "");
+    else if (r.options && r.original) html = substitutesCard(r);
+    else if (r.id && (r.decision || r.status)) html = await orderCard(r);
+    else html = `<div class="empty">Sous answered; nothing to draw for this call.</div>`;
+  } catch (e) { html = `<div class="empty">Couldn't draw this answer (${esc(e.message)}).</div>`; }
+  $root.innerHTML = html;
+  size();
+}
+
+(async () => {
+  try {
+    const r = await request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "sous-cards", version: "1.0.0" },
+      appCapabilities: { availableDisplayModes: ["inline"] } });
+    applyContext(r);
+  } catch (e) { /* a host that skips initialize still sends the result */ }
+  notify("ui/notifications/initialized");
+  size();
+})();
+</script>
+</body>
+</html>
