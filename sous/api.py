@@ -115,7 +115,10 @@ if config.env("BUYER_AGENT") == "1":
 
 @app.get("/", include_in_schema=False)
 def root():
-    return RedirectResponse("/ui/" if WEB_DIR.is_dir() else "/docs")
+    """The live lander (web/live.html): the gateway's orders as a flow, for judges before they try it."""
+    if not WEB_DIR.is_dir():
+        return RedirectResponse("/docs")
+    return RedirectResponse("/ui/live.html" if (WEB_DIR / "live.html").is_file() else "/ui/")
 
 
 _hits: dict[str, deque] = defaultdict(deque)
