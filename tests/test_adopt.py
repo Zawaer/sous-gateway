@@ -146,6 +146,46 @@ def test_agent_cannot_approve_or_reject_its_own_order_over_rest(monkeypatch, app
     assert c.post(f"/orders/{o['id']}/approve", json={"by": "Anna"}, headers=h).json()["status"] == "ordered"
 
 
+def test_shared_token_attempt_is_attributed_to_the_orders_agent_and_lists_all_it_covers():
+    """A sandbox's one token covers several agents: the refusal names the order's own agent (here 'b', not 'a'
+    which sorts first) and records the token's last 4 and every agent id it covers."""
+    from fastapi.testclient import TestClient
+
+    from sous import api
+    issue(auto_approve_limit_eur=100)
+    issue("M2", agent_id="b", auto_approve_limit_eur=100)
+    token = S.agent_credential("M", "owner")["agent_credential"]["token"]
+    agent_auth.mint(Mandate(**store.get_mandate("M2")), "owner", token=token)
+    q = S.request_quote(S.QuoteRequest(agent_id="b", mandate_id="M2", delivery_date=MON,
+                                       items=[S.QuoteItem(product_ids=["MILK"], amount=500, unit="L")]))["quote"]
+    o = S.place_order("b", "M2", q["id"])
+    assert o["status"] == "pending_approval"
+    r = TestClient(api.app).post(f"/orders/{o['id']}/approve", json={"by": "x"},
+                                 headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 403
+    ev = events("agent.approval_attempt_refused")[0]
+    d = ev.get("details") or ev.get("data")
+    assert ev["actor"] == "b" and d["agent_id"] == "b"
+    assert d["credential_agent_ids"] == ["a", "b"] and d["credential_mandate_ids"] == ["M", "M2"]
+    assert d["credential_last4"] == token[-4:]
+
+
+@pytest.mark.parametrize("approver_code", ["", "1234"])
+def test_approval_records_which_credential_approved(monkeypatch, approver_code):
+    from fastapi.testclient import TestClient
+
+    from sous import api
+    monkeypatch.setattr(config, "APPROVER_CODE", approver_code)
+    issue(auto_approve_limit_eur=100)
+    o = order(500)
+    h = {"X-Approver-Code": approver_code} if approver_code else {}
+    out = TestClient(api.app).post(f"/orders/{o['id']}/approve", json={"by": "Anna"}, headers=h).json()
+    want = "global approver code" if approver_code else "open (no approver code configured)"
+    assert out["approval"]["by"] == "Anna" and out["approval"]["authority"] == want
+    ev = events("order.approved")[0]
+    assert (ev.get("details") or ev.get("data"))["authority"] == want
+
+
 def test_unknown_agent_shaped_token_is_refused_too():
     from fastapi.testclient import TestClient
 

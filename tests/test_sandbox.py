@@ -256,6 +256,7 @@ def test_sandbox_approver_token_decides_only_its_own_orders(c):
                   headers={"X-Approver-Code": "sbxa_forged"}).status_code == 401
     r = c.post(f"/orders/{pa['id']}/approve", json={"by": "judge"}, headers=tok)
     assert r.status_code == 200 and r.json()["status"] == "ordered"
+    assert r.json()["approval"]["authority"] == f"sandbox approver {a['sandbox']['id']}"
     # nothing else a human does
     assert c.post(f"/mandates/{a['mandates'][0]['mandate_id']}/revoke", json={"by": "judge"},
                   headers=tok).status_code == 401

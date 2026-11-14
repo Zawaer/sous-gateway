@@ -136,10 +136,15 @@ def require_approver(request: Request, x_approver_code: str | None = Header(defa
         if presented:
             raise S.refuse_agent_approval(request.path_params.get("order_id", ""), presented[0],
                                           "approve" if path.endswith("/approve") else "reject")
-    if config.APPROVER_CODE and not access.approver_code_ok(x_approver_code) and not (
-            request.url.path.endswith(("/approve", "/reject"))
-            and sandbox.may_approve(x_approver_code, request.path_params.get("order_id"))):
+    if config.APPROVER_CODE and access.approver_code_ok(x_approver_code):
+        return "global approver code"
+    order_id = request.path_params.get("order_id")
+    if path.endswith(("/approve", "/reject")) and sandbox.may_approve(x_approver_code, order_id):
+        o = store.get_order(order_id) or {}
+        return f"sandbox approver {sandbox.owner(o.get('mandate_id'))}"
+    if config.APPROVER_CODE:
         raise HTTPException(401, "Human approver code required (X-Approver-Code header).")
+    return "open (no approver code configured)"
 
 
 def require_global_approver(x_approver_code: str | None = Header(default=None)):
@@ -423,14 +428,15 @@ class Decision(BaseModel):
     note: str | None = None
 
 
-@app.post("/orders/{order_id}/approve", tags=["approvals"], dependencies=[Depends(require_approver)])
-def approve(order_id: str, d: Decision):
-    return S.decide(order_id, d.by, True, d.note)
+@app.post("/orders/{order_id}/approve", tags=["approvals"])
+def approve(order_id: str, d: Decision, authority: str = Depends(require_approver)):
+    """`by` is the name the approver gives; the order and audit also record which credential approved."""
+    return S.decide(order_id, d.by, True, d.note, authority=authority)
 
 
-@app.post("/orders/{order_id}/reject", tags=["approvals"], dependencies=[Depends(require_approver)])
-def reject(order_id: str, d: Decision):
-    return S.decide(order_id, d.by, False, d.note)
+@app.post("/orders/{order_id}/reject", tags=["approvals"])
+def reject(order_id: str, d: Decision, authority: str = Depends(require_approver)):
+    return S.decide(order_id, d.by, False, d.note, authority=authority)
 
 
 # --- rule register ----------------------------------------------------------

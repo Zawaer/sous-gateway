@@ -108,13 +108,20 @@ def revoke(m: Mandate, by: str) -> dict:
 
 
 def identify(token: str | None) -> dict | None:
-    """Which mandate's agent a token belongs to ({mandate_id, agent_id, last4}), or None if no credential matches."""
+    """Who a token belongs to, or None if no credential matches: {mandate_ids, agent_ids, last4}.
+
+    One token can cover several mandates (a judge sandbox gives one token for its three), so this lists all of
+    them instead of picking one; the caller attributes the actor from context (service.refuse_agent_approval
+    names the order's own agent when the token covers it)."""
     if not token:
         return None
     _ensure()
-    rows = store._exec("SELECT mandate_id, agent_id, last4 FROM agent_credential WHERE token_sha256 = ?",
-                       (_hash(token),))[0]
-    return {k: rows[0][k] for k in ("mandate_id", "agent_id", "last4")} if rows else None
+    rows = store._exec("SELECT mandate_id, agent_id, last4 FROM agent_credential WHERE token_sha256 = ? "
+                       "ORDER BY mandate_id", (_hash(token),))[0]
+    if not rows:
+        return None
+    return {"mandate_ids": [r["mandate_id"] for r in rows],
+            "agent_ids": sorted({r["agent_id"] for r in rows}), "last4": rows[0]["last4"]}
 
 
 def check(m: Mandate, agent_id: str, token: str | None, operation: str) -> None:

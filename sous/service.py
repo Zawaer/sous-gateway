@@ -693,9 +693,11 @@ def _receipt(order: dict) -> str:
                         "sous-order+jws")
 
 
-def decide(order_id: str, approver: str, approve: bool, note: str | None = None) -> dict:
+def decide(order_id: str, approver: str, approve: bool, note: str | None = None, authority: str | None = None) -> dict:
+    """`approver` is the name the human gives (free text); `authority` is which credential let them decide
+    ("global approver code", "sandbox approver SBX-..."), recorded alongside so the audit shows authority."""
     with _order_lock:
-        o, mandate = _decide(order_id, approver, approve, note)
+        o, mandate = _decide(order_id, approver, approve, note, authority)
     notify.send("order.decided", o, mandate)  # FYI to the agent side
     return o
 
@@ -703,13 +705,24 @@ def decide(order_id: str, approver: str, approve: bool, note: str | None = None)
 def refuse_agent_approval(order_id: str, token: str, action: Literal["approve", "reject"]) -> GatewayError:
     """An agent credential was presented to approve or reject an order: only a human decides. Audits the
     attempt (agent, order, action; never the token) and returns the error to raise."""
-    who = agent_auth.identify(token)
+    who = agent_auth.identify(token) or {}
     o = store.get_order(order_id) or {}
-    agent = (who or {}).get("agent_id") or "unidentified agent"
+    covered = who.get("agent_ids") or []
+    # One token may cover several agents (a judge sandbox's covers three): don't pin the attempt on whichever
+    # sorts first. Name the order's own agent when the token covers it, else its only agent, else the token.
+    if o.get("agent_id") in covered:
+        agent = o["agent_id"]
+    elif len(covered) == 1:
+        agent = covered[0]
+    elif covered:
+        agent = f"agent credential ...{who['last4']}"
+    else:
+        agent = "unidentified agent"
     store.audit("agent.approval_attempt_refused", agent, "agent", order_id, o.get("buyer"),
-                {"order_id": order_id, "action": action, "agent_id": (who or {}).get("agent_id"),
-                 "credential_mandate_id": (who or {}).get("mandate_id"), "order_mandate_id": o.get("mandate_id"),
-                 "credential_last4": (who or {}).get("last4"), "order_status": o.get("status")})
+                {"order_id": order_id, "action": action, "agent_id": agent if agent in covered else None,
+                 "credential_last4": who.get("last4"), "credential_agent_ids": covered,
+                 "credential_mandate_ids": who.get("mandate_ids") or [], "order_agent_id": o.get("agent_id"),
+                 "order_mandate_id": o.get("mandate_id"), "order_status": o.get("status")})
     return GatewayError("agent_cannot_approve",
                         f"Agents can't {action} orders: an agent credential was presented. Order {order_id} waits "
                         "for a human approver (X-Approver-Code or the approval link); this attempt is in the audit log.",
@@ -744,7 +757,8 @@ def _approval_blocker(o: dict, mandate: Mandate, now: datetime) -> tuple[str, st
     return None
 
 
-def _decide(order_id: str, approver: str, approve: bool, note: str | None) -> tuple[dict, Mandate]:
+def _decide(order_id: str, approver: str, approve: bool, note: str | None,
+            authority: str | None = None) -> tuple[dict, Mandate]:
     o = store.get_order(order_id)
     if not o:
         raise GatewayError("order_not_found", f"No order {order_id}.", 404)
@@ -757,7 +771,7 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None) -> tu
     if approve and (blocked := _approval_blocker(o, mandate, now)):
         status, reason = blocked
     o["status"] = status
-    o["approval"] = {"by": approver, "approved": approve, "note": note, "at": now.isoformat(timespec="milliseconds"),
+    o["approval"] = {"by": approver, "authority": authority, "approved": approve, "note": note, "at": now.isoformat(timespec="milliseconds"),
                      "result_reason": reason, "clock": clock.info(now)}
     o["updated_at"] = now.isoformat(timespec="milliseconds")
     o["approval_url"] = None
@@ -768,7 +782,8 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None) -> tu
         raise GatewayError("not_pending",
                            f"Order {order_id} is {current.get('status')}, not waiting for approval.", 409)
     store.audit("order.approved" if approve else "order.rejected_by_human", approver, "human", order_id,
-                o["buyer"], {"order_id": order_id, "note": note, "resulting_status": status, "reason": reason})
+                o["buyer"], {"order_id": order_id, "note": note, "resulting_status": status, "reason": reason,
+                 "authority": authority})
     return o, mandate
 
 
