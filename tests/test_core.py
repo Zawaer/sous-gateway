@@ -174,6 +174,22 @@ def test_audit_chain_detects_edits(tmp_path, monkeypatch):
     assert (r["ok"], r["events"], r["broken_at_seq"]) == (False, 1, 2)
 
 
+def test_audit_chain_with_a_saved_head_detects_a_cut_tail(tmp_path, monkeypatch):
+    """Deleting the newest events leaves a shorter chain that still verifies; a head saved earlier catches it."""
+    monkeypatch.setattr(config, "STATE_DB", tmp_path / "state.db")
+    monkeypatch.setattr(store, "_conn", None)
+    monkeypatch.setattr(config, "DB_URL", "")
+    for i in range(3):
+        store.audit("test.event", "tester", "system", f"S{i}", None, {"i": i})
+    head = store.verify_chain()["head"]
+    store.audit("test.event", "tester", "system", "S3", None, {"i": 3})
+    assert store.verify_chain(head)["ok"] and store.verify_chain(head)["saved_head"] == {"found": True, "seq": 3}
+    store.db().execute("DELETE FROM audit_event WHERE seq >= 3")
+    assert store.verify_chain()["ok"]  # the chain alone can't tell
+    r = store.verify_chain(head)
+    assert r["ok"] is False and r["saved_head"] == {"found": False, "seq": None}
+
+
 @pytest.fixture(autouse=True)
 def _signing_key(tmp_path, monkeypatch):
     monkeypatch.setattr(signing, "KEY_PATH", tmp_path / "key.pem")

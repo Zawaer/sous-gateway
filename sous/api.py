@@ -900,6 +900,8 @@ def audit(subject: str | None = None, buyer: str | None = None, limit: int = Que
 
 
 @app.get("/audit/verify", tags=["audit"])
-def audit_verify():
-    """Recompute the hash chain: proves no event was edited or deleted."""
-    return store.verify_chain()
+def audit_verify(head: str | None = Query(default=None, pattern="^[0-9a-f]{64}$",
+                                          description="A head hash you saved earlier: fails if it's no longer in the "
+                                                      "chain (its newest events were deleted or rewritten)")):
+    """Recompute the hash chain: proves no event was edited or deleted (pass ?head= to also catch a cut tail)."""
+    return store.verify_chain(head)

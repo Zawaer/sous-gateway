@@ -192,6 +192,9 @@ class Kit:
         has = all(p in paths for p in ("/quotes", "/orders", "/orders/{order_id}/approve", "/sandbox"))
         ok &= has
         notes.append(f"openapi {r.status_code} ({len(paths)} paths{'' if has else ', core paths missing'})")
+        r = self.get("/audit/verify")  # the head now: check_audit asks the gateway to show it's still in the chain
+        if r.status_code == 200 and r.json().get("head"):
+            self.s["audit_head"] = r.json()["head"]
         return ok, "; ".join(notes)
 
     def c_sandbox(self):
@@ -403,9 +406,16 @@ class Kit:
 
     def c_audit(self):
         self.need("o1")
-        r = self.get("/audit/verify")
+        head = self.s.get("audit_head")
+        r = self.get("/audit/verify", params={"head": head} if head else None)
         v = r.json() if r.status_code == 200 else {}
         ok, notes = v.get("ok") is True, [f"chain ok={v.get('ok')} over {v.get('events')} events"]
+        if head and "saved_head" in v:  # deleting the newest events leaves a valid, shorter chain: the head seen
+            kept = v["saved_head"].get("found") is True  # at the start must still be in it
+            ok &= kept
+            notes.append(f"head from the start {'still in the chain' if kept else 'NOT IN THE CHAIN (tail cut)'}")
+        elif head:
+            notes.append("gateway ignores ?head= (a cut tail would go unnoticed)")
         want = {self.s["q1"]["id"]: {"quote.issued"}, self.s["o1"]["id"]: {f"order.{self.s['o1']['status']}"}}
         if "o_ask" in self.s:
             want[self.s["o_ask"]["id"]] = {"order.pending_approval", "agent.approval_attempt_refused", "order.approved"}
