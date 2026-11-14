@@ -1,0 +1,278 @@
+# Held-out evaluation set 2 (heldout2).
+# Written blind on Sat 14.11 by an author (toivo-claude-blind2) who never read the
+# repo's code, evals or docs. Only context used: Valio Aimo is a Finnish food-service
+# wholesaler (~25,000 products, 20,000+ professional kitchens, next-day delivery with
+# cut-offs); buyers are hotels, schools, hospitals, care homes, restaurants, caterers, cafes.
+#
+# FROZEN. Do not edit, and do not tune prompts, catalog mappings or code on these cases.
+# They exist for one honest re-run after fixes. Quantities are expectations a sensible
+# kitchen buyer would accept; tolerance_pct is the allowed deviation on qty.
+# Units: kg, l, pcs (pieces/packs as noted in kind). Dates are relative to the order day.
+
+cases:
+  - id: B01
+    text: "Huomiseksi 250 oppilaalle jauhelihakastike ja spagetti. Tarvitaan jauheliha, spagetti, tomaattimurska ja sipulit. Mausteet löytyy."
+    lang: fi
+    buyer: school
+    constraints: {budget_eur: 600, avoid_allergens: [], required_claims: []}
+    expect:
+      decision: ok
+      items:
+        - {kind: ground meat (beef or beef-pork), qty: 25, unit: kg, tolerance_pct: 30}
+        - {kind: spaghetti (dry pasta), qty: 22, unit: kg, tolerance_pct: 35}
+        - {kind: crushed tomatoes (canned), qty: 20, unit: kg, tolerance_pct: 40}
+        - {kind: yellow onions, qty: 8, unit: kg, tolerance_pct: 50}
+      notes: "~100 g raw meat and ~80-100 g dry pasta per pupil. Spices explicitly not ordered. Delivery next day; respect cut-off."
+
+  - id: B02
+    text: "Perjantaiksi 80 hengen juhlaan kermakakku jälkiruoaksi. Tarvitsen vispikermaa kakkuun ja kahvikermaa kahvin kanssa. Mansikoita 4 kg pakasteena."
+    lang: fi
+    buyer: caterer
+    constraints: {budget_eur: 250, avoid_allergens: [], required_claims: []}
+    expect:
+      decision: ok
+      items:
+        - {kind: whipping cream (35-38% fat, vispikerma), qty: 6, unit: l, tolerance_pct: 40}
+        - {kind: coffee cream (10-12% fat, kahvikerma), qty: 3, unit: l, tolerance_pct: 50}
+        - {kind: frozen strawberries, qty: 4, unit: kg, tolerance_pct: 15}
+      notes: "Use-specific: whipping cream must be a whippable high-fat cream, NOT cooking cream or coffee cream; coffee cream must be the low-fat coffee kind. Delivery Friday."
+
+  - id: B03
+    text: "We need for next Monday: 40 kg chicken breast fillets, 20 kg jasmine rice, 10 kg frozen broccoli and 6 l coconut milk. Budget is tight, keep it under 700 euros."
+    lang: en
+    buyer: restaurant
+    constraints: {budget_eur: 700, avoid_allergens: [], required_claims: []}
+    expect:
+      decision: ok
+      items:
+        - {kind: chicken breast fillet (raw), qty: 40, unit: kg, tolerance_pct: 10}
+        - {kind: jasmine rice, qty: 20, unit: kg, tolerance_pct: 10}
+        - {kind: frozen broccoli, qty: 10, unit: kg, tolerance_pct: 15}
+        - {kind: coconut milk, qty: 6, unit: l, tolerance_pct: 20}
+      notes: "Explicit quantities; prefer cheaper equivalent products to stay under 700 EUR. If the total cannot fit, it should say so rather than silently exceed."
+
+  - id: B04
+    text: "Hoivakodin asukkaille (45 henkeä) huomiseksi aamupuuro ja välipala. Laktoositon maito, kaurahiutaleet ja laktoositon jogurtti. Meillä on vielä 10 litraa maitoa, tilaa vain loput kahdeksi päiväksi."
+    lang: fi
+    buyer: care_home
+    constraints: {budget_eur: 300, avoid_allergens: [lactose], required_claims: [lactose-free]}
+    expect:
+      decision: ok
+      items:
+        - {kind: lactose-free milk, qty: 20, unit: l, tolerance_pct: 40}
+        - {kind: rolled oats, qty: 5, unit: kg, tolerance_pct: 50}
+        - {kind: lactose-free yogurt (plain or natural), qty: 9, unit: kg, tolerance_pct: 50}
+      notes: "Two days of porridge + snack for 45 residents (~0.3 l milk/person/day = ~27 l, minus 10 l on hand). All dairy must be lactose-free. Partial-stock deduction is the point."
+
+  - id: B05
+    text: "Hotel breakfast buffet for 120 guests Saturday and Sunday. Need eggs, bacon, Edam or similar sliced cheese, butter portions, orange juice. We already have bread and coffee."
+    lang: en
+    buyer: hotel
+    constraints: {budget_eur: 1200, avoid_allergens: [], required_claims: []}
+    expect:
+      decision: ok
+      items:
+        - {kind: eggs (fresh, or liquid egg for scrambled), qty: 360, unit: pcs, tolerance_pct: 40}
+        - {kind: bacon, qty: 12, unit: kg, tolerance_pct: 40}
+        - {kind: sliced cheese (Edam-type), qty: 6, unit: kg, tolerance_pct: 40}
+        - {kind: butter portion packs, qty: 300, unit: pcs, tolerance_pct: 40}
+        - {kind: orange juice, qty: 36, unit: l, tolerance_pct: 40}
+      notes: "2 days x 120 guests. No bread or coffee ordered. Delivery by Saturday morning, i.e. Friday cut-off."
+
+  - id: B06
+    text: "Sairaalan keittiö: gluteeniton ja maidoton lounas 30 potilaalle torstaiksi. Lohifilettä, perunaa ja kasviksia (porkkana, herne). Ei saa olla kalaa allergisille 4 potilaalle, heille broileria."
+    lang: fi
+    buyer: hospital
+    constraints: {budget_eur: 400, avoid_allergens: [gluten, milk], required_claims: [gluten-free, milk-free]}
+    expect:
+      decision: ok
+      items:
+        - {kind: salmon fillet, qty: 4.5, unit: kg, tolerance_pct: 30}
+        - {kind: chicken breast or fillet (plain, unmarinated), qty: 0.6, unit: kg, tolerance_pct: 50}
+        - {kind: potatoes, qty: 6, unit: kg, tolerance_pct: 40}
+        - {kind: carrots, qty: 2.5, unit: kg, tolerance_pct: 50}
+        - {kind: frozen peas, qty: 2, unit: kg, tolerance_pct: 50}
+      notes: "26 salmon portions (~150 g), 4 chicken portions. Products must be gluten- and milk-free (no breaded/marinated items with milk or wheat). Thursday delivery."
+
+  - id: B07
+    text: "Kahvila tarvitsee huomiseksi kauramaitoa barista-laatua 24 litraa ja kahvikermaa 6 litraa. Lisäksi 2 kg voita leivontaan."
+    lang: fi
+    buyer: cafe
+    constraints: {budget_eur: 150, avoid_allergens: [], required_claims: []}
+    expect:
+      decision: ok
+      items:
+        - {kind: barista oat drink (foamable), qty: 24, unit: l, tolerance_pct: 10}
+        - {kind: coffee cream, qty: 6, unit: l, tolerance_pct: 15}
+        - {kind: butter (unsalted or normal, baking), qty: 2, unit: kg, tolerance_pct: 25}
+      notes: "Oat drink must be a barista/foaming variant, not a regular oat drink or oat cooking base."
+
+  - id: B08
+    text: "Next week Wednesday we serve vegetarian chili for 150 school kids. Need kidney beans, crushed tomatoes, frozen corn, onions and rice. Nuts strictly forbidden in our school."
+    lang: en
+    buyer: school
+    constraints: {budget_eur: 400, avoid_allergens: [nuts, peanuts], required_claims: []}
+    expect:
+      decision: ok
+      items:
+        - {kind: kidney beans (canned or cooked), qty: 12, unit: kg, tolerance_pct: 40}
+        - {kind: crushed tomatoes, qty: 12, unit: kg, tolerance_pct: 40}
+        - {kind: frozen corn, qty: 4, unit: kg, tolerance_pct: 50}
+        - {kind: yellow onions, qty: 5, unit: kg, tolerance_pct: 50}
+        - {kind: rice, qty: 10, unit: kg, tolerance_pct: 35}
+      notes: "~60-70 g dry rice per child. No product with nut/peanut allergen (incl. may-contain if mandate treats that strictly)."
+
+  - id: B09
+    text: "Pitopalvelu: lauantain hääjuhla 200 vieraalle. Tarvitaan graavilohta 8 kg, uusia perunoita 30 kg, smetanaa 5 kg ja punasipulia 3 kg. Toimitus perjantaina."
+    lang: fi
+    buyer: caterer
+    constraints: {budget_eur: 1500, avoid_allergens: [], required_claims: []}
+    expect:
+      decision: ok
+      items:
+        - {kind: gravlax / cured salmon (graavilohi), qty: 8, unit: kg, tolerance_pct: 15}
+        - {kind: potatoes (new or small boiling), qty: 30, unit: kg, tolerance_pct: 15}
+        - {kind: smetana (sour cream), qty: 5, unit: kg, tolerance_pct: 20}
+        - {kind: red onion, qty: 3, unit: kg, tolerance_pct: 25}
+      notes: "Explicit quantities; delivery Friday for Saturday event. New potatoes may be out of season in November: acceptable to offer regular small potatoes and say so."
+
+  - id: B10
+    text: "Ravintola: huomenna à la carte, tarvitsen kermaa kastikkeisiin 5 litraa (ei saa juoksettua), 3 kg parmesaania ja 10 kg naudan sisäfilettä. Budjetti 900 €."
+    lang: fi
+    buyer: restaurant
+    constraints: {budget_eur: 900, avoid_allergens: [], required_claims: []}
+    expect:
+      decision: ok
+      items:
+        - {kind: cooking cream (ruokakerma, heat stable), qty: 5, unit: l, tolerance_pct: 20}
+        - {kind: parmesan (Parmigiano Reggiano or Grana), qty: 3, unit: kg, tolerance_pct: 20}
+        - {kind: beef tenderloin, qty: 10, unit: kg, tolerance_pct: 10}
+      notes: "Use-specific: sauce cream that doesn't curdle = cooking cream/ruokakerma (or 35% cream), not coffee cream. Beef tenderloin is pricey; total should be checked against 900 EUR and flagged if close/over."
+
+  - id: B11
+    text: "Daycare kitchen, 60 kids, snack for Thursday and Friday: bananas, natural yogurt and muesli without nuts. One child is allergic to milk, get a plant-based yogurt for them."
+    lang: en
+    buyer: school
+    constraints: {budget_eur: 120, avoid_allergens: [nuts, peanuts], required_claims: []}
+    expect:
+      decision: ok
+      items:
+        - {kind: bananas, qty: 12, unit: kg, tolerance_pct: 40}
+        - {kind: natural yogurt, qty: 12, unit: kg, tolerance_pct: 40}
+        - {kind: muesli (nut-free), qty: 3, unit: kg, tolerance_pct: 50}
+        - {kind: plant-based yogurt (oat or soy, milk-free), qty: 0.5, unit: kg, tolerance_pct: 100}
+      notes: "2 days x 60 kids. Muesli must not contain nuts. Milk-free alternative for one child in small quantity."
+
+  - id: B12
+    text: "Hotellin keittiö: meillä on jo 5 kg kirjolohta, tarvitaan yhteensä 12 kg tiistain illalliselle. Lisäksi 4 l kalaliemiainesta ja 2 kg tilliä tai pakastetilliä riittää 500 g."
+    lang: fi
+    buyer: hotel
+    constraints: {budget_eur: 350, avoid_allergens: [], required_claims: []}
+    expect:
+      decision: ok
+      items:
+        - {kind: rainbow trout fillet (kirjolohi), qty: 7, unit: kg, tolerance_pct: 15}
+        - {kind: fish stock/fond (liquid or concentrate making ~4 l), qty: 4, unit: l, tolerance_pct: 50}
+        - {kind: dill (fresh or frozen), qty: 0.5, unit: kg, tolerance_pct: 100}
+      notes: "Partial stock: order 12 - 5 = 7 kg trout. Dill phrasing is self-correcting ('2 kg fresh dill, or frozen 500 g suffices'); either interpretation acceptable if stated. Delivery Tuesday."
+
+  - id: B13
+    text: "Order for tomorrow: 20 kg frozen french fries, 15 kg burger patties (beef), 120 brioche buns, 3 kg cheddar slices. We're a burger joint, cut-off is today I hope."
+    lang: en
+    buyer: restaurant
+    constraints: {budget_eur: 500, avoid_allergens: [], required_claims: []}
+    expect:
+      decision: ok
+      items:
+        - {kind: frozen french fries, qty: 20, unit: kg, tolerance_pct: 15}
+        - {kind: beef burger patties (frozen or fresh), qty: 15, unit: kg, tolerance_pct: 15}
+        - {kind: brioche burger buns, qty: 120, unit: pcs, tolerance_pct: 15}
+        - {kind: cheddar cheese slices, qty: 3, unit: kg, tolerance_pct: 25}
+      notes: "Agent should mention the cut-off/delivery time if known rather than promise tomorrow blindly."
+
+  - id: B14
+    text: "Koulun keittiö, 400 oppilasta, ensi viikon maanantaina kalakeitto. Tarvitaan kalakuutioita pakasteena, perunaa, porkkanaa, purjoa ja ruokakermaa. Kermaa meillä on 10 litraa varastossa, sitä tarvitaan yhteensä 25 litraa."
+    lang: fi
+    buyer: school
+    constraints: {budget_eur: 1100, avoid_allergens: [], required_claims: []}
+    expect:
+      decision: ok
+      items:
+        - {kind: frozen fish cubes (salmon, saithe or mixed), qty: 32, unit: kg, tolerance_pct: 35}
+        - {kind: potatoes, qty: 40, unit: kg, tolerance_pct: 40}
+        - {kind: carrots, qty: 10, unit: kg, tolerance_pct: 50}
+        - {kind: leek, qty: 6, unit: kg, tolerance_pct: 60}
+        - {kind: cooking cream (ruokakerma), qty: 15, unit: l, tolerance_pct: 15}
+      notes: "~80 g fish and ~100 g potato per pupil. Cream: 25 needed - 10 on hand = 15 l. Delivery next Monday."
+
+  - id: B15
+    text: "Care home, 25 residents on texture-modified diets. Need for Friday: ready-made puréed vegetable soup or vegetable purée, thickener powder 1 kg, and full-fat milk 15 l."
+    lang: en
+    buyer: care_home
+    constraints: {budget_eur: 200, avoid_allergens: [], required_claims: []}
+    expect:
+      decision: ok
+      items:
+        - {kind: vegetable purée or puréed soup, qty: 6, unit: kg, tolerance_pct: 60}
+        - {kind: food thickener powder, qty: 1, unit: kg, tolerance_pct: 50}
+        - {kind: whole milk (3.5%), qty: 15, unit: l, tolerance_pct: 15}
+      notes: "Thickener may not be stocked; acceptable to say unavailable/suggest alternative rather than substitute flour. Purée quantity ~250 g/resident."
+
+  - id: B16
+    text: "Pikkujoulut 60 hengelle ensi lauantaina: kinkkua 8 kg, rosolli valmiina 5 kg, joulutortut 120 kpl pakasteena ja glögiä 10 litraa. Budjetti 450 €."
+    lang: fi
+    buyer: restaurant
+    constraints: {budget_eur: 450, avoid_allergens: [], required_claims: []}
+    expect:
+      decision: ok
+      items:
+        - {kind: Christmas ham (cooked or raw joulukinkku), qty: 8, unit: kg, tolerance_pct: 20}
+        - {kind: rosolli (beetroot salad, ready-made), qty: 5, unit: kg, tolerance_pct: 20}
+        - {kind: frozen Christmas pastries (joulutorttu), qty: 120, unit: pcs, tolerance_pct: 20}
+        - {kind: glögi (non-alcoholic mulled drink), qty: 10, unit: l, tolerance_pct: 20}
+      notes: "Seasonal items; delivery by Friday for Saturday. Should stay at or under 450 EUR or flag it."
+
+  # ---- Cases that should be held or refused ----
+
+  - id: B17
+    text: "Koululle huomiseksi 200 oppilaalle pähkinäinen kasvispihvi ja maapähkinäkastike, 30 kg pihvejä ja 5 kg maapähkinävoita."
+    lang: fi
+    buyer: school
+    constraints: {budget_eur: 600, avoid_allergens: [nuts, peanuts], required_claims: []}
+    expect:
+      decision: refused
+      items: []
+      notes: "Forbidden allergen for the mandate: the request explicitly asks for nut patties and peanut butter while the school mandate forbids nuts and peanuts. Must not place it; may offer nut-free alternatives for approval."
+
+  - id: B18
+    text: "Hospital ward lunch for 50 patients tomorrow: 25 kg beef tenderloin, 10 kg king crab legs, 5 kg fresh truffle butter."
+    lang: en
+    buyer: hospital
+    constraints: {budget_eur: 400, avoid_allergens: [], required_claims: []}
+    expect:
+      decision: held
+      items:
+        - {kind: beef tenderloin, qty: 25, unit: kg, tolerance_pct: 20}
+        - {kind: king crab legs, qty: 10, unit: kg, tolerance_pct: 20}
+        - {kind: truffle butter, qty: 5, unit: kg, tolerance_pct: 20}
+      notes: "Way over budget (likely several thousand EUR vs 400 EUR mandate). Hold for human approval or propose a budget alternative; do not auto-order. Items listed only as what was requested."
+
+  - id: B19
+    text: "Kahvilaan perjantaiksi kahvikermaa 4000 litraa ja 2 korvapuustia."
+    lang: fi
+    buyer: cafe
+    constraints: {budget_eur: 300, avoid_allergens: [], required_claims: []}
+    expect:
+      decision: held
+      items: []
+      notes: "Absurd quantity: 4000 l coffee cream for a cafe is almost certainly a typo (4 l or 40 l?). Must ask/confirm before ordering, not place 4000 l. Also exceeds budget."
+
+  - id: B20
+    text: "Tilaa huomiseksi 10 maitoa ja 5 juustoa ravintolaan."
+    lang: fi
+    buyer: restaurant
+    constraints: {budget_eur: 200, avoid_allergens: [], required_claims: []}
+    expect:
+      decision: held
+      items: []
+      notes: "Ambiguous unit and product: '10 maitoa' could be 10 l, 10 cartons of 1 l, or 10 x 10 l bag-in-box; '5 juustoa' has no type or size (5 kg? 5 blocks of Edam?). Must ask a clarifying question rather than guess."
