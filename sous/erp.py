@@ -23,6 +23,10 @@ confirmation_id, payload_hash, endpoint, attempts, last_error, next_retry_at, se
 unsigned operational metadata: signed receipts are never re-issued for it. Audit events: order.erp_sent,
 order.erp_confirmed, order.erp_failed (each attempt), order.erp_gave_up (after MAX_ATTEMPTS).
 
+Post-order amendments (sous/amendments.py) that change the lines add one ORDCHG change message each, keyed
+'<order id>/<amendment id>' in the same outbox (same retries, Idempotency-Key = that key); the original row and
+its payload are never rewritten.
+
 Sandbox orders always go to the stub, whatever SOUS_ERP_URL says: a visitor's order never reaches a real ERP.
 """
 
@@ -269,6 +273,74 @@ def reconcile(limit: int = 200) -> int:
             store.audit("order.erp_reconciled", "erp-adapter", "system", o["id"], o.get("buyer"),
                         {"order_id": o["id"], "reason": "ordered but not in the ERP outbox: queued by the sweep"})
     return n
+
+
+# --- post-order amendments (sous/amendments.py): one ORDCHG change message per amendment ----------------------
+
+def change_key(order_id: str, amendment_id: str) -> str:
+    """Outbox key of an amendment's change message: '<order id>/<amendment id>' (also its Idempotency-Key)."""
+    return f"{order_id}/{amendment_id}"
+
+
+def to_ordchg(order: dict, amendment: dict, customer_number: str | None) -> dict:
+    """The amended order as an ORDERS05 change (MESTYP ORDCHG, E1EDK01 ACTION 002), every line at its original
+    position: changed lines ACTION 002, cancelled ones 003 with quantity 0. Same BELNR as the original order."""
+    doc = to_orders05({**order, "lines": []}, customer_number)
+    doc["EDI_DC40"] |= {"MESTYP": "ORDCHG", "REFINT": change_key(order["id"], amendment["id"])}
+    doc["E1EDK01"]["ACTION"] = "002"
+    doc["E1EDKT1"][0]["E1EDKT2"].append({"TDLINE": f"Amendment {amendment['id']} {amendment['kind']} "
+                                                   f"{amendment['status']}"[:70]})
+    items = []
+    for i, l in enumerate(order.get("lines") or []):
+        if l.get("unit_price_ex_vat") is None:
+            continue
+        action = "003" if l.get("cancelled") else "002" if l.get("amended_by") else "000"
+        items.append({"POSEX": f"{(i + 1) * 10:06d}", "ACTION": action, "MENGE": _qty(l.get("quantity")),
+                      "MENEE": l.get("sales_unit") or "", "VPREI": f"{l['unit_price_ex_vat']:.2f}", "PEINH": "1",
+                      "NETWR": f"{(l.get('line_total_ex_vat') or 0):.2f}",
+                      "E1EDP19": [{"QUALF": "002", "IDTNR": str(l["product_id"]),
+                                   "KTEXT": (l.get("name") or "")[:40]}],
+                      "E1EDP20": [{"WMENG": _qty(l.get("quantity")),
+                                   "EDATU": _d(l.get("delivery_date") or order.get("delivery_date"))}]})
+    doc["E1EDP01"] = items
+    return doc
+
+
+def enqueue_change(order: dict, amendment: dict) -> dict | None:
+    """Queue the change message for an amendment that changed the lines, once per amendment (idempotent), only
+    when the order itself went through the outbox (an order the ERP never got has nothing to change)."""
+    _ensure()
+    base = _get(order["id"])
+    if base is None or base["status"] == "legacy":
+        return None
+    key = change_key(order["id"], amendment["id"])
+    if (row := _get(key)) is not None:
+        return row
+    payload = to_ordchg(order, amendment, base["data"].get("customer_number"))
+    data = {**{k: base["data"].get(k) for k in ("endpoint", "customer_number", "buyer", "target")},
+            "confirmation_id": None, "last_error": None, "sent_at": None, "confirmed_at": None,
+            "change_of": order["id"], "amendment_id": amendment["id"]}
+    try:
+        store._exec("INSERT INTO erp_outbox (order_id, status, attempts, next_ts, payload, payload_hash, data, "
+                    "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (key, "pending", 0, _clock(), json.dumps(payload, ensure_ascii=False), payload_hash(payload),
+                     json.dumps(data), store.now_iso(), store.now_iso()))
+    except Exception as e:  # another thread enqueued it first
+        if type(e).__name__ != "IntegrityError":
+            raise
+    return _get(key)
+
+
+def submit_change(order: dict, amendment: dict) -> dict | None:
+    """Queue and try to send an amendment's change message now; a failure stays queued for the sweep."""
+    try:
+        if enqueue_change(order, amendment) is not None:
+            return attempt(change_key(order["id"], amendment["id"]))
+    except Exception as e:  # noqa: BLE001
+        store.audit("order.erp_failed", "erp-adapter", "system", order["id"], order.get("buyer"),
+                    {"order_id": order["id"], "amendment_id": amendment["id"], "stage": "enqueue_change",
+                     "error": f"{type(e).__name__}: {e}"[:300]})
+    return None
 
 
 def attempt(order_id: str) -> dict | None:

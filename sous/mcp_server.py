@@ -198,6 +198,11 @@ class AgentClaim(_Open):
 class OrderOut(OrderDoc):
     """An order with its signed receipt. Schema: /schemas/order.json."""
     agent_claim: AgentClaim | None = Field(None, description="get_order: the agent's rationale, labelled unverified")
+    amendments: list[dict[str, Any]] | None = Field(
+        None, description="Valio's post-order exceptions (short_pick, delay, substitution_at_pick, cancel_line), "
+        "each {id, kind, line, reason, tier, findings[], status: applied|pending_buyer|accepted|rejected, effect, "
+        "resolution, jws (typ sous-amendment+jws)}")
+    credit_notes: list[dict[str, Any]] | None = Field(None, description="Credit (or extra charge) lines from amendments")
 
 
 class MandateOut(_Open):
@@ -491,7 +496,9 @@ def get_order(order_id: str, agent_token: str | None = None, ctx: Context | None
     """Current status of an order (ordered, pending_approval, refused, rejected, expired, expired_cutoff) and any human decision.
     Only orders under your own mandate: send your Authorization: Bearer header (or agent_token).
     Returns the order (schema /schemas/order.json) with approval {by, approved, note, at} once a human decided,
-    a fresh receipt_jws, and agent_claim (the rationale, labelled unverified)."""
+    a fresh receipt_jws, and agent_claim (the rationale, labelled unverified). After delivery problems it carries
+    amendments[] from Valio (short pick, delay, substitution at pick, cancelled line; status pending_buyer waits
+    for the buyer, ask-tier for their human, not you) and credit_notes[]."""
     access.check_order(_reader(ctx, agent_token), order_id)
     return access.label_order(S.get_order(order_id))
 

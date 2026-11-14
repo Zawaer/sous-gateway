@@ -553,6 +553,61 @@ def reject(order_id: str, d: Decision, authority: str = Depends(require_approver
     return S.decide(order_id, d.by, False, d.note, authority=authority)
 
 
+from . import amendments as AM  # noqa: E402  post-order amendments (sous/amendments.py)
+
+
+def _amendment_actor(request: Request, x_approver_code: str | None = Header(default=None),
+                     authorization: str | None = Header(default=None, include_in_schema=False)) -> tuple[str, bool]:
+    """(authority, is_agent). A human: the global approver code, or this order's sandbox approver token (open
+    when no code is configured). The buyer's agent: its vka_ credential for the order's mandate (only on
+    accept/reject; reporting an amendment is Valio's)."""
+    order_id = request.path_params.get("order_id", "")
+    tok = next((t for t in (agent_auth.bearer(authorization), x_approver_code)
+                if t and t.startswith(agent_auth.PREFIX)), None)
+    if tok:
+        o, who = store.get_order(order_id) or {}, agent_auth.identify(tok) or {}
+        if request.url.path.rstrip("/").endswith("/amendments"):
+            raise S.GatewayError("agent_cannot_amend", "Only Valio Aimo reports amendments; an agent credential "
+                                 "was presented.", 403)
+        if o.get("mandate_id") not in (who.get("mandate_ids") or []):
+            raise S.GatewayError("agent_auth_invalid", f"The agent credential is not valid for order {order_id}.", 403)
+        return f"agent credential ...{who['last4']}", True
+    if config.APPROVER_CODE and access.approver_code_ok(x_approver_code):
+        return "global approver code", False
+    if sandbox.may_approve(x_approver_code, order_id):
+        return f"sandbox approver {sandbox.owner((store.get_order(order_id) or {}).get('mandate_id'))}", False
+    if config.APPROVER_CODE:
+        raise HTTPException(401, "Approver code required (X-Approver-Code header), or the agent's credential "
+                                 "to accept or reject an amendment.")
+    return "open (no approver code configured)", False
+
+
+@app.post("/orders/{order_id}/amendments", tags=["amendments"])
+def report_amendment(order_id: str, req: AM.AmendmentIn, actor: tuple[str, bool] = Depends(_amendment_actor)):
+    """Valio Aimo reports a post-order exception on an ordered order (short_pick, delay, substitution_at_pick,
+    cancel_line). Global approver code, or the sandbox approver token for a sandbox order. Signed (typ
+    sous-amendment+jws), audited (order.amended), re-checked against the mandate: notify-tier is applied at once,
+    ask/block waits for the buyer (status pending_buyer). Returns the order with amendments[]."""
+    return access.label_order(AM.report(order_id, req, actor[0]))
+
+
+@app.post("/orders/{order_id}/amendments/{amendment_id}/accept", tags=["amendments"])
+def accept_amendment(order_id: str, amendment_id: str, r: AM.Resolution,
+                     actor: tuple[str, bool] = Depends(_amendment_actor)):
+    """The buyer accepts a pending_buyer amendment. A human (approver code / sandbox approver token) may accept
+    ask-tier; the agent (Bearer vka_...) only what the mandate as it stands lets through without a human
+    (403 agent_cannot_accept otherwise); nobody a block-tier one (409 amendment_blocked)."""
+    return access.label_order(AM.resolve(order_id, amendment_id, True, r, authority=actor[0], agent=actor[1]))
+
+
+@app.post("/orders/{order_id}/amendments/{amendment_id}/reject", tags=["amendments"])
+def reject_amendment(order_id: str, amendment_id: str, r: AM.Resolution,
+                     actor: tuple[str, bool] = Depends(_amendment_actor)):
+    """The buyer (human or agent) rejects a pending_buyer amendment: the line(s) concerned are cancelled with a
+    credit note line."""
+    return access.label_order(AM.resolve(order_id, amendment_id, False, r, authority=actor[0], agent=actor[1]))
+
+
 from .passkey_routes import router as passkey_router  # noqa: E402  passkey approval (sous/passkey.py)
 app.include_router(passkey_router)
 

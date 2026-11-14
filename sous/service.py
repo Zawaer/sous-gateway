@@ -871,11 +871,15 @@ def _mark_allocated(q: dict, short: list[dict]) -> list[dict]:
 
 
 def _receipt(order: dict) -> str:
-    """Signed receipt of the order's current state (re-issued after a human decision)."""
-    return signing.sign({k: order.get(k) for k in ("id", "quote_id", "mandate_id", "status", "total_ex_vat",
-                                                   "lines", "decision", "approval", "updated_at", "clock", "approve_by",
-                                                   "expiry")},
-                        "sous-order+jws")
+    """Signed receipt of the order's current state (re-issued after a human decision or an amendment)."""
+    body = {k: order.get(k) for k in ("id", "quote_id", "mandate_id", "status", "total_ex_vat",
+                                      "lines", "decision", "approval", "updated_at", "clock", "approve_by",
+                                      "expiry")}
+    if order.get("amendments"):  # post-order exceptions (sous/amendments.py): new total and credit note lines
+        from .amendments import receipt_summary
+        body |= {"original_total_ex_vat": order.get("original_total_ex_vat"),
+                 "credit_notes": order.get("credit_notes") or [], "amendments": receipt_summary(order)}
+    return signing.sign(body, "sous-order+jws")
 
 
 def decide(order_id: str, approver: str, approve: bool, note: str | None = None, authority: str | None = None,
@@ -1061,6 +1065,9 @@ def get_order(order_id: str) -> dict:
     o = expire_if_overdue(store.get_order(order_id))
     if not o:
         raise GatewayError("order_not_found", f"No order {order_id}.", 404)
+    if o.get("amendments"):
+        from .amendments import view
+        o = view(o)
     return erp.attach(o)
 
 

@@ -17,7 +17,8 @@ delivery is audited as notification.sent or notification.failed.
 Events: order.notify, order.ask, order.block (refused by the mandate: nothing ordered; to the buyer's human), order.decided (FYI to the agent
 side after a human approves or rejects), product.held (Valio put a product on hold that the buyer has
 open, standing or, for a recall, recently placed orders for; sous/holds.py), order.expired (a held order
-passed its approve_by: delivery lost, next date suggested), test.
+passed its approve_by: delivery lost, next date suggested), order.amended / order.amendment_pending /
+order.amendment_decided (Valio changed an ordered order after the fact: sous/amendments.py), test.
 """
 
 from __future__ import annotations
@@ -40,6 +41,7 @@ log = logging.getLogger(__name__)
 AUDIENCE = {"order.notify": "buyer", "order.ask": "buyer", "order.block": "buyer", "order.decided": "agent",
             "product.held": "buyer",
             "order.expired": "buyer",
+            "order.amended": "buyer", "order.amendment_pending": "buyer", "order.amendment_decided": "buyer",
             "test": "buyer"}
 
 
@@ -162,8 +164,38 @@ def compose(event: str, order: dict, mandate: Mandate) -> dict:
         return {"title": f"{oid} {status}", "message": msg, "url": url}
     if event == "product.held":
         return held_message(order)
+    if event.startswith("order.amend"):
+        return amendment_message(event, order)
     return {"title": "Sous test notification",
             "message": f"Test notification for {mandate.buyer} (mandate {mandate.id}). Channels work.", "url": url}
+
+
+_AMEND_KIND = {"short_pick": "short pick", "delay": "delay", "substitution_at_pick": "substitution",
+               "cancel_line": "line cancelled"}
+
+
+def amendment_message(event: str, order: dict) -> dict:
+    """order.amended / order.amendment_pending / order.amendment_decided: `order["amendment"]` is the amendment
+    (sous/amendments.py)."""
+    a, oid, url = order.get("amendment") or {}, order.get("id"), order.get("order_url")
+    kind = _AMEND_KIND.get(a.get("kind"), a.get("kind"))
+    why = _sentence(next((f["message"] for f in a.get("findings") or [] if f.get("outcome") == a.get("tier")),
+                         a.get("reason") or ""))
+    total = f" New total {eur(order.get('total_ex_vat'))} ex VAT."
+    credit = (a.get("effect") or {}).get("credit_ex_vat")
+    if credit:
+        total += f" Credit {eur(-credit)}." if credit < 0 else f" Extra charge {eur(credit)}."
+    if event == "order.amendment_pending":
+        return {"title": f"Valio changed {oid}: {kind}, your answer needed",
+                "message": f"Valio Aimo reports a {kind} on {oid}: {why}. Accept or reject it "
+                           f"(amendment {a.get('id')}); rejecting cancels the line(s) concerned.", "url": url}
+    if event == "order.amendment_decided":
+        r = a.get("resolution") or {}
+        return {"title": f"{oid}: {kind} {a.get('status')}",
+                "message": f"{r.get('by') or 'The buyer'} {a.get('status')} the {kind} on {oid} "
+                           f"(amendment {a.get('id')}).{total}", "url": url}
+    return {"title": f"Valio changed {oid}: {kind}", "message": f"Valio Aimo reports a {kind} on {oid}: {why}.{total}",
+            "url": url}
 
 
 def held_message(n: dict) -> dict:

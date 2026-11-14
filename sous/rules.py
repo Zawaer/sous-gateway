@@ -174,6 +174,31 @@ def _build() -> list[dict]:
         _r("product.held", "finding", ["block"], "valio",
            "Valio Aimo has put the product on hold (recall, quality hold or sales stop; GET /holds): it can't be "
            "quoted as orderable, ordered, or approved into an order, also on a quote issued before the hold.", None),
+        # --- post-order amendments (sous/amendments.py): Valio changes an ordered order after the fact
+        _r("amendment.short_pick", "finding", ["notify"], "valio",
+           "Valio Aimo picked fewer units than ordered: applied at once, the total drops and the re-signed receipt "
+           "carries a credit note line. The buyer is told.", None, condition="post-order amendment"),
+        _r("amendment.line_cancelled", "finding", ["notify"], "valio",
+           "Valio Aimo can't deliver a line at all: it is cancelled with a credit note line. The buyer is told.",
+           None, condition="post-order amendment"),
+        _r("amendment.delay", "finding", ["notify"], "buyer",
+           "Valio Aimo moves the delivery to a later date and the mandate's later_delivery is notify: applied, "
+           "the buyer is told.", "later_delivery", condition="post-order amendment"),
+        _r("amendment.delay_beyond_mandate", "finding", ["ask", "block"], "buyer",
+           "Valio Aimo moves the delivery to a later date and the mandate's later_delivery is ask or block: the "
+           "buyer's human must accept it (block: nobody can accept until the mandate allows it); rejecting cancels "
+           "the line(s) with a credit.", "later_delivery", condition="post-order amendment"),
+        _r("amendment.substitution", "finding", ["notify"], "buyer",
+           "Valio Aimo picked another product and the mandate, checked on the substitute line, lets it through: "
+           "applied, the buyer is told.", "substitutions", condition="post-order amendment"),
+        _r("amendment.substitution_not_allowed", "finding", ["ask", "block"], "buyer",
+           "Valio Aimo picked another product that the mandate doesn't let through on its own (substitutions tier, "
+           "allergens, claims, category, holds ... re-checked on the substitute line): it waits for the buyer; "
+           "the agent can't accept it, a block can't be accepted at all. Rejecting cancels the line with a credit.",
+           "substitutions", condition="post-order amendment"),
+        _r("amendment.price_increase", "finding", ["ask"], "gateway",
+           "A substitute picked by Valio Aimo would cost more than the line ordered: a human decides.", None,
+           condition="post-order amendment"),
         # --- supply
         _r("supply.terminal", "finding", _field_tiers("terminal_products"), "buyer",
            "The product ships from the supplier's warehouse (Terminal), so its stock is unknown.",
@@ -258,6 +283,13 @@ def _build() -> list[dict]:
            "whose mandate and buyer have no registered passkey; register one first (POST "
            "/approvers/register/options, with the approver code or the sandbox's approver token).", None,
            status=409),
+        _r("agent_cannot_accept", "refusal", ["block"], "gateway", "The buyer's agent tried to accept a Valio "
+           "amendment that the mandate, re-checked at that moment, would not let through without a human (ask or "
+           "block tier). Refused and audited (agent.amendment_accept_refused); the agent may still reject it.",
+           None, status=403),
+        _r("amendment_blocked", "refusal", ["block"], "buyer", "Accepting a Valio amendment that the mandate as it "
+           "stands blocks (e.g. a substitute with an avoided allergen): nobody can accept it; reject it, or change "
+           "the mandate first.", None, status=409),
         _r("quote_used", "refusal", ["block"], "gateway", "A quote can be ordered once: a second order on it (a "
            "retry with a new key, or many agents racing) is refused. Concurrent orders are serialised.",
            None, status=409),
