@@ -2,7 +2,7 @@
 
 The reference buyer runs in a browser and speaks to a Sous gateway over its documented REST API. It needs a running gateway with catalog data and an issued mandate. The browser needs HTTPS or localhost and Web Crypto support for Ed25519. The buyer needs no model API key, build step, browser extensions, or approver credentials.
 
-If the gateway requires agent authentication, enter your buyer agent token under **Product filters and gateway** after choosing the gateway and mandate. The token stays in the current page. For a private order link, enter the token and choose **Open linked order**.
+Choose the gateway, then enter your buyer agent token under **Product filters and gateway** if authentication is required. **Load available mandates** lists readable buyers and identifies those covered by your credential. Select a mandate to verify its signature and inspect its rules. Public demo choices are labeled, and a token with no owned matches gets an explanation. The token stays in the current page. For a private order link, enter the token and choose **Open linked order**.
 
 Open `/buyer/` on a gateway that serves this directory. To run the buyer separately from the gateway, start a static server from the repo root and pass the gateway URL as a query parameter or enter it under **Product filters and gateway**.
 
@@ -13,6 +13,10 @@ python3 -m http.server 8432 --bind 127.0.0.1 --directory buyer
 With the gateway on port 8431, open [the local reference buyer](http://localhost:8432/?gateway=http%3A%2F%2Flocalhost%3A8431). For a freshly seeded gateway use `M-HOTEL-AURORA`, fill the request from `1,000 litres of lactose-free milk by Monday`, and choose up to six plain milk products. Enter category `10400` to narrow this demo to milk and milk drinks. Verify product fit from the cards before requesting the live quote. To compare substitutes, enter the original product's SKU and click **Find substitutes**. A signed quote records which SKU would be replaced. The actual outcome depends on live availability, signed mandate rules, and the delivery date.
 
 The optional English input fills fields for a single need in the form `quantity unit product by date`. It supports weekdays, today/tomorrow and ISO dates. The editable form also accepts other catalog languages and explicit product constraints. General-purpose agents can connect directly to the gateway's MCP endpoint for more flexible natural-language input.
+
+Set an optional **Purpose** and **Substitution** policy for each item before searching. These follow the item through basket edits, quotes and alternative searches. The gateway combines them with the buyer mandate and applies the stricter rules.
+
+Text entered in **Describe what you need** is included in the signed quote and receipt, with whitespace normalized. The gateway checks its quantities against the basket. If your need changes while editing the fields, update the description too, so the original wording and the requested quantities agree.
 
 The browser verifies mandate and quote JWS payloads against the gateway's JWKS. Use a trusted gateway URL to establish whose public keys you are using. The browser shows the signed quote and submits only after the buyer clicks the order or approval button. The gateway computes the authoritative order outcome. Submissions use one idempotency key per quote and can be retried after an uncertain response while the page is open. Current gateways issue a new signed receipt when an authorised human approves or rejects an order. The buyer checks that the signed status and approval decision match what the gateway reports. If an older gateway still returns the original pending receipt, the buyer labels it as the original receipt and identifies the current status as reported by the gateway.
 
