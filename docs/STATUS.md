@@ -37,7 +37,7 @@ Valio Aimo's front door for AI purchasing agents. Any buyer's agent (a hotel's, 
 - **Ask:** held until a human approves on their phone.
 - **Block:** refused, with the rule that fired.
 
-The LLM never decides; it only turns language into a structured request and explains results. Both the buyer and Valio Aimo read the same hash-chained audit log.
+No language model ever approves an order or relaxes a rule: the buyer's LLM turns language into a structured request and explains results, and the gateway's one classifier (Gemini Decisions, on products with no allergen declaration) can only add a refusal, with its probability shown. Both the buyer and Valio Aimo read the same hash-chained audit log.
 
 Pitch line: *"AI purchasing agents carry a signed mandate from their human, and Valio Aimo's gateway enforces it."*
 

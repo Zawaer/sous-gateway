@@ -3,7 +3,8 @@
 A mandate is what a human gives their purchasing agent: spend limits, allergen
 and product requirements, and what the agent may decide alone. The engine checks
 a quote against it and returns one of four tiers (silent / notify / ask / block), each with the rules that
-fired, in plain language. No LLM is involved in this decision.
+fired, in plain language. No language model makes this decision; the one model input is the Gemini Decisions API's
+probability for products that declare no allergens (sous/allergen_ai.py), which can only add allergen.likely.
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 # Sous
 
-Sous is a seller-side trust gateway for Valio Aimo, the Finnish food-service wholesaler: outside AI purchasing agents search the catalog over MCP or REST, get quotes signed by the gateway with live Valio price and availability, and order under a mandate their buyer set (spend limits, allergens, substitutes). Plain code, not the LLM, puts every order in one of four tiers (auto, auto + FYI, needs approval, refused), and every step goes into a hash-chained audit log that the buyer and Valio Aimo both read.
+Sous is a seller-side trust gateway for Valio Aimo, the Finnish food-service wholesaler: outside AI purchasing agents search the catalog over MCP or REST, get quotes signed by the gateway with live Valio price and availability, and order under a mandate their buyer set (spend limits, allergens, substitutes). Plain code puts every order in one of four tiers (auto, auto + FYI, needs approval, refused): no language model ever approves an order or relaxes a rule, and the one classifier the gateway uses (Gemini Decisions, for undeclared allergens) can only add a refusal. Every step goes into a hash-chained audit log that the buyer and Valio Aimo both read.
 
 Built at Junction 2026 for Valio Aimo's challenge "Trusted Trade Agents".
 

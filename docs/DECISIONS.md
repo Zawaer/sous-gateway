@@ -14,14 +14,15 @@ Any language has a JOSE library, so a buyer can verify offline without our code.
 Each object has its own `typ` so a quote can't be passed off as a receipt.
 Production path: express the mandate as a W3C Verifiable Credential signed by the buyer, and align quote and order with the agent payment protocols now emerging (Google's AP2 mandates, OpenAI/Stripe's ACP). The JWS payloads map onto both without changing the rules engine. Done as views: AP2 v0.2 / schema.org exports, A2A and MCP server cards and JSON Schemas; mapping and gaps in [STANDARDS.md](STANDARDS.md).
 
-## 3. Deterministic rules engine; the LLM never decides
+## 3. Deterministic rules engine; no model approves or relaxes anything
 `mandate.evaluate` is plain Python: every finding has a stable rule id, a tier and a human-readable sentence. The same input always gives the same tier.
-The LLM's job is to turn "1,000 l lactose-free milk by Monday" into a structured request and to explain results. It never sets a price, quantity, allergen verdict or approval.
+The buyer's LLM turns "1,000 l lactose-free milk by Monday" into a structured request and explains results. It never sets a price, quantity, allergen verdict or approval.
+The gateway uses one model, and only to add caution: for a product that declares no allergens, the Gemini Decisions API (`gemini-decision-1`) gives the probability that it contains each avoided allergen, and code refuses at 0.8 or more (`allergen.likely`). Below that nothing changes: the product stays unknown and a human decides. The answer is cached, so the same product gets the same verdict at quote, order and approval, and the probability is in the finding. No model output can approve an order, lower a tier or make a product safe.
 This makes the controls testable (`tests/test_core.py` covers all four tiers) and explainable to the human approving.
 A prompt-injected or confused agent can at worst ask for the wrong thing; it can't talk its way past the mandate.
 
 ## 4. Unknown allergen data is unsafe
-About half of Valio Aimo's products have no allergen declaration. If a mandate avoids allergens, a product without a declaration becomes `allergen.unknown` with tier `ask` (or `block`, per mandate), never `silent`.
+30 % of Valio Aimo's food products (46 % of all products) have no allergen declaration. If a mandate avoids allergens, a product without a declaration becomes `allergen.unknown` with tier `ask` (or `block`, per mandate), never `silent`; if the Gemini Decisions API puts an avoided allergen at 0.8 or more, it is refused (`allergen.likely`, section 3).
 "May contain" counts as contains unless the mandate allows it. `AM`, `AN` and `AW` expand to their whole family (milk incl. lactose, all tree nuts, all gluten cereals).
 For a hospital or school kitchen a false "safe" is the one error that can't be undone. A human confirming is cheap by comparison.
 

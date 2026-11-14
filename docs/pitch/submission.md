@@ -13,7 +13,7 @@ Sous
 AI purchasing agents carry a signed mandate from their human, and Valio Aimo's gateway enforces it.
 
 ## Description
-**Sous is Valio Aimo's front door for AI purchasing agents.** A hotel's, hospital's or school's agent connects over MCP or OpenAPI, searches the catalog, gets a signed quote with live price and availability, and orders, inside limits its human set in a signed mandate (*valtakirja*). Plain code, not the LLM, puts every order in one of four tiers: auto, auto + FYI, needs approval, refused. Live: https://135-181-8-209.sslip.io (a judge path in 5 minutes is at the top of the README).
+**Sous is Valio Aimo's front door for AI purchasing agents.** A hotel's, hospital's or school's agent connects over MCP or OpenAPI, searches the catalog, gets a signed quote with live price and availability, and orders, inside limits its human set in a signed mandate (*valtakirja*). Plain code puts every order in one of four tiers: auto, auto + FYI, needs approval, refused. No language model ever approves an order or relaxes a rule; the one classifier we use (Gemini Decisions, on products with no allergen declaration) can only add a refusal. Live: https://135-181-8-209.sslip.io (a judge path in 5 minutes is at the top of the README).
 
 **The problem.** We asked a general shopping agent for "1,000 litres of lactose-free milk by Monday". After 13 minutes of research it concluded it would have to phone wholesalers on Saturday. Agents will buy from wholesalers anyway; if Valio Aimo doesn't define how they do it safely and openly, someone else's platform will.
 

@@ -390,7 +390,7 @@ def cards(out: Path, seconds: dict[str, float] | None = None) -> None:
         centered(d, 660, "every agent carries a valtakirja: a signed mandate from its human", f(SANS, 36), (150, 150, 155))
 
     def trust(d):
-        cols = [("Rules in code", ["limits, allergens,", "cut-offs: plain code", "the LLM never decides"]),
+        cols = [("Rules in code", ["limits, allergens,", "cut-offs: plain code", "no model approves"]),
                 ("Signed", ["Ed25519 JWS quotes", "and receipts", "public JWKS"]),
                 ("Open", ["MCP + OpenAPI", "any model: Claude,", "Gemini, open-weight", "on Verda (EU)"])]
         for i, (h, body) in enumerate(cols):

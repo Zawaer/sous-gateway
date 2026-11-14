@@ -40,7 +40,7 @@ Before recording (full steps in [demo-runbook.md](../demo-runbook.md)): record b
 ## 1:24–1:40 Why trust it, and why it's open
 
 - **Screen [STILL]:** three columns: "Rules in code" / "Signed: Ed25519 JWS, public JWKS" / "MCP + OpenAPI · any model: Claude, Gemini, open-weight on Verda (EU)".
-- **VO:** "The language model never decides. Limits, allergens and cut-offs are plain code, and quotes and receipts are signed. Any agent can buy: Claude, Gemini, or an open-weight model running on Verda in the EU."
+- **VO:** "No language model ever approves an order. Limits, allergens and cut-offs are plain code, and quotes and receipts are signed. Any agent can buy: Claude, Gemini, or an open-weight model running on Verda in the EU."
 
 ## 1:40–1:52 Numbers
 

@@ -44,7 +44,7 @@ Paste a prompt from `prompts` (they include your mandate and agent ids). Prices 
 | Hotel: one exact product for tomorrow | Depends on the clock: after the order cut-off, **refused** with the rule (`availability.cutoff_passed`); before it, a small ordinary order. The agent can't talk its way around a passed cut-off. |
 | School: 1,500 L of milk | **Refused** whenever the total is over the school's €1,500 hard limit (`spend.hard_limit`), i.e. at any price above €1/L; never ordered silently. |
 
-Try to break it: ask for something with nuts for the hospital, claim to be another agent, reuse a quote. The mandate engine is plain code, not the LLM.
+Try to break it: ask for something with nuts for the hospital, claim to be another agent, reuse a quote. The mandate engine is plain code: no language model can approve an order or relax a rule.
 
 ## 4. Be the human
 

@@ -260,7 +260,7 @@ Each issue is `{code, severity, message}`. A line with any `blocking` issue has 
 
 ## 6. Tiers and rules
 
-The rules engine (`mandate.evaluate`) is plain Python. No LLM is involved. It returns a list of findings `{rule, outcome, message, product_id, rule_url}` and the overall tier is the strictest finding. `rule_url` points at the rule in the register (section 6.1).
+The rules engine (`mandate.evaluate`) is plain Python. No language model approves or relaxes anything; the only model input is the Gemini Decisions API's probability for products that declare no allergens (section 25), which can only add `allergen.likely`. It returns a list of findings `{rule, outcome, message, product_id, rule_url}` and the overall tier is the strictest finding. `rule_url` points at the rule in the register (section 6.1).
 
 | Tier | Order status | Meaning |
 |---|---|---|
