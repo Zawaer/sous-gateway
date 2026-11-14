@@ -514,9 +514,10 @@ def rule_detail(rule_id: str):
 # --- Valio pause of agent ordering (sous/pause.py) ---------------------------
 
 @app.get("/agent-ordering", tags=["holds"])
-def agent_ordering():
-    """Whether Valio Aimo has paused agent ordering, for every buyer or named buyers. Public: agents need it."""
-    return pause.status()
+def agent_ordering(x_approver_code: str | None = Header(default=None)):
+    """Whether Valio Aimo has paused agent ordering for every buyer (with its reason) and how many single buyers are
+    paused. Which buyers and why only with the global approver code: a buyer's pause can be about invoices."""
+    return pause.status(full=not config.APPROVER_CODE or access.approver_code_ok(x_approver_code))
 
 
 @app.post("/agent-ordering/pause", tags=["holds"], dependencies=[Depends(require_global_approver)])

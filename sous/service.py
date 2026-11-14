@@ -646,6 +646,8 @@ def _evaluate(mandate: Mandate, agent_id: str, q: dict, now: datetime, extra_fin
                     spent_today_eur=store.spent_today(mandate.id, now.date().isoformat()), now=now,
                     extra_findings=extra_findings, quantities=usual.profile(q["lines"]),
                     usual_quantities=usual.history(mandate.id, now) if mandate.unusual_quantity_factor else None,
+                    families={l["product_id"]: usual.family(l["product_id"]) for l in q["lines"]}
+                    if mandate.max_price_change_pct else None,
                     **_spend_context(mandate, now))
 
 
@@ -664,6 +666,7 @@ def _spend_context(mandate: Mandate, now: datetime) -> dict:
         out["ordered_products"] = store.ordered_product_ids(mandate.id)
     if mandate.max_price_change_pct:
         out["last_prices"] = store.last_unit_prices(mandate.id)
+        out["last_comparison_prices"] = usual.last_comparison_prices(mandate.id)
     return out
 
 

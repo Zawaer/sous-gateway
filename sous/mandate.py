@@ -9,6 +9,7 @@ fired, in plain language. No LLM is involved in this decision.
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -91,6 +92,17 @@ UNUSUAL_MIN_HISTORY = 3
 _RANK = {"silent": 0, "notify": 1, "ask": 2, "block": 3}
 
 
+def _cents(eur: float) -> int:
+    """Money compared in whole cents: 1.10 + 2.20 is exactly a €3.30 limit, not 3.3000000000000003."""
+    return round(Decimal(str(eur)) * 100)
+
+
+def _over_pct(now: float, was: float, pct: float) -> bool:
+    """|now - was| / was > pct %, decided in exact decimals (a change of exactly the limit passes)."""
+    n, w = Decimal(str(now)), Decimal(str(was))
+    return abs(n - w) * 100 > w * Decimal(str(pct))
+
+
 def readable_name(name: str) -> str:
     """Catalog names are often ALL CAPS ('BRAVO CHEF 400G CHOPPED TOMATOES'); reasons read better in sentence case."""
     letters = [c for c in name or "" if c.isalpha()]
@@ -117,6 +129,8 @@ def evaluate(
     recent_orders: list[dict] | None = None,
     ordered_products: set[str] | None = None,
     last_prices: dict[str, dict] | None = None,
+    families: dict[str, tuple[str, str]] | None = None,
+    last_comparison_prices: dict[tuple[str, str], dict] | None = None,
 ) -> tuple[Tier, list[Finding]]:
     """`extra_findings` are checks made outside the mandate (e.g. standing-order drift); they count like any rule.
     `quantities` is this order's amount per (product family, unit), `usual_quantities` the same buyer's past
@@ -124,7 +138,9 @@ def evaluate(
     `spent_week_eur` is this calendar week's ordered total (spend.weekly_limit), `recent_orders` the orders that
     went through within split_window_minutes as [{id, total_ex_vat}] (spend.split_orders), `ordered_products`
     every product id ever ordered under the mandate (product.first_time), `last_prices` the last unit price paid
-    per product under the mandate as {product_id: {unit_price_ex_vat, order_id, at}} (price.changed)."""
+    per product under the mandate as {product_id: {unit_price_ex_vat, order_id, at}} (price.changed), `families`
+    each line's product family and `last_comparison_prices` the last price per L/KG paid per (family, per) unit
+    (price.comparison_changed). Times are when orders went through (store.ordered_at)."""
     f: list[Finding] = []
 
     def add(rule, outcome, message, pid=None):
@@ -154,22 +170,23 @@ def evaluate(
     elif mandate.notify_above_eur is not None and total > mandate.notify_above_eur:
         add("spend.notify", "notify",
             f"Order total €{total:,.2f} is above €{mandate.notify_above_eur:,.2f}, so the buyer gets an FYI.")
-    if mandate.weekly_limit_eur is not None and spent_week_eur + total > mandate.weekly_limit_eur:
+    if mandate.weekly_limit_eur is not None and _cents(spent_week_eur) + _cents(total) > _cents(mandate.weekly_limit_eur):
         add("spend.weekly_limit", "ask",
-            f"With this order, this week's spend would be €{spent_week_eur + total:,.2f}, "
+            f"With this order, this week's spend would be €{(_cents(spent_week_eur) + _cents(total)) / 100:,.2f}, "
             f"above the weekly limit of €{mandate.weekly_limit_eur:,.2f}.")
     # Slicing: orders that each stay under the auto-approve limit but together pass it within a short window.
-    small = [o for o in recent_orders or () if (o.get("total_ex_vat") or 0) <= mandate.auto_approve_limit_eur]
-    if (mandate.split_window_minutes and small and 0 < total <= mandate.auto_approve_limit_eur
-            and sum(o["total_ex_vat"] for o in small) + total > mandate.auto_approve_limit_eur):
-        together = sum(o["total_ex_vat"] for o in small) + total
+    auto = _cents(mandate.auto_approve_limit_eur)
+    small = [o for o in recent_orders or () if _cents(o.get("total_ex_vat") or 0) <= auto]
+    if (mandate.split_window_minutes and small and 0 < _cents(total) <= auto
+            and sum(_cents(o["total_ex_vat"]) for o in small) + _cents(total) > auto):
+        together = (sum(_cents(o["total_ex_vat"]) for o in small) + _cents(total)) / 100
         add("spend.split_orders", "ask",
             f"This order and {len(small)} more in the last {mandate.split_window_minutes} min add up to "
             f"€{together:,.2f}, above the €{mandate.auto_approve_limit_eur:,.2f} the agent may spend alone: "
             "small orders in a row are checked together.")
-    if mandate.daily_limit_eur is not None and spent_today_eur + total > mandate.daily_limit_eur:
+    if mandate.daily_limit_eur is not None and _cents(spent_today_eur) + _cents(total) > _cents(mandate.daily_limit_eur):
         add("spend.daily_limit", "ask",
-            f"With this order, today's spend would be €{spent_today_eur + total:,.2f}, "
+            f"With this order, today's spend would be €{(_cents(spent_today_eur) + _cents(total)) / 100:,.2f}, "
             f"above the daily limit of €{mandate.daily_limit_eur:,.2f}.")
     # `uncovered` is either one amount in `need_unit`, or {unit: amount} when items use different units.
     missing: dict[str, float] = {}
@@ -230,13 +247,25 @@ def evaluate(
         now_price = l.get("unit_price_ex_vat")
         if last and now_price is not None and last.get("unit_price_ex_vat"):
             was = last["unit_price_ex_vat"]
-            change = (now_price - was) / was * 100
-            if abs(change) > mandate.max_price_change_pct:
+            change = (now_price - was) / was * 100  # for the message only; the decision is exact
+            if _over_pct(now_price, was, mandate.max_price_change_pct):
                 unit = l.get("sales_unit") or "unit"
                 add("price.changed", "ask",
                     f"{name}: €{now_price:,.2f} per {unit} now, {abs(change):.0f}% {'above' if change > 0 else 'below'} "
                     f"the €{was:,.2f} paid on {last['at'][8:10]}.{last['at'][5:7]} (order {last['order_id']}); the "
                     f"mandate asks above {mandate.max_price_change_pct:g}%.", pid)
+
+        # Price per L / KG against what the buyer last paid for the same kind of product (a pricier brand or pack)
+        cp_now = l.get("comparison_price") or {}
+        fam = (families or {}).get(pid)
+        prev = (last_comparison_prices or {}).get((fam[0], cp_now.get("per"))) if fam and mandate.max_price_change_pct else None
+        if (prev and prev["product_id"] != pid and cp_now.get("ex_vat") is not None and prev.get("ex_vat")
+                and cp_now["ex_vat"] > prev["ex_vat"] and _over_pct(cp_now["ex_vat"], prev["ex_vat"], mandate.max_price_change_pct)):
+            per, up = cp_now["per"], (cp_now["ex_vat"] - prev["ex_vat"]) / prev["ex_vat"] * 100
+            add("price.comparison_changed", "ask",
+                f"{name}: €{cp_now['ex_vat']:,.2f}/{per}, {up:.0f}% above the €{prev['ex_vat']:,.2f}/{per} paid for "
+                f"{fam[1].lower()} on {prev['at'][8:10]}.{prev['at'][5:7]} ({readable_name(prev.get('name') or prev['product_id'])}, "
+                f"order {prev['order_id']}); the mandate asks above {mandate.max_price_change_pct:g}%.", pid)
 
         if mandate.allowed_categories is not None and p.get("category") not in mandate.allowed_categories:
             add("product.category", "block",

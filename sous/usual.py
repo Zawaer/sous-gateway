@@ -66,3 +66,27 @@ def history(mandate_id: str, now: datetime) -> dict[tuple[str, str], list[float]
         for key, cur in profile(q["lines"]).items():
             out.setdefault(key, []).append(cur["amount"])
     return out
+
+
+def family(pid: str) -> tuple[str, str]:
+    """(key, label) of the product's family, as quantity.unusual and price.comparison_changed group products."""
+    return _family(pid)
+
+
+def last_comparison_prices(mandate_id: str) -> dict[tuple[str, str], dict]:
+    """{(family, per): {ex_vat, product_id, name, order_id, at}}: the price per L or KG in the order that most recently
+    went through, per product family (from each order's signed quote lines). Feeds price.comparison_changed."""
+    out: dict[tuple[str, str], dict] = {}
+    for o in store.ordered_orders(mandate_id)[:MAX_ORDERS]:
+        q = store.get_quote(o["quote_id"])
+        if not q:
+            continue
+        bought = {l["product_id"] for l in o.get("lines") or []}
+        for l in q.get("lines") or []:
+            cp = l.get("comparison_price") or {}
+            if l["product_id"] not in bought or cp.get("ex_vat") is None or not cp.get("per"):
+                continue
+            key = (_family(l["product_id"])[0], cp["per"])
+            out.setdefault(key, {"ex_vat": cp["ex_vat"], "product_id": l["product_id"], "name": l.get("name"),
+                                 "order_id": o["id"], "at": store.ordered_at(o)})
+    return out

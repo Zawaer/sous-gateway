@@ -593,8 +593,9 @@ def holds_resource() -> dict:
 
 @mcp.resource("sous://agent-ordering", title="Is agent ordering paused?", mime_type="application/json")
 def agent_ordering_resource() -> dict:
-    """Valio Aimo's pause of agent ordering (every buyer, or named buyers). While it covers your buyer, every
-    order is refused with rule ordering.paused; searching and quoting still work."""
+    """Whether Valio Aimo has paused agent ordering for every buyer (and why), and how many single buyers are paused.
+    While a pause covers your buyer, every order is refused with rule ordering.paused, whose message says why;
+    searching and quoting still work."""
     from . import pause
     return pause.status()
 

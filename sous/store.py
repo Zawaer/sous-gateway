@@ -376,34 +376,53 @@ def list_orders(status: str | None = None, mandate_id: str | None = None) -> lis
     return [json.loads(r["data"]) for r in _exec(q + " ORDER BY created_at DESC", args)[0]]
 
 
+def ordered_at(o: dict) -> str:
+    """When the order went through: the human's approval time for an approved order, else when it was placed.
+    Period totals, split detection and last-paid prices all count an order from this moment, so an order held on
+    Sunday and approved on Monday is Monday's spend."""
+    a = o.get("approval") or {}
+    return a["at"] if o.get("status") == "ordered" and a.get("approved") and a.get("at") else o["created_at"]
+
+
+def ordered_orders(mandate_id: str) -> list[dict]:
+    """The mandate's orders that went through, newest ordered_at first."""
+    return sorted(list_orders(status="ordered", mandate_id=mandate_id),
+                  key=lambda o: datetime.fromisoformat(ordered_at(o)), reverse=True)
+
+
+def _cents_total(orders) -> float:
+    return sum(round((o.get("total_ex_vat") or 0) * 100) for o in orders) / 100
+
+
 def spent_today(mandate_id: str, day: str) -> float:
-    r = _exec("SELECT COALESCE(SUM(total_ex_vat), 0) AS s FROM purchase_order "
-              "WHERE mandate_id = ? AND status = 'ordered' AND substr(created_at, 1, 10) = ?", (mandate_id, day))[0]
-    return float(r[0]["s"])
+    """Ordered total of a Helsinki calendar day (YYYY-MM-DD), by ordered_at, summed in cents."""
+    return _cents_total(o for o in list_orders(status="ordered", mandate_id=mandate_id)
+                        if datetime.fromisoformat(ordered_at(o)).astimezone(config.TZ).date().isoformat() == day)
 
 
 def spent_since(mandate_id: str, since_iso: str) -> float:
-    """Ordered total under the mandate since a Helsinki ISO timestamp (created_at compares as text, same format)."""
-    r = _exec("SELECT COALESCE(SUM(total_ex_vat), 0) AS s FROM purchase_order "
-              "WHERE mandate_id = ? AND status = 'ordered' AND created_at >= ?", (mandate_id, since_iso))[0]
-    return float(r[0]["s"])
+    """Ordered total under the mandate since a timestamp, by ordered_at, summed in cents."""
+    since = datetime.fromisoformat(since_iso)
+    return _cents_total(o for o in list_orders(status="ordered", mandate_id=mandate_id)
+                        if datetime.fromisoformat(ordered_at(o)) >= since)
 
 
-def ordered_since(mandate_id: str, since_iso: str) -> list[dict]:
-    """[{id, total_ex_vat}] of the mandate's orders that went through since a Helsinki ISO timestamp."""
-    rows = _exec("SELECT id, total_ex_vat FROM purchase_order WHERE mandate_id = ? AND status = 'ordered' "
-                 "AND created_at >= ? ORDER BY created_at", (mandate_id, since_iso))[0]
-    return [{"id": r["id"], "total_ex_vat": float(r["total_ex_vat"])} for r in rows]
+def ordered_since(mandate_id: str, since_iso: str, *, auto_only: bool = True) -> list[dict]:
+    """[{id, total_ex_vat}] of orders that went through since a timestamp. auto_only: only those the agent ordered
+    alone (no human approval), which is what spend.split_orders sums: an approved order already had a human."""
+    since = datetime.fromisoformat(since_iso)
+    return [{"id": o["id"], "total_ex_vat": float(o["total_ex_vat"])} for o in reversed(ordered_orders(mandate_id))
+            if datetime.fromisoformat(ordered_at(o)) >= since and not (auto_only and o.get("approval"))]
 
 
 def last_unit_prices(mandate_id: str) -> dict[str, dict]:
-    """{product_id: {unit_price_ex_vat, order_id, at}}: the newest price paid per product in orders that went through."""
+    """{product_id: {unit_price_ex_vat, order_id, at}}: the price in the order that most recently went through."""
     out: dict[str, dict] = {}
-    for o in list_orders(status="ordered", mandate_id=mandate_id):  # newest first
+    for o in ordered_orders(mandate_id):
         for l in o.get("lines") or []:
             if l.get("unit_price_ex_vat") is not None and l["product_id"] not in out:
                 out[l["product_id"]] = {"unit_price_ex_vat": l["unit_price_ex_vat"], "order_id": o["id"],
-                                        "at": o["created_at"]}
+                                        "at": ordered_at(o)}
     return out
 
 

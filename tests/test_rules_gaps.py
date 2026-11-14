@@ -27,11 +27,11 @@ def product(pid):
 
 PRODUCTS = {pid: product(pid) for pid in ("MILK", "OATS")}
 clock = {"now": NOW}
-PRICE = {"eur": 1.0}  # Valio's price per 1 l pack in fake_offers
+PRICE = {"eur": 1.0}  # Valio's price per 1 l pack in fake_offers (PRICE[pid] overrides it per product)
 
 
 def fake_offers(product_ids, requested, need=None, need_unit=None):
-    e = PRICE["eur"]
+    e = PRICE.get(product_ids[0], PRICE["eur"])
     pr = {"catalogPrice": {"value": e, "valueWithTax": round(e * 1.135, 2), "validTo": None}, "comparisonPrice": {"value": e},
           "comparisonUnit": "L", "tax": {"taxRate": 13.5}, "error": False}
     av = {"logisticModel": "Stock", "closingTime": "2026-11-25T17:00:00+0200", "salesBlock": False,
@@ -52,6 +52,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(catalog, "get", lambda pid: PRODUCTS.get(pid))
     monkeypatch.setattr(Q, "offers", fake_offers)
     clock["now"] = NOW
+    PRICE.clear()
     PRICE["eur"] = 1.0
     monkeypatch.setattr(S, "_now", lambda: clock["now"])
     monkeypatch.setattr(S.notify, "send", lambda *a, **k: None)
@@ -162,11 +163,11 @@ def test_pause_over_rest_needs_the_global_approver_code(monkeypatch):
     from sous.api import app
     monkeypatch.setattr(config, "APPROVER_CODE", "secret")
     c = TestClient(app)
-    assert c.get("/agent-ordering").json() == {"paused_for_everyone": False, "pauses": []}
+    assert c.get("/agent-ordering").json() == {"paused_for_everyone": False, "everyone": None, "buyer_pauses": 0}
     assert c.post("/agent-ordering/pause", json={"reason": "x"}).status_code == 401
     r = c.post("/agent-ordering/pause", json={"reason": "Incident"}, headers={"x-approver-code": "secret"})
     assert r.status_code == 200 and r.json()["paused_for_everyone"] is True
-    assert c.get("/agent-ordering").json()["pauses"][0]["reason"] == "Incident"
+    assert c.get("/agent-ordering").json()["everyone"]["reason"] == "Incident"
     assert c.post("/agent-ordering/resume", json={}, headers={"x-approver-code": "secret"}).status_code == 200
     assert c.post("/agent-ordering/resume", json={}, headers={"x-approver-code": "secret"}).status_code == 404
     rules = {r["id"] for r in c.get("/rules").json()["rules"]}
@@ -219,3 +220,113 @@ def test_demo_policy_substitutes_and_new_products_ask_and_seed_upgrades_deployme
     assert m["substitutions"] == "ask" and m["first_time_products"] == "ask" and m["weekly_limit_eur"] == 25000
     assert m["auto_approve_limit_eur"] == 1234  # what a human changed stays
     assert signing.verify(S.get_mandate("M-HOTEL-AURORA")["jws"], "sous-mandate+jws")
+
+
+
+# --- QA findings 14.11 (rene-codex-qa): ordered time, exact cents and percentages, private pauses ---------------
+
+SUN_2350 = datetime(2026, 11, 15, 23, 50, tzinfo=config.TZ)
+
+
+@pytest.mark.parametrize("limit", ["daily_limit_eur", "weekly_limit_eur"])
+def test_an_order_counts_in_the_period_it_was_approved(limit):
+    issue(auto_approve_limit_eur=50, **{limit: 100})
+    clock["now"] = SUN_2350
+    held = order(70)
+    assert held["status"] == "pending_approval"
+    clock["now"] = SUN_2350 + timedelta(minutes=15)  # Monday 00:05: approved, so Monday's spend
+    assert S.decide(held["id"], "chef", True)["status"] == "ordered"
+    clock["now"] += timedelta(minutes=1)
+    o = order(40)  # €70 + €40 = €110 ordered today / this week
+    assert o["status"] == "pending_approval" and fired(o) == [f"spend.{limit[:-4]}"]
+
+
+def test_split_orders_ignore_orders_a_human_approved():
+    issue(auto_approve_limit_eur=50, split_window_minutes=60, first_time_products="ask")
+    o = order(40)
+    assert fired(o) == ["product.first_time"] and S.decide(o["id"], "chef", True)["status"] == "ordered"
+    clock["now"] += timedelta(minutes=1)
+    assert order(15)["status"] == "ordered"  # €40 already had a human; €15 alone is fine
+
+
+@pytest.mark.parametrize("rule", ["daily_limit_eur", "weekly_limit_eur", "split"])
+def test_limits_compare_exact_cents(rule):
+    kw = {"auto_approve_limit_eur": 3.30, "split_window_minutes": 60} if rule == "split" else {rule: 3.30}
+    issue(**kw)
+    PRICE["eur"] = 1.10  # one pack each: €1.10, then €2.20
+    assert order(1)["status"] == "ordered"
+    PRICE["eur"] = 2.20
+    assert order(1)["status"] == "ordered"  # €3.30 is exactly the limit: not above it
+    PRICE["eur"] = 0.01
+    assert order(1)["status"] == "pending_approval"
+
+
+def test_last_paid_price_is_the_order_that_went_through_last():
+    issue(first_time_products="ask", max_price_change_pct=20)
+    PRICE["eur"] = 1.0
+    cheap = order(10)
+    clock["now"] += timedelta(minutes=1)
+    PRICE["eur"] = 2.0
+    dear = order(10)
+    clock["now"] += timedelta(minutes=1)
+    assert S.decide(dear["id"], "chef", True)["status"] == "ordered"
+    clock["now"] += timedelta(minutes=1)
+    assert S.decide(cheap["id"], "chef", True)["status"] == "ordered"  # most recently ordered: €1.00
+    clock["now"] += timedelta(minutes=1)
+    o = order(10)  # €2.00 again: +100 % on €1.00
+    assert fired(o) == ["price.changed"] and "€1.00 paid" in o["decision"]["findings"][0]["message"]
+
+
+def test_a_price_change_of_exactly_the_limit_passes():
+    issue(max_price_change_pct=20)
+    PRICE["eur"] = 1.10
+    assert order(10)["status"] == "ordered"
+    clock["now"] += timedelta(minutes=1)
+    PRICE["eur"] = 0.88  # exactly 20 % lower
+    assert order(10)["status"] == "ordered"
+    clock["now"] += timedelta(minutes=1)
+    PRICE["eur"] = 0.70  # 20.45 % below 0.88
+    assert fired(order(10)) == ["price.changed"]
+
+
+def test_price_per_litre_against_the_same_kind_of_product():
+    """Rene: not only the unit price; a pricier product per litre than the buyer usually pays asks too."""
+    issue(max_price_change_pct=20)
+    PRICE["MILK"] = 1.00
+    assert order(10, pid="MILK")["status"] == "ordered"
+    clock["now"] += timedelta(minutes=1)
+    PRICE["OATS"] = 1.15  # +15 % per litre on what was paid for this kind of product
+    assert order(10, pid="OATS")["status"] == "ordered"
+    clock["now"] += timedelta(minutes=1)
+    PRICE["MILK"] = 1.50  # same product: price.changed (+50 % on its own last price)...
+    o = order(10, pid="MILK")
+    assert "price.changed" in fired(o)
+    clock["now"] += timedelta(minutes=1)
+    PRICE["OATS"] = 1.45  # ...other product: +26 % on the €1.15/L last paid for this kind (OATS itself was €1.15)
+    PRICE["MILK"] = 1.00
+    issue("M3", max_price_change_pct=20)
+    assert order(10, pid="MILK", mid="M3")["status"] == "ordered"
+    clock["now"] += timedelta(minutes=1)
+    o = order(10, pid="OATS", mid="M3")  # first OATS order under M3: €1.45/L vs €1.00/L paid for MILK
+    assert fired(o) == ["price.comparison_changed"]
+    msg = o["decision"]["findings"][0]["message"]
+    assert "€1.45/L, 45% above the €1.00/L paid" in msg and "above 20%" in msg
+    clock["now"] += timedelta(minutes=1)
+    PRICE["OATS"] = 0.50  # cheaper per litre than usual: no question
+    assert order(10, pid="OATS", mid="M3")["status"] in ("ordered", "pending_approval")
+
+
+def test_public_pause_status_hides_single_buyers_and_reasons(monkeypatch):
+    from fastapi.testclient import TestClient
+    from sous.api import app
+    monkeypatch.setattr(config, "APPROVER_CODE", "secret")
+    issue("M2", buyer="Private School")
+    pause.pause(pause.PauseIn(buyer="Private School", reason="Unpaid invoices"))
+    c = TestClient(app)
+    public = c.get("/agent-ordering").json()
+    assert public == {"paused_for_everyone": False, "everyone": None, "buyer_pauses": 1}
+    assert "Private School" not in str(public) and "invoice" not in str(public).lower()
+    full = c.get("/agent-ordering", headers={"x-approver-code": "secret"}).json()
+    assert full["pauses"][0]["buyer"] == "Private School"
+    o = order(10, mid="M2")  # the buyer's own agent learns why
+    assert o["status"] == "refused" and "Unpaid invoices" in o["decision"]["findings"][0]["message"]

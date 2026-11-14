@@ -2,8 +2,9 @@
 
 Next to product holds (sous/holds.py, one product) this stops agents from ordering anything at all, e.g. during
 an incident, a suspected runaway agent or a buyer's unpaid invoices. It needs the global approver code
-(POST /agent-ordering/pause and /resume); the current state is public (GET /agent-ordering) because buyers'
-agents need to know why they are refused.
+(POST /agent-ordering/pause and /resume). GET /agent-ordering is public but says only whether every buyer is
+paused and how many single buyers are; which buyer and why needs the global approver code (a buyer's own agent
+sees its pause in the ordering.paused finding).
 
 Effects: mandate.evaluate fires rule `ordering.paused` (block) on every order under an affected mandate, so a
 quote's mandate preview shows it, placing an order is refused, and approving a held order is refused too
@@ -106,7 +107,7 @@ def pause(req: PauseIn) -> dict:
         store._upsert("agent_pause", COLS, (scope, 1, json.dumps(p, ensure_ascii=False), now))
     store.audit("ordering.paused", req.by, "human", scope, None if scope == ALL else scope,
                 {"pause": public(p), "by": req.by})
-    return status()
+    return status(full=True)
 
 
 def resume(req: ResumeIn) -> dict | None:
@@ -122,9 +123,19 @@ def resume(req: ResumeIn) -> dict | None:
         store._upsert("agent_pause", COLS, (scope, 0, json.dumps(p, ensure_ascii=False), now))
     store.audit("ordering.resumed", req.by, "human", scope, None if scope == ALL else scope,
                 {"scope": scope, "paused_since": cur["since"], "by": req.by})
-    return status()
+    return status(full=True)
 
 
-def status() -> dict:
+def status(full: bool = False) -> dict:
+    """Public by default: whether every buyer is paused (with Valio's reason, which is about everyone) and HOW MANY
+    single buyers are paused, never which buyers or why (a buyer's pause can concern invoices or an incident).
+    full=True (global approver code) lists every pause. An affected buyer's agent sees its own pause in the
+    ordering.paused finding of its quotes and orders."""
     act = active()
-    return {"paused_for_everyone": any(p["scope"] == ALL for p in act), "pauses": act}
+    everyone = next((p for p in act if p["scope"] == ALL), None)
+    out = {"paused_for_everyone": everyone is not None,
+           "everyone": {"reason": everyone["reason"], "since": everyone["since"]} if everyone else None,
+           "buyer_pauses": sum(1 for p in act if p["scope"] != ALL)}
+    if full:
+        out["pauses"] = act
+    return out

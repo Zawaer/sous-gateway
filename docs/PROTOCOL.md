@@ -100,7 +100,7 @@ Source: `sous/mandate.py`, class `Mandate`. All money is EUR excluding VAT.
 | `split_window_minutes` | 1-1440 or null | null | Orders that went through within this many minutes, each under `auto_approve_limit_eur`, plus this one above that limit: a human must approve (rule `spend.split_orders`). |
 | `first_time_products` | `notify` \| `ask` \| `block` or null | null | Tier for a product never ordered under this mandate before (rule `product.first_time`). |
 | `usual_products` | list of product ids | [] | Products the buyer has bought before (e.g. imported from their Valio order history): not first-time. |
-| `max_price_change_pct` | number or null | 20 | Ask when a product's unit price ex VAT differs by more than this %, up or down, from the last price paid for it under this mandate (rule `price.changed`). |
+| `max_price_change_pct` | number or null | 20 | Ask when a product's unit price ex VAT differs by more than this %, up or down, from the last price paid for it under this mandate (rule `price.changed`), or its price per L/KG is more than this % above the last price per L/KG paid for the same kind of product (rule `price.comparison_changed`). |
 | `allowed_categories` | list or null | null | Valio Aimo category codes. Null means any. |
 | `avoid_allergens` | list | [] | GS1 allergen codes, e.g. `AM` milk, `AN` tree nuts, `AP` peanuts, `AW` gluten cereals. `AM`, `AN` and `AW` expand to their whole family (see `GET /allergens`). |
 | `allow_may_contain` | bool | false | If false, "may contain" counts as contains. |
@@ -265,6 +265,7 @@ If the tier is `silent` or `notify`, a final `mandate.ok` finding is added with 
 | `spend.split_orders` | ask | This order is under `auto_approve_limit_eur`, and with the orders under it that went through in the last `split_window_minutes` it passes that limit. |
 | `product.first_time` | `first_time_products` | The product is in no order that went through under this mandate and not in `usual_products`. |
 | `price.changed` | ask | Unit price differs from the last price paid for the product under this mandate by more than `max_price_change_pct`. |
+| `price.comparison_changed` | ask | Price per L or KG is more than `max_price_change_pct` above the last price per L/KG paid for the same kind of product (product family) under this mandate, when that was another product. |
 | `ordering.paused` | block | Valio Aimo has paused agent ordering for every buyer or this buyer (section 24). |
 | `need.partial` | ask | Part of the need is uncovered. |
 | `availability.<code>` | block | Any blocking issue on a line, code lowercased: `availability.unit_mismatch`, `availability.content_unknown`, `availability.no_price`, `availability.no_availability`, `availability.sales_block`, `availability.undeliverable`, `availability.out_of_stock`, `availability.cutoff_passed`. |
@@ -871,7 +872,9 @@ The mandate is the buyer's control; a hold is the seller's. Valio Aimo staff can
 
 Product holds stop one product; a pause stops a buyer's agents, or every buyer's, from ordering anything: for an incident, a runaway agent or unpaid invoices.
 
-- `POST /agent-ordering/pause` `{buyer?, reason, by?}` with the **global** approver code. Without `buyer` it covers every buyer, sandboxes included. `POST /agent-ordering/resume` `{buyer?, by?}` lifts that scope (404 if it wasn't paused). `GET /agent-ordering` and the MCP resource `sous://agent-ordering` (public) return `{paused_for_everyone, pauses: [{scope, buyer, reason, since}]}`.
+- `POST /agent-ordering/pause` `{buyer?, reason, by?}` with the **global** approver code. Without `buyer` it covers every buyer, sandboxes included. `POST /agent-ordering/resume` `{buyer?, by?}` lifts that scope (404 if it wasn't paused). `GET /agent-ordering` and the MCP resource `sous://agent-ordering` are public and return `{paused_for_everyone, everyone: {reason, since} | null, buyer_pauses: <count>}`: never which single buyer is paused or why (it can be about invoices). With the global approver code `GET /agent-ordering` adds `pauses: [{scope, buyer, reason, since}]`. A paused buyer's agent reads its reason in the `ordering.paused` finding.
 - **Rule `ordering.paused` (owner valio, block):** fires on every decision under an affected mandate: the quote's mandate preview shows it, `place_order` is refused, and approving a held order is refused (`_approval_blocker` re-runs the rules). Search and quotes keep working. Resuming affects new decisions; refused orders stay refused.
 - Writing a pause takes the order lock, like a hold, so an order either completes before the pause or is evaluated after it.
 - Audit events `ordering.paused` and `ordering.resumed`. Table `agent_pause`, SYSTEM VERSIONED on MariaDB.
+
+**When an order counts.** Period totals (`spend.daily_limit`, `spend.weekly_limit`), `spend.split_orders` and last-paid prices (`price.changed`, `price.comparison_changed`) count an order from when it went through: the human's approval time for an approved order, else when it was placed (`store.ordered_at`). An order held on Sunday and approved on Monday is Monday's spend and the newest price paid. `spend.split_orders` sums only orders the agent placed alone (an approved order already had a human). Money is compared in whole cents and percentages in exact decimals, so an order that reaches a limit exactly, or a price change of exactly the limit, passes.

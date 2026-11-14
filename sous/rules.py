@@ -113,6 +113,10 @@ def _build() -> list[dict]:
            "A product whose unit price (ex VAT) differs by more than the mandate's percentage, up or down, from the "
            "last price paid for it under this mandate waits for a human: a price rise, or a different pack read as "
            "the usual one.", "max_price_change_pct"),
+        _r("price.comparison_changed", "finding", ["ask"], "buyer",
+           "A product priced per litre or kilo more than the mandate's percentage above what the buyer last paid per "
+           "litre or kilo for the same kind of product (a pricier brand, pack or variant than usual) waits for a human. "
+           "The same product's own price is checked by price.changed.", "max_price_change_pct"),
         _r("price.comparison_cap", "finding", ["ask"], "buyer",
            "A product above the buyer's cap on comparison price (e.g. € per litre) waits for a human.",
            "max_comparison_price_eur"),
