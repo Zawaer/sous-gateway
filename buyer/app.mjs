@@ -193,9 +193,13 @@ function fillRequest() {
   }
 }
 
+function claimLabel(code) {
+  return code.toLowerCase().replaceAll('_', ' ').replace(/^free from (.+)$/, '$1 free');
+}
+
 function renderSearch(need, mandate, products, original) {
   const context = [`${mandate.buyer} · ${need.amount} ${units[need.unit]} of ${original?.name || need.query} · ${need.deliveryDate}`];
-  if (need.claims.length) context.push(need.claims.join(', '));
+  if (need.claims.length) context.push(need.claims.map(claimLabel).join(', '));
   if (need.avoidAllergens.length) context.push(`Avoid ${need.avoidAllergens.join(', ')}`);
   if (original) context.push(...original.why_substitute);
   $('candidates-title').textContent = original ? 'Substitute shortlist' : 'Product shortlist';
@@ -214,7 +218,12 @@ function renderSearch(need, mandate, products, original) {
     if (unknownAllergens) {
       metadata.push(checkbox.dataset.unverified === 'true' ? 'Requested allergens could not be checked' : 'Allergen information unavailable');
     }
-    if (product.claims?.length) metadata.push(product.claims.join(', '));
+    const claims = [...new Set(product.claims ?? [])];
+    const requestedClaims = claims.filter((claim) => need.claims.includes(claim));
+    const otherClaims = claims.filter((claim) => !need.claims.includes(claim));
+    const shownClaims = [...requestedClaims, ...otherClaims.slice(0, Math.max(0, 3 - requestedClaims.length))];
+    metadata.push(...shownClaims.map(claimLabel));
+    if (claims.length > shownClaims.length) metadata.push(`+${claims.length - shownClaims.length} more claims`);
     if (product.tier) metadata.push(`Gateway ranking ${product.tier}`);
     if (product.content_per_sales_unit) {
       const { amount, unit } = product.content_per_sales_unit;
