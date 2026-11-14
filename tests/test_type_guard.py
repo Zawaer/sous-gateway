@@ -492,3 +492,31 @@ def test_pesto_allergens_are_still_enforced(gw, pesto):
     q = S.request_quote(S.QuoteRequest(agent_id="a", mandate_id="MM", delivery_date=DAY, items=[
         S.QuoteItem(product_ids=["60"], amount=1, unit="SALES_UNIT", product_type="garlic pesto")]))["quote"]
     assert q["mandate_preview"]["outcome"] == "block" and "product.type_mismatch" not in rules(q)
+
+
+# --- English plurals (judge audit: 'Mutti Pelati whole peeled tomatoes' not confirmed as tomatoes, 468376) -------
+
+def test_english_fallback_reads_plural_food_nouns():
+    def t(fi, en, category="21590"):
+        return Sub.product_type(product("70", fi, en, size=(2.5, "KG"), category=category, claims=[]))
+    # Finnish plural 'tomaatit' has no known head, so the English name decides: a plural vegetable is the product
+    mutti = t("Mutti Pelati kokonaiset kuoritut tomaatit 2500g", "Mutti Pelati whole peeled tomatoes 2500g")
+    assert mutti["key"] == "tomaatti"
+    chopped = t("BRAVO CHEF 400G TOMAATTIMURSKA", "BRAVO CHEF 400G CHOPPED TOMATOES")
+    assert Sub.compare_types(chopped, mutti)[0] != "unknown"
+    assert t("Feelia Perunamuusi 600g", "Feelia Mashed Potatoes 600g")["key"] == "peruna"
+    assert t("MANSIKAT KUIVATUT 150G", "DRIED STRAWBERRIES 150G")["key"] == "mansikka"
+    assert t("Pride Kidneypapuja 2500g/1500g", "Pride Kidney beans 2500g/1500g")["key"] == "papu"
+    # still not loosened: a singular fruit or vegetable at the end is a flavour; 'for' names what it is for;
+    # a recognised Finnish head still wins; sweets shaped as hearts are not offal
+    assert t("Santa Maria 300G Orange & Pepper", "Santa Maria 300G Orange & Pepper")["key"] is None
+    assert t("Salliselta Keittovihannes 400g", "Salliselta Vegetables for soup 400g")["key"] is None
+    assert t("Salliselta sokerisydämet 450g", "Salliselta Sugar hearts 450g")["key"] is None
+    assert t("Valio jogurtti 1 kg mansikka", "Valio strawberries yoghurt 1 kg", "10400")["key"] == "jogurtti"
+    # singular and plural both read in an agent's English hint
+    for hint in ("tomato", "tomatoes"):
+        assert Sub.type_from_hint(hint)["key"] == "tomaatti"
+    for hint in ("potato", "potatoes"):
+        assert Sub.type_from_hint(hint)["key"] == "peruna"
+    assert Sub.type_from_hint("blueberries")["key"] == Sub.type_from_hint("blueberry")["key"] == "mustikka"
+    assert Sub.type_from_hint("sausages")["key"] == Sub.type_from_hint("sausage")["key"]

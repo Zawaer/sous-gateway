@@ -214,7 +214,47 @@ _WEAK = {"kokonainen", "tomaatti", "kirsikkatomaatti", "kurkku", "kurpitsa", "pe
          "sieni", "omena", "päärynä", "banaani", "appelsiini", "sitruuna", "mansikka", "mustikka", "vadelma"}
 _TYPE_INFO = {k: (fam, label) for k, fam, label, _, _ in _TYPES}
 _FI_HEADS = sorted(((h, k) for k, _, _, fi, _ in _TYPES for h in fi.split()), key=lambda x: -len(x[0]))
-_EN_HEADS = sorted(((h.strip(), k) for k, _, _, _, en in _TYPES for h in en.split(",")), key=lambda x: -len(x[0]))
+
+
+def _en_plural(word: str) -> str:
+    """English plural of a food noun: tomato -> tomatoes, berry -> berries, carrot -> carrots."""
+    if word.endswith("y") and len(word) > 2 and word[-2] not in "aeiou":
+        return word[:-1] + "ies"
+    if word.endswith(("o", "s", "x", "ch", "sh")):
+        return word + "es"
+    return word + "s"
+
+
+def _en_singular(word: str) -> str | None:
+    """English singular of a plural food noun (berries -> berry, tomatoes -> tomato, peas -> pea), else None."""
+    if word.endswith("ies") and len(word) > 4:
+        return word[:-3] + "y"
+    if word.endswith(("oes", "ches", "shes", "xes", "sses")):
+        return word[:-2]
+    if word.endswith("s") and not word.endswith(("ss", "us", "is")) and len(word) > 3:
+        return word[:-1]
+    return None
+
+
+# Heads whose plural names something else: 'chocolate hearts' and 'sugar hearts' are sweets, not offal.
+_EN_SINGULAR_ONLY = {"heart", "tongue"}
+
+
+def _en_forms(phrase: str) -> dict[str, bool]:
+    """A phrase and its other number, by its last word: {form: is_plural}. 'tomato' -> {tomato: False,
+    tomatoes: True}; 'raspberries' -> {raspberries: True, raspberry: False}."""
+    *rest, last = phrase.split()
+    if last in _EN_SINGULAR_ONLY:
+        return {phrase: False}
+    sing = _en_singular(last)
+    forms = {last: False, _en_plural(last): True} if sing is None else {last: True, sing: False}
+    return {" ".join(rest + [w]): pl for w, pl in forms.items()}
+
+
+_EN_FORMS = {f: pl for _, _, _, _, en in _TYPES for h in en.split(",") if h.strip()
+             for f, pl in _en_forms(h.strip()).items()}
+_EN_HEADS = sorted(dict.fromkeys((f, k) for k, _, _, _, en in _TYPES for h in en.split(",") if h.strip()
+                                  for f in _en_forms(h.strip())), key=lambda x: -len(x[0]))
 # Same family, but the candidate cannot do the original's job (cooking cream does not whip).
 _ONE_WAY = {("kuohukerma", "ruokakerma"), ("kuohukerma", "kahvikerma"), ("kuohukerma", "kerma")}
 
@@ -318,7 +358,7 @@ def _en_head(en: str) -> str | None:
 _EN_TRAIL = {"frozen", "organic", "uht", "pcs", "pc", "ca", "approx", "about", "fresh", "chilled", "msc", "asc",
              "fairtrade", "bio", "eco", "x", "kg", "g", "l", "ml", "dl", "cl", "pack", "bag", "box", "jar", "can",
              "tin", "bottle", "bib", "lactose", "gluten", "free", "lactose-free", "gluten-free"}
-_EN_NOT_IT = {"in", "with", "filled", "flavoured", "flavored", "no", "without", "added", "less", "reduced"}
+_EN_NOT_IT = {"in", "with", "filled", "flavoured", "flavored", "no", "without", "added", "less", "reduced", "for"}
 _FREE_OK = {"lactose", "gluten", "milk"}  # 'lactose free' trails; 'sugar free' does not: it is not sugar
 
 
@@ -341,9 +381,11 @@ def _en_head_strict(en: str) -> str | None:
     for h, k in _EN_HEADS:
         if m := re.search(rf"(?:^|\s){re.escape(h)}$", tail):
             before = tail[: m.start()].split()
-            # 'tuna in sunflower oil', 'filled with cream', 'no added sugar': the head is what it comes in or
-            # lacks; a fruit or vegetable at the end is usually a flavour ('Cheese & Onion')
-            if k in _WEAK or (before and before[-1] == "and") or set(before[-3:]) & _EN_NOT_IT:
+            # 'tuna in sunflower oil', 'filled with cream', 'no added sugar', 'vegetables for soup': the head is
+            # what it comes in, lacks or is for. A fruit or vegetable named in the singular at the end is usually a
+            # flavour ('Cheese & Onion'); in the plural it is the product itself ('whole peeled tomatoes').
+            if (k in _WEAK and not _EN_FORMS.get(h)) or (before and before[-1] == "and") or \
+                    set(before[-3:]) & _EN_NOT_IT or "for" in before[1:]:
                 return None
             return k
     return None
