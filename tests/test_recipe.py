@@ -338,9 +338,11 @@ def test_an_undeliverable_ingredient_is_left_out_not_blocking_the_basket(gw, mon
     assert "salt (not orderable)" in p.summary()
 
 
-def test_need_with_no_orderable_candidate_keeps_the_reasons():
+def test_need_with_no_orderable_candidate_keeps_the_reasons(monkeypatch):
     """Several candidates, none orderable: the quote keeps them as unorderable lines, so the refusal names
     the real rules (sales block, allergen) instead of only order.empty; they don't count towards spend."""
+    # unorderable lines make the quote look up substitutes, which needs the catalog index (absent in CI)
+    monkeypatch.setattr(S.substitutes, "suggest", lambda *a, **k: {"options": []})
     UNAVAILABLE.update({"121", "122"})
     q = S.request_quote(S.QuoteRequest(agent_id="cater-agent", mandate_id="M-NOMILK", delivery_date=date(2026, 11, 16),
                                        items=[{"product_ids": ["121", "122"], "amount": 200, "unit": "L"}]))["quote"]
