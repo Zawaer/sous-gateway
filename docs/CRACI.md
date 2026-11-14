@@ -57,7 +57,7 @@ recorded no `matchedRule` for either (`policyDenied: false`, HTTP 200). Under `p
 the same two requests (`draft-eval`). They are the runner's connectivity probes: nothing sent, 2 to 5 bytes
 back. So the evidence job now accepts exactly that shape (GET, path `/_dns`, those two hosts, at most 64
 bytes back, nothing sent) and labels it `runner probe`. Any other request to those hosts still fails the run
-(test `test_runner_probe_is_accepted_only_in_its_exact_shape`). The open question for CRACI: which rule let
+(test `test_runner_probe_is_accepted_only_in_its_exact_shape`). Re-audit of that run: PASS (43584176961); next full run green: [43584327314](https://github.com/Zawaer/sous/actions/runs/43584327314) (692521f, `eval` -> Valio 30 KiB out, signature verified). The open question for CRACI: which rule let
 them through in a deny-mode job, and why does the trace name none?
 
 **[43580577498](https://github.com/Zawaer/sous/actions/runs/43580577498)** (`draft_only`): `draft-eval` sent
