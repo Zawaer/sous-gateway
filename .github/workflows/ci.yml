@@ -35,6 +35,14 @@ on:
         description: "Read every page N times (run-to-run variance)"
         type: string
         default: "1"
+      craci_evidence_only:
+        description: "Only the CRACI evidence job (skips every build/test/eval job; pair with evidence_run_id)"
+        type: boolean
+        default: false
+      evidence_run_id:
+        description: "Run id the CRACI evidence job audits (empty: this run)"
+        type: string
+        default: ""
 
 concurrency:
   # manual runs (e.g. the LLM eval) get their own group so a push can't bump them out of the queue
@@ -50,6 +58,7 @@ env:
 jobs:
   test:
     name: test (pytest + MariaDB)
+    if: ${{ !inputs.craci_evidence_only }}
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 15
     services:
@@ -81,6 +90,7 @@ jobs:
 
   docker:
     name: docker (build, SBOM, vulnerability scan)
+    if: ${{ !inputs.craci_evidence_only }}
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
@@ -424,7 +434,7 @@ jobs:
     # in the test job). By hand (draft_only skips the other evals), or on a push to main that changes the drafter
     # or its cases. Fails only if the offline rule parser regresses; Gemini's score is reported, not gated.
     # Not chained to eval/llm-eval: it shares no rate-limited key with them.
-    if: ${{ github.event_name != 'pull_request' && !inputs.recipe_only && !inputs.vision_only }}
+    if: ${{ github.event_name != 'pull_request' && !inputs.recipe_only && !inputs.vision_only && !inputs.craci_evidence_only }}
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 15
     env:
@@ -490,4 +500,59 @@ jobs:
         with:
           name: draft-eval-results
           path: evals/draft_results.*.json
+          if-no-files-found: warn
+
+  craci-evidence:
+    name: craci-evidence (egress proof from CRACI traces, SBOM diff, signed bundle)
+    # After everything else, whatever happened: reads each job's CRACI network trace and SBOM through the CRACI
+    # API, checks every outbound connection against the `network:` that job declares above, diffs CRACI's SBOMs
+    # with syft's and uv.lock, asks CRACI who created the image and the caches, and signs the result
+    # (scripts/craci_evidence.py, docs/CRACI.md). Fails only if a deny-mode job reached an undeclared host.
+    if: ${{ always() }}
+    needs: [test, docker, smoke, eval, llm-eval, draft-eval]
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read   # job list, artifacts and caches of the audited run
+    env:
+      CRACI_API_TOKEN: ${{ secrets.CRACI_API_TOKEN }}
+      GITHUB_TOKEN: ${{ github.token }}
+      EVIDENCE_RUN_ID: ${{ inputs.evidence_run_id || github.run_id }}
+    steps:
+      # Egress: PyPI (uv + the locked dependencies), the CRACI API and the GitHub REST API. Nothing else.
+      - uses: cracicorp/setup@5cbae507e2547dca6c402e413c645767fbae3534 # v1
+        if: ${{ vars.CI_RUNNER == 'craci' }}
+        with:
+          network: |
+            default: deny
+            presets: [pypi]
+            connections:
+              - tls:
+                  serverNamePatterns: [api.craci.com, api.github.com]
+                  ports: [443]
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # a past run is judged by the ci.yml and uv.lock at its own commit
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true   # no docker job, no syft SBOM: reported as a gap
+        with:
+          name: sbom-and-vulns
+          run-id: ${{ env.EVIDENCE_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Install uv
+        run: |
+          PIPX_HOME="$HOME/.pipx" PIPX_BIN_DIR="$HOME/.local/bin" pipx install uv==0.13.6
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Build, check and sign the evidence bundle
+        run: |
+          uv sync --frozen --no-dev
+          # No gateway key in CI: sous.signing makes an ephemeral one here (its public JWK ships with the bundle).
+          SOUS_DATA_DIR="$RUNNER_TEMP/evidence-key" uv run --no-sync python scripts/craci_evidence.py \
+            --run-id "$EVIDENCE_RUN_ID" --raw-dir craci-evidence/raw --out craci-evidence
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: craci-evidence
+          path: craci-evidence/
           if-no-files-found: warn
