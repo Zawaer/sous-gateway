@@ -496,8 +496,12 @@ def _apply_option(req: QuoteRequest) -> tuple[QuoteRequest, set[int], dict[int, 
             skip.add(len(items))
             if opt["kind"] == "next_date" and l.get("delivery_date"):
                 fetch_on[len(items)] = date.fromisoformat(l["delivery_date"])
+            # the item's restrictions travel with each line: what it stands for (substitute_for, also a locked
+            # product another candidate replaces), its purpose / substitution and its use; the re-quote checks them
+            # all again, so taking an option can never relax what the quote enforced
             items.append(QuoteItem(product_ids=[l["product_id"]], amount=l["quantity"], unit="SALES_UNIT",
                                    substitute_for=l.get("substitute_for") or it.get("substitute_for"),
+                                   purpose=it.get("purpose"), substitution=it.get("substitution"),
                                    use=l.get("use") or it.get("use"),
                                    note=f"{opt['id']} ({opt['kind']})"))
     return req.model_copy(update={
@@ -558,28 +562,12 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
             chosen, uncovered = blocked, 0.0
             Q.mark_oversize(chosen, item.amount, unit)  # information, shown next to whatever blocks the line
         carbon.add_range(chosen, cands)
-        item_ctx = (item.purpose, item.substitution)
-        locked_ids = [p for p in ([item.substitute_for] if item.substitute_for else item.product_ids)
-                      if purposes.for_product(mandate, p, item_ctx)[0] in ("exact", "ask")]
         for l in chosen:
-            orig_pid = item.substitute_for or (l["product_id"] if l["product_id"] in item.product_ids[:1] else
-                                               (locked_ids[0] if locked_ids else None))
-            lvl, why = purposes.for_product(mandate, orig_pid, item_ctx) if orig_pid else purposes.strictest(item_ctx)
-            if why:
-                l["purpose"] = why
-            if lvl:
-                l["substitution"] = lvl
-            if locked_ids and l["product_id"] not in locked_ids and not item.substitute_for:
-                # another candidate in place of a product the buyer locked: a substitute, so the rules see it
-                l["substitute_for"] = locked_ids[0]
+            _guard_line(l, item, mandate, use, use_source)
             l["item_index"] = item_index
             if l["product_id"] in mismatch and l["orderable"]:
                 l["issues"] = l["issues"] + [{"code": "TYPE_MISMATCH", "severity": "warning",
                                               "message": mismatch[l["product_id"]]}]
-            if item.substitute_for:
-                l["substitute_for"] = item.substitute_for
-            if use:
-                l["use"], l["use_source"] = use, use_source
             lines.append(l)
         picked = {l["product_id"] for l in chosen}
         considered += [_considered(o, item_index, off_type.get(o["product_id"]), refused.get(o["product_id"]),
@@ -652,6 +640,40 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
     # Finnish twins of the preview's findings and the lines' unit notes (sous/fi.py): unsigned, beside the JWS
     return {"quote": body, "jws": jws, **({"approver_view": sidecar} if sidecar else {}),
             "explanations_fi": fi.explanations(findings, body)}
+
+
+def _locked(item: QuoteItem, mandate: Mandate | None) -> list[str]:
+    """The item's products the buyer locked (purpose exact or ask: by the mandate's product_purposes or the item)."""
+    ctx = (item.purpose, item.substitution)
+    return [p for p in ([item.substitute_for] if item.substitute_for else item.product_ids)
+            if purposes.for_product(mandate, p, ctx)[0] in ("exact", "ask")]
+
+
+def _guard_line(l: dict, item: QuoteItem, mandate: Mandate | None, use: str | None = None,
+                use_source: str | None = None) -> dict:
+    """Mark a line (a quote line or an option's line) with what its item is for, so the mandate rules see it:
+    purpose / substitution of the product it stands for, substitute_for when it replaces the item's original or a
+    product the buyer locked (another candidate in place of an exact / ask product), and the item's use. Quote lines
+    and option lines go through the same marking, so an option can't relax what the quote enforced."""
+    ctx = (item.purpose, item.substitution)
+    locked_ids = _locked(item, mandate)
+    orig_pid = item.substitute_for or (l["product_id"] if l["product_id"] in item.product_ids[:1] else
+                                       (locked_ids[0] if locked_ids else None))
+    lvl, why = purposes.for_product(mandate, orig_pid, ctx) if orig_pid else purposes.strictest(ctx)
+    if why:
+        l["purpose"] = why
+    if lvl:
+        l["substitution"] = lvl
+    if item.substitute_for:
+        l["substitute_for"] = item.substitute_for
+    elif locked_ids and l["product_id"] not in locked_ids:
+        # another candidate in place of a product the buyer locked: a substitute, so the rules see it
+        l["substitute_for"] = locked_ids[0]
+    if use or item.use:
+        l["use"] = use or item.use
+        if use_source:
+            l["use_source"] = use_source
+    return l
 
 
 def _item_use(item: QuoteItem, mandate: Mandate | None) -> tuple[str | None, str | None]:
@@ -778,11 +800,17 @@ def _options(body: dict, troubled: list, requested: date, mandate: Mandate | Non
                 subs = []
             subs = [s for s in subs if s["product_id"] not in item.product_ids]
             opts = OPT.build(item_index, item.amount, unit, offers, chosen, requested, subs, original, nxt)
+        kept = []
         for o in opts:
-            if item.use:  # a substitute line is judged for what the product is used for (preview included)
-                for l in o["_lines"]:
-                    if l.get("substitute_for"):
-                        l["use"] = item.use
+            # every option line is marked like a quote line (purpose, substitution, substitute_for, use), so its
+            # preview and the re-quote that takes it see the same restrictions as the quote
+            for l in o["_lines"]:
+                _guard_line(l, item, mandate)
+            if any(l.get("substitute_for") and l.get("substitution") == "exact" for l in o["_lines"]):
+                continue  # only the locked product will do: never propose another one in its place
+            kept.append(o)
+        opts = kept
+        for o in opts:
             if o["kind"] == "next_date":
                 o["order_cutoff"] = _next_date_cutoff(o["_lines"], offers)
         out += opts
