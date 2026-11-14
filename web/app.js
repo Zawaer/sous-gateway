@@ -170,6 +170,11 @@ const tier = (t) => RANKS.has(t)
   ? `<span class="rank r-${esc(t)}">${esc(TIER_LABEL[t])}</span>`
   : `<span class="tier tier-${TIER_STYLE[t] || "silent"}">${esc(TIER_LABEL[t] || STATUS_LABEL[t] || t)}</span>`;
 
+// Material Symbols (Rounded), loaded in index.html. Decorative: the text next to it carries the meaning.
+const ic = (name, cls = "") => `<span class="ms ${cls}" aria-hidden="true">${name}</span>`;
+const STATUS_ICON = { ordered: "check_circle", pending_approval: "pending_actions", refused: "block",
+  rejected: "cancel", expired: "timer_off" };
+
 function toast(msg, ms = 3500) {
   const t = $("#toast");
   t.textContent = msg;
@@ -1106,51 +1111,57 @@ views.today = {
       return o.status === "rejected" ? `Rejected by ${o.approval?.by || "a human"}${o.approval?.note ? `: “${o.approval.note}”` : ""}`
         : o.status === "expired" ? (o.approval?.result_reason || "Approved after the order cut-off") : (f?.message || "");
     };
-    const row = (o, extra) => `<a class="item today-row" href="#/orders/${esc(o.id)}">
-        <div><b>${esc(bn(o.buyer))}</b> <span class="muted mono small">${esc(o.id)}</span>
-          <div class="small">${extra}</div></div>
-        <div style="text-align:right">${orderBadge(o)}<div class="small">${eur(o.total_ex_vat)}</div></div></a>`;
+    const reasons = (o) => (o.decision?.findings || []).filter((f) => f.outcome === "block" || f.outcome === "ask");
+    // Minimal by default: one line per order; the reasons open in place, the full story in the order panel.
+    const row = (o, sub = "") => `<details class="mrow">
+        <summary>${ic(STATUS_ICON[o.status] || "receipt_long", "st-" + (TIER_STYLE[o.status] || "silent"))}
+          <span class="mrow-main"><b>${esc(bn(o.buyer))}</b><span class="muted">${orderStory(o)}</span>${sub}</span>
+          <span class="mrow-amt">${eur(o.total_ex_vat)}</span>${ic("expand_more", "chev")}</summary>
+        <div class="mrow-more">
+          ${o.status === "rejected" || o.status === "expired" ? `<p>${msg(firstReason(o))}</p>` : ""}
+          ${reasons(o).length ? `<ul class="why">${reasons(o).slice(0, 4).map((f) => `<li>${msg(f.message)}</li>`).join("")}
+            ${reasons(o).length > 4 ? `<li class="muted">+ ${reasons(o).length - 4} more</li>` : ""}</ul>` : ""}
+          <a class="btn plain sm" href="#/orders/${esc(o.id)}">${o.status === "pending_approval" ? "Review and decide" : "Open order"} ${ic("arrow_forward")}</a>
+          <span class="muted mono small">${esc(o.id)}</span></div></details>`;
     const buyerSigned = mandates.filter((m) => m.issuer?.kind === "buyer").length;
     const authed = mandates.filter(authRequired).length;
-    const tile = (label, value, sub) => `<div class="tile"><div class="muted small">${label}</div><div class="hero">${value}</div><div class="small muted">${sub}</div></div>`;
+    const heldDrift = drift.filter(({ r }) => r.status === "pending_approval").length;
+    const spent = ordered.reduce((s, o) => s + (o.total_ex_vat || 0), 0);
+    const stat = (icon, cls, value, label, href) => `<a class="mstat ${cls}" href="${href}">${ic(icon)}<b>${value}</b><span>${label}</span></a>`;
 
-    view.innerHTML = `<div class="head"><div><h2>Today</h2>
-        <div class="muted">${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Helsinki" })}
-          · purchasing agents ordering from Valio Aimo through Sous, each under a signed mandate</div></div></div>
-      <div class="tiles">
-        ${tile("Waiting for a human", pending.length, pending.length ? "held by a mandate rule; decide before the cut-off" : "nothing held")}
-        ${tile("Ordered today", ordered.length, `${eur(ordered.reduce((s, o) => s + (o.total_ex_vat || 0), 0))} ex VAT, within mandates or approved`)}
-        ${tile("Stopped today", stopped.length, "refused by a mandate, rejected or too late")}
-        ${tile("Standing orders held for drift", drift.filter(({ r }) => r.status === "pending_approval").length, `${standing.length} standing order(s) in total`)}
+    view.innerHTML = `<div class="head"><h2>Today</h2>
+        <span class="muted">${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Helsinki" })}</span></div>
+      <div class="mstats">
+        ${stat("pending_actions", pending.length ? "st-ask" : "", pending.length, "waiting for you", "#/inbox")}
+        ${stat("check_circle", "", ordered.length, `ordered, ${eur(spent)}`, "#/orders")}
+        ${stat("block", stopped.length ? "st-block" : "", stopped.length, "stopped", "#/orders")}
+        ${stat("trending_up", heldDrift ? "st-ask" : "", heldDrift, "drift held", "#/standing")}
+        ${stat(chain.ok ? "verified" : "gpp_bad", chain.ok ? "st-silent" : "st-block", chain.ok ? "Intact" : "Broken", "audit chain", "#/audit")}
       </div>
-      <div class="today-grid">
-        <section><h3>Waiting for you</h3>
-          ${pending.length ? `<div class="list">${pending.slice(0, 6).map((o) => {
-            const cut = earliestCutoff(o);
-            return row(o, `${msg(firstReason(o))}${cut ? ` · decide within <span class="deadline" data-until="${esc(cut)}"></span>` : ""}`);
-          }).join("")}</div>${pending.length > 6 ? `<p class="small"><a href="#/inbox">All ${pending.length} in Approvals</a></p>` : ""}`
-            : `<p class="muted small">Nothing is waiting. Orders outside an agent's mandate appear here.</p>`}
-          <h3>Stopped today, and why</h3>
-          ${stopped.length ? `<div class="list">${stopped.slice(0, 6).map((o) => row(o, msg(firstReason(o)))).join("")}</div>`
-            : `<p class="muted small">Nothing refused today.</p>`}
-          ${drift.length ? `<h3>Standing-order drift</h3><div class="list">${drift.map(({ d, r }) => `
-            <a class="item today-row" href="#/standing/${esc(d.standing_order.id)}"><div><b>${esc(d.standing_order.name)}</b>
-              <div class="small">${msg(r.summary || "")}</div></div><div>${tier(r.status)}</div></a>`).join("")}</div>` : ""}
-        </section>
-        <aside>
-          <h3>Can this record be trusted?</h3>
-          <div class="chain ${chain.ok ? "ok" : "bad"}">${chain.ok ? "✔" : "✖"} <div><b>${chain.ok ? "Audit chain intact" : `Chain broken at #${esc(chain.broken_at_seq)}`}</b>
-            <div class="small">${esc(chain.events)} events${versioning(chain)}</div></div></div>
-          <div class="rules small" style="grid-template-columns:1fr">
-            <div><span class="muted">Mandates in force</span><span>${mandates.filter((m) => !m.revoked).length}</span></div>
-            <div><span class="muted">Signed by the buyer's own key</span><span>${buyerSigned}</span></div>
-            <div><span class="muted">Agents must authenticate</span><span>${authed}</span></div>
-            <div><span class="muted">Quotes, orders, receipts</span><span>Ed25519 signed · <a href="/.well-known/jwks.json">key</a></span></div>
-          </div>
-          <p class="small muted" style="margin-top:12px">Decisions are deterministic rules on signed quotes; no AI decides.
-            <a href="#/audit">Audit log</a> · <a href="#/stats">Stats</a></p>
-        </aside>
-      </div>`;
+      <section class="msec"><h3>Waiting for you</h3>
+        ${pending.length ? `<div class="mlist">${pending.slice(0, 6).map((o) => {
+          const cut = earliestCutoff(o);
+          return row(o, cut ? `<span class="mrow-due small">${ic("schedule")}<span class="deadline" data-until="${esc(cut)}"></span></span>` : "");
+        }).join("")}</div>${pending.length > 6 ? `<p class="small"><a href="#/inbox">All ${pending.length} in Approvals</a></p>` : ""}`
+          : `<p class="empty">${ic("done_all")} Nothing waiting</p>`}</section>
+      <section class="msec"><h3>Stopped today</h3>
+        ${stopped.length ? `<div class="mlist">${stopped.slice(0, 6).map((o) => row(o)).join("")}</div>`
+          : `<p class="empty">${ic("done_all")} Nothing stopped</p>`}</section>
+      ${drift.length ? `<section class="msec"><h3>Standing orders</h3><div class="mlist">${drift.map(({ d, r }) => `
+        <details class="mrow"><summary>${ic("event_repeat", "st-" + (TIER_STYLE[r.status] || "silent"))}
+          <span class="mrow-main"><b>${esc(d.standing_order.name)}</b><span class="muted">${esc(r.drift.length)} drift finding${r.drift.length > 1 ? "s" : ""}</span></span>
+          ${tier(r.status)}${ic("expand_more", "chev")}</summary>
+          <div class="mrow-more"><p>${msg(r.summary || "")}</p>
+            <a class="btn plain sm" href="#/standing/${esc(d.standing_order.id)}">Open standing order ${ic("arrow_forward")}</a></div></details>`).join("")}</div></section>` : ""}
+      <details class="mtrust"><summary>${ic("shield")} Why this record can be trusted ${ic("expand_more", "chev")}</summary>
+        <div class="rules small" style="grid-template-columns:1fr">
+          <div><span class="muted">Audit chain</span><span>${chain.ok ? "intact" : `broken at #${esc(chain.broken_at_seq)}`} · ${esc(chain.events)} events${versioning(chain)}</span></div>
+          <div><span class="muted">Mandates in force</span><span>${mandates.filter((m) => !m.revoked).length}</span></div>
+          <div><span class="muted">Signed by the buyer's own key</span><span>${buyerSigned}</span></div>
+          <div><span class="muted">Agents must authenticate</span><span>${authed}</span></div>
+          <div><span class="muted">Quotes, orders, receipts</span><span>Ed25519 signed · <a href="/.well-known/jwks.json">key</a></span></div>
+        </div>
+        <p class="small muted">Decisions are deterministic rules on signed quotes; no AI decides.</p></details>`;
     tickDeadlines();
   },
 };
