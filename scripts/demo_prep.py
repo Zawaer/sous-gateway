@@ -152,11 +152,11 @@ class Prep:
         if not self.check_mcp:
             return
         try:
-            r = self.c.post("/mcp/", json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            r = self.c.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
                 "protocolVersion": "2025-06-18", "capabilities": {},
                 "clientInfo": {"name": "sous-demo-prep", "version": "1"}}},
                 headers={"Accept": "application/json, text/event-stream"})
-            self.say(r.status_code == 200 and "serverInfo" in r.text, f"MCP initialize at /mcp/ -> {r.status_code}")
+            self.say(r.status_code == 200 and "serverInfo" in r.text, f"MCP initialize at /mcp -> {r.status_code}")
         except httpx.HTTPError as e:
             self.say(False, f"MCP initialize at /mcp/: {type(e).__name__}: {e}")
 

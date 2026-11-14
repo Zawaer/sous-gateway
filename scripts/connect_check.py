@@ -4,7 +4,7 @@
     uv run python scripts/connect_check.py <base> --mode header --quote                       # one live quote
 
 Creates ONE judge sandbox (POST /sandbox), then, over Streamable HTTP:
-- header: <base>/mcp/ with `Authorization: Bearer <agent token>` (Claude Code, Cursor, VS Code);
+- header: <base>/mcp with `Authorization: Bearer <agent token>` (Claude Code, Cursor, VS Code);
 - oauth:  <base>/connect/mcp with no credentials, as claude.ai / ChatGPT connect: 401 -> protected-resource
   metadata -> authorization-server metadata -> dynamic client registration -> authorize with S256 PKCE (the
   consent form is submitted with the sandbox's agent token, as a user pasting it would) -> token -> MCP.
@@ -84,7 +84,7 @@ def _next_day(sbx: dict) -> str:
 async def header_mode(base: str, sbx: dict, quote: bool) -> dict:
     http = create_mcp_http_client(headers={"Authorization": f"Bearer {sbx['agent_token']}"})
     async with http:
-        return await session_run(f"{base}/mcp/", http, sbx, quote)
+        return await session_run(f"{base}/mcp", http, sbx, quote)
 
 
 async def oauth_mode(base: str, sbx: dict, quote: bool) -> dict:
@@ -128,7 +128,7 @@ async def oauth_mode(base: str, sbx: dict, quote: bool) -> dict:
 
 
 def cors(base: str) -> dict:
-    r = httpx.options(f"{base}/mcp/", headers={
+    r = httpx.options(f"{base}/mcp", headers={
         "Origin": "https://example-browser-client.dev", "Access-Control-Request-Method": "POST",
         "Access-Control-Request-Headers": "authorization,content-type,mcp-protocol-version,mcp-session-id"})
     return {"preflight_status": r.status_code, "allow_origin": r.headers.get("access-control-allow-origin"),

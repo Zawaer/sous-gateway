@@ -316,3 +316,30 @@ def test_discovery_and_export_routes():
     assert c.get(f"/orders/{o['id']}/schema-org").json()["@type"] == "Order"
     assert c.get("/quotes/Q-NOPE/ap2").status_code == 404
     assert c.get("/mandates/M-NOPE/ap2").status_code == 404
+
+
+def test_cards_use_public_base_url_and_card_url_is_never_null(monkeypatch):
+    monkeypatch.setattr(config, "PUBLIC_BASE_URL", "https://sous.example")
+    c = TestClient(api.app)
+    card = c.get("/.well-known/agent-card.json").json()
+    assert card["url"] == "https://sous.example/mcp"  # A2A 0.3 readers; v1.0 readers use supportedInterfaces
+    assert card["supportedInterfaces"][0]["url"] == card["url"] and card["preferredTransport"] == "MCP"
+    assert {i["url"] for i in card["additionalInterfaces"]} == {i["url"] for i in card["supportedInterfaces"]}
+    assert c.get("/.well-known/mcp/server-card.json").json()["remotes"][0]["url"] == card["url"]
+    monkeypatch.setattr(config, "PUBLIC_BASE_URL", "")
+    assert c.get("/.well-known/agent-card.json").json()["url"] == "http://testserver/mcp"
+
+
+@pytest.mark.parametrize("path", ["/mcp", "/mcp/"])
+def test_mcp_initialize_works_with_and_without_trailing_slash(path, monkeypatch):
+    monkeypatch.setattr(catalog, "_db", lambda: None)
+    monkeypatch.setattr(api.mcp.session_manager, "_has_started", False)  # the lifespan runs once per instance
+    h = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+    with TestClient(api.app, follow_redirects=False) as c:
+        r = c.post(path, headers=h, json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}})
+        assert r.status_code == 200 and "serverInfo" in r.text  # served in place: no 307 for a POST
+        sid = r.headers["mcp-session-id"]
+        r = c.post(path, headers={**h, "Mcp-Session-Id": sid},
+                   json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        assert r.status_code == 200 and "request_quote" in r.text

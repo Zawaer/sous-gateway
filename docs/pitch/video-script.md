@@ -3,7 +3,7 @@
 Target: about 280 spoken words at a calm pace. **VO** is the voice-over; everything else is what's on screen.
 **[REC]** = screen-record this. **[STILL]** = a static slide or screenshot. Numbers match `docs/STATUS.md` and `evals/results.json`.
 
-Before recording (full steps in [demo-runbook.md](../demo-runbook.md)): record before Sun 15.11 17:00 (the mock's cut-off). Use production, https://135-181-8-209.sslip.io, with the demo mandates seeded. Open the UI on a phone (or a phone-sized browser) with the approver code entered. Connect Claude Code over MCP (`claude mcp add --transport http sous https://135-181-8-209.sslip.io/mcp/`). Run `scripts/demo_standing.py --base <URL>` once, so the held renewal is in the inbox. For the history beat, change the hospital mandate once *after* its order is decided (e.g. raise the auto-approve limit), so "then vs now" shows a difference.
+Before recording (full steps in [demo-runbook.md](../demo-runbook.md)): record before Sun 15.11 17:00 (the mock's cut-off). Use production, https://135-181-8-209.sslip.io, with the demo mandates seeded. Open the UI on a phone (or a phone-sized browser) with the approver code entered. Connect Claude Code over MCP (`claude mcp add --transport http sous https://135-181-8-209.sslip.io/mcp`). Run `scripts/demo_standing.py --base <URL>` once, so the held renewal is in the inbox. For the history beat, change the hospital mandate once *after* its order is decided (e.g. raise the auto-approve limit), so "then vs now" shows a difference.
 
 ---
 

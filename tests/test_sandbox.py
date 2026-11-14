@@ -144,7 +144,7 @@ def test_create_gives_signed_mandate_copies_tokens_and_quickstarts(c):
     token, approver = s["agent_token"], s["approver_token"]
     assert token.startswith("vka_") and approver.startswith("sbxa_")
     qs = s["quickstart"]
-    assert qs["claude_code"] == (f'claude mcp add --transport http sous https://sous.test/mcp/ '
+    assert qs["claude_code"] == (f'claude mcp add --transport http sous https://sous.test/mcp '
                                  f'--header "Authorization: Bearer {token}"')
     assert qs["connect"]["url"] == "https://sous.test/connect/mcp"  # OAuth connectors (claude.ai, ChatGPT)
     assert token not in json.dumps(qs["connect"])

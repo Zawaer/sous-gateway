@@ -841,7 +841,9 @@ def _tools() -> list:
 
 def agent_card(base_url: str, version: str, tools: list | None = None) -> dict:
     """A2A v1.0 Agent Card (JSON names of a2a.proto AgentCard). Sous speaks MCP and REST/OpenAPI, not A2A's task
-    protocol, so supportedInterfaces use A2A's open-form protocolBinding values "MCP" and "OPENAPI"."""
+    protocol, so supportedInterfaces use A2A's open-form protocolBinding values "MCP" and "OPENAPI".
+    `url`, `preferredTransport` and `additionalInterfaces` repeat the interfaces in A2A 0.3 form for clients that
+    still read them (v1.0 moved them into supportedInterfaces); `url` is the MCP endpoint, never null."""
     from mcp_types import LATEST_PROTOCOL_VERSION
     tools = _tools() if tools is None else tools
     skills = []
@@ -863,6 +865,10 @@ def agent_card(base_url: str, version: str, tools: list | None = None) -> dict:
             {"url": f"{base_url}/mcp", "protocolBinding": "MCP", "protocolVersion": LATEST_PROTOCOL_VERSION},
             {"url": f"{base_url}/openapi.json", "protocolBinding": "OPENAPI", "protocolVersion": "3.1"},
         ],
+        "url": f"{base_url}/mcp",  # A2A 0.3 compatibility (see docstring)
+        "preferredTransport": "MCP",
+        "additionalInterfaces": [{"url": f"{base_url}/mcp", "transport": "MCP"},
+                                 {"url": f"{base_url}/openapi.json", "transport": "OPENAPI"}],
         "provider": {"organization": "Team Sous (Junction 2026)", "url": REPO},
         "version": version,
         "documentationUrl": f"{base_url}/docs",

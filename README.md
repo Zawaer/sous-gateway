@@ -35,9 +35,9 @@ The demo server is production, `https://135-181-8-209.sslip.io`, set as `SOUS` b
    curl -s "$SOUS/audit?sandbox=$(jq -r .sandbox.id sandbox.json)&limit=5" \
      -H "Authorization: Bearer $(jq -r .agent_token sandbox.json)" | jq '.events[] | {seq, event, hash, prev_hash}'
    ```
-5. **Connect an MCP client** to `$SOUS/mcp` (the URL in the MCP server card; the quickstart prints `/mcp/`, which the server treats the same) with the agent token, then paste one of the four `prompts`. Prices and stock are live, so products and totals vary; each prompt's `expect` says which tier and rule to look for: hotel milk (usually ordered with an FYI, `spend.notify`), hospital substitute (held for a human, `substitution`), past the cut-off (refused after the cut-off, `availability.cutoff_passed`), school over budget (refused above €1,500, `spend.hard_limit`).
+5. **Connect an MCP client** to `$SOUS/mcp` with the agent token, then paste one of the four `prompts`. Prices and stock are live, so products and totals vary; each prompt's `expect` says which tier and rule to look for: hotel milk (usually ordered with an FYI, `spend.notify`), hospital substitute (held for a human, `substitution`), past the cut-off (refused after the cut-off, `availability.cutoff_passed`), school over budget (refused above €1,500, `spend.hard_limit`).
    ```bash
-   jq -r .quickstart.claude_code sandbox.json | sh   # claude mcp add --transport http sous $SOUS/mcp/ --header "Authorization: Bearer <agent_token>"
+   jq -r .quickstart.claude_code sandbox.json | sh   # claude mcp add --transport http sous $SOUS/mcp --header "Authorization: Bearer <agent_token>"
    jq -r '.prompts[] | .title, .prompt, ""' sandbox.json
    ```
    **From claude.ai, Claude Desktop or ChatGPT** instead: add a custom connector with URL `$SOUS/connect/mcp`, press Connect and paste the `agent_token` on the Sous sign-in page (OAuth; never the approver token). Cursor, VS Code and the details: [docs/CONNECT.md](docs/CONNECT.md).
@@ -109,7 +109,7 @@ curl -s -X POST $SOUS/sandbox | jq
 
 The response has your sandbox id (e.g. `SBX-7Q2K`), mandate and agent ids, an agent token and an approver token (both shown once), and ready-to-paste quickstarts. Then:
 
-1. Connect Claude Code with the `quickstart.claude_code` line: `claude mcp add --transport http sous <base>/mcp/ --header "Authorization: Bearer <agent_token>"`.
+1. Connect Claude Code with the `quickstart.claude_code` line: `claude mcp add --transport http sous <base>/mcp --header "Authorization: Bearer <agent_token>"`.
 2. Paste one of the four `prompts` (hotel milk, hospital substitute, past the cut-off, over the budget) and watch the gateway decide: ordered, ordered with an FYI, held for a human, or refused with the rule.
 3. Open `quickstart.seller_ui` (`/ui/?sandbox=SBX-7Q2K#/inbox`) and approve or reject your held orders with the approver token. It works only on your sandbox's orders.
 4. Open `quickstart.break_ui` (`/ui/break.html?sandbox=SBX-7Q2K`), paste your agent token and try seven attacks (self-approval, slicing, prompt injection, a tampered quote, replay, over the limit, a forbidden allergen): each shows the verdict, the rule and the audit events, with no Valio call.

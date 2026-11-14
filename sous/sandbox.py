@@ -432,8 +432,8 @@ def quickstart(sid: str, base: str, token: str, approver: str, mandates: list[di
                        "delivery_date": next_delivery_day().isoformat(),
                        "items": [{"product_ids": ["464119", "476240", "464201"], "amount": 100, "unit": "L"}]})
     return {
-        "claude_code": f'claude mcp add --transport http sous {base}/mcp/ --header "Authorization: Bearer {token}"',
-        "mcp_url": f"{base}/mcp/",
+        "claude_code": f'claude mcp add --transport http sous {base}/mcp --header "Authorization: Bearer {token}"',
+        "mcp_url": f"{base}/mcp",
         # claude.ai / Claude Desktop / ChatGPT connectors can't send a header: they use OAuth (sous/oauth.py)
         "connect": {
             "url": f"{base}/connect/mcp",

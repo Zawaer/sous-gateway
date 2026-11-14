@@ -38,7 +38,7 @@ final edit; they come from `scripts/record_demo_shots.json` (`tag`), so dropping
   or re-record when the mock prices Eila cheapest.
 - **Terminal shot** is a real MCP Streamable HTTP session (`mcp` Python client, same tools Claude Code would call),
   rendered frame by frame from the transcript, not Claude Code's own UI. To use Claude Code instead:
-  `claude mcp add --transport http sous https://staging.135-181-63-134.sslip.io/mcp/` and the prompt from the
+  `claude mcp add --transport http sous https://staging.135-181-63-134.sslip.io/mcp` and the prompt from the
   script; screen-record the terminal.
 - **Phone approval and standing order** run on a local gateway (same code, same Valio mock, SQLite, an approver
   code set just for this) because the staging approver code is with Rene. The order panel on the local gateway says

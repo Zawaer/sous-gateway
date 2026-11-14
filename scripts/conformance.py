@@ -525,7 +525,7 @@ class Kit:
             h["Mcp-Session-Id"] = session
         msg = {"jsonrpc": "2.0", "method": method, **({"params": params} if params is not None else {}),
                **({"id": rid} if rid is not None else {})}
-        r = self.post("/mcp/", msg, auth=auth, headers=h)
+        r = self.post("/mcp", msg, auth=auth, headers=h)
         data = [ln[5:].strip() for ln in r.text.splitlines() if ln.startswith("data:")]
         try:
             body = json.loads(data[-1]) if data else (r.json() if r.text.strip() else None)

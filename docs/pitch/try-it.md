@@ -28,7 +28,7 @@ You get (keep this output, the tokens are shown once):
 With Claude Code, paste `quickstart.claude_code`:
 
 ```bash
-claude mcp add --transport http sous $SOUS/mcp/ --header "Authorization: Bearer <agent_token>"
+claude mcp add --transport http sous $SOUS/mcp --header "Authorization: Bearer <agent_token>"
 ```
 
 Any MCP client works the same way; or use plain REST with `quickstart.curl_quote` and `curl_order` (replace `<quote.id>` with the quote's id; the idempotency key is your sandbox id plus the quote id, so a retry returns the same order and keys never clash with other sandboxes).

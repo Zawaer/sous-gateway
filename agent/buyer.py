@@ -49,7 +49,7 @@ WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", 
 class MCPGateway:
     """A persistent MCP client session, usable from synchronous code.
 
-    target: the in-process MCPServer (sous.mcp_server.mcp) or a URL like https://host/mcp/.
+    target: the in-process MCPServer (sous.mcp_server.mcp) or a URL like https://host/mcp.
     agent_token: the agent's bearer credential (default $SOUS_AGENT_TOKEN), for mandates that require agent
       authentication. It is added to the TOKEN_TOOLS calls' arguments here, below the model and the transcripts.
     The session lives in its own event-loop thread, because the MCP client's task groups must be
@@ -62,7 +62,7 @@ class MCPGateway:
         self._agent_token = agent_token or os.getenv("SOUS_AGENT_TOKEN") or None
 
         if isinstance(target, str) and not target.rstrip("/").endswith("/mcp"):
-            target = target.rstrip("/") + "/mcp/"
+            target = target.rstrip("/") + "/mcp"
         self.target = target if isinstance(target, str) else "in-process"
         self._timeout = timeout_s
         self._loop = asyncio.new_event_loop()
@@ -462,7 +462,7 @@ def main(argv=None) -> int:
     ap.add_argument("--mandate", required=True)
     ap.add_argument("--agent", required=True)
     ap.add_argument("--gateway", default="https://staging.135-181-63-134.sslip.io",
-                    help="gateway base URL (MCP at /mcp/), or 'local' for the in-process gateway")
+                    help="gateway base URL (MCP at /mcp), or 'local' for the in-process gateway")
     ap.add_argument("--provider", help="gemini | verda | local (default: $LLM_PROVIDER or gemini)")
     ap.add_argument("--model")
     ap.add_argument("--agent-token", default=None,

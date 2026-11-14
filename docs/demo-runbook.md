@@ -11,7 +11,7 @@ uv run python scripts/demo_prep.py --base $SOUS --reset        # a fresh sandbox
 ```
 
 It checks `/health` (ok, commit, clock mode, Valio shared budget and circuit), `/rules`, `/holds`, `/ui/`,
-`/ui/break.html`, `/buyer/` and MCP `initialize` at `/mcp/`. Then it creates **one** sandbox, checks its seeded held
+`/ui/break.html`, `/buyer/` and MCP `initialize` at `/mcp`. Then it creates **one** sandbox, checks its seeded held
 order is `pending_approval` with `approve_by` in the future, and warms the cache with 2 live lookups: the
 quickstart's hotel milk quote and the hospital's substitutes for 468376. It places no order and runs no attack
 (those are the live demo). Output: `~/sous-demo-<date>.json` plus a printable `.txt` next to it, mode 600, never

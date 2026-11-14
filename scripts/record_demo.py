@@ -58,10 +58,10 @@ async def _mcp_session(base: str, out: Path, when: date) -> None:
     from mcp.client.streamable_http import streamable_http_client
 
     agent, mandate = "aurora-purchasing-agent", "M-HOTEL-AURORA"
-    log: list[dict] = [{"kind": "header", "url": base + "/mcp/", "ts": time.time()},
+    log: list[dict] = [{"kind": "header", "url": base + "/mcp", "ts": time.time()},
                        {"kind": "user", "text": "1,000 litres of lactose-free milk by Monday for Hotel Aurora."}]
 
-    async with streamable_http_client(base + "/mcp/") as streams:
+    async with streamable_http_client(base + "/mcp") as streams:
         read, write = streams[0], streams[1]
         async with ClientSession(read, write) as s:
             init = await s.initialize()

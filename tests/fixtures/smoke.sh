@@ -29,7 +29,7 @@ if [ -n "${EXPECT_STORAGE:-}" ]; then check /health ".storage == \"$EXPECT_STORA
 
 # MCP: initialize, then list tools with the returned session id.
 hdr=$(mktemp)
-init=$(curl -fsS -D "$hdr" -X POST "$BASE/mcp/" \
+init=$(curl -fsS -D "$hdr" -X POST "$BASE/mcp" \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci-smoke","version":"1"}}}')
 echo "$init" | grep -q '"serverInfo"' || { echo "FAIL mcp initialize"; echo "$init"; exit 1; }
@@ -37,8 +37,8 @@ echo "ok   /mcp initialize"
 sid=$(grep -i '^mcp-session-id:' "$hdr" | cut -d' ' -f2 | tr -d '\r' || true)
 sh=(-H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream')
 [ -n "$sid" ] && sh+=(-H "mcp-session-id: $sid")
-curl -fsS -X POST "$BASE/mcp/" "${sh[@]}" -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
-tools=$(curl -fsS -X POST "$BASE/mcp/" "${sh[@]}" -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')
+curl -fsS -X POST "$BASE/mcp" "${sh[@]}" -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+tools=$(curl -fsS -X POST "$BASE/mcp" "${sh[@]}" -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')
 echo "$tools" | grep -q '"search_products"' || { echo "FAIL mcp tools/list"; echo "$tools"; exit 1; }
 echo "ok   /mcp tools/list"
 echo "smoke passed"

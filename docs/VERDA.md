@@ -48,7 +48,7 @@ Scaling).
 ## Process (what we did, reproducibly)
 
 1. Gateway: `docker compose up -d --build` on the CPU instance; `.env` on the server only (Valio key,
-   approver code, public URL); Caddy terminates TLS. Health: `/health`, MCP at `/mcp/`.
+   approver code, public URL); Caddy terminates TLS. Health: `/health`, MCP at `/mcp`.
 2. Reference buyer agent (`agent/buyer.py`): the gateway's own MCP tools are listed over MCP, turned into
    function-calling schemas (agent_id, mandate_id and the idempotency key are bound by the runtime, so the
    model can't present someone else's mandate or double-order), and given to the model with the gateway's

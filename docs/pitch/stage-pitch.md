@@ -12,7 +12,7 @@ allergen-safety case for hospitals and schools), **Implementation** (beats 2 and
 - Laptop: browser tabs open in this order, logged in, zoomed to 125 %:
   1. `/ui/?sandbox=<id>#/inbox` of a sandbox made that morning (its held standing-order renewal is waiting);
   2. `/ui/break.html?sandbox=<id>` with the agent token pasted;
-  3. terminal with Claude Code connected to `$SOUS/mcp/` (sandbox agent token), prompt typed, not sent.
+  3. terminal with Claude Code connected to `$SOUS/mcp` (sandbox agent token), prompt typed, not sent.
 - Phone (for the approval): the same inbox link, approver token pasted.
 - Fallback if the venue network fails: deck slides 4, 5 and 9 carry the same story with production screenshots. If
   production is down, use staging (same flow); say so.
