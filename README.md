@@ -6,7 +6,7 @@ Built at Junction 2026 for Valio Aimo's challenge "Trusted Trade Agents".
 
 ## Judge path in 5 minutes
 
-The demo server is production, `https://135-181-8-209.sslip.io`, set as `SOUS` below. It is redeployed from `main` until the Sun 15.11 08:00 Helsinki freeze. Staging, `https://staging.135-181-63-134.sslip.io`, runs the same code and is the fallback if production is ever down; [docs/STATUS.md](docs/STATUS.md#deployed-now) says what runs where. Needs `curl` and `jq`.
+The demo server is production, `https://135-181-8-209.sslip.io`, set as `SOUS` below. It is redeployed from `main` until the Sun 15.11 08:00 Helsinki freeze. Staging, `https://staging.135-181-63-134.sslip.io`, is the fallback if production is ever down and usually runs newer code (on Sat 14.11 11:50Z prod was at a880f90, staging at 8624b18); [docs/STATUS.md](docs/STATUS.md#deployed-now) says what runs where. Needs `curl` and `jq`.
 
 1. **Get a private sandbox**: copies of the hotel, hospital and school mandates, valid 24 h, 15 live Valio lookups. The two tokens in the response are shown once.
    ```bash
@@ -37,7 +37,7 @@ The demo server is production, `https://135-181-8-209.sslip.io`, set as `SOUS` b
    jq -r '.prompts[] | .title, .prompt, ""' sandbox.json
    ```
 
-Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it: scripted cases (no LLM, live Valio prices) 60/60 in a local run with the stricter demo policy (`evals/results.json`, Sat 14.11 10:30), 44/44 unsafe actions blocked or escalated; 59/59 also in CI on CRACI (last green: run 43554621653, 04e6539). LLM agent, live in CI run 43557209740 (0b0ad68), 49 buyer sentences: Kimi K3.1 Pro 48/49, Gemini 4 Hydrogen 46/49, 0 mandate violations auto-ordered.
+Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it (our own cases, not held out). From one full CI run on CRACI, [43587725624](https://github.com/Zawaer/sous/actions/runs/43587725624) on 11d8448: scripted cases (no LLM, live Valio prices) **60/60**, 43/43 unsafe actions blocked or escalated; LLM buyer agent on 48 one-sentence cases: Kimi K3.1 Pro (Verda Inference) 47/48, Gemini 4 Hydrogen 46/48, Nemotron 3.5 Super VL 30/48, with **0 mandate violations auto-ordered** by any of them (unsafe requests blocked or escalated 34/34, 34/34, 33/34); mandate drafting by Gemini 23/23. Conformance kit 17/17 on staging ([CONFORMANCE.md](docs/CONFORMANCE.md)); check-the-checker catches 47/47 planted violations ([EVAL_INTEGRITY.md](docs/EVAL_INTEGRITY.md)); Monday rush, 60 agents on 400 units of stock: 0 over-allocated ([ROBUSTNESS.md](docs/ROBUSTNESS.md)). Spend so far: $29.77 known ([COSTS.md](docs/COSTS.md)).
 
 ## Where to read more
 
@@ -46,9 +46,13 @@ Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it: scripted c
 - [docs/PROTOCOL.md](docs/PROTOCOL.md): the full protocol. Start with [6. Tiers and rules](docs/PROTOCOL.md#6-tiers-and-rules), [12. Audit log](docs/PROTOCOL.md#12-audit-log) and [18. Judge sandbox](docs/PROTOCOL.md#18-judge-sandbox).
 - [docs/DECISIONS.md](docs/DECISIONS.md): technical choices and the path to production.
 - [docs/INTEGRATION.md](docs/INTEGRATION.md): how Sous plugs into Valio Aimo's systems: orders to SAP (ORDERS05 outbox, stub today), customer accounts (credit limit, payment block, delivery days), contract prices, routes, a phased plan, and what we don't know.
-- [docs/CONFORMANCE.md](docs/CONFORMANCE.md): one command (`scripts/conformance.py --base <url>`) runs 15 black-box checks (signatures, tampering, idempotency, self-approval, private reads, hard limit, prompt injection, audit, stock exposure) against any Sous gateway; latest staging run included.
-- [docs/STANDARDS.md](docs/STANDARDS.md): mapping to AP2, ACP, A2A, MCP server cards, schema.org, W3C VC 2.0, JOSE.
-- [docs/LLM_EVAL.md](docs/LLM_EVAL.md), [docs/CI.md](docs/CI.md), [docs/VERDA.md](docs/VERDA.md), [docs/GEMINI.md](docs/GEMINI.md), [docs/NEMOTRON.md](docs/NEMOTRON.md), [docs/AIVEN.md](docs/AIVEN.md), [docs/demo-runbook.md](docs/demo-runbook.md).
+- [docs/CONFORMANCE.md](docs/CONFORMANCE.md): one command (`scripts/conformance.py --base <url>`) runs 17 black-box checks (signatures, tampering, idempotency, self-approval, private reads, hard limit, prompt injection, audit, stock exposure) against any Sous gateway; 17/17 on staging, run output included.
+- [docs/STANDARDS.md](docs/STANDARDS.md): mapping to AP2, ACP, A2A, MCP server cards, schema.org, W3C VC 2.0, JOSE, and Peppol BIS Ordering 3.0 (UBL Order and Order Response per order).
+- [docs/EVAL_INTEGRITY.md](docs/EVAL_INTEGRITY.md): checking the checker, 47 planted violations the evals and verifiers must catch.
+- [docs/ROBUSTNESS.md](docs/ROBUSTNESS.md): the Monday rush, 60 agents on one short product, stock reservations and fair share.
+- [docs/CRACI.md](docs/CRACI.md): CI on CRACI runners, deny-by-default egress per job and the signed egress evidence.
+- [docs/COSTS.md](docs/COSTS.md): every paid model run and running service.
+- [docs/LLM_EVAL.md](docs/LLM_EVAL.md) (per-model LLM eval, case by case), [docs/CI.md](docs/CI.md), [docs/VERDA.md](docs/VERDA.md), [docs/GEMINI.md](docs/GEMINI.md), [docs/NEMOTRON.md](docs/NEMOTRON.md), [docs/AIVEN.md](docs/AIVEN.md), [docs/demo-runbook.md](docs/demo-runbook.md).
 - The rest of this README: features, API table, local setup, configuration, architecture.
 
 ## What it does
@@ -71,7 +75,7 @@ Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it: scripted c
 - **LLM buyer agent** (`agent/`): any OpenAI-compatible model (Gemini, Verda Inference, self-hosted vLLM) turns a sentence into the gateway's MCP tool calls. The runtime binds identity, mandate and idempotency; the model never decides. Scored per model by `scripts/llm_eval.py`.
 - **Snap a photo of the order** (CLI; the web upload in `/agent/` is off on the servers): NVIDIA Nemotron 3.5 Super VL reads a handwritten order list, a menu or a delivery note (Finnish, Swedish, English); the agent turns it into one basket quote under the mandate, and low-confidence lines go to a human instead of the basket. See [docs/NEMOTRON.md](docs/NEMOTRON.md).
 - **Response options** when an item can't be covered as asked (part now, rest later, a substitute...), each with a mandate preview. **Rule register** at `GET /rules`.
-- **Evaluation** (our own cases, live Valio prices; details and run ids in [docs/STATUS.md](docs/STATUS.md#evaluation)): scripted, no LLM: all 59 cases 59/59 in a local run (43/43 unsafe actions blocked or escalated; incl. partial-availability options and attack cases: slicing, self-approval, prompt injection, unusual quantity); 59/59 also in CI on CRACI (last green: run 43554621653, 04e6539; also 95dd711 with the shared Valio budget on Aiven Valkey). LLM agent, 49 sentences, live in CI run 43557209740 (0b0ad68): Kimi K3.1 Pro 48/49, Gemini 4 Hydrogen 46/49 (both miss H20, where they found real lactose-free milk instead of the case's coffee milk); 0 mandate violations auto-ordered with either.
+- **Evaluation** (our own cases, live Valio prices; details and run ids in [docs/STATUS.md](docs/STATUS.md#evaluation)), all from CI run 43587725624 (11d8448) on CRACI: scripted, no LLM: 60/60 cases, 43/43 unsafe actions blocked or escalated (incl. partial-availability options and attack cases: slicing, self-approval, prompt injection, unusual quantity). LLM agent, 48 one-sentence cases, all three models in the same run: Kimi K3.1 Pro 47/48, Gemini 4 Hydrogen 46/48, Nemotron 3.5 Super VL 30/48; 0 mandate violations auto-ordered with any of them. The miss all three share, S04, is a case whose premise (only a coconut cream without allergen data exists) holds only for the scripted run.
 
 ## Try it yourself
 
