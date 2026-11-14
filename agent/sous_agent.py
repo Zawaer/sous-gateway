@@ -917,9 +917,16 @@ class SousAgent(BuyerAgent):
                         self.corrections.append(f"added named product {missing}")
                         q["product_ids"] = missing + ids
             args["items"] = items
-            if risks:
+            # the model's own doubts as it wrote them: one string is one doubt (not one per letter), and odd JSON
+            # (a number, a list with nulls) never crashes the run
+            own = args.get("declared_risks")
+            own = [str(x) for x in (own if isinstance(own, list) else [own]) if isinstance(x, (str, int, float))
+                   and not isinstance(x, bool)]
+            if risks or own:
                 from .recipe import cap_risks
-                args["declared_risks"] = cap_risks(list(args.get("declared_risks") or []) + risks)
+                args["declared_risks"] = cap_risks(own + risks)
+            else:
+                args.pop("declared_risks", None)
             self.declared = list(args.get("declared_risks") or [])
         if name == "suggest_substitutes" and n.sure and len(n.items) == 1:
             args = {**args, "amount": n.amount, "unit": n.unit, "delivery_date": n.delivery_date.isoformat()}

@@ -257,3 +257,21 @@ def test_an_impossible_date_is_a_declared_doubt_not_a_crash(text):
     assert n.delivery_date == MON and n.date_from == "default"
     assert any("date that doesn't exist" in r for r in n.risks)
     assert R.parse_date(text, SAT) is None or "february" in text or "marraskuuta" in text
+
+
+@pytest.mark.parametrize("own, kept", [("not sure which cream", ["not sure which cream"]), (5, ["5"]),
+                                       ([None, 3, "x"], ["3", "x"]), ({"a": 1}, []), (None, [])])
+def test_the_models_declared_risks_are_read_as_written(own, kept):
+    # review2: a string was split into one 'doubt' per letter, and a number or a list with null crashed the run
+    agent = SousAgent.__new__(SousAgent)
+    agent.need = parse_need("milk for 40 people", SAT, MON)
+    agent.quote_refusals, agent.corrections, agent.piece_doubts, agent.plan, agent.declared = [], [], [], None, []
+    args, refusal = agent.vet(None, "request_quote", {"items": [{"product_ids": ["1"], "amount": 1, "note": "#1"}],
+                                                      "declared_risks": own})
+    assert refusal is None
+    assert args["declared_risks"][:len(kept)] == kept
+    assert args["declared_risks"][len(kept)].startswith("Assumed 8 L for \"milk\"")
+    agent.need = parse_need("milk 8 l", SAT, MON)  # no doubt of the runtime's own: the model's alone, or none
+    args, _ = agent.vet(None, "request_quote", {"items": [{"product_ids": ["1"], "amount": 8, "unit": "L"}],
+                                                "declared_risks": own})
+    assert args.get("declared_risks", []) == kept
