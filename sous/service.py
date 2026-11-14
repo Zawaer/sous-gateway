@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import agent_auth, aimo, catalog, clock, config, credentials, notify, options as OPT, quote as Q, sandbox, signing, store, substitutes
+from . import agent_auth, aimo, catalog, clock, config, credentials, notify, options as OPT, quote as Q, sandbox, signing, store, substitutes, usual
 from .mandate import Mandate, evaluate
 
 
@@ -535,7 +535,8 @@ def _evaluate(mandate: Mandate, agent_id: str, q: dict, now: datetime, extra_fin
     return evaluate(mandate, agent_id, q["lines"], requested_date=date.fromisoformat(q["requested_delivery_date"]),
                     substitute_for=subs, uncovered=uncovered,
                     spent_today_eur=store.spent_today(mandate.id, now.date().isoformat()), now=now,
-                    extra_findings=extra_findings)
+                    extra_findings=extra_findings, quantities=usual.profile(q["lines"]),
+                    usual_quantities=usual.history(mandate.id, now) if mandate.unusual_quantity_factor else None)
 
 
 def _refresh_cutoffs(q: dict, now: datetime) -> None:
@@ -647,6 +648,22 @@ def decide(order_id: str, approver: str, approve: bool, note: str | None = None)
         o, mandate = _decide(order_id, approver, approve, note)
     notify.send("order.decided", o, mandate)  # FYI to the agent side
     return o
+
+
+def refuse_agent_approval(order_id: str, token: str, action: Literal["approve", "reject"]) -> GatewayError:
+    """An agent credential was presented to approve or reject an order: only a human decides. Audits the
+    attempt (agent, order, action; never the token) and returns the error to raise."""
+    who = agent_auth.identify(token)
+    o = store.get_order(order_id) or {}
+    agent = (who or {}).get("agent_id") or "unidentified agent"
+    store.audit("agent.approval_attempt_refused", agent, "agent", order_id, o.get("buyer"),
+                {"order_id": order_id, "action": action, "agent_id": (who or {}).get("agent_id"),
+                 "credential_mandate_id": (who or {}).get("mandate_id"), "order_mandate_id": o.get("mandate_id"),
+                 "credential_last4": (who or {}).get("last4"), "order_status": o.get("status")})
+    return GatewayError("agent_cannot_approve",
+                        f"Agents can't {action} orders: an agent credential was presented. Order {order_id} waits "
+                        "for a human approver (X-Approver-Code or the approval link); this attempt is in the audit log.",
+                        403)
 
 
 def _approval_blocker(o: dict, mandate: Mandate, now: datetime) -> tuple[str, str] | None:

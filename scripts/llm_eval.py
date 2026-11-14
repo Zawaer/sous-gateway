@@ -44,6 +44,7 @@ NOT_FOR_LLM = {
     "H17": "Protocol mechanics: ordering after the quote expired (shortened TTL and a deliberate wait).",
     "H19": "Protocol mechanics: another agent replays the hotel's idempotency key.",
     "A03": "Two requests in sequence on one day (daily budget): a scripted sequence, not one buyer sentence.",
+    "A08": "Protocol mechanics: the agent calling REST approve with its own token (MCP has no approve tool).",
 }
 
 # The buyer's words for cases whose `request` also narrates the test setup in brackets. The setup
@@ -54,6 +55,8 @@ REQUESTS = {
     "A02": "20 litres of lactose-free milk.",
     "A05": "8 kg of coffee beans.",
     "A06": "100 litres of lactose-free milk.",
+    "U01": "1,000 litres of lactose-free semi-skimmed milk (464201).",
+    "U02": "250 litres of lactose-free semi-skimmed milk (464201).",
 }
 
 # Which checks are about understanding the buyer (vs. the gateway's decision).
@@ -113,9 +116,10 @@ def case_request(case: dict) -> str:
 def run_case(case: dict, defaults: dict, make_agent) -> tuple[dict, object]:
     """Run one case through the agent; return (record shaped like scripts/eval.py's, BuyerRun)."""
     from sous import service as S
-    from scripts.eval_checks import _order_summary
+    from scripts.eval_checks import _order_summary, setup_history
 
     t0 = time.perf_counter()
+    setup_history(case, date.fromisoformat(str(case.get("delivery_date", defaults["delivery_date"]))))
     agent = make_agent(case)
     run = agent.run(case_request(case))
     r = {"id": case["id"], "title": case["title"], "request": case_request(case), "mandate": case["mandate"],

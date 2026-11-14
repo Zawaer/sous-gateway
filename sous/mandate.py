@@ -47,6 +47,9 @@ class Mandate(BaseModel):
     max_comparison_price_eur: dict[str, float] = Field(default_factory=dict, description="e.g. {'L': 2.5}")
     demo_public: bool = Field(False, description="Curated demo data: readable without credentials (see sous/access.py). "
                               "Real buyers' mandates leave this off.")
+    unusual_quantity_factor: float | None = Field(
+        3.0, gt=1, description="Ask when a product family's quantity is more than this many times the median of the "
+        "buyer's past orders of it (at least 3 past orders); None = off")
     sandbox: str | None = Field(None, description="Judge sandbox id (e.g. SBX-7Q2K) for a visitor's copy; see sous/sandbox.py")
 
     @field_validator("valid_until")
@@ -61,6 +64,15 @@ class Finding(BaseModel):
     outcome: Tier
     message: str
     product_id: str | None = None
+    rule_url: str | None = Field(None, description="This rule in the rule register (GET /rules/{rule})")
+
+    def model_post_init(self, _ctx) -> None:
+        if self.rule_url is None:
+            self.rule_url = f"{config.PUBLIC_BASE_URL}/rules/{self.rule}"
+
+
+# Fewer past orders than this and there is no "usual" quantity to compare with.
+UNUSUAL_MIN_HISTORY = 3
 
 
 _RANK = {"silent": 0, "notify": 1, "ask": 2, "block": 3}
@@ -78,8 +90,12 @@ def evaluate(
     spent_today_eur: float = 0.0,
     now: datetime,
     extra_findings: list[Finding] | None = None,
+    quantities: dict[tuple[str, str], dict] | None = None,
+    usual_quantities: dict[tuple[str, str], list[float]] | None = None,
 ) -> tuple[Tier, list[Finding]]:
-    """`extra_findings` are checks made outside the mandate (e.g. standing-order drift); they count like any rule."""
+    """`extra_findings` are checks made outside the mandate (e.g. standing-order drift); they count like any rule.
+    `quantities` is this order's amount per (product family, unit), `usual_quantities` the same buyer's past
+    ordered amounts per key (both from sous/usual.py); they feed quantity.unusual."""
     f: list[Finding] = []
 
     def add(rule, outcome, message, pid=None):
@@ -120,6 +136,18 @@ def evaluate(
         add("need.partial", "ask",
             "Only part of the need can be covered: "
             f"{' and '.join(f'{a:g} {u}' for u, a in missing.items())} still missing.")
+
+    factor = mandate.unusual_quantity_factor
+    for key, cur in (quantities or {}).items() if factor else ():
+        past = sorted((usual_quantities or {}).get(key) or [])
+        if len(past) < UNUSUAL_MIN_HISTORY:
+            continue
+        n = len(past)
+        med = past[n // 2] if n % 2 else (past[n // 2 - 1] + past[n // 2]) / 2
+        if med > 0 and cur["amount"] > factor * med:
+            add("quantity.unusual", "ask",
+                f"{cur['label']}: {cur['amount']:g} {key[1]} is {round(cur['amount'] / med, 1):g}× your usual {med:g} {key[1]} "
+                f"(median of your last {n} orders; the mandate asks above {factor:g}×).", cur.get("product_id"))
 
     subs = substitute_for or {}
     for l in lines:

@@ -107,6 +107,16 @@ def revoke(m: Mandate, by: str) -> dict:
     return status(m)
 
 
+def identify(token: str | None) -> dict | None:
+    """Which mandate's agent a token belongs to ({mandate_id, agent_id, last4}), or None if no credential matches."""
+    if not token:
+        return None
+    _ensure()
+    rows = store._exec("SELECT mandate_id, agent_id, last4 FROM agent_credential WHERE token_sha256 = ?",
+                       (_hash(token),))[0]
+    return {k: rows[0][k] for k in ("mandate_id", "agent_id", "last4")} if rows else None
+
+
 def check(m: Mandate, agent_id: str, token: str | None, operation: str) -> None:
     """Raise AuthError unless the call may act under mandate `m`. A no-op when the mandate doesn't require auth."""
     if not required(m):

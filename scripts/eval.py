@@ -46,7 +46,7 @@ import yaml  # noqa: E402
 from sous import aimo, catalog, config, service as S  # noqa: E402
 from sous.mandate import Mandate  # noqa: E402
 from scripts.seed import MANDATES  # noqa: E402
-from scripts.eval_checks import _order_summary, api_calls, check, safety_handled  # noqa: E402,F401
+from scripts.eval_checks import _order_summary, api_calls, check, safety_handled, setup_history  # noqa: E402,F401
 
 APPROVER = "eval-runner (human stand-in)"
 
@@ -112,10 +112,14 @@ def run_case(case: dict, defaults: dict) -> dict:
         candidates = [sr["options"][sub.get("pick", 0)]["product_id"]]
         r["candidates"] = candidates
 
-    # 3. quote
+    # 3. the buyer's order history, when the case needs one (quantity.unusual)
+    r["history_orders"] = setup_history(case, delivery)
+
+    # 4. quote
     def quote():
         req = S.QuoteRequest(agent_id=agent, mandate_id=mid, delivery_date=delivery, items=[S.QuoteItem(
-            product_ids=candidates, amount=case["amount"], unit=unit, substitute_for=substitute_for)])
+            product_ids=candidates, amount=case["amount"], unit=unit, substitute_for=substitute_for)],
+            rationale=case.get("rationale"))
         tq = time.perf_counter()
         q = call(S.request_quote, req)["quote"]
         r.setdefault("quote_latency_ms", []).append(round((time.perf_counter() - tq) * 1000))
@@ -144,9 +148,10 @@ def run_case(case: dict, defaults: dict) -> dict:
                          "preview": (o.get("mandate_preview") or {}).get("outcome"), "tradeoff": o["tradeoff"],
                          "lines": [(l["product_id"], l["quantity"]) for l in o["lines"]]} for o in q["options"]]
 
-    # 4. flow
+    # 5. flow
     key = f"eval-{case['id']}-{q['id']}"
     first = None
+    slices = 0
     for step in case.get("flow", ["order"]):
         try:
             if step == "order":
@@ -183,6 +188,13 @@ def run_case(case: dict, defaults: dict) -> dict:
                                       "uncovered": [g["uncovered"] for g in q2["uncovered"]]}
                 o = call(S.place_order, agent, mid, q2["id"], idempotency_key=f"eval-{case['id']}-{q2['id']}")
                 r["orders"].append(_order_summary(o, "second"))
+            elif step == "slice":  # the next slice of a split-up order: same need, new quote, new order
+                slices += 1
+                qn = quote()
+                o = call(S.place_order, agent, mid, qn["id"], idempotency_key=f"eval-{case['id']}-{qn['id']}")
+                r["orders"].append(_order_summary(o, f"slice{slices}"))
+            elif step == "agent_self_approve":
+                r["orders"].append(agent_self_approve(r, mid, first))
             elif step in ("approve", "reject"):
                 o = S.decide(first["id"], APPROVER, approve=step == "approve", note="eval")
                 first = o
@@ -201,6 +213,24 @@ def run_case(case: dict, defaults: dict) -> dict:
             r["errors"].append({"step": step, "code": e.code, "message": e.message})
     r["latency_ms"] = round((time.perf_counter() - t0 - waited) * 1000)
     return r
+
+
+def agent_self_approve(r: dict, mid: str, first: dict) -> dict:
+    """The agent calls REST approve on its own held order with its own bearer credential (minted here, as the
+    buyer would hand it over). The gateway must refuse (403 agent_cannot_approve) and audit the attempt."""
+    from fastapi.testclient import TestClient
+
+    from sous import api, store
+
+    token = S.agent_credential(mid, "Eval runner")["agent_credential"]["token"]
+    resp = TestClient(api.app).post(f"/orders/{first['id']}/approve", json={"by": "the agent itself"},
+                                    headers={"Authorization": f"Bearer {token}"})
+    body = resp.json()
+    if resp.status_code >= 400:
+        r["errors"].append({"step": "agent_self_approve", "code": body.get("error"), "message": body.get("message"),
+                            "http_status": resp.status_code})
+    r["audit_events"] = [e["event"] for e in store.audit_events(subject=first["id"], limit=50)]
+    return _order_summary(S.get_order(first["id"]), "agent_self_approve")
 
 
 # --- main ----------------------------------------------------------------------

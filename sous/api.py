@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
-from . import access, aimo, catalog, clock, config, sandbox, service as S, signing, standing, store
+from . import access, agent_auth, aimo, catalog, clock, config, rules, sandbox, service as S, signing, standing, store
 from .mandate import Mandate
 from .mcp_server import mcp
 
@@ -122,9 +122,19 @@ async def rate_limit(request: Request, call_next):
     return await call_next(request)
 
 
-def require_approver(request: Request, x_approver_code: str | None = Header(default=None)):
+def require_approver(request: Request, x_approver_code: str | None = Header(default=None),
+                     authorization: str | None = Header(default=None, include_in_schema=False)):
     """Human-only actions. In production this is the buyer's own login (e.g. OIDC); here a shared demo code.
-    A judge sandbox's approver token (sandbox.py) also works, but only to approve/reject its own orders."""
+    A judge sandbox's approver token (sandbox.py) also works, but only to approve/reject its own orders.
+    An agent credential (vka_..., as bearer or as the code) on approve/reject is refused with 403 and audited,
+    even when no approver code is configured: agents never decide their own orders."""
+    path = request.url.path
+    if path.endswith(("/approve", "/reject")):
+        presented = [t for t in (agent_auth.bearer(authorization), x_approver_code)
+                     if t and t.startswith(agent_auth.PREFIX)]
+        if presented:
+            raise S.refuse_agent_approval(request.path_params.get("order_id", ""), presented[0],
+                                          "approve" if path.endswith("/approve") else "reject")
     if config.APPROVER_CODE and x_approver_code != config.APPROVER_CODE and not (
             request.url.path.endswith(("/approve", "/reject"))
             and sandbox.may_approve(x_approver_code, request.path_params.get("order_id"))):
@@ -414,6 +424,23 @@ def approve(order_id: str, d: Decision):
 @app.post("/orders/{order_id}/reject", tags=["approvals"], dependencies=[Depends(require_approver)])
 def reject(order_id: str, d: Decision):
     return S.decide(order_id, d.by, False, d.note)
+
+
+# --- rule register ----------------------------------------------------------
+
+@app.get("/rules", tags=["rules"])
+def rules_register():
+    """Every rule the gateway can fire: id, kind (finding or refusal), the tiers it can produce, owner (buyer
+    mandate, Valio, gateway safety), plain-language text and the mandate field that sets it. Each decision
+    finding links here with `rule_url`."""
+    return rules.document()
+
+
+@app.get("/rules/{rule_id}", tags=["rules"])
+def rule_detail(rule_id: str):
+    if not (r := rules.get(rule_id)):
+        raise S.GatewayError("rule_not_found", f"No rule {rule_id}; GET /rules lists them all.", 404)
+    return r
 
 
 # --- mandates ---------------------------------------------------------------

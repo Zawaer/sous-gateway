@@ -17,7 +17,7 @@ from datetime import date
 from mcp.server.mcpserver import Context, MCPServer
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
 
-from . import access, agent_auth, catalog, clock, service as S, standing
+from . import access, agent_auth, catalog, clock, rules, service as S, standing
 
 log = logging.getLogger(__name__)
 
@@ -368,6 +368,13 @@ def allergens() -> dict:
     return {"codes": catalog.ALLERGENS,
             "groups": {k: sorted(v) for k, v in catalog.ALLERGEN_GROUPS.items()},
             "note": "Avoiding a group code (AM, AN, AW) also avoids every code in its group."}
+
+
+@mcp.resource("sous://rules", title="Rule register", mime_type="application/json")
+def rules_resource() -> dict:
+    """Every rule the gateway can fire: tiers, owner (buyer mandate / Valio / gateway), text, mandate field.
+    Decision findings carry rule_url pointing at the same entries (GET /rules/{id})."""
+    return rules.document()
 
 
 @mcp.resource("sous://mandates/{mandate_id}", title="Mandate", mime_type="application/json")
