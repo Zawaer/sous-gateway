@@ -85,7 +85,7 @@
         <a class="on" href="agent.html">Buyer agent</a>
         <a href="./">Seller UI</a>
         <a href="/buyer/">Buyer page</a>
-        <a href="/agent/docs">Agent API</a>
+        <a class="needs-agent" href="/agent/docs">Agent API</a>
       </nav>
     </div>
   </header>
@@ -101,6 +101,20 @@
     </div>
     <div class="banner">Reference buyer agent (runs on the buyer's side; shown here for the demo). It talks to the
       Sous gateway like any other agent, with your sandbox's agent token. Models never see prices and never decide.</div>
+
+    <section class="card" id="agent-off" hidden>
+      <h3>The reference buyer agent isn't switched on on this server</h3>
+      <div class="muted">The gateway itself is up; only the demo buyer agent (menu planning, photo reading, the
+        sentence agent and mandate drafting) is off here. Follow the
+        <a href="https://github.com/Zawaer/sous#judge-path-in-5-minutes">README judge path</a>, which needs no buyer
+        agent, or run the agent locally with <span class="mono">SOUS_BUYER_AGENT=1</span>
+        (<a href="https://github.com/Zawaer/sous#quick-start">Quick start</a>). Your sandbox below still works.</div>
+      <div class="actions" id="agent-off-links">
+        <a class="btn plain" href="./">Seller UI</a>
+        <a class="btn plain" href="/buyer/">Buyer page</a>
+        <a class="btn plain" href="/docs">Gateway API</a>
+      </div>
+    </section>
 
     <section class="card sbx-card" id="sbx">
       <div class="row">
@@ -123,7 +137,7 @@
       </details>
     </section>
 
-    <div class="grid3">
+    <div class="grid3 needs-agent">
       <section class="card">
         <h3>Plan from a menu</h3>
         <div class="model" id="m-menu">Gemini 4 Hydrogen</div>
@@ -163,7 +177,7 @@
       </section>
     </div>
 
-    <section class="card draft-card" id="draft">
+    <section class="card draft-card needs-agent" id="draft">
       <h3>Write your rules in plain words</h3>
       <div class="model" id="m-draft">Gemini 4 Hydrogen drafts · code checks every field · you sign</div>
       <textarea id="draft-text" placeholder="Your purchasing rules, in Finnish or English">max 2000 € per order, yli 300 € kysy minulta, ei pähkinöitä, laktoositon</textarea>
@@ -182,7 +196,7 @@
 
   <footer class="foot">
     <span>Sous · reference buyer agent (buyer side) talking to the Valio Aimo gateway</span>
-    <span><a href="/agent/usage">Model usage</a> · <a href="/agent/docs">Agent API</a> · <a href="/docs">Gateway API</a></span>
+    <span><span class="needs-agent"><a href="/agent/usage">Model usage</a> · <a href="/agent/docs">Agent API</a> · </span><a href="/docs">Gateway API</a></span>
   </footer>
 
 <script>
@@ -254,8 +268,20 @@ async function loadStatus() {
     show("#m-ask", s.models.ask, " · with the gateway's MCP tools");
     if (s.models.draft) show("#m-draft", s.models.draft, " drafts · code checks every field · you sign");
   } catch (e) {
-    $("#result").innerHTML = `<div class="error">The buyer agent is not enabled on this server (SOUS_BUYER_AGENT=1). ${esc(e.message)}</div>`;
+    if (e.status === 404) return agentOff();
+    $("#result").innerHTML = `<div class="error">The buyer agent didn't answer: ${esc(e.message)}</div>`;
   }
+}
+
+// /agent/ is mounted only with SOUS_BUYER_AGENT=1. Without it: one calm notice, and no cards or links that 404.
+async function agentOff() {
+  document.querySelectorAll(".needs-agent").forEach((el) => { el.hidden = true; el.style.display = "none"; });
+  $("#agent-off").hidden = false;
+  $("#result").hidden = true;
+  try {
+    const r = await fetch("break.html", {method: "HEAD"});
+    if (r.ok) $("#agent-off-links").insertAdjacentHTML("beforeend", `<a class="btn plain" href="break.html">Try to break it</a>`);
+  } catch { /* no break page on this server */ }
 }
 
 function need() {
