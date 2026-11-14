@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import account, agent_auth, aimo, allergen_ai, catalog, clock, config, credentials, deadline, erp, exposure, holds, notify, options as OPT, quote as Q, sandbox, signing, store, substitutes, usual
+from . import account, agent_auth, aimo, allergen_ai, catalog, clock, config, credentials, deadline, erp, exposure, holds, notify, options as OPT, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
 from .mandate import Mandate, evaluate
 
 
@@ -451,6 +451,7 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
         unit = None if item.unit == "SALES_UNIT" else item.unit
         day = (fetch_on or {}).get(item_index, req.delivery_date)
         offers, now = Q.offers(item.product_ids, day, item.amount, unit)
+        RES.adjust_offers(offers, mandate.buyer if mandate else None, now)  # minus stock reserved by orders
         if day > req.delivery_date:
             OPT.flag_later(offers, req.delivery_date, f"chosen option {req.option_id}")
         if not offers:
@@ -730,6 +731,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
         raise GatewayError("quote_expired", f"Quote {quote_id} expired at {q['expires_at']}; ask for a new one.", 409)
 
     _refresh_cutoffs(q, now)
+    short = _mark_allocated(q, RES.check(q["lines"], mandate.buyer, now))  # stock other orders reserved
     outcome, findings = _evaluate(mandate, agent_id, q, now, extra_findings)
     status = {"silent": "ordered", "notify": "ordered", "ask": "pending_approval", "block": "refused"}[outcome]
     oid = _id("PO")
@@ -756,18 +758,32 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
     if status == "pending_approval":  # the human must decide before the cut-off (sous/deadline.py)
         dl = deadline.compute(order["lines"], deadline.delivery_days(order), now)
         order["approve_by"], order["approve_by_detail"] = (dl["at"], dl) if dl else (None, None)
+    if status != "refused" and (late := _mark_allocated(q, RES.reserve(oid, q["lines"], mandate.buyer, now, (
+            datetime.fromisoformat(order["approve_by"]) if order.get("approve_by") else None)
+            if status == "pending_approval" else None))):
+        # another deployment took the stock between check and reserve (Valkey): refused like the check would
+        short, (outcome, findings) = late, _evaluate(mandate, agent_id, q, now, extra_findings)
+        status = order["status"] = "refused"
+        order.update(approval_url=None, approve_by=None, approve_by_detail=None, decision={
+            **order["decision"], "outcome": outcome, "findings": [f.model_dump() for f in findings]})
+    if short:
+        order["allocation"] = {"policy": RES.mode(), "lines": short}
+        order["options"] = RES.options(oid, short)
     order["receipt_jws"] = _receipt(order)
     # Claim the quote and store the order together: if storing fails, the quote is released again.
     if not store.claim_quote(quote_id, oid):
+        RES.release(oid, now)
         raise GatewayError("quote_used", f"Quote {quote_id} was already used for an order.", 409)
     try:
         store.insert_order(order)
     except store.Conflict:
         store.release_quote(quote_id, oid)
+        RES.release(oid, now)
         raise GatewayError("idempotency_key_reused",
                            "You already used this idempotency key for another order; use a fresh key.", 409)
     except Exception:
         store.release_quote(quote_id, oid)
+        RES.release(oid, now)
         raise
     store.audit(f"order.{status}", "mandate-engine", "system", oid, mandate.buyer,
                 {"order_id": oid, "quote_id": quote_id, "agent_id": agent_id, "outcome": outcome,
@@ -776,6 +792,15 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
                     if status == "pending_approval" else {}),
                  "fired": [f.model_dump() for f in findings if f.outcome != "silent"] or [findings[-1].model_dump()]})
     return order, mandate
+
+
+def _mark_allocated(q: dict, short: list[dict]) -> list[dict]:
+    """Each short line (sous/reservations.py) gets the blocking issue ALLOCATED: rule availability.allocated."""
+    for s in short:
+        line = q["lines"][s["line"]]
+        line["issues"] = [i for i in line["issues"] if i["code"] != "ALLOCATED"] + [RES.issue(s)]
+        line["orderable"] = False
+    return short
 
 
 def _receipt(order: dict) -> str:
@@ -818,6 +843,7 @@ def expire_if_overdue(o: dict | None, now: datetime | None = None) -> dict | Non
     o["receipt_jws"] = _receipt(o)
     if not store.update_order(o, expected_status="pending_approval"):
         return store.get_order(o["id"])
+    RES.release(o["id"], now, "expired")
     store.audit("order.expired_cutoff", "deadline", "system", o["id"], o["buyer"],
                 {"order_id": o["id"], "approve_by": o["approve_by"], "approve_by_detail": o.get("approve_by_detail"),
                  "lost_delivery_date": lost, "next_delivery_date": nxt})
@@ -937,6 +963,11 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
     reason = note
     if approve and (blocked := _approval_blocker(o, mandate, now)):
         status, reason = blocked
+    if status == "ordered" and (short := RES.confirm(o, now)):  # tentative reservation -> firm
+        status, reason = "refused", " ".join(RES.message(s) for s in short)
+        o["allocation"], o["options"] = {"policy": RES.mode(), "lines": short}, RES.options(o["id"], short)
+    elif status != "ordered":
+        RES.release(order_id, now)
     o["status"] = status
     o["approval"] = {"by": approver, "authority": authority, "approved": approve, "note": note, "at": now.isoformat(timespec="milliseconds"),
                      "result_reason": reason, "clock": clock.info(now)}

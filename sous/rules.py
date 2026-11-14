@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import typing
 
-from . import config, deadline
+from . import config, deadline, reservations
 from .mandate import UNUSUAL_MIN_HISTORY, Mandate
 
 OWNERS = {
@@ -176,6 +176,12 @@ def _build() -> list[dict]:
            "Only part of the need can be covered (stock or pack sizes): never silently short-shipped.", None),
         _r("availability.partial_stock", "finding", ["ask"], "valio",
            "Valio Aimo has less in stock than the quantity needed.", None),
+        _r("availability.allocated", "finding", ["block"], "valio",
+           "Valio Aimo's stock for the product and delivery date is already reserved by orders placed or held "
+           "through Sous (sous/reservations.py): the order asks for more than is left, so it is refused and its "
+           "options offer what's left. Under SOUS_ALLOCATION=pro_rata (set by Valio, not by a mandate), when demand "
+           "exceeds stock each buyer is capped at a share in proportion to their last 4 weeks' orders.", None,
+           condition=f"SOUS_ALLOCATION={reservations.mode()}"),
         _r("price.expires", "finding", ["ask"], "valio",
            "Valio Aimo's price is valid only until before the delivery date.", None),
         _r("availability.data_stale", "finding", ["ask"], "gateway",
