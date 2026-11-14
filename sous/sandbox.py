@@ -385,8 +385,18 @@ def seed(sid: str, mandate_id: str, token: str) -> dict | None:
     o = r["order"]
     return {"note": SEED_NOTE, "standing_order_id": so["id"], "held_order_id": o["id"], "status": o["status"],
             "why": r["drift"]["summary"],
-            "reasons": [f["message"] for f in o["decision"]["findings"] if f["outcome"] != "silent"],
-            "order_url": o["order_url"]}
+            "reasons": hold_reasons(o["decision"]["findings"]), "order_url": o["order_url"]}
+
+
+_RANK = {"silent": 0, "notify": 1, "ask": 2, "block": 3}
+
+
+def hold_reasons(findings: list[dict]) -> list[str]:
+    """The findings a human reads first: the ones that held the order (ask/block; standing-order drift first),
+    then FYI-level ones as "also: ...". Silent ones are left out."""
+    fs = sorted((f for f in findings if f["outcome"] != "silent"),
+                key=lambda f: (-_RANK.get(f["outcome"], 0), not str(f.get("rule", "")).startswith("standing.")))
+    return [f["message"] if _RANK.get(f["outcome"], 0) >= _RANK["ask"] else "also: " + f["message"] for f in fs]
 
 
 def _rules(m: Mandate) -> str:

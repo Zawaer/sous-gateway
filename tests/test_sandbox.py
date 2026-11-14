@@ -430,6 +430,14 @@ def test_new_sandbox_is_seeded_with_a_drifted_standing_order_and_a_held_order_wi
     rules = {f["rule"] for f in o["decision"]["findings"]}
     assert {"standing.quantity_creep", "standing.quantity_trend", "standing.cost_drift"} <= rules, rules
     assert o["decision"]["outcome"] == "ask" and "Seeded demo data" in o["agent_rationale"]
+    # the reasons that held it come first; FYI-level ones (the €1,000 notify line) follow as "also: ..."
+    by_msg = {f["message"]: f for f in o["decision"]["findings"]}
+    held = [by_msg[m] for m in seeded["reasons"] if m in by_msg]
+    assert held and held[0]["rule"].startswith("standing.") and all(f["outcome"] == "ask" for f in held)
+    assert seeded["reasons"][:len(held)] == [f["message"] for f in held]
+    also = seeded["reasons"][len(held):]
+    assert also and all(r.startswith("also: ") for r in also)
+    assert {by_msg[r[6:]]["outcome"] for r in also} <= {"notify"}
     # the seeded quote and the receipt are signed and verify like any other
     q = signing.verify(store.get_quote(o["quote_id"])["_jws"], "sous-quote+jws")
     assert q["seeded"]["sandbox"] == sid and q["valio_api_calls"]["price_calls"] == 0
