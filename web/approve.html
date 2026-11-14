@@ -134,6 +134,10 @@ function render() {
   const o = order, pending = o.status === "pending_approval";
   const rs = reasons(o);
   const has = keys.passkeys.length > 0;
+  // "What the passkey signs" only where a passkey is (or was) the path: pending with a passkey set up, or decided
+  // with one. Not after an approver-code decision, nor while no passkey exists for this order.
+  const byPasskey = /^passkey/.test((o.approval || {}).authority || "");
+  const showSigns = pending ? has : byPasskey;
   const lines = (o.lines || []).map((l) => `<tr><td>${esc(sentence(l.name))}<div class="rule-id">${esc(l.product_id)}</div></td>
       <td class="num">${esc(I18N.num(l.quantity))} ${esc(I18N.unit(l.sales_unit))}</td>
       <td class="num">${eur(l.line_total_ex_vat)}</td></tr>`).join("");
@@ -148,9 +152,9 @@ function render() {
     <table class="lines" aria-label="${esc(t("approve.lines_label"))}">${lines}</table>
     <p class="hint">${esc(t("approve.delivery", { date: o.delivery_date ? I18N.date(o.delivery_date, { weekday: true }) : "" }))}</p>
     ${has ? `<p class="hint">${esc(t("approve.passkeys_for", { list: keys.passkeys.map((k) => `${k.approver} (…${k.last8})`).join(", ") }))}</p>` : ""}
-    <details><summary>${esc(t("approve.signs_summary"))}</summary>
+    ${showSigns ? `<details><summary>${esc(t("approve.signs_summary"))}</summary>
       <p>${esc(t("approve.signs_text"))} <a href="${API}/orders/${encodeURIComponent(o.id)}/approval/verify">${esc(t("approve.verify_link"))}</a>.</p>
-      <pre id="binding">${esc(binding || t("approve.binding_placeholder"))}</pre></details>`;
+      <pre id="binding">${esc(binding || t("approve.binding_placeholder"))}</pre></details>` : ""}`;
   if (pending && o.approve_by) countdown(o.approve_by, (o.approve_by_detail || {}).basis);
   wire(has);
 }
@@ -266,9 +270,9 @@ async function approveWithCode(btn) {
   btn.disabled = true;
   try {
     order = await api(`/orders/${encodeURIComponent(ORDER)}/approve`, { method: "POST", body: JSON.stringify({ by }) });
-    render();
-    say(`${esc(statusText(order))}<br><span class="rule-id">${esc((order.approval || {}).authority || "")}</span>`,
-        order.status === "ordered" ? "ok" : "err");
+    render();  // shows the outcome once ("Approved by … Ordered."); the message adds only which credential decided
+    const via = (order.approval || {}).authority;
+    if (via) say(`<span class="rule-id">${esc(via)}</span>`, order.status === "ordered" ? "ok" : "err");
   } catch (e) {
     btn.disabled = false;
     say(esc(e.status === 401 ? t("approve.code_not_accepted") : e.message), "err");
@@ -283,8 +287,7 @@ async function rejectWithCode(btn) {
   btn.disabled = true;
   try {
     order = await api(`/orders/${encodeURIComponent(ORDER)}/reject`, { method: "POST", body: JSON.stringify({ by }) });
-    render();
-    say(esc(statusText(order)), "ok");
+    render();  // the outcome line ("Rejected by …") is shown once, by render
   } catch (e) {
     btn.disabled = false;
     if (e.status === 401) return askCode("approve.reject_needs_code");
@@ -298,7 +301,7 @@ async function decide(action, btn) {
   try {
     const opts = await api(`/orders/${encodeURIComponent(ORDER)}/approve/options`, { method: "POST", body: JSON.stringify({ action }) });
     binding = JSON.stringify(opts.binding, null, 2);
-    $("#binding").textContent = binding;
+    if ($("#binding")) $("#binding").textContent = binding;
     const pk = opts.publicKey;
     const a = await navigator.credentials.get({ publicKey: {
       ...pk, challenge: b2a(pk.challenge), allowCredentials: (pk.allowCredentials || []).map((c) => ({ ...c, id: b2a(c.id) })) } });
