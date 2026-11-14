@@ -38,7 +38,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from .buyer import WEEKDAYS, helsinki_today, next_delivery_day
-from .dates import relative_date
+from .dates import deliverable, relative_date
 
 RECIPES_PATH = Path(__file__).with_name("recipes.json")
 MAX_CANDIDATES = 5
@@ -165,8 +165,30 @@ def parse_portions(text: str) -> int | None:
     return int(m[1]) if m else None
 
 
+# "Mausteet löytyy", "we have the spices": every seasoning in the plan is on hand (a group, not one ingredient).
+SPICES = "spices"
+_SPICE_GROUP = re.compile(r"^(?:the\s+|our\s+|all\s+(?:the\s+)?)?(?:spices?|seasonings?|herbs\s+and\s+spices|"
+                          r"mauste\w*|perusmauste\w*|kryddor\w*|kryddorna)$", re.I)
+_SPICE_HAVE = re.compile(r"(?:\b(?:we\s+(?:already\s+)?have|we've\s+got|on\s+hand|in\s+stock|meillä\s+on|meiltä\s+"
+                         r"löytyy|löyty\w*|on\s+jo|vi\s+har|finns|covered|sorted)\b)", re.I)
+_SPICE_WORD = re.compile(r"\b(?:spices?|seasonings?|mausteet|mausteita|perusmausteet|kryddor(?:na)?)\b", re.I)
+_SPICE_NAME = re.compile(r"\b(?:salt|pepper|peppercorns?|oregano|basil|thyme|rosemary|paprika|cumin|curry|cinnamon|"
+                         r"nutmeg|bay\s+lea(?:f|ves)|chil+i\s+(?:flakes|powder)|allspice|cardamom|marjoram|"
+                         r"spices?|seasonings?|dried\s+herbs?)\b", re.I)
+
+
+def is_spice(n) -> bool:
+    """A seasoning (salt, pepper, oregano, allspice, bay leaf, ...), by its English name; not bell peppers."""
+    name = f"{n.name_en}".lower()
+    return bool(_SPICE_NAME.search(name)) and not re.search(r"bell|sweet\s+pepper|pickle|cucumber", name)
+
+
 def parse_stock(text: str) -> list[Stock]:
     out: list[Stock] = []
+    for clause in re.split(r"[.;!?\n]|\b(?:but|mutta|men)\b", text):
+        if _SPICE_WORD.search(clause) and _SPICE_HAVE.search(clause) and not re.search(r"\w+kö\b|\?", clause):
+            out.append(Stock(ingredient=SPICES, plenty=True))
+            break
     for m in _PLENTY.finditer(text):
         name = re.split(r"\s+(?:and|ja|och)\s+|[,.;]", m[1])[0].strip()
         if name:
@@ -446,6 +468,11 @@ def compute_needs(spec: MenuSpec) -> list[Need]:
             n.per_portion.append(f"{ing.amount_per_portion:g} {ing.unit} x {portions} ({short})")
             n.notes += [x for x in notes + ([ing.notes] if ing.notes else []) if x not in n.notes]
     for s in spec.stock_on_hand:
+        if _SPICE_GROUP.match(s.ingredient.strip()):
+            for n in needs.values():
+                if is_spice(n) and n.on_hand is None:
+                    n.on_hand, n.on_hand_text = math.inf, f"on hand (the buyer has the {s.ingredient})"
+            continue
         key = match_ingredient(s.ingredient)
         n = needs.get(key) if key else None
         if n is None:
@@ -824,10 +851,20 @@ def plan(request_text: str, *, gateway, mandate_id: str, agent_id: str, llm=None
         p.interpretation = "table" if llm is None else f"llm:{getattr(getattr(llm, 'cfg', None), 'label', 'llm')}"
         p.error = str(e)
         return p
+    if not any(_SPICE_GROUP.match(s.ingredient.strip()) for s in p.spec.stock_on_hand):
+        p.spec.stock_on_hand += [s for s in parse_stock(request_text) if s.ingredient == SPICES]
+    date_risks = []
     if delivery_date:
         p.spec.delivery_date = delivery_date
     elif not p.spec.delivery_date or p.spec.delivery_date <= today:
         p.spec.delivery_date = next_delivery_day(today)
+    else:
+        asked = p.spec.delivery_date
+        p.spec.delivery_date, why = deliverable(asked)
+        if why:
+            date_risks.append(f"The buyer asked for delivery on {WEEKDAYS[asked.weekday()]} {asked.isoformat()}, "
+                              f"which is {why} with no Valio delivery: moved to "
+                              f"{WEEKDAYS[p.spec.delivery_date.weekday()]} {p.spec.delivery_date.isoformat()}.")
     dd = p.spec.delivery_date.isoformat()
 
     is_error, m = _call(gateway, p.trace, "get_mandate", {"mandate_id": mandate_id})
@@ -836,7 +873,8 @@ def plan(request_text: str, *, gateway, mandate_id: str, agent_id: str, llm=None
         return p
     mandate = m["mandate"]
     p.needs = compute_needs(p.spec)
-    p.declared_risks = cap_risks(list(declared_risks or []) + (assumption_risks(p) if declare_assumptions else []))
+    p.declared_risks = cap_risks(list(declared_risks or []) + date_risks
+                                 + (assumption_risks(p) if declare_assumptions else []))
     if p.declared_risks:
         gateway = _WithRisks(gateway, p.declared_risks)
 

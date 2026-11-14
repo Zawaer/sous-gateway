@@ -78,7 +78,8 @@ def test_portion_table_is_small_and_explicit():
 def test_relative_dates(phrase, day):
     assert relative_date(f"10 L maitoa {phrase}", SAT) == day
     n = parse_need(f"10 L milk {phrase}", SAT, date(2026, 11, 17))
-    assert n.delivery_date == day and n.date_from == "sentence"
+    # Sunday 15.11 has no Valio delivery: the parser moves it to Monday and declares it (test_agent_fixes2.py)
+    assert n.delivery_date == (MON if day.weekday() == 6 else day) and n.date_from == "sentence"
 
 
 def test_absolute_finnish_date_and_cutoff():
@@ -86,8 +87,10 @@ def test_absolute_finnish_date_and_cutoff():
     late = datetime(2026, 11, 14, 18, 30, tzinfo=config.TZ)
     early = datetime(2026, 11, 14, 9, 0, tzinfo=config.TZ)
     assert past_cutoff(date(2026, 11, 15), late) and not past_cutoff(date(2026, 11, 15), early)
-    assert any("cut-off" in r for r in parse_need("10 L maitoa huomiseksi", SAT, MON, now=late).risks)
-    assert not parse_need("10 L maitoa huomiseksi", SAT, MON, now=early).risks
+    fri = date(2026, 11, 13)  # tomorrow = Saturday, a delivery day
+    late, early = datetime(2026, 11, 13, 18, 30, tzinfo=config.TZ), datetime(2026, 11, 13, 9, 0, tzinfo=config.TZ)
+    assert any("cut-off" in r for r in parse_need("10 L maitoa huomiseksi", fri, MON, now=late).risks)
+    assert not parse_need("10 L maitoa huomiseksi", fri, MON, now=early).risks
 
 
 # --- 1 + 5. the runtime holds the quote to the parsed need and declares its doubts ------------------------------

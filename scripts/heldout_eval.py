@@ -607,7 +607,7 @@ def report_section(name: str = "heldout") -> list[str]:
         L.append("")
     fixed = set_dir(name) / "fixed.yaml"
     if fixed.exists():
-        L += ["### Fixed after the held-out run", ""]
+        L += [f"### Fixed after {'held-out set 2' if name == 'heldout2' else 'the held-out run'}", ""]
         L += [f"- {x}" for x in yaml.safe_load(fixed.read_text()) or []]
         L.append("")
     return L

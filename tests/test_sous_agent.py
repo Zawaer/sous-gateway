@@ -20,7 +20,7 @@ MON = date(2026, 11, 16)
     ("200 litres of milk by Saturday 14 November.", 200, "L", SAT),
     # not in evals/cases.yaml
     ("Need 2 500 liters of skimmed milk on Wednesday", 2500, "L", date(2026, 11, 18)),
-    ("6 kilos of butter tomorrow", 6, "KG", date(2026, 11, 15)),
+    ("6 kilos of butter tomorrow", 6, "KG", MON),  # tomorrow is Sunday: moved to Monday (declared)
     ("3 cases of passata on 20.11.", 3, "SALES_UNIT", date(2026, 11, 20)),
     ("150 l oat drink, 2026-11-19", 150, "L", date(2026, 11, 19)),
 ])

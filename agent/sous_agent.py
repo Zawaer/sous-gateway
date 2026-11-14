@@ -9,7 +9,10 @@ This one is specialised for buying through Sous:
    substitute", and whether the sentence asks for a dish to be cooked (a menu). The model is told the parsed need
    as facts, and the runtime holds every quote to it (`vet`): all parsed items go into ONE basket quote, their
    amounts, units and the date are set to the parsed values, and a product id the buyer named is always among the
-   candidates. The model still chooses the searches, the candidates and the product types.
+   candidates. The model still chooses the searches, the candidates and the product types. Stock the buyer already
+   has ("meillä on jo 5 kg", "we have 2 kg in stock") is subtracted from its item, never ordered; piece counts
+   ("120 brioche buns") go to the gateway as pieces (ST), which it converts by pack content; a named day without
+   delivery (a Sunday, a public holiday) moves to the next delivery day, declared.
 2. Headcounts are servings, never pack counts: an item with no amount but a headcount gets an amount from
    PORTIONS (a small, explicit per-person table below, e.g. milk for coffee 0.03 L/person). That amount is an
    assumption, so it is sent to the gateway as a declared risk and shown to the buyer. With no rule for the item,
@@ -39,7 +42,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
 from .buyer import WEEKDAYS, BuyerAgent, BuyerConfig, BuyerRun, Step, helsinki_today, next_delivery_day
-from .dates import past_cutoff, relative_date
+from .dates import deliverable, past_cutoff, relative_date
 
 SOUS_TOOLS = ("search_products", "suggest_substitutes", "request_quote", "place_order")
 PLAN_MENU = "plan_menu"
@@ -58,7 +61,8 @@ DIET_HINTS = (
     (re.compile(r"lactose[- ]free|laktoositon", re.I), "claims=[\"FREE_FROM_LACTOSE\"]"),
     (re.compile(r"gluten[- ]free|gluteeniton", re.I), "avoid_allergens=[\"AW\"] (cereals containing gluten)"),
     (re.compile(r"egg[- ]free|no eggs?\b", re.I), "avoid_allergens=[\"AE\"] (egg)"),
-    (re.compile(r"milk[- ]allerg|milk[- ]free|dairy[- ]free|maidoton", re.I), "avoid_allergens=[\"AM\"] (milk)"),
+    (re.compile(r"milk[- ]allerg|milk[- ]free|dairy[- ]free|maidoton|maitoallerg|allergic\s+to\s+(?:cow'?s\s+)?(?:milk|dairy)",
+                re.I), "avoid_allergens=[\"AM\"] (milk)"),
     (re.compile(r"\bno nuts\b|nut[- ]free|pähkinätön", re.I), "avoid_allergens=[\"AN\"] (tree nuts)"),
     (re.compile(r"peanut", re.I), "avoid_allergens=[\"AP\"] (peanuts) if the buyer excludes them"),
 )
@@ -107,6 +111,8 @@ PORTIONS: tuple[tuple[str, str | None, float, str, str], ...] = (
     (r"oats|oatmeal|porridge|kaurahiutale|puuro|muesli|granola", None, 0.04, "KG",
      "oats or muesli, 40 g dry per person"),
     (r"juice|mehu", None, 0.2, "L", "juice, a 2 dl glass per person"),
+    (r"banan|apple|pears?\b|oranges?\b|mandarin|clementin|fruit|banaan|omen|päärynä|appelsiin|klementiin|hedelm", None,
+     0.15, "KG", "one piece of fruit, about 150 g per person"),
     (r"vanilla sauce|custard|vaniljakastike", None, 0.1, "L", "vanilla sauce, 1 dl per person"),
     (r"berr|marja|mansik|mustik|vadelm|puoluk", None, 0.08, "KG", "berries for a dessert, 80 g per person"),
     (r"cheese|juusto", r"bread|sandwich|leipä|leivä|breakfast|aamiai", 0.03, "KG",
@@ -125,17 +131,27 @@ FOODS = (
     ("cheese", r"cheese|juusto\w*|mozzarella|cheddar|feta|halloumi"), ("yoghurt", r"yogh?urts?|jogurt\w*"),
     ("quark", r"quark|rahka\w*"), ("oats", r"oats|oatmeal|porridge|kaurahiutale\w*|puuro\w*|muesli|granola"),
     ("coffee", r"coffee|kahvi\w*|kaffe"), ("tea", r"tea|teetä"), ("juice", r"juices?|mehu\w*"),
-    ("bread", r"bread|rolls?|buns?|leipä\w*|leivä\w*|sämpylä\w*"), ("egg", r"eggs?|kananmun\w*"),
+    ("bread", r"bread|rolls?|buns?|brioche\w*|leipä\w*|leivä\w*|leipi\w*|sämpyl\w*"),
+    ("egg", r"eggs?|kananmun\w*|munia|munaa"),
+    ("sour cream", r"sour cream|smetana\w*|crème fraîche|creme fraiche|ranskankerm\w*"),
+    ("herbs", r"herbs?|dill|parsley|chives|basil|tilli\w*|persilja\w*|ruohosipul\w*|basilika\w*|yrt\w*"),
+    ("stock", r"broth|bouillon|fond\w*|liemi\w*|lientä|liemen\w*"),
+    ("fruit", r"fruits?|bananas?|apples?|pears?|oranges?|mandarins?|clementines?|hedelm\w*|banaan\w*|omen\w*|"
+              r"päärynä\w*|appelsiin\w*|mandariini\w*|klementiini\w*"),
+    ("drink", r"glögi\w*|glögg|mulled wine|lemonade|limonadi\w*|soft drinks?|virvoitus\w*|sima\w*"),
+    ("ready meal", r"rosolli\w*|salad|salaatti\w*|casserole|tortu\w*|torttu\w*|tart\w*|pie\b|"
+                   r"piirak\w*|piira\w*"),
     ("flour", r"flour|jauho\w*"), ("sugar", r"sugar|sokeri\w*"), ("salmon", r"salmon|lohi\w*|lohe\w*|lohta"),
-    ("fish", r"fish|kala|kalaa|kalan\w*|kalafile\w*"), ("chicken", r"chicken|broiler\w*|kana\w*|turkey|kalkkun\w*"),
+    ("fish", r"fish|trout|cod|herring|tuna|zander|pike-?perch|kala|kalaa|kalan\w*|kalafile\w*|silak\w*|muik\w*|"
+             r"siika\w*|siikaa|kuha\w*|turska\w*|tonnikal\w*|kirjolohi\w*|kirjolohta"), ("chicken", r"chicken|broiler\w*|kana\w*|turkey|kalkkun\w*"),
     ("meat", r"mince|minced|beef|pork|meat|jauheliha\w*|naudan\w*|porsaan\w*|sianliha\w*|liha\w*"),
     ("ham", r"ham|kinkku\w*"), ("sausage", r"sausages?|makkara\w*|nakki\w*|pepperoni|salami|bacon|pekoni\w*"),
-    ("potato", r"potato(?:es)?|peruna\w*"), ("rice", r"rice|riisi\w*"),
+    ("potato", r"potato(?:es)?|peruna\w*|peruno\w*"), ("rice", r"rice|riisi\w*"),
     ("pasta", r"pasta|spaghetti|macaroni|makaroni\w*|noodles?|lasagne sheets?"),
     ("berries", r"berr(?:y|ies)|strawberr\w*|blueberr\w*|raspberr\w*|marja\w*|mansik\w*|mustik\w*|vadelm\w*"),
     ("vanilla sauce", r"vanilla sauce|custard|vaniljakastike\w*"), ("dough", r"dough|taikina\w*|pizza ?bases?"),
-    ("vegetables", r"tomato(?:es)?|tomaat\w*|cucumbers?|kurk\w*|lettuce|salaat\w*|onions?|sipul\w*|carrots?|"
-                   r"porkkan\w*|vegetables?|vihannek\w*|kasvik\w*"),
+    ("vegetables", r"tomato(?:es)?|tomaat\w*|cucumbers?|kurk\w*|lettuce|onions?|sipul\w*|carrots?|"
+                   r"porkkan\w*|vegetables?|vihannek\w*|kasvik\w*|beetroots?|punajuur\w*|cabbage|kaali\w*"),
     ("sauce", r"(?<!vanilla )sauces?|(?<!vanilja)kastike\w*|passata|ketchup|mayonnaise|majonee\w*"),
     ("oil", r"oil|öljy\w*"), ("water", r"water|vesi|vettä"), ("chocolate", r"chocolate|suklaa\w*"),
     ("cake", r"cakes?|kakku\w*|pulla\w*|biscuits?|cookies?|keksi\w*|pastr(?:y|ies)|leivonnai\w*"),
@@ -146,20 +162,84 @@ FI_STEMS = {"milk": "maito|maido", "cream": "kerma", "cheese": "juusto", "yoghur
             "salmon": "lohi|lohe|lohta", "meat": "liha", "ham": "kinkku", "sausage": "makkara|nakki",
             "potato": "peruna",
             "rice": "riisi", "berries": "marja", "sauce": "kastike", "oil": "öljy", "chocolate": "suklaa",
-            "ice cream": "jäätelö", "oat drink": "kaurajuom", "chicken": "broiler"}
+            "ice cream": "jäätelö", "oat drink": "kaurajuom", "chicken": "broiler",
+            "vegetables": "sipul|porkkan|tomaat|kurk|juur", "fish": "kala|silakk|siika|kuha|turska",
+            "stock": "liemi|lient|fond", "fruit": "hedelm|omena|omeno", "herbs": "tilli|yrtti",
+            "egg": "muna|munia"}
 _FOOD_RX = [(k, re.compile(rf"(?<![\w-])(?:{p})(?![\w])" + (rf"|\w(?:{FI_STEMS[k]})\w*" if k in FI_STEMS else ""),
                            re.I)) for k, p in FOODS]
-_SPLIT = re.compile(r"(,\s+|;\s*|\.\s+(?=[A-ZÄÖÅ\d])|\n+|\s+(?:and|plus|ja|sekä|och|as well as)\s+|\s*[&+]\s*)",
+_SPLIT = re.compile(r"(,\s+|;\s*|\.\s+(?=[A-ZÄÖÅ\d§])|\n+|\s+(?:and|plus|ja|sekä|och|as well as)\s+|\s*[&+]\s*)",
                     re.I)
 _ALTERNATIVES = re.compile(r"\b(?:or|tai|eller)\b", re.I)
 # A request for a dish to be cooked rather than products: the recipe planner's job.
 _MENU_CUE = re.compile(r"\b(?:ingredients?|ainekse\w*|aineks\w*|raaka-?aine\w*|order\s+the\s+rest|the\s+rest|"
                        r"loput|cook|cooking|kokata|kokkaa\w*|valmista\w*|menu|ruokalista\w*|recipe|resepti\w*|"
                        r"we(?:'ll| will)\s+make|teemme)\b", re.I)
+# Only these send a list of products with their own amounts to the planner: the buyer will cook from them.
+_COOK_CUE = re.compile(r"\b(?:ingredients?|ainekse\w*|aineks\w*|raaka-?aine\w*|order\s+the\s+rest|the\s+rest|loput|"
+                       r"cook|cooking|kokata|kokkaa\w*|valmistamme|valmistetaan|recipe|resepti\w*|"
+                       r"we(?:'ll| will)\s+make|teemme|to\s+make)\b", re.I)
+
+# --- stock on hand ("meillä on jo 5 kg", "we have 2 kg in stock"): subtracted, never ordered --------------------
+_STOCK_CUE = re.compile(
+    r"\b(?:we\s+(?:already\s+|still\s+)?(?:have|got)(?!\s+to\b)|we've\s+(?:already\s+|still\s+)?got|already\s+have|"
+    r"have\s+already|in\s+stock|on\s+hand|left\s*over|meillä\s+on|meiltä\s+löytyy|on\s+(?:jo|vielä)(?!\s+loppu)|"
+    r"(?:jo|vielä)\s+on|löyty(?:y|vät)(?!\w)|varastossa|löytyy\s+(?:jo|vielä|varastosta)|vi\s+har|har\s+redan|i\s+lager|finns\s+redan)\b",
+    re.I)
+_IF_STOCK = re.compile(r"\b(?:if|jos|om|whether|check)\b", re.I)
+_NEED_CUE = re.compile(r"\b(?:need\w*|want|order|send|get|buy|please|requir\w*|tarvit\w*|tarvii|tilaa\w*|tilataan|"
+                       r"halua\w*|toimit\w*|lähet\w*|behöver|beställ\w*|skicka)\b", re.I)
+_TOTAL_CUE = re.compile(r"\b(?:in\s+total|total|altogether|overall|all\s+in\s+all|yhteensä|kaikkiaan|"
+                        r"kokonaisuudessaan|totalt|sammanlagt|i\s+allt)\b", re.I)
+# words that only restate an amount ("split it into orders of 25 l", "tarvitaan yhteensä 12 kg")
+_FILLER = {"split", "into", "orders", "order", "batches", "deliveries", "each", "per", "every", "the", "and", "for",
+           "with", "from", "this", "that", "them", "those", "these", "also", "then", "too", "only", "just", "about",
+           "approx", "approximately", "around", "roughly", "max", "maximum", "least", "most", "more", "another",
+           "extra", "plus", "please", "thanks", "find", "substitute", "instead", "same", "again", "delivery",
+           "deliver", "delivered", "noin", "yhteensä", "kiitos", "myös", "lisäksi", "vielä", "sitten", "sekä",
+           "kanssa", "erissä", "jaettuna", "vähintään", "enintään", "lisää", "toinen", "toimitus", "tarvitaan",
+           "tarvitsemme", "tarvitaan", "och", "också", "totalt", "jo", "nyt", "still", "now", "need", "needed"}
+
+# --- special-diet subgroups ("one child is allergic to milk", "allergisille 4 potilaalle, heille broileria") ----
+SUB_MARK = "§§"
+_NUMWORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+             "ten": 10, "yksi": 1, "yhdelle": 1, "yhden": 1, "kaksi": 2, "kahdelle": 2, "kolme": 3, "kolmelle": 3,
+             "neljä": 4, "neljälle": 4, "viisi": 5, "viidelle": 5, "kuusi": 6, "kuudelle": 6, "ett": 1, "en": 1,
+             "två": 2, "tre": 3, "fyra": 4, "fem": 5}
+_PERSON = (r"(?:child(?:ren)?|kids?|persons?|people|guests?|pupils?|students?|patients?|residents?|diners?|eaters?|"
+           r"customers?|employees?|vegans?|vegetarians?|coeliacs?|celiacs?|lapsi|lasta|lapse\w*|lapsi\w*|oppila\w*|"
+           r"potila\w*|asuk\w*|viera\w*|vieras|henkilö\w*|hengel\w*|ruokailij\w*|vegaan\w*|kasvissyöj\w*|"
+           r"keliaak\w*|allergik\w*|barn(?:en)?|elev(?:er)?|gäst(?:er)?|patient(?:er)?)")
+_SUB = re.compile(rf"(?<![\d.,])\b(\d{{1,4}}|{'|'.join(_NUMWORDS)})\s+(?:[\wäöå'-]+\s+){{0,2}}?{_PERSON}\b", re.I)
+_DIET_CUE = re.compile(r"allerg\w*|intoleran\w*|vegan\w*|vegaan\w*|vegetar\w*|kasvissyöj\w*|keliaak\w*|coeliac|"
+                       r"celiac|gluten|lactose|laktoos\w*|maidot\w*|dairy|special\s+diet|erityisruokavali\w*|"
+                       r"\bei\s+saa\b|must\s+not|can(?:'t|not)\s+(?:eat|have)|\bei\s+voi\b|\w+-free\b", re.I)
+_BACKREF = re.compile(r"\b(?:them|those|these|him|her|heille|niille|näille|hänelle|dem|honom|henne|"
+                      r"for\s+(?:the\s+)?(?:allergic|vegan|special))\b", re.I)
+# A food named as something to avoid ("allergic to milk", "ei saa olla kalaa", "without nuts") is not an item.
+_EXCLUDED = re.compile(
+    r"\b(?:\w+\s+)?(?:allergic|intolerant|sensitive)\s+to\s+(?:cow'?s\s+)?\w+(?:\s+(?:or|tai|eller)\s+\w+)?"
+    r"|\b\w+[\s-](?:allergy|allergies|allergic|intolerance|intolerant)\b|\b\w+-?allergi\w*|\b\w+\s+allergi\w*"
+    r"|\b(?:ei\s+saa\s+(?:olla|sisältää|syödä)|eivät\s+(?:saa|voi)\s+syödä|ei\s+voi\s+syödä|"
+    r"must\s+not\s+(?:contain|have|eat|include)|can(?:'t|not)\s+(?:eat|have)|without|free\s+(?:from|of)|ilman|utan)"
+    r"\s+(?:any\s+)?\w+(?:\s+(?:or|tai|eikä|eller)\s+\w+)?", re.I)
+
+# --- counts: packs or pieces ------------------------------------------------------------------------------------
+_PACK_WORD = re.compile(
+    r"jars?|cans?|tins?|bottles?|box(?:es)?|cases?|cartons?|packs?|packets?|packages?|bags?|sacks?|crates?|trays?|"
+    r"buckets?|tubs?|pails?|kegs?|purk\w*|tölk\w*|pullo\w*|laatik\w*|ltk|kartong\w*|pakkau\w*|paket\w*|pussi\w*|"
+    r"säk\w*|rasia\w*|ämpär\w*|kanist\w*|sanko\w*|låd\w*|burk\w*|flask\w*|förpackning\w*", re.I)
+_PIECE_WORD = re.compile(r"pcs|pc|pieces?|kpl|kappale\w*|st|stk|stycken", re.I)
+_COUNTABLE = re.compile(
+    r"eggs?|buns?|rolls?|croissants?|bagels?|muffins?|donuts?|doughnuts?|patt(?:y|ies)|burgers?|sausages?|"
+    r"frankfurters?|tortillas?|wraps?|pies?|pastr(?:y|ies)|tarts?|cookies?|bananas?|apples?|oranges?|lemons?|limes?|"
+    r"pears?|avocados?|kananmun\w*|muna\w*|munia|sämpyl\w*|pulla\w*|pullia|munk\w*|piira\w*|tortu\w*|pihv\w*|"
+    r"nakk\w*|makkar\w*|banaan\w*|omen\w*|appelsiin\w*|sitruun\w*|päärynä\w*|croissant\w*|ägg|bullar|frallor",
+    re.I)
 
 
 def foods_in(text: str) -> list[str]:
-    t = re.sub(r"\b\w+-(?=\s|$)", " ", _DIET_WORDS.sub(" ", text))  # "milk- and nut-free"
+    t = re.sub(r"\b\w+-(?=\s|$)", " ", _DIET_WORDS.sub(" ", _EXCLUDED.sub(" ", text)))  # "milk- and nut-free"
     return [k for k, rx in _FOOD_RX if rx.search(t)]
 
 
@@ -174,6 +254,10 @@ class Item:
     headcount: int | None = None
     assumption: str | None = None    # for source=portion: what was assumed, in words
     product_ids: list[str] = field(default_factory=list)
+    total: bool = False              # the buyer's amount is the total need ("yhteensä 12 kg"), stock included
+    subgroup: bool = False           # headcount is a special-diet subgroup ("one milk-allergic child"), not everyone
+    on_hand: float | None = None     # stock subtracted from the buyer's amount (same unit)
+    stock_note: str | None = None
 
     def label(self, i: int) -> str:
         return f"#{i + 1}"
@@ -181,9 +265,15 @@ class Item:
     def as_text(self, i: int) -> str:
         what = f"{self.label(i)} \"{self.text}\": "
         if self.source == "stated":
-            what += f"{self.amount:g} {self.unit} (stated by the buyer)"
+            what += f"{self.amount:g} {self.unit} (" + (self.stock_note + ", already subtracted" if self.stock_note
+                                                         else "stated by the buyer") + ")"
+            if self.unit == "ST":
+                what += ("; a count of PIECES: keep unit ST, the gateway converts pieces to whole sales units by the "
+                         "pack content (120 ST of a carton of 50 = 3 cartons)")
         elif self.source == "portion":
-            what += f"{self.amount:g} {self.unit} (ASSUMED: {self.assumption}; the runtime declares it as a risk)"
+            what += (f"{self.amount:g} {self.unit} (ASSUMED: {self.assumption}"
+                     + (f", for the {self.headcount} people in this special-diet group only" if self.subgroup else "")
+                     + (f"; {self.stock_note}" if self.stock_note else "") + "; the runtime declares it as a risk)")
         elif self.source == "ask":
             what += (f"ASK THE BUYER: no amount given, and no portion rule for this item for {self.headcount} "
                      f"people; do not quote, ask how much they need")
@@ -193,9 +283,16 @@ class Item:
             what += f"; product ids named: {', '.join(self.product_ids)}"
         return what
 
+    def portion_risk(self) -> str:
+        who = f"{self.headcount} people" + (" (the special-diet group only)" if self.subgroup else "")
+        return (f"Assumed {self.amount:g} {self.unit} for \"{self.text[:60]}\": {who} x {self.assumption} "
+                f"(the buyer gave no amount" + (f"; {self.stock_note}" if self.stock_note else "") + ").")
+
     def view(self) -> dict:
         return {"text": self.text, "amount": self.amount, "unit": self.unit, "source": self.source,
-                "assumption": self.assumption, "product_ids": self.product_ids}
+                "assumption": self.assumption, "product_ids": self.product_ids,
+                **({"headcount": self.headcount, "subgroup": True} if self.subgroup else {}),
+                **({"on_hand": self.on_hand, "stock_note": self.stock_note} if self.on_hand is not None else {})}
 
 
 @dataclass
@@ -209,6 +306,7 @@ class Need:
     headcount: int | None = None
     menu: bool = False               # a dish to cook: the recipe planner (plan_menu) quotes it
     risks: list[str] = field(default_factory=list)  # the parser's own doubts (declared on every quote)
+    stock: list[str] = field(default_factory=list)  # what the buyer says they already have (never ordered)
 
     # single-item views (the first item), as before multi-item parsing
     @property
@@ -225,8 +323,7 @@ class Need:
 
     @property
     def assumptions(self) -> list[str]:
-        return [f"Assumed {i.amount:g} {i.unit} for \"{i.text[:60]}\": {i.headcount} people x {i.assumption} "
-                f"(the buyer gave no amount)." for i in self.items if i.source == "portion"]
+        return [i.portion_risk() for i in self.items if i.source == "portion"]
 
     def as_text(self) -> str:
         lines = []
@@ -238,6 +335,9 @@ class Need:
             lines.append(f"- items ({len(self.items)}): quote ALL of them in ONE request_quote, one entry each, in "
                          f"this order, with note = the item's label (#1, #2, ...):")
             lines += [f"  {it.as_text(i)}" for i, it in enumerate(self.items)]
+        if self.stock:
+            lines.append("- already on hand (the buyer has it: never quote it as an item; amounts above already "
+                         "subtract it): " + "; ".join(self.stock))
         lines.append(f"- delivery_date: {self.delivery_date.isoformat() if self.delivery_date else 'unknown'} "
                      f"({'named by the buyer' if self.date_from == 'sentence' else 'the default delivery day'})")
         if self.product_ids:
@@ -254,6 +354,7 @@ class Need:
                 "headcount": self.headcount, "menu": self.menu,
                 "delivery_date": self.delivery_date.isoformat() if self.delivery_date else None,
                 "date_from": self.date_from, "product_ids": self.product_ids, "substitute": self.substitute,
+                "on_hand": self.stock,
                 "risks": self.assumptions + self.risks}
 
 
@@ -266,22 +367,42 @@ def parse_need(text: str, today: date, default: date | None = None, now: datetim
     n = Need()
     t = " ".join(text.split())
     body = _PACK.sub(" ", t)
+    body, subs = _take_subgroups(body)
     body, n.headcount = _take_headcount(body)
-    n.items = [_item(seg, body) for seg in _segments(body)] or [Item(text=t)]
+    entries = _segments(body, [c for _, c in subs])
+    words = [w for w, _ in subs]
+    for e in entries:
+        e["text"] = _restore(e["text"], words)
+    n.items = [_item(e) for e in entries if not e["stock"]]
+    if not n.items and not any(e["stock"] for e in entries):
+        n.items = [Item(text=t)]
     for it in n.items:
         if it.amount is None and (it.headcount or n.headcount):
             _apply_portion(it, it.headcount or n.headcount, t)
+    _subtract_stock(n, entries)
     n.delivery_date, n.date_from = _date(t, today), "sentence"
     if n.delivery_date is None:
         n.delivery_date, n.date_from = default or next_delivery_day(today), "default"
-    elif past_cutoff(n.delivery_date, now):
-        n.risks.append(f"The buyer asked for delivery on {WEEKDAYS[n.delivery_date.weekday()]} "
-                       f"{n.delivery_date.isoformat()}; Valio's usual order cut-off for that day (17:00 the day "
-                       f"before) has passed, so some lines may not make it.")
+    else:
+        asked = n.delivery_date
+        n.delivery_date, why = deliverable(asked)
+        if why:
+            n.risks.append(f"The buyer asked for delivery on {WEEKDAYS[asked.weekday()]} {asked.isoformat()}, which "
+                           f"is {why} with no Valio delivery: moved to the next delivery day, "
+                           f"{WEEKDAYS[n.delivery_date.weekday()]} {n.delivery_date.isoformat()}.")
+        if past_cutoff(n.delivery_date, now):
+            n.risks.append(f"The buyer asked for delivery on {WEEKDAYS[n.delivery_date.weekday()]} "
+                           f"{n.delivery_date.isoformat()}; Valio's usual order cut-off for that day (17:00 the day "
+                           f"before) has passed, so some lines may not make it.")
     n.product_ids = list(dict.fromkeys(re.findall(r"\b(4\d{5})\b", t)))
     n.substitute = bool(re.search(r"\bsubstitut|\bkorvaa\w*|\bkorvike\w*|\bersätt", t, re.I))
     n.hints = [h for rx, h in DIET_HINTS if rx.search(t)]
-    n.menu = recipe.looks_like_menu(t) or bool(n.headcount and _MENU_CUE.search(t))
+    menu = recipe.looks_like_menu(t) or bool(n.headcount and _MENU_CUE.search(t))
+    # A shopping list names products with their own amounts ("ham 8 kg, ready-made rosolli 5 kg, 120 tarts"), even
+    # under a party's name: it is quoted as it is. Only an explicit cooking cue sends such a list to the planner.
+    stated = [i for i in n.items if i.source == "stated"]
+    shopping_list = bool(stated) and 2 * len(stated) >= len(n.items) and not _COOK_CUE.search(t)
+    n.menu = menu and not shopping_list
     return n
 
 
@@ -294,57 +415,226 @@ def _take_headcount(body: str) -> tuple[str, int | None]:
     for m in _FOR_N.finditer(body):
         nxt = re.match(r"\s*([A-Za-zÀ-ÿ%€']+)", body[m.end():])
         word = nxt.group(1).lower() if nxt else None
-        if word is None or word in _FOR_OK or re.fullmatch(_HEAD_NOUNS, word, re.I):
+        if word is None or word in _FOR_OK or re.fullmatch(_HEAD_NOUNS, word, re.I) \
+                or relative_date(word, date(2026, 1, 1)):  # "for 40 ylihuomenna"
             found.append((m.start(), int(_num(m.group(1)))))
     spans = [m.span() for m in _HEAD.finditer(body)] + \
             [m.span() for m in _FOR_N.finditer(body) if any(s == m.start() for s, _ in found)]
-    for a, b in sorted(spans, reverse=True):
+    merged: list[list[int]] = []
+    for a, b in sorted(spans):  # "for 40 guests": the two phrases overlap; cut their union once
+        if merged and a <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], b)
+        else:
+            merged.append([a, b])
+    for a, b in reversed(merged):
         out = out[:a] + " " + out[b:]
     return out, (min(found)[1] if found else None)
 
 
-def _segments(body: str) -> list[str]:
-    """The phrases of a sentence, merged into items. A phrase becomes its own item when it names a food the item
-    before it doesn't, or a new food after "and / ja / plus" ("milk and coffee"). Otherwise it describes the item
-    before it: an amount-less phrase ("40 kg coffee beans, Paulig or Juhla"; "milk. Proper milk, not a drink") or
-    an amount with no food ("Find a substitute, 80 litres"; "split it into orders of 25 l": the first amount
-    stays)."""
+def _take_subgroups(body: str) -> tuple[str, list[tuple[str, int]]]:
+    """Special-diet subgroups ("one child is allergic to milk", "allergisille 4 potilaalle"): replaced by a marker
+    (so they are not the whole group's headcount) and returned in order as (words, count). Only when the sentence
+    also has a larger headcount for the whole group; otherwise the phrase IS the headcount."""
+    found = []
+    for m in _SUB.finditer(body):
+        a = max(body.rfind(c, 0, m.start()) for c in ".;!?,\n")
+        b = min([x for x in (body.find(c, m.end()) for c in ".;!?,\n") if x >= 0] or [len(body)])
+        if _DIET_CUE.search(body[a + 1:b]):
+            found.append(m)
+    if not found:
+        return body, []
+    rest = body
+    for m in reversed(found):
+        rest = rest[:m.start()] + SUB_MARK + rest[m.end():]
+    _, whole = _take_headcount(rest)
+    subs = [(m.group(0), _count(m.group(1))) for m in found]
+    if not whole or any(c >= whole for _, c in subs):
+        return body, []
+    return rest, subs
+
+
+def _count(s: str) -> int:
+    return int(s) if s.isdigit() else _NUMWORDS[s.lower()]
+
+
+def _restore(text: str, words: list[str]) -> str:
+    while SUB_MARK in text and words:
+        text = text.replace(SUB_MARK, words.pop(0), 1)
+    return " ".join(text.replace(SUB_MARK, " ").split()).strip(" ,")
+
+
+def _names_product(seg: str) -> bool:
+    """Does an amount phrase name something beyond the amount ("smetanaa 2 kg"), rather than restate one ("80
+    litres", "split it into orders of 25 l", "tarvitaan yhteensä 12 kg")?"""
+    rest = re.sub(_NUM + r"\s*(?:" + _LITRE + "|" + _KILO + r"|kpl\b|pcs\b)?", " ", seg, flags=re.I)
+    for w in re.findall(r"[A-Za-zÀ-ÿ][\wÀ-ÿ'’-]{2,}", rest):
+        lw = w.lower()
+        if lw in _FILLER or lw in _NOT_COUNT or lw in MONTHS or re.fullmatch(_HEAD_NOUNS, lw) \
+                or any(lw.startswith(f) for f in FI_MONTHS) or relative_date(lw, date(2026, 1, 1)) \
+                or _STOCK_CUE.search(lw) or _NEED_CUE.fullmatch(lw) or _TOTAL_CUE.fullmatch(lw):
+            continue
+        return True
+    return False
+
+
+def _is_stock(seg: str) -> bool:
+    """Does the phrase say what the buyer already has ("meillä on jo 5 kg", "we have 2 kg in stock")?"""
+    m = _STOCK_CUE.search(seg)
+    if not m:
+        return False
+    if re.search(r"stock|varasto|lager", m.group(0), re.I) and _IF_STOCK.search(seg[:m.start()]):
+        return False  # "if it's in stock"
+    need = _NEED_CUE.search(seg)
+    return not (need and need.start() < m.start())
+
+
+def _segments(body: str, subs: list[int] | None = None) -> list[dict]:
+    """The phrases of a sentence, merged into entries {text, foods, q, stock, sub, of_stock, total, named}.
+
+    A phrase becomes its own item when it names a food the item before it doesn't, a new food after "and / ja /
+    plus" ("milk and coffee"), or anything at all with its own amount ("smetanaa 2 kg", "punasipulia 1 kg"). Otherwise
+    it describes the item before it: an amount-less phrase ("40 kg coffee beans, Paulig or Juhla"; "milk. Proper
+    milk, not a drink") or an amount with no product ("Find a substitute, 80 litres"; "split it into orders of
+    25 l": the first amount stays). A phrase saying what the buyer already has ("meillä on jo 5 kg kirjolohta", "we
+    have 2 kg in stock") is stock (stock=True), never an item; an amount with no product right after it ("tarvitaan
+    yhteensä 12 kg") is the item it belongs to (of_stock). A special-diet subgroup phrase starts an entry of its
+    own, which the phrase after it joins ("..., heille broileria"; "..., get a plant-based yoghurt for them")."""
+    subs = list(subs or [])
     parts = _SPLIT.split(body)
     pairs = [(parts[0], "")] + [(parts[i + 1], parts[i]) for i in range(1, len(parts) - 1, 2)]
     items: list[dict] = []
+    stock_mode = False
     for raw, sep in pairs:
         seg = " ".join(raw.split()).strip(" .:")
         if not seg:
             continue
         q, foods = _qty(seg), set(foods_in(seg))
+        named = bool(foods) or (q is not None and _names_product(seg))
         conj = bool(re.search(r"[&+]|\b(?:and|plus|ja|sekä|och|as well as)\b", sep, re.I))
+        sentence = bool(re.search(r"[.;\n]", sep))
         prev = items[-1] if items else None
-        if prev is None:
+        stock = _is_stock(seg) or (stock_mode and conj and not _NEED_CUE.search(seg) and q is not None)
+        stock_mode = stock and (q is not None or bool(foods))
+        new = {"text": seg, "foods": foods, "q": q, "stock": stock, "sub": None, "of_stock": None,
+               "total": bool(_TOTAL_CUE.search(seg)), "named": named}
+        if SUB_MARK in seg:
+            new["sub"] = subs.pop(0) if subs else None
+        if stock:
+            items.append(new)
+            continue
+        if prev is not None and prev["stock"]:
+            if q is not None and not named:            # "tarvitaan yhteensä 12 kg" after "meillä on jo 5 kg ..."
+                new["of_stock"] = prev
+                items.append(new)
+            elif q is None and not named:              # more words about the stock
+                prev["text"] += ", " + seg
+            else:
+                items.append(new)
+            continue
+        if prev is None or new["sub"] is not None:
             merge = False
-        elif not prev["foods"] and prev["q"] is None:
+        elif prev["sub"] is not None and not prev["foods"] and prev["q"] is None:
+            merge = not sentence or bool(_BACKREF.search(seg))  # "..., heille broileria" joins the subgroup
+        elif not prev["foods"] and prev["q"] is None and not prev["named"]:
             merge = True                                   # a preamble ("Hi, we need")
-        elif not foods:
+        elif not named:
             merge = True
         elif q is not None:
             merge = False
         else:
-            merge = bool(_ALTERNATIVES.search(seg)) or (not conj and foods <= prev["foods"])
+            merge = bool(_ALTERNATIVES.search(seg)) or (not conj and bool(foods) and foods <= prev["foods"])
         if merge:
             prev["text"] += ", " + seg
             prev["foods"] |= foods
             prev["q"] = prev["q"] if prev["q"] is not None else q
+            prev["named"] = prev["named"] or named
+            prev["total"] = prev["total"] or new["total"]
         else:
-            items.append({"text": seg, "foods": foods, "q": q})
-    return [i["text"] for i in items if i["foods"] or i["q"] is not None] or [i["text"] for i in items[:1]]
+            items.append(new)
+    out = [e for e in items if e["stock"] or e["foods"] or e["q"] is not None or e["named"]]
+    if not any(not e["stock"] for e in out):  # "Lasagne, we have the sheets": the dish is still the request
+        out = [e for e in items if not e["stock"]][:1] + out
+    return out or items[:1]
 
 
-def _item(seg: str, body: str) -> Item:
+def _item(e: dict) -> Item:
+    seg = e["text"]
     it = Item(text=seg, foods=foods_in(seg), product_ids=list(dict.fromkeys(re.findall(r"\b(4\d{5})\b", seg))))
-    q = _qty(seg)
-    if q:
-        it.amount, it.unit, it.source = q[0], q[1], "stated"
-    _, it.headcount = _take_headcount(seg) if _HEAD.search(seg) or _FOR_N.search(seg) else (seg, None)
+    if e["q"]:
+        it.amount, it.unit, it.source = e["q"][0], e["q"][1], "stated"
+    it.total = e["total"]
+    if e["sub"]:
+        it.headcount, it.subgroup = e["sub"], True
+    else:
+        _, it.headcount = _take_headcount(seg) if _HEAD.search(seg) or _FOR_N.search(seg) else (seg, None)
     return it
+
+
+def _diet_sig(text: str) -> frozenset:
+    return frozenset(h for rx, h in DIET_HINTS if rx.search(text))
+
+
+def _subtract_stock(n: Need, entries: list[dict]) -> None:
+    """Stock the buyer already has is subtracted from the item it belongs to, never ordered. With a stated total
+    ("yhteensä 12 kg", "25 l in total") the result is certain; otherwise the amount the buyer gave may already be
+    the extra they need, so the subtraction is declared to the gateway as a risk (a human confirms)."""
+    item_entries = [e for e in entries if not e["stock"]]
+    item_of = {id(e): it for e, it in zip(item_entries, list(n.items))} if len(item_entries) == len(n.items) else {}
+    for k, s in enumerate(entries):
+        if not s["stock"]:
+            continue
+        what = s["text"][:80]
+        child = next((e for e in entries if e["of_stock"] is s), None)
+        target = item_of.get(id(child)) if child is not None else None
+        if target is not None:
+            before = [item_of[id(e)] for e in entries[:k] if id(e) in item_of and item_of[id(e)] in n.items]
+            if not s["foods"] and before and before[-1].amount is None:
+                # "Kermaa juhliin, 10 l varastossa, yhteensä 25 l": the total belongs to the item before the stock
+                b = before[-1]
+                b.amount, b.unit, b.source, b.total = target.amount, target.unit, "stated", True
+                b.text = f"{b.text}, {target.text}"
+                n.items.remove(target)
+                target = b
+            else:
+                target.text = f"{s['text']}, {target.text}"
+                target.foods = list(dict.fromkeys(target.foods + foods_in(s["text"])))
+                target.total = True
+        else:
+            sig, cands = _diet_sig(s["text"]), []
+            for j, e in enumerate(entries):
+                it = item_of.get(id(e))
+                if it is None or it not in n.items:
+                    continue
+                if s["foods"] and not (e["foods"] & s["foods"] and _diet_sig(e["text"]) == sig):
+                    continue
+                cands.append((abs(j - k) + (0.5 if j > k else 0), it))
+            target = min(cands, key=lambda x: x[0])[1] if cands else None
+        sq = s["q"]
+        if sq is None and not s["foods"]:
+            continue  # "meillä on juhlat": no stock named
+        if target is None or sq is None:
+            n.stock.append(f"\"{what}\" (on hand: not ordered)")
+            if target is not None and target.amount is None and target.source != "portion":
+                n.items.remove(target)  # "we already have the milk": nothing of it to order
+            continue
+        if target.amount is None or target.unit != sq[1]:
+            n.stock.append(f"\"{what}\" (on hand)")
+            n.risks.append(f"The buyer has \"{what[:50]}\" on hand, not subtracted from \"{target.text[:40]}\" "
+                           f"({'no amount given' if target.amount is None else 'another unit'}): check the amount.")
+            continue
+        asked, rest = target.amount, round(target.amount - sq[0], 3)
+        if rest <= 0:
+            n.items.remove(target)
+            n.stock.append(f"\"{what}\": {sq[0]:g} {sq[1]} on hand covers the {asked:g} {sq[1]} of "
+                           f"\"{target.text[:60]}\" (not ordered)")
+            continue
+        target.amount, target.on_hand = rest, sq[0]
+        target.stock_note = f"{asked:g} {sq[1]} needed minus {sq[0]:g} {sq[1]} on hand"
+        n.stock.append(f"\"{what}\": {sq[0]:g} {sq[1]} on hand, subtracted from \"{target.text[:60]}\"")
+        if not target.total:
+            n.risks.append(f"Subtracted {sq[0]:g} {sq[1]} on hand from the {asked:g} {sq[1]} asked for "
+                           f"\"{target.text[:40]}\": quoting {rest:g} {sq[1]}. If {asked:g} {sq[1]} was the extra "
+                           f"needed, change it back.")
 
 
 def _qty(seg: str) -> tuple[float, str] | None:
@@ -360,17 +650,32 @@ def _qty(seg: str) -> tuple[float, str] | None:
             continue
         if v and v < 100000 and not re.fullmatch(r"4\d{5}", m.group(1)) and word not in MONTHS \
                 and word not in _NOT_COUNT and not any(word.startswith(f) for f in FI_MONTHS) \
-                and not re.fullmatch(_HEAD_NOUNS, word, re.I):
-            return v, "SALES_UNIT"
+                and not re.fullmatch(_HEAD_NOUNS, word, re.I) and not relative_date(word, date(2026, 1, 1)):
+            return v, _count_unit(seg[m.start(2):])
     return None
+
+
+def _count_unit(after: str) -> str:
+    """A count's unit: packs ("12 jars", "3 boxes of eggs") are SALES_UNIT; pieces ("120 brioche buns", "60 eggs",
+    "120 kpl") are ST, which the gateway converts to whole sales units with the product's pack content (a carton
+    of 50 buns: 120 ST -> 3 cartons), never 1:1."""
+    words = re.findall(r"[A-Za-zÀ-ÿ][\w'’-]*", after)[:4]
+    if not words or _PACK_WORD.fullmatch(words[0]):
+        return "SALES_UNIT"
+    if _PIECE_WORD.fullmatch(words[0]):
+        return "ST"
+    if any(_COUNTABLE.fullmatch(w) for w in words) and not any(_PACK_WORD.fullmatch(w) for w in words[:3]):
+        return "ST"
+    return "SALES_UNIT"
 
 
 def _apply_portion(it: Item, people: int, sentence: str) -> None:
     it.headcount = people
+    text = _EXCLUDED.sub(" ", it.text)  # "allergic to milk" is not milk to portion
     for pat, ctx, per, unit, what in PORTIONS:
-        if not re.search(pat, it.text, re.I):
+        if not re.search(pat, text, re.I):
             continue
-        if ctx and not (re.search(ctx, it.text, re.I) or re.search(ctx, sentence, re.I)):
+        if ctx and not (re.search(ctx, text, re.I) or re.search(ctx, sentence, re.I)):
             continue
         it.amount, it.unit, it.source = math.ceil(round(per * people * 10, 6)) / 10, unit, "portion"
         it.assumption = what
@@ -483,6 +788,7 @@ class SousAgent(BuyerAgent):
         self.self_check_refusals: list[str] = []
         self.quote_refusals: list[str] = []
         self.declared: list[str] = []
+        self.piece_doubts: list[str] = []
         self.plan = None
 
     def run(self, request: str, earlier: list[dict] | None = None) -> BuyerRun:
@@ -493,6 +799,7 @@ class SousAgent(BuyerAgent):
             now = datetime.now(ZoneInfo("Europe/Helsinki"))
         self.need = parse_need(words, self.cfg.today, self.cfg.default_delivery, now=now)
         self.corrections, self.self_check_refusals, self.quote_refusals, self.declared = [], [], [], []
+        self.piece_doubts = []
         self.plan = None
         r = super().run(request, earlier)
         r.agent_notes = {"parsed_need": self.need.view(), "corrections": self.corrections,
@@ -590,11 +897,13 @@ class SousAgent(BuyerAgent):
                         self.corrections.append(f"amount {q.get('amount')} {q.get('unit')} -> {it.amount:g} {it.unit}")
                     q["amount"], q["unit"] = it.amount, it.unit
                     if it.source == "portion":
-                        risks.append(f"Assumed {it.amount:g} {it.unit} for \"{it.text[:60]}\": {it.headcount} "
-                                     f"people x {it.assumption} (the buyer gave no amount).")
+                        risks.append(it.portion_risk())
                 elif it.source in ("open", "ask"):
                     risks.append(f"No amount given for \"{it.text[:60]}\"; the agent chose {q.get('amount')} "
                                  f"{q.get('unit') or 'SALES_UNIT'}.")
+                if it.text in self.piece_doubts:
+                    risks.append(f"{it.amount:g} pieces asked for \"{it.text[:50]}\", but the product's pack content "
+                                 f"in pieces is unknown: check how many packs that is.")
                 named = it.product_ids or (n.product_ids if len(n.items) == 1 else [])
                 if named and not n.substitute:
                     ids = [str(p) for p in q.get("product_ids") or []]
@@ -685,6 +994,19 @@ class SousAgent(BuyerAgent):
             ids = {str(p) for i in args.get("items") or [] for p in i.get("product_ids") or []}
             if not set(n.product_ids) & ids:
                 return f"The buyer named {n.product_ids}; the quote has none of them."
+        # a count of pieces the gateway could only read as sales units (no piece unit on the product): never order
+        # 120 cartons for 120 buns silently; re-quote with the doubt declared
+        match = self._match([i for i in args.get("items") or [] if isinstance(i, dict)])
+        for k, it in enumerate(n.items):
+            j = match.get(k)
+            if it.unit != "ST" or j is None or it.text in self.piece_doubts:
+                continue
+            if any(l.get("item_index") == j and "is not a unit of this product" in str(l.get("unit_note") or "")
+                   for l in q.get("lines") or []):
+                self.piece_doubts.append(it.text)
+                return (f"\"{it.text[:60]}\" is {it.amount:g} pieces, but the quoted product has no piece unit, so "
+                        f"the gateway read it as {it.amount:g} sales units (packs). Pick a product sold per piece or "
+                        f"with its pieces per pack, or request_quote again as it is: the runtime then declares the doubt.")
         if not prev.get("outcome"):
             return "The quote has no mandate_preview; request a new quote."
         return None

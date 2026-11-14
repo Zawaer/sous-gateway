@@ -10,7 +10,8 @@
 
 "next Monday" is read as the coming Monday (on a Saturday: in two days), which is what a kitchen usually means;
 "ensi viikon maanantai" is the explicit next-week form. Absolute dates (2026-11-20, 20.11., 20 November) are
-parsed by the callers before this. `past_cutoff` says whether an order for that day is already past Valio's usual
+parsed by the callers before this. `deliverable` moves a day Valio doesn't deliver on (a Sunday or a Finnish public
+holiday) to the next delivery day and says why, so the caller can declare it. `past_cutoff` says whether an order for that day is already past Valio's usual
 order cut-off (17:00 Helsinki time the day before delivery, sous/deadline.py), so the agent can say so.
 """
 
@@ -51,6 +52,53 @@ def relative_date(text: str, today: date) -> date | None:
     if _TODAY.search(t):
         return today
     return None
+
+
+# --- days Valio Aimo does not deliver -------------------------------------------------------------------------
+# Sundays and Finnish public holidays (plus Christmas Eve and Midsummer Eve, which wholesalers keep too). This is an
+# assumption about the delivery calendar, not Valio data: a date moved off such a day is always declared to the
+# gateway as a risk, so a human sees it.
+
+def _easter(year: int) -> date:
+    a, b, c = year % 19, year // 100, year % 100
+    d, e = b // 4, b % 4
+    g = (8 * b + 13) // 25
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = c // 4, c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 19 * l) // 433
+    month = (h + l - 7 * m + 90) // 25
+    return date(year, month, (h + l - 7 * m + 33 * month + 19) % 32)
+
+
+def holidays(year: int) -> dict[date, str]:
+    """Finnish public holidays (and the eves wholesalers keep) in `year`: {date: name}."""
+    e = _easter(year)
+    midsummer_eve = next(date(year, 6, d) for d in range(19, 26) if date(year, 6, d).weekday() == 4)
+    all_saints = next(d for d in (date(year, 10, 31) + timedelta(days=i) for i in range(7)) if d.weekday() == 5)
+    return {date(year, 1, 1): "New Year's Day", date(year, 1, 6): "Epiphany", e - timedelta(days=2): "Good Friday",
+            e: "Easter Sunday", e + timedelta(days=1): "Easter Monday", date(year, 5, 1): "May Day",
+            e + timedelta(days=39): "Ascension Day", midsummer_eve: "Midsummer Eve",
+            midsummer_eve + timedelta(days=1): "Midsummer Day", all_saints: "All Saints' Day",
+            date(year, 12, 6): "Independence Day", date(year, 12, 24): "Christmas Eve",
+            date(year, 12, 25): "Christmas Day", date(year, 12, 26): "Boxing Day"}
+
+
+def no_delivery_reason(day: date) -> str | None:
+    """Why there is no delivery on `day` ('a Sunday', 'a public holiday (Christmas Day)'), or None."""
+    if (h := holidays(day.year).get(day)) is not None:
+        return f"a public holiday ({h})"
+    if day.weekday() == 6:
+        return "a Sunday"
+    return None
+
+
+def deliverable(day: date) -> tuple[date, str | None]:
+    """The first delivery day on or after `day`, and why `day` itself isn't one (None if it is)."""
+    why, d = no_delivery_reason(day), day
+    while no_delivery_reason(d):
+        d += timedelta(days=1)
+    return d, why
 
 
 def past_cutoff(day: date, now: datetime | None) -> bool:
