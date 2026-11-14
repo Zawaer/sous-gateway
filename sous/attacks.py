@@ -190,8 +190,17 @@ def _with_allergen_data(pid: str) -> dict:
     return p
 
 
+# An attack's `result` always says what its `tier` means: refused (block), held for approval (ask), or allowed
+# (silent / notify: the order went through, which for an attack that should be stopped is a bug).
+RESULTS = {"block": "refused", "ask": "held for approval", "notify": "allowed", "silent": "allowed"}
+
+
+def _result(tier: str | None) -> str:
+    return RESULTS.get(tier or "", "allowed")
+
+
 def _verdict(o: dict) -> str:
-    return {"pending_approval": "held", "refused": "refused"}.get(o["status"], "allowed")
+    return _result(o["decision"]["outcome"])
 
 
 def _eur(x: float) -> str:
@@ -277,8 +286,8 @@ def _injection(ctx: Ctx) -> dict:
     return {
         "what_we_tried": (f"Two identical {_eur(inj['total_ex_vat'])} orders: {plain['id']} with a plain reason, "
                           f"{inj['id']} with the reason \"{INJECTION}\"."),
-        "result": "blocked" if same else "allowed", "tier": inj["decision"]["outcome"], "http_status": 200,
-        "error_code": None, "rule_ids": _deciding(inj, "spend.auto_limit"),
+        "result": _verdict(inj), "tier": inj["decision"]["outcome"], "http_status": 200,
+        "injection_changed_decision": not same, "error_code": None, "rule_ids": _deciding(inj, "spend.auto_limit"),
         "explanation": ((f"Both were {label}, by the same rules: the mandate rules never read the agent's words. "
                          if same else "The two orders were decided differently. This is a bug. ")
                         + ("The seller UI shows the injected reason as the agent's own, unverified words and flags "
@@ -313,7 +322,7 @@ def _tamper_quote(ctx: Ctx) -> dict:
         store._exec("UPDATE quote SET data = ?, jws = ? WHERE id = ?",
                     (json.dumps(original_data, ensure_ascii=False), row["_jws"], q["id"]))
     if o is not None:
-        return {"what_we_tried": f"Ordered quote {q['id']} after editing its total to €1.00.", "result": "allowed",
+        return {"what_we_tried": f"Ordered quote {q['id']} after editing its total to €1.00.", "result": _verdict(o),
                 "tier": o["decision"]["outcome"], "http_status": 200, "error_code": None, "rule_ids": [],
                 "explanation": f"The edited quote was ordered ({o['id']}). This is a bug."}
     return {
@@ -341,7 +350,7 @@ def _replay_other_agent(ctx: Ctx) -> dict:
     if got is not None:
         leaked = got["id"] == first["id"]
         return {"what_we_tried": f"{thief} replayed {first['id']}'s request with the same key.",
-                "result": "allowed", "tier": got["decision"]["outcome"], "http_status": 200, "error_code": None,
+                "result": _verdict(got), "tier": got["decision"]["outcome"], "http_status": 200, "error_code": None,
                 "rule_ids": [], "explanation": ("The replay returned the first agent's order. This is a bug."
                                                 if leaked else f"The replay made a new order {got['id']}.")}
     return {

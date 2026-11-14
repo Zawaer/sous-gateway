@@ -34,6 +34,7 @@ def check_common(c, sbx, r, name, result, rule, env):  # noqa: F811
     assert r.status_code == 200, r.text
     d = r.json()
     assert d["attack"] == name and d["result"] == result, d
+    assert d["result"] == attacks.RESULTS[d["tier"]], (d["result"], d["tier"])  # the label says what the tier means
     assert d["rule_ids"][0] == rule, d["rule_ids"]
     assert all(rules.get(i) for i in d["rule_ids"]) and d["rules"][0]["url"].endswith(f"/rules/{rule}")
     sid = sbx["sandbox"]["id"]
@@ -69,20 +70,21 @@ def test_self_approve_is_refused_and_audited(c, env):  # noqa: F811
 
 def test_slice_crossing_order_is_held_by_the_daily_limit(c, env):  # noqa: F811
     s = new(c)
-    d = check_common(c, s, attack(c, s, "slice"), "slice", "held", "spend.daily_limit", env)
+    d = check_common(c, s, attack(c, s, "slice"), "slice", "held for approval", "spend.daily_limit", env)
     statuses = [o["status"] for o in d["orders"]]
     assert statuses == ["ordered", "ordered", "ordered", "pending_approval"], statuses
     assert all(o["total_ex_vat"] <= 500 for o in d["orders"])
     # again: today's spend is already high, so the first slice is held at once
-    d2 = check_common(c, s, attack(c, s, "slice"), "slice", "held", "spend.daily_limit", env)
+    d2 = check_common(c, s, attack(c, s, "slice"), "slice", "held for approval", "spend.daily_limit", env)
     assert [o["status"] for o in d2["orders"]] == ["pending_approval"]
 
 
 def test_injection_changes_nothing_and_is_flagged(c, env):  # noqa: F811
     s = new(c)
-    d = check_common(c, s, attack(c, s, "injection"), "injection", "blocked", "spend.auto_limit", env)
+    d = check_common(c, s, attack(c, s, "injection"), "injection", "held for approval", "spend.auto_limit", env)
     plain, inj = (store.get_order(o["id"]) for o in d["orders"])
-    assert plain["decision"]["outcome"] == inj["decision"]["outcome"] == "ask"
+    assert plain["decision"]["outcome"] == inj["decision"]["outcome"] == "ask" == d["tier"]
+    assert d["injection_changed_decision"] is False
     assert inj["agent_rationale"] == attacks.INJECTION and d["agent_claim"]["suspicious"]
     r = c.get(f"/orders/{inj['id']}", headers={"Authorization": f"Bearer {s['agent_token']}"})
     assert r.json()["agent_claim"]["suspicious"] is True

@@ -144,17 +144,19 @@ function setSandbox(sid) {
 
 function badge(d) {
   if (d.result === "refused") return `<span class="tier tier-block">${TIER.block}</span>`;
-  if (d.result === "held") return `<span class="tier tier-ask">${TIER.ask}</span>`;
-  if (d.result === "blocked" && TIER[d.tier]) return `<span class="tier tier-${esc(d.tier)}">${esc(TIER[d.tier])}</span>`;
+  if (d.result === "held for approval") return `<span class="tier tier-ask">${TIER.ask}</span>`;
+  if (d.injection_changed_decision === false && TIER[d.tier]) return `<span class="tier tier-${esc(d.tier)}">${esc(TIER[d.tier])}</span>`;
   return `<span class="neutral">Not stopped</span>`;
 }
 
 function headline(d) {
+  if (d.injection_changed_decision === true) return "The injected reason changed the decision. Please tell the Sous team.";
+  const same = d.injection_changed_decision === false ? "No effect: the same decision as an order with a plain reason. " : "";
   if (d.result === "refused") return d.http_status >= 400
     ? `Refused before anything was ordered (HTTP ${esc(d.http_status)} <code>${esc(d.error_code)}</code>).`
-    : "Refused by the mandate: the order is stored as refused and nothing goes to Valio Aimo.";
-  if (d.result === "held") return "Held: it waits for a human with the approver token.";
-  if (d.result === "blocked") return "No effect: the same decision as an order with a plain reason.";
+    : same + "Refused by the mandate: the order is stored as refused and nothing goes to Valio Aimo.";
+  if (d.result === "held for approval") return same + "Held for approval: it waits for a human with the approver token.";
+  if (same) return same;
   return "The control did not stop this. Please tell the Sous team.";
 }
 
