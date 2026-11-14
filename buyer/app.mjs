@@ -673,10 +673,11 @@ if (linkedOrder) {
       quote = await gateway.getQuote(order.quote_id);
     } catch (error) {
       if (error.status === 404) {
+        $('agent-token').closest('details').open = true;
         throw new Error('This order is unavailable. Check the link and gateway. If you have an agent token, enter it under Product filters and gateway, then choose Open linked order.');
       }
       if (error.status >= 500 || error instanceof TypeError || error.name === 'TimeoutError') {
-        throw new Error('Could not load this order from the gateway. Check your connection and reload this page to retry.');
+        throw new Error('Could not load this order from the gateway. Check your connection, then choose Open linked order to try again.');
       }
       throw error;
     }
