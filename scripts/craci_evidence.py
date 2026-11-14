@@ -67,6 +67,9 @@ PRESET_HOSTS = {
 # blanket *.blob.core.windows.net or *.githubusercontent.com would hide an exfiltration path to any Azure account.
 GITHUB_INFRA = ["github.com", "codeload.github.com", "api.github.com", "*.actions.githubusercontent.com",
                 "productionresultssa*.blob.core.windows.net", "cache.blob.core.windows.net"]
+# GET https://<host>/_dns probes some runs make; deny-mode jobs have them blocked and still pass (run 43553948018),
+# so an implied policy leaves them out.
+RUNNER_PROBES = ["copilot-proxy.githubusercontent.com", "pkg.github.com"]
 
 
 # ---------------------------------------------------------------- declared policy (ci.yml)
@@ -209,7 +212,7 @@ def suggest_policy(check: dict) -> str:
     had no policy, so under `default: deny` it needs an explicit connection."""
     presets, tls = set(), defaultdict(set)
     for d in check["destinations"]:
-        if not d["allowed"] or _host_match(d["host"], GITHUB_INFRA):
+        if not d["allowed"] or _host_match(d["host"], GITHUB_INFRA + RUNNER_PROBES):
             continue
         if not d.get("craci_rules"):
             tls[d["port"]].add(d["host"])
@@ -746,6 +749,32 @@ def markdown(bundle: dict, jwk: dict | None, key_note: str | None, digest: str |
     return "\n".join(out) + "\n"
 
 
+def verify_dir(d: Path) -> tuple[bool, str]:
+    """Check the JWS signature with the shipped public key and that its payload is evidence.json, byte for byte."""
+    import base64
+
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+    def unb64(s):
+        return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+    h, p, s = (d / "evidence.jws").read_text().strip().split(".")
+    header = json.loads(unb64(h))
+    key = next((k for k in json.loads((d / "evidence.jwks.json").read_text())["keys"] if k["kid"] == header["kid"]),
+               None)
+    if header.get("typ") != "sous-ci-evidence+jws" or header.get("alg") != "EdDSA" or key is None:
+        return False, f"unexpected header or unknown kid: {header}"
+    try:
+        Ed25519PublicKey.from_public_bytes(unb64(key["x"])).verify(unb64(s), f"{h}.{p}".encode())
+    except InvalidSignature:
+        return False, "signature INVALID"
+    payload = json.loads(unb64(p))
+    same = payload == json.loads((d / "evidence.json").read_text())
+    return same, (f"signature valid (kid {header['kid']}); run {payload['run_id']} commit {payload['commit'][:12]} "
+                  f"egress {payload['summary']['egress_verdict']}; evidence.json "
+                  f"{'matches' if same else 'DOES NOT match'} the signed payload")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", "Zawaer/sous"))
@@ -760,7 +789,13 @@ def main() -> int:
     ap.add_argument("--replay", help="read raw API responses from this directory instead of calling the APIs")
     ap.add_argument("--no-sign", action="store_true")
     ap.add_argument("--no-fail", action="store_true", help="report undeclared egress without failing")
+    ap.add_argument("--verify", metavar="DIR", help="verify DIR/evidence.jws against DIR/evidence.jwks.json and "
+                                                    "DIR/evidence.json, then exit")
     args = ap.parse_args()
+    if args.verify:
+        ok, msg = verify_dir(Path(args.verify))
+        print(msg)
+        return 0 if ok else 1
     if not args.run_id:
         ap.error("--run-id (or GITHUB_RUN_ID) is required")
     if not args.replay and not os.environ.get("CRACI_API_TOKEN"):
