@@ -325,6 +325,9 @@ RULES = {
                            "enintään 5 lyhyttä lausetta): tilaus odottaa ihmistä, joka näkee agentin omat sanat. "
                            "Agentin sanat voivat vain nostaa tasoa, eivät koskaan laskea; ne allekirjoitetaan "
                            "tarjoukseen ja tilauskuittiin.",
+    "approver_not_authorized": "Hyväksyjän rooli: odottavassa tilauksessa on havainto, jonka valtakirja ohjaa "
+                               "nimetyille hyväksyjille (approvers_for, esim. allergeenit ravitsemusterapeutille), ja "
+                               "hyväksyntä tuli joltakulta muulta. Jonkun heistä on hyväksyttävä; hylätä saa kuka tahansa.",
     "separate_approver_required": "Neljän silmän periaate: valtakirja vaatii erillisen hyväksyjän, ja hyväksyntä "
                                   "tuli samalta tunnisteelta, jonka pyynnöstä tilaus tehtiin (order.requested_by: "
                                   "agentin tunnisteen luoja, muuten valtakirjan myöntäjä), tai ilman nimeä. Jonkun "
