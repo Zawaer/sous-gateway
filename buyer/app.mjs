@@ -318,7 +318,11 @@ function renderCoverage(content, quote, draft = [], findAlternatives) {
     }
     list.append(li);
   }
-  content.append(element('h3', 'Coverage by item'), list);
+  content.append(element('h3', 'Coverage by item'));
+  if (quote.requested_delivery_date) {
+    content.append(element('p', `Requested delivery: ${quote.requested_delivery_date}`, 'muted'));
+  }
+  content.append(list);
 }
 
 function editQuotedItem(index, row) {
