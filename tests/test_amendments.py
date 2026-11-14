@@ -253,7 +253,7 @@ def test_rest_needs_the_approver_code_and_get_order_shows_amendments(monkeypatch
     assert r.status_code == 200, r.text
     g = c.get(f"/orders/{o['id']}", headers={"X-Approver-Code": "secret-code"}).json()
     assert g["amendments"][0]["status"] == "applied" and g["total_ex_vat"] == 7.0
-    assert g["amendments"][0]["erp"]["status"] == "confirmed"  # the change message went to the stub ERP
+    assert g["amendments"][0]["erp"]["status"] == "simulated"  # the change message went to the stub ERP
     schema = mcp_server.output_schema(mcp_server.OrderOut)
     validator_for(schema)(schema).validate(g)  # MCP get_order's structured output stays valid
 
@@ -350,7 +350,7 @@ def test_amendment_and_its_erp_change_message_commit_together(monkeypatch):
     import sqlite3
     issue()
     o = order(10)
-    assert erp.status(o["id"])["status"] == "confirmed"
+    assert erp.status(o["id"])["status"] == "simulated"
     real = erp.write
 
     def flaky(row):
@@ -366,7 +366,7 @@ def test_amendment_and_its_erp_change_message_commit_together(monkeypatch):
     monkeypatch.setattr(erp, "write", real)
     o = report(o["id"], kind="short_pick", line=0, delivered_quantity=6)
     key = erp.change_key(o["id"], last(o)["id"])
-    assert erp.status(key)["status"] == "confirmed" and erp.document(key)["payload"]["E1EDP01"][0]["MENGE"] == "6"
+    assert erp.status(key)["status"] == "simulated" and erp.document(key)["payload"]["E1EDP01"][0]["MENGE"] == "6"
 
 
 def test_sweep_reconciles_an_applied_amendment_missing_its_change_message():
@@ -376,7 +376,7 @@ def test_sweep_reconciles_an_applied_amendment_missing_its_change_message():
     store._exec("DELETE FROM erp_outbox WHERE order_id = ?", (key,))  # lost (e.g. written before the fix)
     assert erp.status(key) is None
     erp.process_due()
-    assert erp.status(key)["status"] == "confirmed"
+    assert erp.status(key)["status"] == "simulated"
     assert erp.document(key)["payload"]["E1EDP01"][0]["MENGE"] == "6"
     assert any(e["data"].get("amendment_id") == last(o)["id"] for e in events("order.erp_reconciled"))
     erp.process_due()  # idempotent: nothing more to queue

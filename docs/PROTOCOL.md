@@ -641,7 +641,7 @@ The reference buyer in `buyer/` does the same in the browser with Web Crypto.
 - Agents are identified by `agent_id` plus the signed mandate issued to it, and, on mandates that require it, an opt-in bearer token (section 16). Production would bind a key to the mandate (mTLS, DPoP or a VC-bound key) so a leaked token is useless without the key.
 - One signing key, no rotation, no `exp` or `iat` JWS claims (expiry is inside the quote payload).
 - Prices are the mock's catalog prices; the mock ignores the customer number.
-- No real order is sent to Valio Aimo; `ordered` is the end state.
+- No real order is sent to Valio Aimo; `ordered` is the end state. The order's `erp` block says so: with the default stub it is `{adapter: "stub", simulated: true, status: "simulated", confirmation_id: "SIM-…", note: "Simulated hand-off: no real order was sent to Valio Aimo …"}`, audited as `order.erp_simulated`. Only a configured `SOUS_ERP_URL` that answers yields `status: "confirmed"` (`order.erp_confirmed`). Assistants describe an order as "placed with Sous; Valio hand-off simulated in this demo".
 - The order lock is per process: the gateway runs as one process. Several replicas would need the lock in the database.
 - Seasonal and new suggestions use proxies (name keywords, Synkka lastUpdated); standing-order demo history is simulated and marked so.
 

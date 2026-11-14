@@ -52,6 +52,9 @@ Typical flow, 3-4 calls:
 3. place_order(quote_id, mandate_id, idempotency_key=<unique string you reuse on retry>).
    Result status: ordered | pending_approval (a human decides; give them approval_url, check get_order later)
    | refused (tell the buyer which rule fired; you cannot override it).
+   An ordered order is placed with Sous (signed receipt). Its `erp` block is the hand-off to Valio Aimo's
+   order system: when erp.simulated is true (status "simulated", confirmation_id "SIM-..."), nothing was sent to
+   Valio. Say "placed with Sous; Valio hand-off simulated in this demo", never that Valio or its ERP confirmed it.
 
 If the mandate has require_agent_auth, quotes, orders and renewals need your agent credential: connect with
 the header "Authorization: Bearer <token>" (or, where headers are impossible, pass agent_token). Never print it.
@@ -206,6 +209,11 @@ class OrderOut(OrderDoc):
         "each {id, kind, line, reason, tier, findings[], status: applied|pending_buyer|accepted|rejected, effect, "
         "resolution, jws (typ sous-amendment+jws)}")
     credit_notes: list[dict[str, Any]] | None = Field(None, description="Credit (or extra charge) lines from amendments")
+    erp: dict[str, Any] | None = Field(
+        None, description="Hand-off to Valio Aimo's order system (unsigned): {adapter: stub|http, simulated, status: "
+        "pending|sent|confirmed|simulated|failed, confirmation_id, note, ...}. simulated=true (status 'simulated', "
+        "confirmation_id 'SIM-...'): no real order was sent to Valio Aimo (no order API in this demo); describe "
+        "the order as 'placed with Sous; Valio hand-off simulated in this demo', never as confirmed by Valio.")
 
 
 class MandateOut(_Open):
@@ -531,7 +539,9 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
     Always send an idempotency_key and reuse it on retries: the same key never orders twice (the retry returns
     the original order); reusing a key for a different quote fails with idempotency_key_reused.
     Returns the order (schema /schemas/order.json): id (PO-...), status, decision {outcome, findings}, lines,
-    totals, approval_url when pending, and receipt_jws (signed receipt).
+    totals, approval_url when pending, receipt_jws (signed receipt) and, once ordered, erp (the hand-off to
+    Valio Aimo's order system). In this demo erp.status is "simulated" with a SIM- confirmation_id: tell the
+    buyer the order is placed with Sous and the Valio hand-off is simulated, not that Valio confirmed it.
     rationale: one sentence on why the buyer needs this order; the approver sees it next to the mandate's findings.
     agent_token: only if you can't send the Authorization: Bearer header and the mandate requires agent auth.
     """
@@ -546,7 +556,9 @@ def get_order(order_id: str, agent_token: str | None = None, ctx: Context | None
     Returns the order (schema /schemas/order.json) with approval {by, approved, note, at} once a human decided,
     a fresh receipt_jws, and agent_claim (the rationale, labelled unverified). After delivery problems it carries
     amendments[] from Valio (short pick, delay, substitution at pick, cancelled line; status pending_buyer waits
-    for the buyer, ask-tier for their human, not you) and credit_notes[]."""
+    for the buyer, ask-tier for their human, not you) and credit_notes[]. erp: the hand-off to Valio Aimo's order
+    system; erp.simulated / status "simulated" / SIM- id means placed with Sous, Valio hand-off simulated in this
+    demo (no real order reached Valio)."""
     access.check_order(_reader(ctx, agent_token), order_id)
     return access.label_order(S.get_order(order_id))
 

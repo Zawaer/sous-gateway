@@ -1,9 +1,9 @@
 """Outbound order adapter: an order that went through is handed to Valio Aimo's order system (ERP).
 
 When an order becomes `ordered` (silent/notify at placement, or approved by a human) it is mapped to an SAP IDoc
-ORDERS05-shaped JSON document and sent to SOUS_ERP_URL. Default: an in-process stub that answers like an ERP
-would (a sales order number), so the whole flow runs without any Valio system. Nothing here talks to a real Valio
-system; the mapping is our best reading of a standard ORDERS05 inbound sales order and is to be checked with
+ORDERS05-shaped JSON document and sent to SOUS_ERP_URL. Default: an in-process stub (a SIM- number, status
+`simulated`), so the whole flow runs without any Valio system: Valio Aimo has no order API in this challenge, and
+the stub never claims a confirmation. Nothing here talks to a real Valio system; the mapping is our best reading of a standard ORDERS05 inbound sales order and is to be checked with
 Valio's integration team (docs/INTEGRATION.md has the mapping table and what we don't know).
 
 Never loses an order: the order is written to the `erp_outbox` table first (one row per order id: idempotent),
@@ -18,10 +18,15 @@ without its row. As a second net, every sweep runs reconcile(): any ordered orde
 (order.erp_reconciled). Orders already `ordered` when the adapter was first activated (erp_meta.activated_at) get
 a `legacy` row and are never sent.
 
-State: erp_outbox row -> `erp` on the order (GET /orders/{id}): {status: pending|sent|confirmed|failed,
-confirmation_id, payload_hash, endpoint, attempts, last_error, next_retry_at, sent_at, confirmed_at}. It is
-unsigned operational metadata: signed receipts are never re-issued for it. Audit events: order.erp_sent,
-order.erp_confirmed, order.erp_failed (each attempt), order.erp_gave_up (after MAX_ATTEMPTS).
+State: erp_outbox row -> `erp` on the order (GET /orders/{id}): {adapter: stub|http, simulated, status:
+pending|sent|confirmed|simulated|failed, confirmation_id, payload_hash, endpoint, attempts, last_error,
+next_retry_at, sent_at, confirmed_at, note}. It is unsigned operational metadata: signed receipts are never
+re-issued for it. Audit events: order.erp_sent, order.erp_confirmed (a real ERP answered) or order.erp_simulated
+(the stub: nothing left Sous), order.erp_failed (each attempt), order.erp_gave_up (after MAX_ATTEMPTS).
+
+The stub is labelled as what it is everywhere a client can see it: status `simulated` (never `confirmed`), a
+`SIM-` confirmation id and SIMULATED_NOTE. Valio Aimo has no order API in this challenge, so no assistant may
+tell a buyer that Valio's ERP confirmed an order when the stub answered.
 
 Post-order amendments (sous/amendments.py) that change the lines add one ORDCHG change message each, keyed
 '<order id>/<amendment id>' in the same outbox (same retries, Idempotency-Key = that key); the original row and
@@ -49,6 +54,8 @@ SENDER = config.env("ERP_SENDER", "SOUS")  # logical system of the gateway (EDI_
 RECEIVER = config.env("ERP_RECEIVER", "VALIOAIMO")  # Valio's ERP logical system (EDI_DC40 RCVPRN); a placeholder
 MAX_ATTEMPTS = 10
 BACKOFF = [30, 60, 120, 300, 600, 1800, 3600]  # seconds before attempt 2, 3, ...; then hourly
+SIMULATED_NOTE = ("Simulated hand-off: no real order was sent to Valio Aimo (no order API in this challenge). "
+                  "The ORDERS05 payload is what would be sent.")
 
 _SQLITE = """CREATE TABLE IF NOT EXISTS erp_outbox (
   order_id TEXT PRIMARY KEY, status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_ts REAL NOT NULL,
@@ -149,13 +156,16 @@ class SendError(Exception):
 
 
 def _stub(payload: dict, fail: bool) -> dict:
-    """What an ERP answers: a sales order number (VBELN-like, 10 digits), deterministic per order id, so a
-    resend gets the same number (idempotent)."""
+    """A stand-in for an ERP answer: a SIM- prefixed number (10 digits, deterministic per order id, so a resend
+    gets the same one) and status `simulated`: nothing left Sous, so it must never read as a confirmation."""
     if fail:
         raise SendError("stub ERP configured to fail (SOUS_ERP_URL=stub:fail)")
     oid = payload["E1EDK01"]["BELNR"]
-    return {"status": "confirmed",
-            "confirmation_id": f"{int(hashlib.sha256(oid.encode()).hexdigest()[:12], 16) % 10**8 + 10**9:010d}"}
+    return {"status": "simulated", "confirmation_id": _sim_id(oid)}
+
+
+def _sim_id(key: str) -> str:
+    return f"SIM-{int(hashlib.sha256(key.encode()).hexdigest()[:12], 16) % 10**8 + 10**9:010d}"
 
 
 def _http(url: str, payload: dict, order_id: str) -> dict:
@@ -376,7 +386,7 @@ def attempt(order_id: str) -> dict | None:
     """Send one queued order now (if it's due or never tried). Idempotent; failures stay queued."""
     with _send_lock:
         row = _get(order_id)
-        if row is None or row["status"] in ("sent", "confirmed", "legacy") or row["data"].get("gave_up"):
+        if row is None or row["status"] in ("sent", "confirmed", "simulated", "legacy") or row["data"].get("gave_up"):
             return row
         payload = json.loads(row["payload"])
         d, buyer, now = row["data"], row["data"].get("buyer"), _clock()
@@ -397,11 +407,17 @@ def attempt(order_id: str) -> dict | None:
             return row
         d.update(last_error=None, next_retry_at=None, sent_at=_iso(now), confirmation_id=res.get("confirmation_id"))
         row["status"] = "sent"
-        store.audit("order.erp_sent", "erp-adapter", "system", order_id, buyer, ev)
-        if res["status"] == "confirmed":
+        if res["status"] != "simulated":  # the stub sends nothing: it logs only order.erp_simulated
+            store.audit("order.erp_sent", "erp-adapter", "system", order_id, buyer, ev)
+        if res["status"] == "simulated":
+            row["status"], d["simulated_at"] = "simulated", _iso(_clock())
+            store.audit("order.erp_simulated", "erp-adapter", "system", order_id, buyer,
+                        {**ev, "adapter": "stub", "simulated": True, "confirmation_id": d["confirmation_id"],
+                         "note": SIMULATED_NOTE})
+        elif res["status"] == "confirmed":
             row["status"], d["confirmed_at"] = "confirmed", _iso(_clock())
             store.audit("order.erp_confirmed", "erp-adapter", "system", order_id, buyer,
-                        {**ev, "confirmation_id": d["confirmation_id"]})
+                        {**ev, "adapter": "http", "confirmation_id": d["confirmation_id"]})
         _save(row)
         return row
 
@@ -440,12 +456,20 @@ def status(order_id: str) -> dict | None:
     if row is None or row["status"] == "legacy":
         return None
     d = row["data"]
-    return {"status": row["status"], "confirmation_id": d.get("confirmation_id"), "payload_hash": row["payload_hash"],
-            "format": "ORDERS05 (JSON)", "endpoint": d["endpoint"], "customer_number": d.get("customer_number"),
-            "attempts": row["attempts"], "last_error": d.get("last_error"), "next_retry_at": d.get("next_retry_at"),
-            "gave_up": bool(d.get("gave_up")), "sent_at": d.get("sent_at"), "confirmed_at": d.get("confirmed_at"),
-            "note": "Operational metadata, not signed. The stub stands in for Valio Aimo's ERP; see docs/INTEGRATION.md."
-            if d["endpoint"] == "stub" else "Operational metadata, not signed."}
+    stub = d["endpoint"] == "stub"
+    st, cid = row["status"], d.get("confirmation_id")
+    if stub:  # rows the stub answered before it was labelled: show them as what they were
+        st = "simulated" if st in ("confirmed", "sent") else st
+        cid = cid if not cid or cid.startswith("SIM-") else f"SIM-{cid}"
+    return {"adapter": "stub" if stub else "http", "simulated": stub, "status": st, "confirmation_id": cid,
+            "payload_hash": row["payload_hash"], "format": "ORDERS05 (JSON)", "endpoint": d["endpoint"],
+            "customer_number": d.get("customer_number"), "attempts": row["attempts"], "last_error": d.get("last_error"),
+            "next_retry_at": d.get("next_retry_at"), "gave_up": bool(d.get("gave_up")), "sent_at": None if stub else d.get("sent_at"),
+            "confirmed_at": None if stub else d.get("confirmed_at"),
+            "simulated_at": (d.get("simulated_at") or d.get("confirmed_at") or d.get("sent_at"))
+            if st == "simulated" else None,
+            "note": SIMULATED_NOTE + " Operational metadata, not signed; see docs/INTEGRATION.md." if stub
+            else "Operational metadata, not signed."}
 
 
 def attach(order: dict) -> dict:

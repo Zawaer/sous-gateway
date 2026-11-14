@@ -160,12 +160,21 @@ def test_sandbox_buyer_gets_its_own_account():
 
 # --- ERP adapter -----------------------------------------------------------------------------------------------
 
-def test_ordered_order_is_sent_and_confirmed_by_stub():
+def test_stub_hand_off_is_labelled_simulated_everywhere():
+    """Valio Aimo has no order API in this challenge: the stub must never read as a confirmation from Valio."""
     o = order()
-    assert o["erp"]["status"] == "confirmed" and len(o["erp"]["confirmation_id"]) == 10
-    assert o["erp"]["endpoint"] == "stub" and o["erp"]["customer_number"] == "0000104711"
-    assert [e["subject"] for e in events("order.erp_sent")] == [o["id"]]
-    assert events("order.erp_confirmed")[0]["data"]["confirmation_id"] == o["erp"]["confirmation_id"]
+    e = o["erp"]
+    assert e["status"] == "simulated" and e["adapter"] == "stub" and e["simulated"] is True
+    assert e["confirmation_id"].startswith("SIM-") and len(e["confirmation_id"]) == 14
+    assert e["note"].startswith(erp.SIMULATED_NOTE) and "no real order was sent to Valio Aimo" in e["note"]
+    assert e["confirmed_at"] is None and e["sent_at"] is None and e["simulated_at"]
+    assert e["endpoint"] == "stub" and e["customer_number"] == "0000104711"
+    assert not events("order.erp_sent") and not events("order.erp_confirmed")
+    ev = events("order.erp_simulated")
+    assert [x["subject"] for x in ev] == [o["id"]]
+    assert ev[0]["data"]["confirmation_id"] == e["confirmation_id"] and ev[0]["data"]["simulated"] is True
+    assert ev[0]["data"]["note"] == erp.SIMULATED_NOTE
+    assert erp.document(o["id"])["erp"]["status"] == "simulated"
     assert S.get_order(o["id"])["erp"] == o["erp"]
     # the stored order (and its signed receipt) are untouched: erp is attached on read, never signed
     assert "erp" not in store.get_order(o["id"])
@@ -191,7 +200,7 @@ def test_pending_order_not_sent_until_approved():
     o = order()
     assert o["status"] == "pending_approval" and "erp" not in o and erp.document(o["id"]) is None
     approved = S.decide(o["id"], "Anna", True)
-    assert approved["erp"]["status"] == "confirmed"
+    assert approved["erp"]["status"] == "simulated"
 
 
 def test_failure_is_queued_and_retried_idempotently(monkeypatch):
@@ -226,6 +235,41 @@ def test_failure_is_queued_and_retried_idempotently(monkeypatch):
     assert len(events("order.erp_failed")) == 2 and len(events("order.erp_confirmed")) == 1
 
 
+def test_real_erp_url_keeps_confirmed(monkeypatch):
+    """A configured SOUS_ERP_URL that answers with a sales order number: status confirmed, no SIM- label."""
+    monkeypatch.setattr(erp, "ERP_URL", "https://erp.invalid/orders")
+    sent = []
+
+    class Resp:
+        status_code = 201
+        text = ""
+
+        def json(self):
+            return {"sales_order": "4500012345"}
+
+    monkeypatch.setattr(erp.httpx, "post", lambda url, **kw: sent.append((url, kw["headers"])) or Resp())
+    o = order()
+    e = o["erp"]
+    assert e["status"] == "confirmed" and e["confirmation_id"] == "4500012345"
+    assert e["adapter"] == "http" and e["simulated"] is False and e["confirmed_at"] and e["sent_at"]
+    assert "Simulated" not in e["note"] and e["simulated_at"] is None
+    assert sent[0][0] == "https://erp.invalid/orders" and sent[0][1]["Idempotency-Key"] == o["id"]
+    assert [x["subject"] for x in events("order.erp_sent")] == [o["id"]]
+    assert events("order.erp_confirmed")[0]["data"]["confirmation_id"] == "4500012345"
+    assert not events("order.erp_simulated")
+
+
+def test_old_stub_rows_read_as_simulated():
+    """Rows the stub answered before the label existed (status confirmed, bare number) read as simulated."""
+    o = order()
+    row = erp._get(o["id"])
+    row["status"], row["data"]["confirmation_id"] = "confirmed", "1012345678"
+    row["data"]["confirmed_at"] = row["data"].pop("simulated_at")
+    erp._save(row)
+    e = erp.status(o["id"])
+    assert e["status"] == "simulated" and e["confirmation_id"] == "SIM-1012345678" and e["confirmed_at"] is None
+
+
 def test_gives_up_after_max_attempts(monkeypatch):
     monkeypatch.setattr(erp, "ERP_URL", "stub:fail")
     t = [0.0]
@@ -250,7 +294,9 @@ def test_api_erp_and_account_endpoints():
     o = order()
     r = c.get(f"/orders/{o['id']}/erp")
     assert r.status_code == 200 and r.json()["payload"]["EDI_DC40"]["MESTYP"] == "ORDERS"
-    assert c.get(f"/orders/{o['id']}").json()["erp"]["status"] == "confirmed"
+    g = c.get(f"/orders/{o['id']}").json()["erp"]
+    assert g["status"] == "simulated" and g["confirmation_id"].startswith("SIM-") and g["note"]
+    assert r.json()["erp"]["status"] == "simulated"
     a = c.get("/accounts/0000104711").json()
     assert a["credit"]["sous_open_orders_eur"] == o["total_inc_vat"]
     r = c.patch("/accounts/0000104711", json={"payment_block": True})
@@ -282,7 +328,7 @@ def test_outbox_insert_failure_rolls_back_the_order(monkeypatch):
     assert store.list_orders(status="ordered") == []
     assert store.get_quote(q["id"])["_order_id"] is None
     o = S.place_order("a", "M", q["id"], "k-qa")
-    assert o["status"] == "ordered" and o["erp"]["status"] == "confirmed"
+    assert o["status"] == "ordered" and o["erp"]["status"] == "simulated"
 
 
 def test_crash_between_order_and_outbox_is_reconciled_by_sweep():
@@ -294,7 +340,7 @@ def test_crash_between_order_and_outbox_is_reconciled_by_sweep():
     store.insert_order(crashed)
     assert erp.document("PO-CRASHED1") is None
     assert erp.process_due() == 1
-    assert S.get_order("PO-CRASHED1")["erp"]["status"] == "confirmed"
+    assert S.get_order("PO-CRASHED1")["erp"]["status"] == "simulated"
     assert [x["subject"] for x in events("order.erp_reconciled")] == ["PO-CRASHED1"]
     assert erp.process_due() == 0 and len(events("order.erp_reconciled")) == 1
 

@@ -597,8 +597,9 @@ def get_order(order_id: str):
 
 @app.get("/orders/{order_id}/erp", tags=["ordering"], dependencies=[Depends(_read_order)])
 def order_erp(order_id: str):
-    """The ORDERS05-shaped document handed to Valio Aimo's ERP for this order (a stub by default) and its status:
-    pending, sent, confirmed or failed (retried from the outbox). 404 erp_not_sent: not ordered, or ordered
+    """The ORDERS05-shaped document handed to Valio Aimo's ERP for this order and its status: pending, sent,
+    confirmed or failed (retried from the outbox); with the default stub, `simulated` (SIM- id: nothing reached
+    Valio, which has no order API in this challenge). 404 erp_not_sent: not ordered, or ordered
     before the adapter existed. See docs/INTEGRATION.md."""
     S.get_order(order_id)
     if (d := erp.document(order_id)) is None:
