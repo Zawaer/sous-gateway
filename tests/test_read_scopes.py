@@ -85,7 +85,8 @@ def test_without_credentials_only_public_demo_data_is_readable(c):
 
     # public by design
     v = c.get("/audit/verify").json()
-    assert v["ok"] and set(v) <= {"backend", "ok", "events", "head", "broken_at_seq", "system_versioning"}
+    assert v["ok"] and set(v) <= {"backend", "ok", "events", "head", "broken_at_seq", "system_versioning", "checkpoints"}
+    assert set(v["checkpoints"]) <= {"stored", "ok", "problems", "latest_seq"}  # seq numbers only, no buyer data
     for path in ("/health", "/allergens", "/.well-known/jwks.json", "/schemas/mandate.json", "/openapi.json",
                  "/products/OAT"):
         assert c.get(path).status_code == 200, path

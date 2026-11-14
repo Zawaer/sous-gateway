@@ -1100,6 +1100,8 @@ def _receipt(order: dict) -> str:
         from .amendments import receipt_summary
         body |= {"original_total_ex_vat": order.get("original_total_ex_vat"),
                  "credit_notes": order.get("credit_notes") or [], "amendments": receipt_summary(order)}
+    from . import checkpoints  # the audit chain's head when this receipt was signed: a point a buyer can check
+    order["audit_head"] = body["audit_head"] = checkpoints.head()
     return signing.sign(body, "sous-order+jws")
 
 

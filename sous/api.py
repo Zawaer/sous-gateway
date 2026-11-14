@@ -60,6 +60,11 @@ async def _sweep_overdue(every: float = 60):
             await asyncio.to_thread(_background, S.sweep_overdue)
         except Exception:  # noqa: BLE001 - reads expire lazily too; never kill the app over the sweep
             pass
+        try:  # a signed checkpoint of the audit chain's head, every CHECKPOINT_EVERY_S (sous/checkpoints.py)
+            from . import checkpoints
+            await asyncio.to_thread(checkpoints.make)
+        except Exception:  # noqa: BLE001
+            pass
         try:  # orders whose hand-off to Valio's ERP failed are retried from the outbox (sous/erp.py)
             await asyncio.to_thread(_background, erp.process_due)
         except Exception:  # noqa: BLE001
@@ -1329,6 +1334,18 @@ def audit(subject: str | None = None, buyer: str | None = None, limit: int = Que
 @app.get("/audit/verify", tags=["audit"])
 def audit_verify(head: str | None = Query(default=None, pattern="^[0-9a-f]{64}$",
                                           description="A head hash you saved earlier: fails if it's no longer in the "
-                                                      "chain (its newest events were deleted or rewritten)")):
-    """Recompute the hash chain: proves no event was edited or deleted (pass ?head= to also catch a cut tail)."""
-    return store.verify_chain(head)
+                                                      "chain (its newest events were deleted or rewritten)"),
+                 checkpoint: str | None = Query(default=None, max_length=4000,
+                                                description="A signed checkpoint (GET /audit/checkpoints) you saved: "
+                                                            "fails if the chain no longer contains its event")):
+    """Recompute the hash chain: proves no event was edited or deleted. Every stored signed checkpoint is checked
+    against it too, and ?checkpoint= (or ?head=) checks one you saved, which also catches a cut tail."""
+    return store.verify_chain(head, checkpoint)
+
+
+@app.get("/audit/checkpoints", tags=["audit"])
+def audit_checkpoints(limit: int = Query(20, ge=1, le=200)):
+    """Signed checkpoints of the audit chain's head (Ed25519 JWS, typ sous-checkpoint+jws), newest first. Save one;
+    GET /audit/verify?checkpoint=<jws> later proves nothing up to it was cut or rewritten (sous/checkpoints.py)."""
+    from . import checkpoints
+    return checkpoints.listing(limit)

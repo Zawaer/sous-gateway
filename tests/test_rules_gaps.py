@@ -541,3 +541,48 @@ def test_mandate_price_limit_applies_and_seeded_quotes_are_not_compared(monkeypa
     assert S.decide(o["id"], "chef", True)["status"] == "expired"
     blocker, rec = recheck.check({"lines": []}, {"seeded": {"sandbox": "SBX-1"}}, None, NOW)
     assert blocker is None and "seeded" in rec["skipped"]
+
+
+# --- signed audit checkpoints and the policy stamp ----------------------------------------------------------
+
+def test_checkpoints_catch_a_cut_tail_and_receipts_carry_the_chain_head():
+    from sous import checkpoints
+    issue()
+    o = order(10)
+    rec = signing.verify(o["receipt_jws"], "sous-order+jws")
+    assert rec["audit_head"]["seq"] >= 1 and len(rec["audit_head"]["hash"]) == 64
+    cp = checkpoints.make(force=True)
+    assert signing.verify(cp["jws"], "sous-checkpoint+jws")["seq"] == cp["seq"]
+    v = store.verify_chain(checkpoint=cp["jws"])
+    assert v["ok"] and v["checkpoints"]["saved"]["ok"] and v["checkpoints"]["stored"] == 1
+    # cut the tail: delete the newest events (as someone with database access could)
+    store._exec("DELETE FROM audit_event WHERE seq >= ?", (cp["seq"],))
+    v = store.verify_chain(checkpoint=cp["jws"])
+    assert not v["ok"] and v["checkpoints"]["problems"] and v["checkpoints"]["saved"]["ok"] is False
+    assert not store.verify_chain(checkpoint="not.a.jws")["checkpoints"]["saved"]["ok"]
+
+
+def test_checkpoint_listing_over_rest_and_verify_param():
+    from fastapi.testclient import TestClient
+    from sous.api import app
+    issue()
+    order(10)
+    c = TestClient(app)
+    lst = c.get("/audit/checkpoints").json()
+    jws = lst["checkpoints"][0]["jws"]
+    assert lst["typ"] == "sous-checkpoint+jws"
+    r = c.get("/audit/verify", params={"checkpoint": jws}).json()
+    assert r["ok"] and r["checkpoints"]["saved"]["ok"]
+
+
+def test_every_decision_names_the_policy_that_made_it():
+    from sous import policy_stamp, rules
+    issue(auto_approve_limit_eur=50)
+    o = order(60)
+    p = o["decision"]["policy"]
+    assert p["rules_sha256"] == rules.document()["sha256"] and p["rules_count"] == len(rules.register())
+    assert len(p["mandate_jws_sha256"]) == 64 and "commit" in p["gateway"]
+    a = S.decide(o["id"], "chef", True)
+    assert a["approval"]["policy"]["rules_sha256"] == p["rules_sha256"]
+    signed = signing.verify(a["receipt_jws"], "sous-order+jws")
+    assert signed["decision"]["policy"] == p and signed["approval"]["policy"] == a["approval"]["policy"]

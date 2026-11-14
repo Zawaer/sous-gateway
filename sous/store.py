@@ -253,7 +253,7 @@ def audit_events(subject: str | None = None, buyer: str | None = None, limit: in
     return [_audit_row(r) for r in _exec(q, args)[0]]
 
 
-def verify_chain(head: str | None = None) -> dict:
+def verify_chain(head: str | None = None, checkpoint: str | None = None) -> dict:
     """Recompute the hash chain. `head`: a head hash the caller saved earlier. A consistent chain alone can't show
     that its newest events were deleted (what's left is a shorter valid chain), so a saved head must still be one
     of the chain's hashes, else the chain fails."""
@@ -261,6 +261,7 @@ def verify_chain(head: str | None = None) -> dict:
     n = 0
     result: dict = {"backend": backend()}
     head_seq = 0 if head == prev else None  # the empty chain's head is the genesis hash
+    hashes: dict[int, str] = {}  # seq -> hash, for the signed checkpoints (sous/checkpoints.py)
     for r in _exec("SELECT * FROM audit_event ORDER BY seq")[0]:
         d = _audit_row(r)
         rec = {k: d[k] for k in ("ts", "actor", "actor_type", "event", "subject", "buyer", "data", "prev_hash")}
@@ -268,6 +269,7 @@ def verify_chain(head: str | None = None) -> dict:
             result.update({"ok": False, "events": n, "broken_at_seq": d["seq"]})
             break
         prev = d["hash"]
+        hashes[int(d["seq"])] = d["hash"]
         n += 1
         if head and d["hash"] == head:
             head_seq = d["seq"]
@@ -276,6 +278,9 @@ def verify_chain(head: str | None = None) -> dict:
     if head:
         result["saved_head"] = {"found": head_seq is not None, "seq": head_seq}
         result["ok"] = result["ok"] and head_seq is not None
+    from . import checkpoints  # signed checkpoints: a cut tail below any of them fails
+    result["checkpoints"] = checkpoints.check(hashes, checkpoint)
+    result["ok"] = result["ok"] and result["checkpoints"]["ok"]
     if config.DB_URL:
         # Independent check from MariaDB's own history: an append-only table has no closed rows.
         rows, _, _ = _exec("SELECT seq, ROW_END FROM audit_event FOR SYSTEM_TIME ALL "
