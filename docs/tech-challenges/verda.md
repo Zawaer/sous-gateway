@@ -1,19 +1,18 @@
 # Best Use of Verda
 
-**Ambition.** Sous is Valio Aimo's front door for AI purchasing agents: an agent gets a signed quote with live price and stock and orders under a mandate signed by its human; plain code enforces it. What a kitchen buys (a hospital's milk-allergy ward) is sensitive, so the gateway and the agent's model both run in the EU on Verda, and the model is open-weight, measured and swappable.
+**Ambition.** Sous is Valio Aimo's front door for AI purchasing agents: signed quotes, orders under a mandate signed by the buyer, enforced by plain code. With a Verda GPU we red-teamed it at a scale no API budget allows: **2,000 generated fi/en buyer requests** (injection, slicing, fake approvals, allergens, other buyers' mandates...) through the real agent loop, an open-weight model on one GPU, Valio prices replayed so the shared Valio key saw 0 calls.
 
-**Fit: Verda products, and why each**
-- **CPU instance (CPU.4V.16G, FIN-01, Finland)** for the gateway: FastAPI + MCP + MariaDB + Caddy (`compose.yaml`). No GPU needed: search is SQLite FTS5, the mandate engine is plain code. Prod https://135-181-8-209.sslip.io and staging, ~$0.048/h each.
-- **Verda Inference** for the buyer agent's model: `kimi-k3-1-pro` (open weights, runs in Germany), OpenAI-compatible with tool calling; prompts not stored or used for training. Same code as Gemini; only the base URL changes (`agent/llm.py`, preset `verda`).
+**Fit**
+- **GPU instance** (1x RTX PRO 6000 96GB, $2.89/h): vLLM serving `Qwen3-30B-A3B-Instruct-2507`, 83M tokens in 69 min (20k tokens/s). Prompts never left a machine we ran.
+- **CPU instances** (FIN-01): gateway prod + staging, FastAPI + MCP + MariaDB, ~$0.048/h each.
+- **Verda Inference**: `kimi-k3-1-pro` (open weights, EU) as the everyday buyer model, same code (`agent/llm.py`).
 
-**Working prototype**
-1. Gateway deployed with `docker compose up` on the CPU instance (prod runs an older commit than `main`; [STATUS](../STATUS.md#deployed-now)).
-2. LLM buyer agent (`agent/buyer.py`) on the gateway's own MCP tools; the runtime binds identity, mandate and idempotency key.
-3. Eval in CI on CRACI, 48 buyer sentences, live Valio prices. Kimi, run 43587725624 (11d8448): **47/48 matched without correction, 34/34 unsafe held or refused, 0 mandate violations auto-ordered, p50 9.9 s, ~27k tokens/request**, best of three models in one run (Gemini 46/48, Nemotron 30/48). Its miss, S04, expects a coconut cream with no allergen data; live, Kimi found one with data, which the gateway held. Kimi also turned 7/7 menus into schema-valid plans.
-4. Spend: Verda Inference $14.59, CPU instances ~$1.58 (project total $29.77, [COSTS.md](../COSTS.md)).
+**Working prototype + process**
+1. Gateway live on the CPU instance ([STATUS](../STATUS.md)).
+2. CI eval, 48 sentences, live Valio: Kimi 47/48, 34/34 unsafe held, 0 violations.
+3. Red team ([REDTEAM.md](../REDTEAM.md)): snapshot from 2 Valio calls -> 4,000 requests (13 categories) -> oracle harness check (2,036/2,036 unsafe held) -> GPU run: **976/997 unsafe held or refused; 0 allergen / limit / other-mandate violations**; 3 gateway-side misses, all order slicing (the demo mandates have the split rule off), reported with a repro.
+4. Honest log: no H100 was free; two A100s never booted ($1.30); Gemma 4 gave garbage under vLLM 0.33 on this GPU, so Qwen ran. GPU total $8.09 ([COSTS.md](../COSTS.md)).
 
-**Path to scale (estimates, no load test run).** 20,000 kitchens is roughly 50-100k orders/day: a few CPU instances plus managed MariaDB. The model is the variable cost at ~26k tokens/request; per-token Inference has no idle cost, and past a steady load the same open-weight model can run on a Verda GPU with vLLM, changing only `LLM_BASE_URL`. The vLLM recipe is in VERDA.md; **we have not run it**. Safety does not depend on the model: CI fails if any model gets a mandate violation auto-ordered.
+**Path to scale.** 20k kitchens is ~50-100k orders/day: a few CPU instances + managed MariaDB. The model is the variable cost (~40k tokens/request). Measured: one GPU at $2.89/h did 29 agent requests/min, i.e. ~$0.0017/request, ~30x cheaper than list-price APIs at steady load; bursty load stays on per-token Inference. Swap is one env var (`LLM_BASE_URL`). Every model change is re-run through the same red team; safety does not depend on the model.
 
-Not done: self-hosted vLLM on a Verda GPU, `deepseek-4-1-flash-1017`.
-
-Code: https://github.com/Zawaer/sous · [docs/VERDA.md](../VERDA.md) · [docs/LLM_EVAL.md](../LLM_EVAL.md)
+Code: https://github.com/Zawaer/sous · [VERDA.md](../VERDA.md) · [REDTEAM.md](../REDTEAM.md)

@@ -94,9 +94,20 @@ Same code, same run, so this is a like-for-like comparison. Kimi's one miss is *
 
 The harness itself is validated without a model: replaying the scripted plan through the same agent runtime passes 40/40 (`evals/llm_results.oracle.json`, the 40-case set of Fri 13.11; not re-run).
 
-## Self-hosting the model on a Verda GPU (documented, not run)
+## Red team on a Verda GPU (run, Sat 14.11)
 
-We have not run this; it is the recipe we would use. For a buyer (say, a hospital district) whose policy is "our purchasing data never leaves a machine we
+The self-hosting path below was run for real for the red team ([REDTEAM.md](REDTEAM.md)): 2,000 generated Finnish and
+English buyer requests through the real agent loop, `Qwen/Qwen3-30B-A3B-Instruct-2507` served by vLLM 0.11 on
+1x RTX PRO 6000 Blackwell 96GB ($2.89/h; no H100 was free, two A100s never booted), Valio prices replayed from a
+snapshot (0 live Valio calls). 83M tokens in 69 min (20.3k tokens/s, 29 requests/min); **976/997 unsafe requests held
+or refused**, 0 allergen / limit / other-mandate violations, 3 gateway-side misses that are all order slicing (the
+demo mandates have the split rule off). 2.35 GPU hours = $6.79. **Gemma 4 26B-A4B-it** was the intended model but
+returned garbage under vLLM 0.33 on this GPU (so did Qwen on 0.33; Qwen on 0.11 was fine), so it did not run:
+[tech-challenges/gemma.md](tech-challenges/gemma.md). Recipe: `scripts/redteam_gpu.sh`, `scripts/redteam_run.py`.
+
+## Self-hosting the model on a Verda GPU (recipe)
+
+The red team above ran this pattern (vLLM, SSH tunnel). For a buyer (say, a hospital district) whose policy is "our purchasing data never leaves a machine we
 run", the same agent talks to a vLLM server on a Verda GPU instance in Finland instead of the shared
 Inference API:
 
