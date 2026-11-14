@@ -21,8 +21,7 @@ def test_kit_passes_against_the_reference_gateway(env):  # noqa: F811
     kit, report = run_kit()
     by = {c["id"]: c for c in report["checks"]}
     assert len(by) == len(conformance.Kit.CHECKS)
-    # The seeded quote's stock fields are a known finding (agent board, 05:01Z); every other check must pass.
-    failing = {k: c["detail"] for k, c in by.items() if c["status"] != "pass" and k != "stock_buckets_seeded"}
+    failing = {k: c["detail"] for k, c in by.items() if c["status"] != "pass"}
     assert not failing, failing
     assert report["quotes_requested"] == 4
     assert report["sandbox_lookups"]["quotes_used"] <= 4

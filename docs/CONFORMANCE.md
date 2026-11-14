@@ -99,14 +99,15 @@ FAIL  stock_buckets_seeded  The seeded sandbox quote follows the same stock poli
 ```
 
 The one failure is real: the sandbox's seeded quote (priced from reference data, no Valio call) has lines with
-`stock: "plenty"` and no `stock_level`, unlike every live quote. It was reported on the agent board (issue #1);
-the fix belongs in `sous/sandbox.py` (`_seed_quote`: `stock_level: "unknown"`, since no availability was checked).
-Once it is fixed, this check passes with no change to the kit.
+`stock: "plenty"` and no `stock_level`, unlike every live quote. It was reported on the agent board (issue #1)
+and fixed in 895b04e (seeded lines now say `stock_level: "unknown"`, since no availability was read); the
+offline test below passes all 15 checks on that code, and staging turns green once it is deployed, with no change
+to the kit.
 
 ## In CI
 
 `tests/test_conformance.py` runs the same kit against the in-process app through FastAPI's `TestClient` (real
 HTTP semantics, no network), with the one-product catalog and mocked Valio Aimo from `tests/test_sandbox.py`. It
-asserts every check passes except the known seeded-stock finding, that the run asks for exactly 4 quotes, and that
+asserts every check passes, that the run asks for exactly 4 quotes, and that
 no token appears in the output; a second test sets `SOUS_STOCK_EXPOSURE=exact` and expects `stock_buckets` to fail,
 so the kit is shown to catch a regression. Both run offline in a few seconds.
