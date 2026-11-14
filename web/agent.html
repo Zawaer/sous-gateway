@@ -6,7 +6,11 @@
   <meta name="theme-color" content="#f8f8f3" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#141412" media="(prefers-color-scheme: dark)">
   <title>Sous · reference buyer agent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Fragment+Mono&display=swap">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="tokens.css">
   <style>
     .banner { font: .78rem/1.5 var(--mono); color: var(--ink-55); padding: 10px 14px; border-radius: 6px;
       background: var(--panel); margin-bottom: 22px; }
@@ -47,6 +51,21 @@
     .sbx-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .sbx-row .btn { flex: 0 0 auto; }
     #result:empty { display: none; }
+    [hidden] { display: none !important; }
+    /* tier badges come from tokens.css (icon + fill weight); undo the seller sheet's square bullet */
+    .tier.tier-silent::before, .tier.tier-notify::before, .tier.tier-ask::before, .tier.tier-block::before {
+      width: auto; height: auto; background: none; border-radius: 0; }
+    .model .off { color: var(--ask-ink); }
+    details.log summary { font: .74rem var(--mono); color: var(--ink-55); cursor: pointer; margin-top: 14px; }
+    details.log .meta { color: var(--ink-55); }
+    /* phones: keep the page 390px wide; wide tables scroll inside their step instead of widening the page */
+    .step > div { min-width: 0; }
+    #result table.lines { display: block; overflow-x: auto; }
+    @media (max-width: 600px) {
+      .step { grid-template-columns: 18px 1fr; gap: 8px; }
+      .step h4 .by { display: inline-block; margin-top: 4px; }
+      .grid3 .card, .sbx-card { padding: 18px 16px; }
+    }
   </style>
 </head>
 <body>
@@ -248,7 +267,14 @@ function modelMeta(m) {
     `${m.completion_tokens.toLocaleString()} out tokens · ${(m.latency_ms / 1000).toFixed(1)} s · $${Number(m.cost_usd).toFixed(4)}` +
     `${m.cost_estimated ? " (estimated)" : ""}</div>`;
 }
-function tier(t) { return `<span class="tier t-${esc(t)}">${esc(String(t).replace("_", " "))}</span>`; }
+// Same labels and badges as the seller and buyer UIs (web/tokens.css, docs/UI_PRINCIPLES.md).
+const TIER = { silent: ["silent", "Auto"], notify: ["notify", "Auto + FYI"], ask: ["ask", "Needs approval"], block: ["block", "Refused"],
+  ordered: ["silent", "Ordered"], pending_approval: ["ask", "Needs approval"], refused: ["block", "Refused"],
+  rejected: ["block", "Rejected"], expired: ["block", "Expired"] };
+function tier(t) {
+  const [cls, label] = TIER[t] || ["silent", String(t).replaceAll("_", " ")];
+  return `<span class="tier tier-${cls}">${esc(label)}</span>`;
+}
 function quoteTable(q, uncovered) {
   if (!q) return `<div class="muted">No quote.</div>`;
   const rows = q.lines.map((l) => `<tr><td>${esc(l.name)}<div class="rule">${esc(l.product_id)}${l.substitute_for ? " · substitute for " + esc(l.substitute_for) : ""}${l.orderable ? "" : " · not orderable"}</div></td>` +
@@ -259,6 +285,7 @@ function quoteTable(q, uncovered) {
     `<td class="num"><b>${eur(q.total_ex_vat)}</b></td></tr></table>${unc}`;
 }
 function preview(p) {
+  lastPreview = p && p.outcome;
   if (!p) return `<div class="muted">No preview.</div>`;
   const f = (p.findings || []).filter((x) => x.outcome !== "silent" || x.rule === "mandate.ok");
   return `<div>${tier(p.outcome)} <span class="muted small">what the gateway would decide if the agent orders now</span></div>` +
@@ -278,15 +305,18 @@ function wireOrder() {
     try {
       const r = await api("/agent/order", {method: "POST", headers: {...auth(), "Content-Type": "application/json"},
         body: JSON.stringify({quote_id: b.dataset.q, mandate_id: m.mandate_id, agent_id: m.agent_id})});
-      $("#order-out").innerHTML = orderResult(r.order);
+      $("#order-out").innerHTML = orderResult(r.order, r.order.tier === lastPreview);
+      b.hidden = true;
     } catch (e) { $("#order-out").innerHTML = `<div class="error">${esc(e.message)}</div>`; b.disabled = false; }
   });
 }
-function orderResult(o) {
-  const f = (o.findings || []).filter((x) => x.outcome !== "silent");
+let lastPreview = null;
+function orderResult(o, afterPreview) {
+  // After the mandate-check step the findings are already on screen: repeat them only if the decision changed.
+  const f = afterPreview ? [] : (o.findings || []).filter((x) => x.outcome !== "silent");
   const human = o.status === "pending_approval" ? `<div class="small" style="margin-top:8px">Waiting for a human: approve or reject it in the <a href="./?sandbox=${encodeURIComponent(state.id)}#/inbox">seller UI</a> with your sandbox approver token.</div>` : "";
   return `<div style="margin-top:12px"><div class="big">${esc(o.id)} ${tier(o.status)}</div>` +
-    `<div class="muted small">tier ${esc(o.tier)} · ${eur(o.total_ex_vat)} ex VAT</div>` +
+    `<div class="muted small">${eur(o.total_ex_vat)} ex VAT · mandate outcome ${tier(o.tier)} · <a href="./?sandbox=${encodeURIComponent((state && state.id) || "")}#/orders/${encodeURIComponent(o.id)}">open in the seller UI</a></div>` +
     (f.length ? `<ul class="findings">${f.map((x) => `<li>${tier(x.outcome)}<div>${esc(x.message)}<div class="rule">${esc(x.rule)}</div></div></li>`).join("")}</ul>` : "") + human + `</div>`;
 }
 
@@ -309,7 +339,7 @@ function renderMenu(d) {
     step(3, "Quote <span class='by code'>Valio Aimo gateway: live price and availability</span>", quoteTable(d.quote, d.uncovered) + subs) +
     step(4, "Mandate check <span class='by code'>gateway's mandate engine</span>", preview(d.mandate_preview)) +
     orderBlock(d, 5) +
-    `<div class="meta">${esc(d.summary)} · Valio API calls: ${esc(d.valio_api_calls)} · gateway tool calls: ${esc(d.gateway_calls)}</div>`;
+    `<details class="log"><summary>Summary for the log · ${esc(d.valio_api_calls)} Valio API calls · ${esc(d.gateway_calls)} gateway tool calls</summary><div class="meta">${esc(d.summary)}</div></details>`;
   wireOrder();
 }
 
@@ -335,7 +365,7 @@ function renderPhoto(d, src) {
       d.substitutes.map((s) => `<div class="small">Substitute: <b>${esc(s.name)}</b> ${s.compromises && s.compromises.length ? `<span class="muted">(${esc(s.compromises.join("; "))})</span>` : ""}</div>`).join("") +
       (d.error && !d.quote ? `<div class="error">${esc(d.error)}</div>` : "")) +
     step(3, "Mandate check <span class='by code'>gateway's mandate engine</span>", preview(d.mandate_preview)) +
-    orderBlock(d, 4) + `<div class="meta">${esc(d.summary)}</div>`;
+    orderBlock(d, 4) + `<details class="log"><summary>Summary for the log</summary><div class="meta">${esc(d.summary)}</div></details>`;
   wireOrder();
 }
 
