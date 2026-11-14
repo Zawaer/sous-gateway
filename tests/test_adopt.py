@@ -324,8 +324,10 @@ def emitted_rule_ids() -> set[str]:
         s = p.read_text()
         ids |= set(re.findall(r'\b(?:add|flag)\(\s*"([a-z_]+(?:\.[a-z_]+)*)"\s*,', s))
         ids |= set(re.findall(r'Finding\(\s*rule\s*=\s*"([a-z_.]+)"', s))
+    # PRODUCT_HELD is the one blocking issue with its own rule (product.held, emitted by add() in mandate.py)
     ids |= {f"availability.{c.lower()}" for c in
-            re.findall(r'Issue\(\s*"([A-Z_]+)"\s*,\s*BLOCKING', (SRC / "quote.py").read_text())}
+            re.findall(r'Issue\(\s*"([A-Z_]+)"\s*,\s*BLOCKING', (SRC / "quote.py").read_text())
+            if c != "PRODUCT_HELD"}
     return {i for i in ids if "." in i or i == "substitution"}
 
 

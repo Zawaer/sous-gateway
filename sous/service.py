@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import agent_auth, aimo, catalog, clock, config, credentials, exposure, notify, options as OPT, quote as Q, sandbox, signing, store, substitutes, usual
+from . import agent_auth, aimo, catalog, clock, config, credentials, exposure, holds, notify, options as OPT, quote as Q, sandbox, signing, store, substitutes, usual
 from .mandate import Mandate, evaluate
 
 
@@ -325,7 +325,11 @@ def search(agent_id: str, query: str, *, claims=None, avoid_allergens=None, labe
     store.audit("catalog.search", agent_id, "agent", None, buyer,
                 {"query": query, "claims": claims, "avoid_allergens": avoid_allergens,
                  "results": [r["id"] for r in results], "valio_api_calls": 0})
-    return {"products": [catalog.card(r) for r in results],
+    cards = [catalog.card(r) for r in results]
+    for c in cards:  # Valio's hold on a product (sous/holds.py): it can't be ordered until lifted
+        if held := holds.card_info(c["id"]):
+            c["held"] = held
+    return {"products": cards,
             "note": "Static catalog only; no price or stock yet. Ask for a quote on the products you want."}
 
 

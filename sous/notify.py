@@ -15,7 +15,8 @@ they win over the environment. A failed notification never blocks or fails an or
 delivery is audited as notification.sent or notification.failed.
 
 Events: order.notify, order.ask (to the buyer's human), order.decided (FYI to the agent
-side after a human approves or rejects), test.
+side after a human approves or rejects), product.held (Valio put a product on hold that the buyer has
+open, standing or, for a recall, recently placed orders for; sous/holds.py), test.
 """
 
 from __future__ import annotations
@@ -35,7 +36,8 @@ from .mandate import Mandate
 
 log = logging.getLogger(__name__)
 
-AUDIENCE = {"order.notify": "buyer", "order.ask": "buyer", "order.decided": "agent", "test": "buyer"}
+AUDIENCE = {"order.notify": "buyer", "order.ask": "buyer", "order.decided": "agent", "product.held": "buyer",
+            "test": "buyer"}
 
 
 def _env(name: str, default: str = "") -> str:
@@ -130,8 +132,29 @@ def compose(event: str, order: dict, mandate: Mandate) -> dict:
             msg = f"{who} approved {oid}, but it is {status}: {_sentence(a.get('result_reason') or '')}. " \
                   "Nothing was ordered."
         return {"title": f"{oid} {status}", "message": msg, "url": url}
+    if event == "product.held":
+        return held_message(order)
     return {"title": "Sous test notification",
             "message": f"Test notification for {mandate.buyer} (mandate {mandate.id}). Channels work.", "url": url}
+
+
+def held_message(n: dict) -> dict:
+    """product.held: `n` carries the public hold and the buyer's affected orders (sous/holds.py)."""
+    from .holds import KIND_TEXT, RECALL_LOOKBACK_DAYS
+
+    h, refs = n["hold"], n.get("affected") or []
+    name = h.get("name") or h["product_id"]
+    ids = lambda role: ", ".join(r["id"] for r in refs if r["role"] == role)  # noqa: E731
+    parts = []
+    if p := ids("pending_approval"):
+        parts.append(f"Waiting for approval: {p} (approving is now blocked).")
+    if s := ids("standing_order"):
+        parts.append(f"Standing order {s}: renewals skip it or are blocked.")
+    if r := ids("recently_ordered"):
+        parts.append(f"Already ordered in the last {RECALL_LOOKBACK_DAYS} days: {r}. Check deliveries and stock on hand.")
+    title = ("Recall: " if h["kind"] == "recall" else "Product hold: ") + name
+    msg = f"Valio Aimo has put {name} ({h['product_id']}) {KIND_TEXT[h['kind']]}: {_sentence(h['reason'])}."
+    return {"title": title, "message": " ".join([msg, *parts]), "url": None}
 
 
 # --- channels -----------------------------------------------------------------

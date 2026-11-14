@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
-from . import access, agent_auth, aimo, catalog, clock, config, exposure, quote as Q, rules, sandbox, service as S, signing, standing, store
+from . import access, agent_auth, aimo, catalog, clock, config, exposure, holds, quote as Q, rules, sandbox, service as S, signing, standing, store
 from .mandate import Mandate
 from .mcp_server import mcp
 
@@ -477,6 +477,33 @@ def rule_detail(rule_id: str):
     if not (r := rules.get(rule_id)):
         raise S.GatewayError("rule_not_found", f"No rule {rule_id}; GET /rules lists them all.", 404)
     return r
+
+
+# --- Valio product holds (sous/holds.py) --------------------------------------
+
+@app.get("/holds", tags=["holds"])
+def list_holds():
+    """Products Valio Aimo has on hold right now (recall, quality hold, sales stop). Public: buyers' agents need
+    it. A held product is quoted unorderable (PRODUCT_HELD) and blocks ordering and approval (rule product.held)."""
+    return {"holds": [holds.public(h) for h in holds.list_active()]}
+
+
+@app.post("/holds", tags=["holds"], dependencies=[Depends(require_global_approver)])
+def create_hold(req: holds.HoldIn):
+    """Valio staff put a product on hold (global approver code only; holds apply to every buyer and sandbox).
+    Buyers with open, standing or (recall) last-14-day orders for it are notified; see `affected`."""
+    p = catalog.get(req.product_id)
+    if not p:
+        raise HTTPException(404, f"No product {req.product_id}")
+    return holds.create(req, p.get("name"))
+
+
+@app.delete("/holds/{hold_id}", tags=["holds"], dependencies=[Depends(require_global_approver)])
+def lift_hold(hold_id: str, by: str = "valio"):
+    """Lift a hold: the product can be quoted and ordered again (new quotes; old quotes stay as signed)."""
+    if not (h := holds.lift(hold_id, by)):
+        raise HTTPException(404, f"No hold {hold_id}")
+    return h
 
 
 # --- mandates ---------------------------------------------------------------

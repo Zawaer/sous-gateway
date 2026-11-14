@@ -117,6 +117,9 @@ def _build() -> list[dict]:
         _r("substitution", "finding", _field_tiers("substitutions"), "buyer",
            "A line replaces the product the buyer asked for; the mandate says how much say the human gets.",
            "substitutions"),
+        _r("product.held", "finding", ["block"], "valio",
+           "Valio Aimo has put the product on hold (recall, quality hold or sales stop; GET /holds): it can't be "
+           "quoted as orderable, ordered, or approved into an order, also on a quote issued before the hold.", None),
         # --- supply
         _r("supply.terminal", "finding", _field_tiers("terminal_products"), "buyer",
            "The product ships from the supplier's warehouse (Terminal), so its stock is unknown.",

@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from . import catalog, config
+from . import catalog, config, holds
 
 # Four tiers, from least to most human involvement:
 #   silent: routine, the order goes through and is logged
@@ -162,7 +162,13 @@ def evaluate(
         pid, name = l["product_id"], readable_name(l["name"])
         p = catalog.get(pid) or {}
 
+        # Valio's hold on the product: also for a quote issued before the hold (ordering, approving it later)
+        held = next((i for i in l.get("issues", []) if i["code"] == "PRODUCT_HELD"), None)
+        if held or (hold := holds.active_for(pid)):
+            add("product.held", "block", f"{name}: {held['message'] if held else holds.message(hold)}", pid)
         for issue in l.get("issues", []):
+            if issue["code"] == "PRODUCT_HELD":
+                continue
             if issue["severity"] == "blocking":
                 add(f"availability.{issue['code'].lower()}", "block", f"{name}: {issue['message']}", pid)
             elif issue["code"] == "LATER_DATE":

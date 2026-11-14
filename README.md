@@ -142,7 +142,7 @@ Demos and evaluation (each takes `--base <gateway URL>`; see [docs/demo-runbook.
 ```sh
 uv run python scripts/demo.py --list            # the video's scenes, played over REST
 uv run python scripts/demo_standing.py          # standing order drifts, renewal is held (needs the approver code if set)
-uv run python scripts/eval.py                   # the scripted buyer requests (59 cases), live Valio prices -> evals/results.json
+uv run python scripts/eval.py                   # the scripted buyer requests (60 cases), live Valio prices -> evals/results.json
 uv run python -m agent.buyer "We need 1,000 litres of lactose-free milk delivered on Monday." \
     --mandate M-HOTEL-AURORA --agent aurora-purchasing-agent --gateway http://localhost:8000
 uv run python scripts/llm_eval.py --provider verda   # the eval sentences through the LLM agent, per model
@@ -269,7 +269,7 @@ sous/             the gateway
 agent/            LLM buyer agent: buyer.py (MCP tool loop), llm.py (OpenAI-compatible model presets)
                   recipe.py (menu -> basket), vision.py (photo -> basket, Nemotron VL)
 scripts/          fetch_data.py, seed.py, demo.py, demo_standing.py, eval.py, llm_eval.py
-evals/            cases.yaml (59 cases), results.json, llm_results.*.json, vision/
+evals/            cases.yaml (60 cases), results.json, llm_results.*.json, vision/
 web/              Valio Aimo UI: approvals, orders, mandates, audit, stats, live activity
 buyer/            reference buyer in the browser, verifies JWS with Web Crypto
 tests/            pytest, offline plus MariaDB

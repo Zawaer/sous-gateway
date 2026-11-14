@@ -15,7 +15,7 @@ from typing import Annotated, Literal
 
 from pydantic import BeforeValidator, WithJsonSchema
 
-from . import aimo, catalog, clock, config, exposure
+from . import aimo, catalog, clock, config, exposure, holds
 
 # --- need units: the one place they are normalised -----------------------------------------------------------
 # Needs are in litres, kilos, sales units (SALES_UNIT, 'pack(s)') or one of Valio's own unit codes (ST = piece,
@@ -242,6 +242,9 @@ def build_offer(
         elif stock_known and qty is not None and available_amount < qty:
             issues.append(Issue("PARTIAL_STOCK", WARNING,
                                 f"Only {available_amount:g} {sl.get('salesUnit', su)} in stock; {qty:g} needed."))
+    # --- Valio's own hold on the product (recall, quality hold, sales stop: sous/holds.py)
+    if hold := holds.active_for(product["id"]):
+        issues.append(Issue("PRODUCT_HELD", BLOCKING, holds.message(hold)))
     # --- last-known data served because Valio Aimo couldn't be reached (see aimo.py)
     stale = {k: d["_stale_seconds"] for k, d in (("price", price), ("availability", avail))
              if d and d.get("_stale_seconds") is not None}

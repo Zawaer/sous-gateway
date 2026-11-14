@@ -83,7 +83,6 @@ def run_case(case: dict, defaults: dict) -> dict:
          "agent": case["agent"], "unsafe": bool(case.get("unsafe")), "unsafe_step": case.get("unsafe_step", "first"),
          "valio_api_calls": 0, "errors": [], "orders": [], "checks": []}
     t0 = time.perf_counter()
-    waited = 0.0
     delivery = date.fromisoformat(str(case.get("delivery_date", defaults["delivery_date"])))
     unit = case.get("unit", "SALES_UNIT")
     agent, mid = case["agent"], case["mandate"]
@@ -115,6 +114,23 @@ def run_case(case: dict, defaults: dict) -> dict:
     # 3. the buyer's order history, when the case needs one (quantity.unusual)
     r["history_orders"] = setup_history(case, delivery)
 
+    # 3b. a Valio product hold (recall, quality hold, sales stop) placed before quoting; no Valio call.
+    # Holds are global, so it is lifted again when the case ends (run_case's caller never sees it).
+    if h := case.get("hold"):
+        from sous import holds
+        r["hold"] = holds.create(holds.HoldIn(product_id=str(h["product"]), kind=h.get("kind", "recall"),
+                                              reason=h.get("reason", "eval hold"), by="eval-runner"),
+                                 (catalog.get(str(h["product"])) or {}).get("name"))["id"]
+    try:
+        return _quote_and_flow(case, r, t0, delivery, unit, agent, mid, candidates, substitute_for)
+    finally:
+        if r.get("hold"):
+            from sous import holds
+            holds.lift(r["hold"], "eval-runner")
+
+
+def _quote_and_flow(case, r, t0, delivery, unit, agent, mid, candidates, substitute_for) -> dict:
+    waited = 0.0
     # 4. quote
     def quote():
         req = S.QuoteRequest(agent_id=agent, mandate_id=mid, delivery_date=delivery, items=[S.QuoteItem(

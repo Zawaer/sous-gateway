@@ -28,7 +28,7 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import access, agent_auth, catalog, clock, exposure, rules, service as S, standing
+from . import access, agent_auth, catalog, clock, exposure, holds, rules, service as S, standing
 from .mandate import Finding, Mandate
 from .standards import OrderDoc, QuoteDoc
 
@@ -582,6 +582,13 @@ def rules_resource() -> dict:
     """Every rule the gateway can fire: tiers, owner (buyer mandate / Valio / gateway), text, mandate field.
     Decision findings carry rule_url pointing at the same entries (GET /rules/{id})."""
     return rules.document()
+
+
+@mcp.resource("sous://holds", title="Valio product holds", mime_type="application/json")
+def holds_resource() -> dict:
+    """Products Valio Aimo has on hold right now (recall, quality hold, sales stop): they can't be ordered.
+    Search cards of held products carry `held`; quotes mark them PRODUCT_HELD (rule product.held)."""
+    return {"holds": [holds.public(h) for h in holds.list_active()]}
 
 
 @mcp.resource("sous://mandates/{mandate_id}", title="Mandate", mime_type="application/json")

@@ -219,6 +219,7 @@ Each issue is `{code, severity, message}`. A line with any `blocking` issue has 
 | `UNDELIVERABLE` | blocking | No schedule lines: no delivery date at all. |
 | `OUT_OF_STOCK` | blocking | No available date, or available amount 0. |
 | `CUTOFF_PASSED` | blocking | The order cut-off (`closingTime`) for the quoted date is in the past, even if the API still reports the date. Also added at order time if the cut-off passed after the quote was issued. |
+| `PRODUCT_HELD` | blocking | Valio Aimo has the product on hold (recall, quality hold, sales stop; section 23). Rule `product.held`, not `availability.*`. |
 | `CUTOFF_UNKNOWN` | warning | Valio Aimo reported a cut-off only for an earlier available date, so the cut-off for the requested date isn't known. The line gets no `order_cutoff` and doesn't shorten the quote's expiry. |
 | `LOT_SIZE` | warning | Sold in lots; quantity rounded up. |
 | `PRICE_EXPIRES` | warning | Price `validTo` is before the delivery date. |
@@ -790,8 +791,19 @@ Without `mandate_id`, substitutes are catalog data and stay public.
 - `GET /sandbox/{id}` stays public (status, lookups left, order counts); its `orders.recent` list needs one of the sandbox's tokens; without one it is replaced by `orders.recent_hidden` (a hint).
 - Quotes requested without a mandate are readable by id: they hold catalog prices any caller may request.
 
-**Public on purpose.** `/products*`, `/allergens`, `/.well-known/*` (JWKS, agent and server cards), `/schemas/*`, `/health`, `/docs`, `/openapi.json`, `/audit/verify` (only `ok`, event count and head hash; no event bodies), `/buyers/{buyer}/keys` (public did:keys).
+**Public on purpose.** `/products*`, `/allergens`, `/.well-known/*` (JWKS, agent and server cards), `/schemas/*`, `/health`, `/docs`, `/openapi.json`, `/audit/verify` (only `ok`, event count and head hash; no event bodies), `/buyers/{buyer}/keys` (public did:keys), `GET /holds` (section 23).
 
 **Development.** With no approver code configured (`SOUS_APPROVER_CODE` unset) everything is readable, as writes are unguarded then too (an agent presenting a `vka_` token still can't approve or reject: 403); the gateway logs a warning at startup. **Fail closed:** with `SOUS_DEPLOYMENT_ROLE` set to `prod`, `staging` or `demo` and no approver code the gateway refuses to start (`access.startup_check`). MCP over stdio (`python -m sous.mcp_server`) has no request to take credentials from, so it is the local operator and reads everything, in every deployment role (it logs this at startup; stock still follows `SOUS_STOCK_EXPOSURE`). Run it only where whoever starts the process could read the database anyway; outside agents use `/mcp` over HTTP, which is scoped like REST.
 
 **Production path.** The approver code stands in for the buyer's login (OIDC): reads would be scoped per buyer organisation from the login's claims, with Valio Aimo staff roles for cross-buyer views.
+
+## 23. Product holds (Valio's controls, `sous/holds.py`)
+
+The mandate is the buyer's control; a hold is the seller's. Valio Aimo staff can put a product on hold, and no agent can buy past it.
+
+- `POST /holds` `{product_id, kind, reason, until?, by?}` with the **global** approver code (sandbox tokens can't: a hold applies to every buyer and every sandbox). `kind` is `recall`, `quality_hold` or `sales_stop`; without `until` the hold lasts until `DELETE /holds/{id}` (global code) lifts it. Both are audited (`hold.created`, `hold.lifted`).
+- `GET /holds` (public) and the MCP resource `sous://holds` list the active holds: `{id, product_id, name, kind, reason, since, until}`. Search cards of a held product carry `held: {id, kind, reason, since, until}`.
+- **Quotes:** a held product's line gets the blocking issue `PRODUCT_HELD` (not orderable), so the planner picks another candidate, and response options, substitutes and suggestions skip it.
+- **Rule `product.held` (owner valio, block):** fires for every held line, also on a quote signed before the hold, so `place_order` is refused and approving a held order is refused (`_approval_blocker` re-runs the rules).
+- **Who is told:** on creation every buyer with an open `pending_approval` order or an active standing order containing the product gets a `product.held` notification (feed plus their channels, section 10), and each affected order or standing order gets an audit event `product.held`. A `recall` also lists the buyer's orders of the last 14 days with the product, so they can check deliveries. The response's `affected` lists them per mandate.
+- Storage: table `product_hold`, SYSTEM VERSIONED on MariaDB like `mandate` and `standing_order`, so a lifted hold keeps its history. Lifting a hold doesn't change signed quotes; ask for a new quote.
