@@ -523,3 +523,4 @@ div.mstat:hover { background: none; }
   .decide-card { padding: 18px 16px; }
 }
 @media (max-width: 560px) { .sheet-head .big .small { display: block; margin-top: 4px; } }
+.decide-inline input[data-note] { margin: 0 0 8px; }

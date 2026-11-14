@@ -687,22 +687,22 @@ async function openOrder(id) {
     ${pending && SIDE === "seller" ? waitingForBuyer(o) : ""}
     ${pending && SIDE === "buyer" ? `<div class="decide-inline" data-order="${esc(o.id)}">
       ${rememberBox(o)}
+      <input data-note type="text" placeholder="Note for the agent and the log (optional)" aria-label="Note">
       <div class="actions">
         <button class="btn no" data-act="reject">Reject</button>
         ${approveButton(o)}
       </div>
-      ${sec("Add a note or change quantities", `<input data-note type="text" placeholder="Note for the agent and the log (optional)" aria-label="Note">
-        ${editBox(o)}${passkeyNote(o)}`)}</div>` : ""}
+      ${passkeyOnly(o) ? passkeyNote(o) : sec("Change quantities or use a passkey", `${editBox(o)}${passkeyNote(o)}`)}</div>` : ""}
     ${a?.replaced_by ? `<p class="note-line">${ic("published_with_changes")} Approved with changes as <a href="#/orders/${esc(a.replaced_by)}">${esc(a.replaced_by)}</a>.</p>` : ""}
     ${o.approval_changes ? `<p class="note-line">${ic("published_with_changes")} ${esc(o.approval_changes.by)} changed
       <a href="#/orders/${esc(o.approval_changes.from_order)}">${esc(o.approval_changes.from_order)}</a> before approving:
       ${o.approval_changes.changes.map((c) => `${esc(pname(c.name))} ${esc(c.from)} → ${esc(c.to)} ${esc(unit(c.unit))}`).join("; ")}. Re-priced live.</p>` : ""}
     ${(o.amendments || []).length || (o.status === "ordered" && SIDE === "seller") ? amendSection(o) : ""}
     ${sec("How it happened", `<ol class="flow" id="flow"><li class="muted small">Loading…</li></ol>
-      <p class="small"><a href="/ui/trace.html?order=${encodeURIComponent(o.id)}${SANDBOX ? `&sandbox=${encodeURIComponent(SANDBOX)}` : ""}">Show the journey</a> on the trust board, hop by hop with signatures checked.</p>`, !pending)}
-    ${sec("Lines", linesTable(o.lines), !pending)}
+      <p class="small"><a href="/ui/trace.html?order=${encodeURIComponent(o.id)}${SANDBOX ? `&sandbox=${encodeURIComponent(SANDBOX)}` : ""}">Show the journey</a> on the trust board, hop by hop with signatures checked.</p>`, true)}
+    ${sec("Lines", linesTable(o.lines), true)}
     ${sec("Why the mandate decided this", `<div class="muted small">By ${esc(d.by)} at ${when(d.at)}. Deterministic rules; no AI in this step.</div>
-      ${findingsList(d.findings)}<div id="asof"></div>`)}
+      ${findingsList(d.findings)}<div id="asof"></div>`, SIDE === "seller")}
     ${sec("Substitutes", `<p class="small muted">Alternatives from Valio Aimo's own assortment that keep the mandate's hard rules
       (allergens, claims, category, unit). Ranked best (no compromises), better (minor) and good (a real trade-off).</p>
     <div id="subs">${(o.lines || []).map((l) => {
