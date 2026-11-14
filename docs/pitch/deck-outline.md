@@ -19,10 +19,10 @@ per slide, numbers with sources in the footer. Numbers must match `docs/STATUS.m
 8. **Trust.** Signed receipt, AS OF query; only signed data, two audit layers, scoped reads, stock buckets,
    `agent_claim`.
 9. **Try to break it.** Attack table (20 parallel → 1 ordered, slicing, self-approval, injection, unusual quantity);
-   conformance kit 15/15 on staging; `/ui/break.html`.
-10. **Models read, code decides.** Kimi 48/49, Gemini 46/49 (CI 43557209740), drafting 23/23 (43566010358),
-    Nemotron 0 silent errors (43530170621). H20 and "our own cases" in the footer.
-11. **Numbers.** 60/60, 44/44, 0 violations, ≤ 2 calls (1.24 avg in CI), search 56 → 100 %, 36 % to a human.
+   conformance kit 17/17 on staging; `/ui/break.html`.
+10. **Models read, code decides.** Kimi 47/48, Gemini 46/48, Nemotron 30/48, 0 violations (CI 43587725624), drafting 23/23 (same run),
+    Nemotron 0 silent errors (43530170621). S04 and "our own cases" in the footer.
+11. **Numbers.** 60/60, 43/43, 0 violations, ≤ 2 calls (0.47 avg in CI 43587725624), search 56 → 100 %, 34.5 % to a human.
 12. **Open, production, next.** MCP structured output, AP2/A2A/schema.org exports, conformance kit; CRACI, Verda,
-    Aiven (live in CI, not yet on the servers); next: OIDC, bound agent keys, real order API, key rotation. CRACI
+    Aiven (shared Valio budget, live on prod, staging and CI); next: OIDC, bound agent keys, real order API, key rotation. CRACI
     evidence line stays conditional until docs/CRACI.md has a green run.

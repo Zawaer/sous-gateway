@@ -12,9 +12,9 @@ Valkey holds coordination state only (orders and audit are in MariaDB), so losin
 
 **Implementation.** Fails open: 1 s timeouts; on error one log line, Valkey skipped for 30 s, each process falls back to its own limits. `/health` shows `valio_aimo.shared_budget`; the URI is never logged. `tests/test_valkey.py` (fakeredis): ci capped while prod keeps its half; a 429 seen by ci pauses prod; prod reuses staging's cache; a dead Valkey falls back without leaking the URL. CRACI's deny-by-default egress allows only TLS to `*.aivencloud.com:23770`.
 
-**Where it is live.** CI's `eval` and `llm-eval` jobs use it: run 43530484114 logs `backend: valkey, role: ci, role_limit: 25`. **Prod and staging do not yet** (`/health`: `backend: local, configured: false`); setting `SOUS_VALKEY_URL` there is the next step. So "prod-first" is tested, not yet exercised in production.
+**Where it is live.** Prod, staging and CI's `eval` and `llm-eval` jobs. `/health` on 14.11 11:50Z: prod `backend: valkey, role: prod, role_limit: 60`, staging `role: staging, role_limit: 30`, with CI's calls in the same window (`by_role: {ci: 18, dev: 6}`); run 43530484114 logs `role: ci`.
 
-**Impact.** Not measured as a before/after 429 count. What it changes: CI evals can no longer starve the judges' prod gateway once prod is connected, and one 429 no longer becomes a storm from several deployments. Cost: about $0.08 of Aiven trial credits so far.
+**Impact.** Not measured as a before/after 429 count. What it changes: CI evals can no longer starve the judges' prod gateway, and one 429 no longer becomes a storm from several deployments. Cost: about $0.31 of Aiven trial credits so far ([COSTS.md](../COSTS.md)).
 
 **Creativity.** A managed key-value store used as a shared rate-limit, circuit breaker and cache for a third-party API key, with priority by deployment role.
 

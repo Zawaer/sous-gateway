@@ -1,8 +1,9 @@
-<!-- Description below: 4,565 characters (limit 5,000), counted with Python len() on the text between the
+<!-- Description below: 4,780 characters (limit 5,000), counted with Python len() on the text between the
      Description and Challenge headings, trimmed. Recount after any edit:
      python3 -c "s=open('docs/pitch/submission.md').read();print(len(s.split(chr(10)+'## Description'+chr(10))[1].split(chr(10)+'## Challenge'+chr(10))[0].strip()))"
-     Every number is from docs/STATUS.md (run ids given), except drafting (docs/GEMINI.md) and conformance
-     (docs/CONFORMANCE.md; staging 15/15 at 7c9a965, agent board 14.11 05:23Z). -->
+     Numbers: scripted, LLM and drafting from CI run 43587725624 (11d8448), see docs/STATUS.md; Nemotron photo reading
+     from CI run 43530170621 (docs/NEMOTRON.md); conformance 17/17 on staging (docs/CONFORMANCE.md); 47/47 from
+     docs/EVAL_INTEGRITY.md; rush from docs/ROBUSTNESS.md. Prod was at a880f90 on 14.11 11:50Z, staging at 8624b18. -->
 
 # Junction submission
 
@@ -25,11 +26,11 @@ AI purchasing agents carry a signed mandate from their human, and Valio Aimo's g
 
 **Controls.** Every rule has an id, tier and plain meaning at `/rules`. Agents can't approve (403, audited). Mandates, quotes and receipts are Ed25519 JWS; orders use only the signed payloads, one per quote, bound to the agent. A hash-chained log plus MariaDB system versioning shows what the mandate said when each order was decided. Reads are scoped: another buyer's order answers 404.
 
-**Measured (our own cases, live Valio prices).** Scripted buyer requests: 60/60 locally with the stricter demo policy, 44/44 unsafe actions blocked or escalated; 59/59 in CI on CRACI (run 43554621653). Attacks: 20 parallel orders on one quote give 1 order and 19 rejections; order slicing, self-approval, prompt injection and an unusual quantity are all held or refused. LLM buyer agent on 49 sentences (CI run 43557209740): Kimi K3.1 Pro on Verda Inference 48/49, Gemini 4 Hydrogen 46/49, 0 mandate violations auto-ordered. A 15-check black-box conformance kit passes 15/15 on staging; judges can run seven attacks themselves at `/ui/break.html` in a private sandbox.
+**Measured (our own cases, live Valio prices, CI run 43587725624 on CRACI).** Scripted buyer requests: 60/60, 43/43 unsafe actions blocked or escalated. Attacks: 20 parallel orders on one quote give 1 order and 19 rejections; order slicing, self-approval, prompt injection and an unusual quantity are all held or refused; 60 agents rushing 400 units of one product are never over-allocated. LLM buyer agents on 48 sentences: Kimi K3.1 Pro on Verda Inference 47/48, Gemini 4 Hydrogen 46/48, Nemotron 3.5 Super VL 30/48, 0 mandate violations auto-ordered by any. A 17-check black-box conformance kit passes 17/17 on staging; 47/47 planted violations are caught by our own checks. Judges can run seven attacks at `/ui/break.html` in a private sandbox.
 
-**AI where it helps, never deciding.** Gemini drafts a mandate from plain language and a validator checks every field (23/23 on our cases, CI run 43566010358); nothing that loosens a mandate survives. Nemotron 3.5 Super VL reads a photo of an order list into a basket, with 0 silent errors over 32 page reads (CI run 43530170621); unreadable lines go to a human.
+**AI where it helps, never deciding.** Gemini drafts a mandate from plain language and a validator checks every field (23/23 on our cases, CI run 43587725624); nothing that loosens a mandate survives. Nemotron 3.5 Super VL reads a photo of an order list into a basket, with 0 silent errors over 32 page reads (CI run 43530170621); unreadable lines go to a human.
 
-**Open and run like production.** MCP tools return typed structured output; AP2 v0.2 claim sets (unsigned views), an A2A agent card, MCP server card and schema.org exports exist. CI on CRACI: tests with MariaDB, SBOM and grype gate, deny-by-default egress per job. Production and staging run on Verda CPU instances in Finland. Aiven for Valkey shares one Valio call budget across deployments (live in CI; not yet on the servers).
+**Open and run like production.** MCP tools return typed structured output; AP2 v0.2 claim sets (unsigned views), an A2A agent card, MCP server card and schema.org exports exist. CI on CRACI: tests with MariaDB, SBOM and grype gate, deny-by-default egress per job. Production and staging run on Verda CPU instances in Finland. Aiven for Valkey shares one Valio call budget across production, staging and CI.
 
 **Honest limits.** Identity is demo-grade: one shared approver code for humans, bearer tokens for agents. There is no real order API, so "ordered" means accepted and signed by Sous, at list prices. All eval cases were written by us, not held out. Next: buyer login (OIDC), agent keys bound to the mandate, Valio Aimo's order API with contract prices, key rotation.
 

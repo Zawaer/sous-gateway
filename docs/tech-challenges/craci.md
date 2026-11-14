@@ -4,7 +4,7 @@ Sous is a purchasing gateway that holds Valio's API key and signs orders, so the
 
 **Technical depth**
 - For every job in the run it fetches the CRACI network trace and parses that job's `network:` block from ci.yml at the audited commit. It matches each HTTP/TLS/TCP access against the declaration with our own preset table, not CRACI's verdict. Any undeclared host in a deny-mode job fails the run; a missing trace gives `incomplete`, never `pass`.
-- Run [43580565490](https://github.com/Zawaer/sous/actions/runs/43580565490): PASS. `eval` reached only Valio (18 KiB out), Aiven Valkey and PyPI. `smoke` (gateway, MariaDB, MCP) had no app egress. It caught CRACI letting 2 runner probes out of deny-mode `smoke` with no matched rule (run 43582172396). Audit of the live LLM run 43557209740: Gemini 4.2 MiB and Verda 4.0 MiB out, all declared.
+- Run [43580565490](https://github.com/Zawaer/sous/actions/runs/43580565490): PASS. `eval` reached only Valio (18 KiB out), Aiven Valkey and PyPI. `smoke` (gateway, MariaDB, MCP) had no app egress. It caught CRACI letting 2 runner probes out of deny-mode `smoke` with no matched rule (run 43582172396). Full run 43587725624: llm-eval sent Gemini 4.3, Verda 4.2, NVIDIA 10.7 MiB, all declared.
 - SBOMs: 49/49 PyPI packages CRACI saw downloaded are in our syft image SBOM; 49/49 match an exact wheel file in uv.lock. Found: `hatchling` + 4 deps (the build backend) come in unpinned, and 137 of the docker job's 155 SBOM components (89 old commits) are inherited from buildkit caches.
 - The bundle is signed with the gateway's own Ed25519 JWS code (`typ sous-ci-evidence+jws`, ephemeral key) and checked with `--verify`.
 
