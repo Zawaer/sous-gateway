@@ -33,6 +33,13 @@ def day_start(d: date | str) -> datetime:
     return datetime.combine(d, time(0), config.TZ)
 
 
+def delivery_days(order: dict) -> list[str]:
+    """The days an order delivers on: its lines' own delivery dates (after a signed next_date option these are later
+    than the date first asked for, which no longer matters), else the order's delivery date."""
+    days = [l["delivery_date"] for l in order.get("lines") or [] if l.get("delivery_date")]
+    return days or [d for d in (order.get("delivery_date") or order.get("requested_delivery_date"),) if d]
+
+
 def compute(lines: list[dict], delivery_dates: list[str], now: datetime) -> dict | None:
     """approve_by for a held order: {at, basis, cutoff, product_id, margin_minutes, delivery_date}, or None."""
     cands = []

@@ -405,6 +405,43 @@ def test_single_product_past_cutoff_gets_substitute_and_next_date_options(monkey
     assert q2["mandate_preview"]["outcome"] == "ask" and "options" not in q2
 
 
+def test_accepted_next_date_option_gets_its_own_approve_by(monkeypatch):
+    """QA 06:02Z: asked for Sun 15.11, the signed next_date option (Tue 17.11, cut-off Mon 16.11 12:00) was accepted;
+    approve_by was Sun 00:00 (the superseded date) and the order expired at Sun 00:01 saying Sunday was lost."""
+    from sous import deadline
+    sent = []
+    monkeypatch.setattr(S.notify, "send", lambda event, o, m: sent.append((event, S.notify.compose(event, o, m))))
+    cutoff_passed_on_sunday(monkeypatch)
+    q = quote(["A"], day=SUN)["quote"]
+    nxt = next(o for o in q["options"] if o["kind"] == "next_date")
+    q2 = S.request_quote(S.QuoteRequest(agent_id="agent", mandate_id="M-T", option_id=nxt["id"]))["quote"]
+    o = S.place_order("agent", "M-T", q2["id"])
+    assert o["status"] == "pending_approval" and o["requested_delivery_date"] == "2026-11-15"
+    assert o["approve_by"] == "2026-11-16T11:45:00+02:00"  # Mon 12:00 cut-off minus the 15 min margin
+    assert o["approve_by_detail"]["basis"] == "cutoff" and o["approve_by_detail"]["delivery_date"] == "2026-11-17"
+    assert "Approve by Mon 16.11 11:45 or delivery on Tue 17.11 is lost" in sent[-1][1]["message"]
+    monkeypatch.setattr(S, "_now", lambda: datetime(2026, 11, 15, 0, 1, tzinfo=config.TZ))
+    assert S.get_order(o["id"])["status"] == "pending_approval" and S.sweep_overdue() == 0
+    late = datetime(2026, 11, 16, 11, 50, tzinfo=config.TZ)
+    monkeypatch.setattr(S, "_now", lambda: late)
+    x = S.get_order(o["id"])
+    assert x["status"] == "expired_cutoff" and x["expiry"]["lost_delivery_date"] == "2026-11-17"
+    assert "delivery on 2026-11-17 is lost" in x["expiry"]["reason"] and x["expiry"]["next_delivery_date"] == "2026-11-18"
+    assert "delivery on Tue 17.11 is lost" in sent[-1][1]["message"]
+    assert deadline.delivery_days(x) == ["2026-11-17"]
+
+
+def test_accepted_next_date_option_can_be_approved_after_the_superseded_date(monkeypatch):
+    cutoff_passed_on_sunday(monkeypatch)
+    q = quote(["A"], day=SUN)["quote"]
+    nxt = next(o for o in q["options"] if o["kind"] == "next_date")
+    q2 = S.request_quote(S.QuoteRequest(agent_id="agent", mandate_id="M-T", option_id=nxt["id"]))["quote"]
+    o = S.place_order("agent", "M-T", q2["id"])
+    monkeypatch.setattr(S, "_now", lambda: datetime(2026, 11, 16, 11, 0, tzinfo=config.TZ))  # Sunday is past
+    d = S.decide(o["id"], "chef", True)
+    assert d["status"] == "ordered", d["approval"]["result_reason"]
+
+
 def test_no_next_date_lookup_when_the_product_is_blocked_for_another_reason(monkeypatch):
     cutoff_passed_on_sunday(monkeypatch)
     AVAIL["A"] = None  # undeliverable, not a passed cut-off: nothing to ask again for

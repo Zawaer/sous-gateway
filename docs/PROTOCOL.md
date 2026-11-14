@@ -404,7 +404,9 @@ A held order is useless if the human approves after Valio's order cut-off, so ev
 `approve_by` (ISO time) and `approve_by_detail {at, basis: cutoff|delivery_date, cutoff, product_id, margin_minutes,
 delivery_date}`: the earliest `order_cutoff` (Valio `closingTime`) among its lines minus `SOUS_APPROVE_MARGIN_MIN`
 (default 15; dropped when the order was held inside the margin), or the start of the delivery day if that is
-earlier or no line has a cut-off. It is in the signed receipt, the `order.pending_approval` audit event and the
+earlier or no line has a cut-off. The days are the order lines' own delivery dates: after a signed `next_date`
+option is accepted they are later than the quote's `requested_delivery_date`, which then plays no part (in the
+deadline, the lost-delivery explanation or the approval's "delivery date passed" check). It is in the signed receipt, the `order.pending_approval` audit event and the
 `order.ask` notification ("Approve by Sun 15.11 16:45 or delivery on Mon 16.11 is lost"; `data.deadline`).
 
 When business time (the demo clock applies, section 21) passes `approve_by` with no decision, the order becomes

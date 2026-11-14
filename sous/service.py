@@ -727,7 +727,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
         "clock": clock.info(now),
     }
     if status == "pending_approval":  # the human must decide before the cut-off (sous/deadline.py)
-        dl = deadline.compute(order["lines"], [order["delivery_date"], order["requested_delivery_date"]], now)
+        dl = deadline.compute(order["lines"], deadline.delivery_days(order), now)
         order["approve_by"], order["approve_by_detail"] = (dl["at"], dl) if dl else (None, None)
     order["receipt_jws"] = _receipt(order)
     # Claim the quote and store the order together: if storing fails, the quote is released again.
@@ -840,9 +840,7 @@ def _approval_blocker(o: dict, mandate: Mandate, now: datetime) -> tuple[str, st
         if l.get("order_cutoff") and datetime.fromisoformat(l["order_cutoff"]) <= now:
             return "expired", f"Approved too late: the order cut-off for {l['name']} ({l['order_cutoff']}) has passed."
     today = now.astimezone(config.TZ).date()
-    days = [l["delivery_date"] for l in o["lines"] if l.get("delivery_date")]
-    days += [d for d in (o.get("requested_delivery_date"), o.get("delivery_date")) if d]
-    for d in sorted(set(days)):
+    for d in sorted(set(deadline.delivery_days(o))):
         if date.fromisoformat(d) < today:
             return "expired", f"Approved too late: the delivery date {d} has already passed."
     # The human may have tightened the mandate since the order was held (lower caps, blocked products,
