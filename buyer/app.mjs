@@ -406,6 +406,9 @@ async function renderOrder(current, order) {
   appendList(content, 'Gateway decision', order.decision.findings.map((finding) => finding.message));
   try {
     const signed = await gateway.receipt(order, quote);
+    const unitNotes = (signed.lines ?? []).filter((line) => line.unit_note)
+      .map((line) => [line.name, line.unit_note].filter(Boolean).join(' · '));
+    appendList(content, 'Pack quantities', unitNotes);
     if (signed.status === 'pending_approval' && Number.isFinite(Date.parse(signed.approve_by))) {
       content.append(element('p', `Approve by ${time(signed.approve_by)} Helsinki time.`));
     }
