@@ -139,8 +139,19 @@ key; the gateway only ever sees that signed credential.
 - **Works offline.** Without a key (or if the call fails) a small rule-based parser handles common Finnish and
   English phrasings, so the page and the tests need no model. `evals/draft_cases.yaml` has 19 sentences, including
   vague limits, unsupported asks, conflicts and injection attempts; `scripts/draft_eval.py` scores the rule parser
-  (19/19, run in `tests/test_draft.py`) and, with `--provider gemini`, the Gemini path through the same validator
-  (not run yet; it prints its tokens for `evals/costs.yaml`).
+  (19/19, run in `tests/test_draft.py`) and, with `--provider gemini`, the Gemini path through the same validator.
+  The CI job `draft-eval` runs both ([docs/CI.md](CI.md)). **Gemini 4 Hydrogen: 15/19** in
+  [run 43562850006](https://github.com/Zawaer/sous/actions/runs/43562850006) (19 calls, 26,519 tokens in, 2,260
+  out, about $0.06; results in `evals/draft_results.gemini.json`). Every miss was caught by the eval, none loosened
+  a mandate, and all four injection traps passed. Where it differs from the rule parser:
+  - **D01, D18** ("ei pähkinöitä", "nut-free"): Gemini also avoids peanuts (AP) as well as tree nuts (AN). That is
+    stricter than the case expects (peanuts are legumes), so it is safe but blocks more products. The signer sees it
+    in the diff.
+  - **D05** ("Gluteeniton ja maidoton"): Gemini made gluten-free a required claim (`FREE_FROM_GLUTEN`) instead of
+    avoiding the gluten allergen (AW). That holds every product without the label, even ones with no gluten in
+    them, so avoiding the allergen is the better rule.
+  - **D11** ("at most 3000 € per week"): Gemini correctly listed weekly budgets as unsupported but didn't ask
+    whether a per-order or daily limit should replace it. The rule parser asks.
 
 ## Run it
 

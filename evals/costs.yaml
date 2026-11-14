@@ -25,6 +25,7 @@ runs:
   - {when: "2026-11-14 03:40", provider: verda, model: kimi-k3-1-pro, purpose: "buyer LLM eval, 59 cases / 49 run (CI push on CRACI, run 43539740484, a4644a0)", tokens_in: 1205877, tokens_out: 27178}
   - {when: "2026-11-14 06:50", provider: gemini, model: gemini-4-hydrogen, purpose: "buyer LLM eval, 59 cases / 49 run (CI push on CRACI, run 43557209740, 0b0ad68)", tokens_in: 1379854, tokens_out: 15075, usd: 2.1828}
   - {when: "2026-11-14 06:57", provider: verda, model: kimi-k3-1-pro, purpose: "buyer LLM eval, 59 cases / 49 run (CI push on CRACI, run 43557209740, 0b0ad68)", tokens_in: 1265705, tokens_out: 26299}
+  - {when: "2026-11-14 07:45", provider: gemini, model: gemini-4-hydrogen, purpose: "mandate drafting eval, 19 cases, 15/19 (CI on CRACI, run 43562850006, 1f65871)", tokens_in: 26519, tokens_out: 2260, usd: 0.0567}
   - {when: "2026-11-14 00:10", provider: openai, model: codex, purpose: "read-only security review of the trust core (Codex run 01a1d6fd)", tokens_in: 356000, tokens_out: 2400, note: "approximate, from the Codex run summary"}
   - {when: "2026-11-14 04:50", provider: openai, model: codex, purpose: "read-only security review of overnight trust changes (Codex run 01a1d86a)", tokens_in: 372700, tokens_out: 2334, note: "approximate, from the Codex run summary"}
 
