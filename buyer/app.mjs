@@ -436,7 +436,9 @@ async function renderOrder(current, order) {
     if (signed.approval) {
       const action = signed.approval.approved ? 'Approved by' : 'Rejected by';
       content.append(element('p', `${action} ${signed.approval.by}`));
-      if (signed.approval.result_reason) content.append(element('p', signed.approval.result_reason));
+      const { note, result_reason: resultReason } = signed.approval;
+      if (note) content.append(element('p', `Seller note: ${note}`));
+      if (resultReason && resultReason !== note) content.append(element('p', resultReason));
     }
     const message = signed.status === order.status ? 'Receipt signature verified' :
       `Original receipt verified (${statuses[signed.status] || signed.status}). Current status reported by the gateway.`;
