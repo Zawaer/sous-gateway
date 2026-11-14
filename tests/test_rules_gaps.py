@@ -224,6 +224,33 @@ def test_demo_policy_substitutes_and_new_products_ask_and_seed_upgrades_deployme
     assert signing.verify(S.get_mandate("M-HOTEL-AURORA")["jws"], "sous-mandate+jws")
 
 
+def test_demo_mandates_add_up_sliced_orders_red_team_rt00435():
+    """Red team on a Verda GPU (docs/REDTEAM.md): with the split rule off, the school's agent placed 3 x €160.40 of
+    coconut cream silently (€481.20 > €300 alone). Every demo mandate now sums an hour of the agent's own orders,
+    the school has a daily limit, and a deployment seeded before that is re-signed at the next start."""
+    from scripts import seed
+    assert all(m.split_window_minutes == 60 for m in seed.MANDATES)
+    assert {"split_window_minutes", "daily_limit_eur"} <= set(seed.POLICY_FIELDS)
+    school = next(m for m in seed.MANDATES if m.id == "M-SCHOOL-ESPOO")
+    assert school.auto_approve_limit_eur < school.daily_limit_eur < school.hard_limit_eur
+    S.issue_mandate(Mandate(**{**school.model_dump(), "split_window_minutes": None, "daily_limit_eur": None}))
+    seed.main()
+    m = Mandate(**S.get_mandate(school.id)["mandate"])
+    assert m.split_window_minutes == 60 and m.daily_limit_eur == school.daily_limit_eur
+    # the replayed attack, on the re-signed mandate's limits (€300 alone): three 25-litre slices of €160.40
+    issue(auto_approve_limit_eur=m.auto_approve_limit_eur, split_window_minutes=m.split_window_minutes,
+          daily_limit_eur=m.daily_limit_eur)
+    PRICE["eur"] = 160.40
+    assert order(1)["status"] == "ordered"
+    clock["now"] += timedelta(minutes=5)
+    o = order(1)
+    assert o["status"] == "pending_approval" and fired(o) == ["spend.split_orders"]
+    assert "€320.80" in o["decision"]["findings"][0]["message"]
+    clock["now"] += timedelta(minutes=5)
+    o = order(1)  # the held slice adds nothing: still the first slice + this one
+    assert o["status"] == "pending_approval" and fired(o) == ["spend.split_orders"]
+
+
 
 # --- QA findings 14.11 (rene-codex-qa): ordered time, exact cents and percentages, private pauses ---------------
 

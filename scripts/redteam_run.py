@@ -7,6 +7,9 @@ every request with the same checks as scripts/llm_eval.py plus red-team checks o
         --n 4000 --concurrency 48 --gpu "1x A100 80GB" --gpu-price 2.386
     uv run python scripts/redteam_run.py --provider oracle --n 4000   # no model: the scripted plan (harness check)
     uv run python scripts/redteam_run.py --report evals/redteam/<run>  # rebuild the report from results
+    # re-score a past run against TODAY's gateway: replay each request's recorded tool calls (no model)
+    uv run python scripts/redteam_run.py --provider transcript \
+        --transcripts evals/redteam/run-qwen3-30b-a3b/results.sample.jsonl --out-dir evals/redteam/rescore-<date>
 
 Writes <out-dir>/results.jsonl (one line per request), summary.json and report.md.
 
@@ -47,6 +50,41 @@ SNAPSHOT = ROOT / "evals" / "redteam" / "valio_snapshot.json"
 _W: dict = {}
 
 
+class TranscriptLLM:
+    """--provider transcript: re-issues the tool calls a model made in a recorded run, in the same order, against
+    the current gateway (no model). Quote ids (and option ids built on them) in later calls are mapped from the
+    recorded run's to the new ones, in the order the quotes were made. It does not react to a different answer (e.g. an order now held): it replays
+    what that model did, which is what re-scoring a past run's requests against a changed gateway needs."""
+
+    def __init__(self, transcript: list[dict]):
+        from agent.llm import LLMConfig
+        self.cfg = LLMConfig(provider="transcript", base_url="", model="recorded-tool-calls")
+        self.steps = transcript
+
+    @staticmethod
+    def _quote_id(res: dict) -> str | None:
+        return (res.get("quote") or {}).get("id") or res.get("id")
+
+    def chat(self, messages, tools=None):
+        from agent.llm import ChatResponse
+
+        done = [m for m in messages if m["role"] == "tool"]
+        if len(done) >= len(self.steps):
+            return ChatResponse({"role": "assistant", "content": "Replayed the recorded tool calls."}, "stop", {}, 0, 0)
+        old = [self._quote_id(s.get("result") or {}) for s in self.steps[:len(done)] if s["tool"] == "request_quote"]
+        new = [self._quote_id(json.loads(m["content"]) if m["content"].startswith("{") else {})
+               for m in done if m["name"] == "request_quote"]
+        ids = {o: n for o, n in zip(old, new) if o and n}
+        step = self.steps[len(done)]
+        raw = json.dumps(step.get("args") or {})
+        for o, n in ids.items():  # quote_id, and option ids built on a quote id (Q-1234ABCD.O1)
+            raw = raw.replace(o, n)
+        args = json.loads(raw)
+        return ChatResponse({"role": "assistant", "content": None, "tool_calls": [{
+            "id": f"call_{len(done)}", "type": "function",
+            "function": {"name": step["tool"], "arguments": json.dumps(args)}}]}, "tool_calls", {}, 0, 0)
+
+
 def _init_worker(env: dict, provider: str, model: str | None, max_tool_calls: int) -> None:
     os.environ.update(env)
     import logging
@@ -60,10 +98,13 @@ def _init_worker(env: dict, provider: str, model: str | None, max_tool_calls: in
         replay.enable(env["SOUS_VALIO_REPLAY"])
     _W["gw"] = MCPGateway(mcp)
     _W["provider"], _W["max_tool_calls"] = provider, max_tool_calls
-    if provider in ("oracle", "fake"):  # the scripted plan parses tool results as JSON: never truncate them
+    if provider in ("oracle", "fake", "transcript"):  # scripted plans parse tool results as JSON: never truncate
         import agent.buyer
         agent.buyer.MAX_RESULT_CHARS = 10**8
-    if provider not in ("oracle", "fake"):
+    if provider == "transcript":
+        recs = (json.loads(x) for x in Path(env["REDTEAM_TRANSCRIPTS"]).read_text().splitlines() if x.strip())
+        _W["transcripts"] = {r["id"]: r.get("transcript") or [] for r in recs}
+    if provider not in ("oracle", "fake", "transcript"):
         from agent.llm import ChatClient, config_from_env
         cfg = config_from_env(provider, model)
         cfg.timeout_s = 300.0
@@ -86,7 +127,8 @@ def run_one(rec: dict) -> dict:
 
     def make_agent(c):
         p = _W["provider"]
-        llm = OracleLLM(c, defaults) if p == "oracle" else _W["fake"](c) if p == "fake" else _W["client"]
+        llm = OracleLLM(c, defaults) if p == "oracle" else _W["fake"](c) if p == "fake" else \
+            TranscriptLLM(_W["transcripts"][c["id"]]) if p == "transcript" else _W["client"]
         bc = BuyerConfig(mandate_id=c["mandate"], agent_id=c["agent"], today=clock.now().date(),
                          default_delivery=date.fromisoformat(DEFAULT_DELIVERY), max_tool_calls=_W["max_tool_calls"])
         return BuyerAgent(llm, _W["gw"], bc)
@@ -355,7 +397,10 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base-url", help="OpenAI-compatible endpoint, e.g. http://127.0.0.1:8000/v1 (vLLM)")
     ap.add_argument("--model")
-    ap.add_argument("--provider", default="local", help="local (default) | verda | gemini | nvidia | oracle")
+    ap.add_argument("--provider", default="local",
+                    help="local (default) | verda | gemini | nvidia | oracle | transcript (see --transcripts)")
+    ap.add_argument("--transcripts", help="with --provider transcript: a results JSONL whose recorded tool calls are "
+                                          "replayed; only its request ids run")
     ap.add_argument("--requests", default=str(ROOT / "evals" / "redteam" / "requests.jsonl"))
     ap.add_argument("--n", type=int, default=0, help="first N requests (0 = all)")
     ap.add_argument("--sample", type=int, default=0, help="a seeded stratified-free random sample of N instead")
@@ -390,6 +435,11 @@ def main(argv=None) -> int:
         return 0
 
     recs = [json.loads(x) for x in Path(a.requests).read_text().splitlines() if x.strip()]
+    if a.provider == "transcript":
+        if not a.transcripts:
+            sys.exit("--provider transcript needs --transcripts <results.jsonl>")
+        have = {json.loads(x)["id"] for x in Path(a.transcripts).read_text().splitlines() if x.strip()}
+        recs = [r for r in recs if r["id"] in have]
     if a.sample:
         import random
         recs = random.Random(11).sample(recs, min(a.sample, len(recs)))
@@ -400,7 +450,8 @@ def main(argv=None) -> int:
         os.environ["LLM_BASE_URL"] = a.base_url
     if a.provider == "local" and not a.model:
         sys.exit("--model is required for --provider local")
-    model = "scripted-plan" if a.provider == "oracle" else a.model or a.provider
+    model = "scripted-plan" if a.provider == "oracle" else "recorded-tool-calls" if a.provider == "transcript" \
+        else a.model or a.provider
     slug = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in model).strip("-")
     out_dir = Path(a.out_dir or ROOT / "evals" / "redteam" / f"run-{slug}")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -411,6 +462,8 @@ def main(argv=None) -> int:
            "SOUS_RATE_LIMIT_PER_MIN": "100000"}
     if os.getenv("SOUS_DATA_DIR"):
         env["SOUS_DATA_DIR"] = os.environ["SOUS_DATA_DIR"]
+    if a.transcripts:
+        env["REDTEAM_TRANSCRIPTS"] = str(Path(a.transcripts).resolve())
     os.environ.update(env)  # also for this process (summary, report)
     from sous import replay
     replay.enable(env["SOUS_VALIO_REPLAY"])

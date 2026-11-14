@@ -43,6 +43,12 @@ SCHOOL_USUAL = [
     "474291", "474343", "474758", "476522", "476560", "476679", "476771", "476797", "476856",
 ]
 
+# Order slicing (spend.split_orders): orders the agent placed alone within this many minutes are added up against
+# the auto-approve limit, so "split it into three orders under the limit" waits for a human from the slice that
+# crosses it. On for every demo mandate (and so every sandbox copy) since the red team on a Verda GPU found three
+# sliced orders going through silently with it off (docs/REDTEAM.md).
+SPLIT_WINDOW = 60
+
 MANDATES = [
     Mandate(
         id="M-HOTEL-AURORA",
@@ -56,6 +62,7 @@ MANDATES = [
         hard_limit_eur=10000,
         daily_limit_eur=8000,
         weekly_limit_eur=25000,
+        split_window_minutes=SPLIT_WINDOW,
         substitutions="ask",
         first_time_products="ask",
         usual_products=HOTEL_USUAL,
@@ -74,6 +81,7 @@ MANDATES = [
         auto_approve_limit_eur=400,
         hard_limit_eur=3000,
         weekly_limit_eur=6000,
+        split_window_minutes=SPLIT_WINDOW,
         first_time_products="ask",
         usual_products=HOSPITAL_USUAL,
         avoid_allergens=["AM", "AN", "AP"],
@@ -93,7 +101,9 @@ MANDATES = [
         issued_by="Liisa Korhonen, food services",
         auto_approve_limit_eur=300,
         hard_limit_eur=1500,
+        daily_limit_eur=1000,  # a school day's dairy and dry goods; a bigger day waits for Liisa
         weekly_limit_eur=3000,
+        split_window_minutes=SPLIT_WINDOW,
         first_time_products="ask",
         autonomy="reorder",  # the school's agent reorders the usual products alone; anything new waits for a human
         usual_products=SCHOOL_USUAL,
@@ -114,6 +124,7 @@ MANDATES = [
         hard_limit_eur=2500,
         daily_limit_eur=3000,
         weekly_limit_eur=6000,
+        split_window_minutes=SPLIT_WINDOW,
         first_time_products="ask",  # a new buyer: no usual products yet, so every first order asks
         avoid_allergens=["AM", "AE", "AN", "AP"],
         allow_may_contain=False,
@@ -138,6 +149,7 @@ MANDATES = [
         hard_limit_eur=10000,
         daily_limit_eur=8000,
         weekly_limit_eur=25000,
+        split_window_minutes=SPLIT_WINDOW,
         substitutions="ask",
         first_time_products="ask",
         usual_products=HOTEL_USUAL,
@@ -151,7 +163,8 @@ MANDATES = [
 
 # Demo policy fields the seed brings existing deployments up to date on (re-signed at startup when they differ).
 POLICY_FIELDS = ("substitutions", "first_time_products", "usual_products", "weekly_limit_eur",
-                 "max_comparison_price_eur", "comparison_price_caps", "customer_number", "autonomy")
+                 "max_comparison_price_eur", "comparison_price_caps", "customer_number", "autonomy",
+                 "split_window_minutes", "daily_limit_eur")
 
 
 def _print_credential(mid: str, cred: dict) -> None:

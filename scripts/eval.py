@@ -7,8 +7,11 @@ and availability) -> order under a mandate -> optional human step. Results go to
     uv run python scripts/eval.py H01 P03         # some cases
     uv run python scripts/eval.py --state-db /tmp/eval-state.db
 
-State (mandates, quotes, orders, audit) goes to a fresh SQLite file, never to data/state.db or
-MariaDB, so the demo state is untouched and daily spend starts from zero on every run.
+State (mandates, quotes, orders, audit) goes to fresh SQLite files, never to data/state.db or
+MariaDB, so the demo state is untouched. Every case gets its own file with freshly issued mandates (like
+scripts/llm_eval.py and scripts/redteam_run.py): each case is one buyer's request on its own, so one case's
+orders never count towards another's daily/weekly limit or split-order window (spend.split_orders sums the
+orders an agent placed alone within the last hour, and the whole run takes minutes).
 """
 
 from __future__ import annotations
@@ -30,7 +33,8 @@ ap.add_argument("cases", nargs="*", help="case ids to run (default: all)")
 ap.add_argument("--file", default=str(ROOT / "evals" / "cases.yaml"))
 ap.add_argument("--out", default=str(ROOT / "evals" / "results.json"))
 ap.add_argument("--state-db", default=os.getenv("SOUS_STATE_DB"),
-                help="SQLite file for eval state (wiped first). Default: a new temp file.")
+                help="SQLite file for eval state; each case uses <stem>-<case id>.db next to it (wiped first). "
+                     "Default: a new temp directory.")
 args = ap.parse_args()
 
 state_db = Path(args.state_db or Path(tempfile.mkdtemp(prefix="sous-eval-")) / "state.db").resolve()
@@ -44,8 +48,6 @@ os.environ["SOUS_DB_URL"] = ""  # always SQLite: never write eval orders into Ma
 import yaml  # noqa: E402
 
 from sous import aimo, catalog, config, reservations, service as S  # noqa: E402
-from sous.mandate import Mandate  # noqa: E402
-from scripts.seed import MANDATES  # noqa: E402
 from scripts.eval_checks import _order_summary, api_calls, check, safety_handled, setup_history  # noqa: E402,F401
 
 APPROVER = "eval-runner (human stand-in)"
@@ -66,15 +68,8 @@ def call(fn, *a, **kw):
 
 # --- setup -------------------------------------------------------------------
 
-def issue_mandates(spec: dict) -> None:
-    for m in MANDATES:
-        S.issue_mandate(m)
-    for raw in spec.get("mandates", []):
-        raw = dict(raw)
-        revoke = raw.pop("revoke_before_run", False)
-        S.issue_mandate(Mandate(**raw))
-        if revoke:
-            S.revoke_mandate(raw["id"], "Eval runner")
+def case_state(case_id: str) -> Path:
+    return state_db.with_name(f"{state_db.stem}-{case_id}.db")
 
 
 # --- one case ----------------------------------------------------------------
@@ -261,11 +256,12 @@ def main() -> int:
     spec = yaml.safe_load(Path(args.file).read_text())
     defaults = spec.get("defaults", {})
     cases = [c for c in spec["cases"] if not args.cases or c["id"] in args.cases]
-    issue_mandates(spec)
-    print(f"Running {len(cases)} cases against {config.AIMO_API_BASE} (state: {state_db})\n")
+    from scripts.llm_eval import fresh_state
+    print(f"Running {len(cases)} cases against {config.AIMO_API_BASE} (state: {case_state('<case>')})\n")
     results = []
     for case in cases:
         try:
+            fresh_state(case_state(case["id"]), spec)  # the demo + eval mandates, no earlier case's orders
             # each case its own stock-reservation pool: earlier cases' orders never eat later cases' stock
             reservations.set_scope(f"eval-{RUN_TAG}-{case['id']}")
             r = run_case(case, defaults)

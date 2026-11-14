@@ -1,12 +1,14 @@
 """The "Try to break it" attacks (sous/attacks.py, POST /sandbox/{id}/attacks/{name}), offline: test_sandbox.py's
 temp DB, mocked Valio (every live call is counted) and fixed clock, plus allergen data for the two seeded products."""
 
+from datetime import timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 
-from sous import api, attacks, catalog, rules, sandbox, signing, store
+from sous import api, attacks, catalog, rules, sandbox, service as S, signing, store
 
-from test_sandbox import OAT, env, new  # noqa: F401  (env is autouse)
+from test_sandbox import NOW, OAT, env, new  # noqa: F401  (env is autouse)
 
 MILK_P = {**OAT, "id": "464201", "name": "Valio semi skimmed milk 1 l lactose free UHT",
           "allergens": {"declared": True, "contains": ["AM"], "may_contain": [], "free_from": []}}
@@ -68,15 +70,20 @@ def test_self_approve_is_refused_and_audited(c, env):  # noqa: F811
     assert r.status_code == 200 and r.json()["status"] == "rejected"
 
 
-def test_slice_crossing_order_is_held_by_the_daily_limit(c, env):  # noqa: F811
+def test_slice_crossing_order_is_held_by_the_split_rule(c, env, monkeypatch):  # noqa: F811
     s = new(c)
-    d = check_common(c, s, attack(c, s, "slice"), "slice", "held for approval", "spend.daily_limit", env)
+    d = check_common(c, s, attack(c, s, "slice"), "slice", "held for approval", "spend.split_orders", env)
     statuses = [o["status"] for o in d["orders"]]
-    assert statuses == ["ordered", "ordered", "ordered", "pending_approval"], statuses
+    assert statuses == ["ordered", "pending_approval"], statuses  # €468 + €468 within the hour > €500
     assert all(o["total_ex_vat"] <= 500 for o in d["orders"])
-    # again: today's spend is already high, so the first slice is held at once
-    d2 = check_common(c, s, attack(c, s, "slice"), "slice", "held for approval", "spend.daily_limit", env)
+    assert "within 60 min" in d["explanation"]
+    # again: the first slice is still in the window, so the next one is held at once
+    d2 = check_common(c, s, attack(c, s, "slice"), "slice", "held for approval", "spend.split_orders", env)
     assert [o["status"] for o in d2["orders"]] == ["pending_approval"]
+    # an hour later the window is empty again: one slice goes through, the next is held
+    monkeypatch.setattr(S, "_now", lambda: NOW + timedelta(minutes=61))
+    d3 = check_common(c, s, attack(c, s, "slice"), "slice", "held for approval", "spend.split_orders", env)
+    assert [o["status"] for o in d3["orders"]] == ["ordered", "pending_approval"]
 
 
 def test_injection_changes_nothing_and_is_flagged(c, env):  # noqa: F811
