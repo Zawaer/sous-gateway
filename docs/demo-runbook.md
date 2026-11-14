@@ -105,6 +105,24 @@ night of 13-14.11), quotes and orders need the mandate's bearer token. Two ways:
   Dry run on staging, 14.11 ~01:05: scenes 1-4 all as expected in 63 s with `--pause 15`,
   ~10 Valio calls; the phone approval with the `sbxa_` token worked.
 
+### Valio's proactive offer (near best-before cream)
+Valio's selling agent pushes an offer; the hotel's agent may take it; the mandate still decides.
+1. **Valio creates it** (approver code, or a sandbox's `sbxa_` token for its own hotel):
+   `POST <base>/offers` with `{"target": {"mandate_ids": ["M-HOTEL-AURORA"]}, "product_ids": ["464194"],
+   "discount_pct": 30, "quantity_cap": 60, "valid_until": "<in 2 days>", "reason": "near_best_before",
+   "reason_text": "best before 20.11., cream for sauces and desserts"}`. The response is signed (`jws`) and shows
+   `mandates` (delivered) and `excluded` (e.g. the hospital, which avoids milk, if targeted). Every new sandbox
+   already has one such offer (`seeded.offer`), so in a sandbox skip this step.
+2. **The hotel's agent sees it**: MCP `list_offers(mandate_id)` (or `GET /mandates/{id}/offers`): "Valio Aimo
+   offers… Near best-before", with the disclosure. The buyer's feed has an `offer.received` notification.
+3. **It quotes**: `request_quote(mandate_id, agent_id, delivery_date, items=[{product_ids: ["464194"], amount: 20,
+   unit: "SALES_UNIT"}], offer_id="OF-…")`. The line costs the offer price (never above the live price) and
+   carries `offer`; `mandate_preview` lists `offer.applied` (notify).
+4. **The mandate decides**: `place_order` → **Auto + FYI** (notify: the buyer hears the agent took a seller's
+   offer), or **Ask human** when the cream is a first-time product for the hotel (`product.first_time`), as with
+   the seeded sandbox offer. Asking for more than is left → `offer_over_cap`; after valid_until → `offer_expired`.
+5. Audit log: filter by the offer id for `offer.created` → `offer.offered` → `offer.accepted`.
+
 ## If something goes wrong
 - A scene prints `scene failed`: the others still run. Usually the Valio mock is slow (503) or
   the per-IP rate limit (60 POST/min) was hit; wait a minute and rerun that scene.

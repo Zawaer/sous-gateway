@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
-from . import access, autonomy, account, agent_auth, aimo, catalog, clock, config, erp, exposure, holds, origin as origin_mod, pause, peppol, proof, quote as Q, rules, sandbox, service as S, signing, standing, store
+from . import access, autonomy, account, agent_auth, aimo, catalog, clock, config, erp, exposure, holds, offers, origin as origin_mod, pause, peppol, proof, quote as Q, rules, sandbox, service as S, signing, standing, store
 from .mandate import Mandate
 from .mcp_server import mcp
 
@@ -782,6 +782,50 @@ def lift_hold(hold_id: str, by: str = "valio"):
     if not (h := holds.lift(hold_id, by)):
         raise HTTPException(404, f"No hold {hold_id}")
     return h
+
+
+# --- Valio proactive offers (sous/offers.py) -----------------------------------
+
+def _offer_issuer(r: access.Reader = Depends(access.reader)) -> str | None:
+    """None for the global approver code; the sandbox id for a sandbox's sbxa_ token (its own buyers only)."""
+    if r.everything:
+        return None
+    for sid in sorted(r.sandboxes):
+        if sandbox.list_scope(sid):
+            return sid
+    raise HTTPException(401, "Valio side: the approver code (X-Approver-Code) or a sandbox's approver token is "
+                             "required.")
+
+
+@app.post("/offers", tags=["offers"])
+def create_offer(req: offers.OfferIn, scope: str | None = Depends(_offer_issuer)):
+    """Valio Aimo makes a signed offer (JWS typ sous-offer+jws) to buyers' agents: target mandates, a buyer or a
+    segment (category); price or discount at or below Valio's current price; quantity cap; valid_until; reason.
+    Mandates whose rules exclude a product (avoided allergens, categories, claims) don't get it; a buyer with 3
+    active offers gets no more. Returns the offer with `mandates` (delivered) and `excluded` (with reasons)."""
+    return offers.create(req, scope)
+
+
+@app.get("/offers", tags=["offers"])
+def list_offers(scope: str | None = Depends(_offer_issuer)):
+    """Valio side: every offer in your scope (the global code: curated and sandbox ones; a sandbox token: its own),
+    newest first, with use against the cap."""
+    return {"offers": offers.list_valio("*" if scope is None else scope)}
+
+
+@app.delete("/offers/{offer_id}", tags=["offers"])
+def withdraw_offer(offer_id: str, by: str = "valio", scope: str | None = Depends(_offer_issuer)):
+    """Withdraw an offer: no new quotes on it; orders on its quotes are blocked (rule offer.expired)."""
+    if not (o := offers.withdraw(offer_id, by, scope)):
+        raise HTTPException(404, f"No offer {offer_id}")
+    return o
+
+
+@app.get("/mandates/{mandate_id}/offers", tags=["mandates"], dependencies=[Depends(_read_mandate)])
+def mandate_offers(mandate_id: str, include_inactive: bool = False):
+    """Valio Aimo's active offers for this mandate (sponsored; read-scoped like GET /mandates/{id}). Accept one
+    with POST /quotes {..., offer_id}; the mandate decides as always."""
+    return offers.for_mandate(mandate_id, include_inactive)
 
 
 # --- mandates ---------------------------------------------------------------

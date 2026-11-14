@@ -212,6 +212,17 @@ def _build() -> list[dict]:
         _r("amendment.price_increase", "finding", ["ask"], "gateway",
            "A substitute picked by Valio Aimo would cost more than the line ordered: a human decides.", None,
            condition="post-order amendment"),
+        # --- Valio Aimo offers (sous/offers.py)
+        _r("offer.applied", "finding", ["notify"], "gateway",
+           "A line is priced on a Valio Aimo offer (request_quote with offer_id): the agent took a seller's "
+           "commercial offer, so the buyer is told. Every other rule still applies; an offer never bypasses limits, "
+           "allergens, categories or first-time products.", None),
+        _r("offer.expired", "finding", ["block"], "valio",
+           "The Valio Aimo offer a quote was priced on has expired or was withdrawn before the order was placed or "
+           "approved: ask for a new quote.", None),
+        _r("offer.over_cap", "finding", ["block"], "valio",
+           "Orders on the Valio Aimo offer would exceed its quantity cap (all buyers together; orders placed or "
+           "waiting for approval count).", None),
         # --- supply
         _r("supply.terminal", "finding", _field_tiers("terminal_products"), "buyer",
            "The product ships from the supplier's warehouse (Terminal), so its stock is unknown.",
@@ -318,6 +329,21 @@ def _build() -> list[dict]:
            "The agent already used this idempotency key for a different order; a same-key retry returns the "
            "original order. Keys are scoped per agent.",
            None, status=409),
+        _r("offer_not_found", "refusal", ["block"], "gateway", "No such offer for this mandate (an offer made for "
+           "another buyer answers the same).", None, status=404),
+        _r("offer_expired", "refusal", ["block"], "valio", "The offer has expired, was withdrawn or is sold out.",
+           None, status=409),
+        _r("offer_not_applicable", "refusal", ["block"], "gateway", "None of the offer's products is an orderable "
+           "line of the quote.", None, status=422),
+        _r("offer_over_cap", "refusal", ["block"], "valio", "The quote asks for more of the offer than is left "
+           "under its quantity cap.", None, status=409),
+        _r("offer_requires_mandate", "refusal", ["block"], "gateway", "An offer is quoted only under the mandate it "
+           "was made for (pass mandate_id).", None, status=422),
+        _r("offer_above_list", "refusal", ["block"], "gateway", "Valio side: an offer price above Valio's current "
+           "price for the product is refused; an offer may only lower a price.", None, status=422),
+        _r("offer_no_targets", "refusal", ["block"], "gateway", "Valio side: no target mandate is left after the "
+           "guardrails (mandate rules such as avoided allergens, or the limit of active offers per buyer).", None,
+           status=422),
         _r("too_many_candidates", "refusal", ["block"], "gateway",
            f"At most {config.MAX_CANDIDATES_PER_QUOTE} candidate products per quote.", None, status=400),
         _r("sandbox_limit", "refusal", ["block"], "gateway",

@@ -53,7 +53,7 @@ def run(coro_fn):
 def test_tools_and_annotations():
     tools = {t.name: t for t in run(lambda c: c.list_tools()).tools}
     assert set(tools) == {"search_products", "get_product", "request_quote", "suggest_substitutes",
-                          "place_order", "get_order", "get_mandate", "get_suggestions",
+                          "place_order", "get_order", "get_mandate", "get_suggestions", "list_offers",
                           "create_standing_order", "renew_standing_order", "get_standing_order"}
     for name in ("search_products", "get_product", "get_order", "get_mandate", "suggest_substitutes",
                  "get_suggestions"):

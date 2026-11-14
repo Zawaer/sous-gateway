@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import account, agent_auth, aimo, allergen_ai, autonomy, catalog, clearance, clock, config, credentials, deadline, erp, exposure, carbon, holds, notify, options as OPT, origin, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
+from . import account, agent_auth, aimo, allergen_ai, autonomy, catalog, clearance, clock, config, credentials, deadline, erp, exposure, carbon, holds, notify, offers as OFFERS, options as OPT, origin, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
 from .mandate import Mandate, evaluate, product_refusals
 
 
@@ -366,6 +366,9 @@ class QuoteRequest(BaseModel):
     rationale: str | None = Field(None, max_length=500, description=RATIONALE_DOC)
     option_id: str | None = Field(None, description="Re-quote with one of a previous quote's options[] "
                                   "(e.g. 'Q-1A2B3C4D.O2'): that item's lines become the option's, other items stay")
+    offer_id: str | None = Field(None, description="Quote under a Valio Aimo offer (GET /mandates/{id}/offers, e.g. "
+                                 "'OF-1A2B3C4D'): its products are priced at min(offer price, live price); the "
+                                 "mandate decides as always")
 
 
 def order_url(order_id: str, sandbox_id: str | None = None) -> str:
@@ -388,6 +391,9 @@ def request_quote(req: QuoteRequest, agent_token: str | None = None, approver: b
     m = authorize_agent(req.mandate_id, req.agent_id, agent_token, "request_quote") if req.mandate_id else None
     skip: set[int] = set()
     fetch_on: dict[int, date] = {}
+    if req.option_id and req.offer_id:
+        raise GatewayError("invalid_request", "Give offer_id or option_id, not both.", 422)
+    offer = OFFERS.for_quote(req.offer_id, m) if req.offer_id else None
     if req.option_id:
         req, skip, fetch_on = _apply_option(req)
     if not req.items or req.delivery_date is None:
@@ -397,7 +403,7 @@ def request_quote(req: QuoteRequest, agent_token: str | None = None, approver: b
                            f"At most {config.MAX_CANDIDATES_PER_QUOTE} candidate products per quote; narrow the search first.")
     try:
         with sandbox.metered(m):
-            return _request_quote(req, skip, approver, fetch_on)
+            return _request_quote(req, skip, approver, fetch_on, offer)
     except aimo.AimoError as e:
         raise valio_error(e)
 
@@ -439,7 +445,7 @@ def _apply_option(req: QuoteRequest) -> tuple[QuoteRequest, set[int], dict[int, 
 
 
 def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), approver: bool = False,
-                   fetch_on: dict[int, date] | None = None) -> dict:
+                   fetch_on: dict[int, date] | None = None, offer: dict | None = None) -> dict:
     """`fetch_on`: items priced for a later day than requested (a chosen next_date option); their lines carry
     LATER_DATE against the requested date, so the mandate still sees the later delivery."""
     mandate = _mandate(req.mandate_id) if req.mandate_id else None
@@ -511,6 +517,7 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
         if sized and item_index not in skip_options and OPT.trouble(chosen, uncovered, req.delivery_date):
             troubled.append((item_index, item, [o for o in cands if o["product_id"] not in off_type], chosen))
 
+    offer_ref = OFFERS.apply(offer, mandate, lines) if offer else None  # Valio's offer price (sous/offers.py)
     # Lines that can't be ordered are shown for their reasons but never bought, so they cost nothing.
     total_ex = round(sum(l["line_total_ex_vat"] or 0 for l in lines if l["orderable"]), 2)
     total_inc = round(sum(l["line_total_inc_vat"] or 0 for l in lines if l["orderable"]), 2)
@@ -540,6 +547,8 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
         body["rationale"] = rationale
     if req.option_id:
         body["chosen_option"] = req.option_id
+    if offer_ref:
+        body["offer"] = offer_ref
     if troubled and (opts := _options(body, troubled, req.delivery_date, mandate, now)):
         body["options"] = opts
     body["valio_api_calls"] = {k: aimo.stats[k] - before[k] for k in aimo.stats}
@@ -711,7 +720,8 @@ def _evaluate(mandate: Mandate, agent_id: str, q: dict, now: datetime, extra_fin
         uncovered[u] = uncovered.get(u, 0.0) + g["uncovered"]
     subs = {l["product_id"]: l["substitute_for"] for l in q["lines"] if l.get("substitute_for")}
     # Valio's own facts about the customer (credit, payment block, delivery days): sous/account.py
-    extra_findings = list(extra_findings or []) + account.findings(mandate, q, now)
+    extra_findings = list(extra_findings or []) + account.findings(mandate, q, now) \
+        + OFFERS.findings(q, now)
     return evaluate(mandate, agent_id, q["lines"], requested_date=date.fromisoformat(q["requested_delivery_date"]),
                     substitute_for=subs, uncovered=uncovered,
                     spent_today_eur=store.spent_today(mandate.id, now.date().isoformat()), now=now,
@@ -764,6 +774,8 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
     with _order_lock:
         order, mandate = _place_order(agent_id, mandate_id, quote_id, idempotency_key, extra_findings,
                                       clean_rationale(rationale))
+    if mandate is not None:
+        OFFERS.on_order(order)  # audit offer.accepted (sous/offers.py)
     if mandate is not None and order["decision"]["outcome"] in ("notify", "ask", "block"):
         # FYI / approval request / refusal: the buyer always hears when an order of theirs was refused; never blocks
         notify.send(f"order.{order['decision']['outcome']}", order, mandate)
@@ -813,6 +825,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
         "lines": [{k: l.get(k) for k in ("product_id", "name", "quantity", "sales_unit", "unit_price_ex_vat",
                                          "line_total_ex_vat", "delivery_date", "logistic_model", "order_cutoff")}
                   | ({"unit_note": l["unit_note"]} if l.get("unit_note") else {})  # how the unit was read
+                  | ({"offer_id": l["offer_id"]} if l.get("offer_id") else {})  # bought on a Valio offer
                   for l in q["lines"]],
         "decision": {"outcome": outcome, "findings": [f.model_dump() for f in findings], "by": "mandate-engine",
                      "at": now.isoformat(timespec="milliseconds")},

@@ -28,7 +28,7 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import access, agent_auth, catalog, clock, exposure, holds, origin as origin_mod, rules, service as S, standing
+from . import access, agent_auth, catalog, clock, exposure, holds, offers, origin as origin_mod, rules, service as S, standing
 from .mandate import Finding, Mandate
 from .standards import OrderDoc, QuoteDoc
 
@@ -242,6 +242,38 @@ class SuggestionsOut(_Open):
     note: str | None = None
 
 
+class OfferProductOut(_Open):
+    product_id: str
+    name: str
+    price_ex_vat: float
+    reference_price_ex_vat: float | None = None
+
+
+class OfferOut(_Open):
+    id: str
+    sponsored_by: str
+    disclosure: str
+    status: str
+    reason: str
+    reason_text: str
+    headline: str
+    products: list[OfferProductOut]
+    valid_until: str
+    quantity_cap: float
+    remaining: float
+    how_to_accept: str
+    jws: str
+
+
+class OffersOut(_Open):
+    mandate_id: str
+    buyer: str
+    sponsored_by: str
+    disclosure: str
+    offers: list[OfferOut]
+    note: str | None = None
+
+
 class StandingOrderOut(_Open):
     id: str = Field(description="SO-XXXXXXXX")
     mandate_id: str
@@ -418,6 +450,7 @@ def request_quote(
     mandate_id: str | None = None,
     rationale: str | None = None,
     option_id: str | None = None,
+    offer_id: str | None = None,
     agent_token: str | None = None,
     ctx: Context | None = None,
 ) -> dict:
@@ -440,12 +473,16 @@ def request_quote(
       (e.g. 'Q-1A2B3C4D.O2'): you get a fresh signed quote with that item's lines replaced; then place_order it.
     rationale: one sentence on the buyer's business need (e.g. "breakfast milk for 400 guests"); it is signed into
       the quote and shown to the humans who audit or approve. State the need, not your reasoning steps.
+    offer_id: a Valio Aimo offer from list_offers (e.g. 'OF-1A2B3C4D'), only when the buyer wants it: name the
+      offer's product_ids in items; they are priced at min(offer price, live price) and the quote carries `offer`.
+      The mandate decides as always (rule offer.applied tells the buyer).
     agent_token: only if you can't send the Authorization: Bearer header and the mandate requires agent auth.
     Returns {quote (schema /schemas/quote.json), jws (sous-quote+jws over quote)}.
     """
     return S.request_quote(S.QuoteRequest(agent_id=agent_id, mandate_id=mandate_id,
                                           delivery_date=_date(delivery_date) if delivery_date else None,
-                                          items=items or [], rationale=rationale, option_id=option_id),
+                                          items=items or [], rationale=rationale, option_id=option_id,
+                                          offer_id=offer_id),
                            agent_token=_agent_token(ctx, agent_token),
                            approver=exposure.is_approver(_reader(ctx, agent_token)))
 
@@ -539,6 +576,19 @@ def get_suggestions(mandate_id: str, agent_id: str, delivery_date: str, limit: i
     from . import suggest
     return suggest.suggestions(mandate_id, agent_id, _date(delivery_date), basis, limit,
                                agent_token=_agent_token(ctx, agent_token), reader=_reader(ctx, agent_token))
+
+
+@_tool(OffersOut, title="Valio Aimo's offers (sponsored)", annotations=READ_LOCAL)
+def list_offers(mandate_id: str, agent_token: str | None = None, ctx: Context | None = None) -> dict:
+    """Valio Aimo's active COMMERCIAL offers made to your buyer: signed (jws, typ sous-offer+jws) prices below the
+    current one for a reason (near best-before, seasonal, a replacement for a recalled product, a new product),
+    with a quantity cap and valid_until. Products the mandate rules out (avoided allergens, categories, claims)
+    were never offered. Nothing is ordered: present each to the buyer as "Valio Aimo offers...", with its
+    headline and disclosure, and only if the buyer wants it call request_quote with offer_id as how_to_accept
+    says; the mandate decides as always (a first-time product may still need a human).
+    Read-scoped like get_mandate: send your Authorization: Bearer header (or agent_token)."""
+    access.check_mandate(_reader(ctx, agent_token), mandate_id)
+    return offers.for_mandate(mandate_id)
 
 
 @_tool(StandingOrderOut, title="Create a weekly standing order",

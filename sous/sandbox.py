@@ -261,6 +261,9 @@ def create(ip: str, base_url: str = "") -> dict:
                 {"sandbox": sid, "mandates": list(mandates.values()), "expires_at": _iso(expires),
                  "quotes_limit": config.SANDBOX_QUOTES})
     seeded = seed(sid, mandates["hotel"], token)
+    from . import offers
+    if offer := offers.seed(sid, mandates["hotel"]):  # a near-best-before cream offer, no Valio call
+        seeded = {**(seeded or {}), "offer": offer}
     base_url = (config.PUBLIC_BASE_URL or base_url).rstrip("/")
     return {
         "sandbox": {"id": sid, "status": "active", "expires_at": _iso(expires),

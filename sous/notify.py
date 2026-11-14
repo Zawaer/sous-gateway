@@ -42,6 +42,7 @@ AUDIENCE = {"order.notify": "buyer", "order.ask": "buyer", "order.block": "buyer
             "product.held": "buyer",
             "order.expired": "buyer",
             "order.amended": "buyer", "order.amendment_pending": "buyer", "order.amendment_decided": "buyer",
+            "offer.received": "agent",
             "test": "buyer"}
 
 
@@ -166,6 +167,13 @@ def compose(event: str, order: dict, mandate: Mandate) -> dict:
         return held_message(order)
     if event.startswith("order.amend"):
         return amendment_message(event, order)
+    if event == "offer.received":
+        o = order["offer"]
+        names = ", ".join(f"{p['name']} €{p['price_ex_vat']:.2f}" for p in o["products"])
+        return {"title": f"Valio Aimo offer: {o['headline']}",
+                "message": f"Valio Aimo offers {names} ex VAT per sales unit, up to {o['quantity_cap']:g} units, "
+                           f"until {fmt_time(o['valid_until'])} ({o['headline']}). Commercial offer: nothing is "
+                           "ordered unless your agent quotes it and your mandate allows it.", "url": None}
     return {"title": "Sous test notification",
             "message": f"Test notification for {mandate.buyer} (mandate {mandate.id}). Channels work.", "url": url}
 
