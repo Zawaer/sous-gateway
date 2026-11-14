@@ -34,11 +34,11 @@ mid-sized open-weight model is enough, and why we can measure the model separate
    prompts and responses are not stored (in-memory cache only, gone within 2 hours), not used for training,
    and **not shared with the model's developer**; each model page names the country it runs in. It speaks
    the same Chat Completions + tool-calling wire format as Gemini's OpenAI endpoint, so the agent's code is
-   identical for both (`agent/llm.py`, preset `verda`). Models we evaluate:
+   identical for both (`agent/llm.py`, preset `verda`). Models:
    - `kimi-k3-1-pro` (Moonshot AI, open weights, 1M context, tool calling; runs in Germany). Its default
      reasoning effort is `max`; the agent sends `reasoning_effort=low`, which is plenty for
      "search -> quote -> order" and keeps latency and cost down.
-   - `deepseek-4-1-flash-1017` (DeepSeek, open weights): the cheaper/faster comparison point.
+   - `deepseek-4-1-flash-1017` (DeepSeek, open weights): planned as the cheaper/faster comparison point; **not run**.
 3. **GPU instance + vLLM, when a buyer wants the model on infrastructure they control** (below). Same
    OpenAI-compatible API, so it plugs in with `--provider local`.
 
@@ -53,7 +53,7 @@ Scaling).
    function-calling schemas (agent_id, mandate_id and the idempotency key are bound by the runtime, so the
    model can't present someone else's mandate or double-order), and given to the model with the gateway's
    instructions, the mandate id, and today's date in Helsinki. Up to 12 tool calls per request.
-3. Evaluation (`scripts/llm_eval.py`): the 45 cases of `evals/cases.yaml` (40 apply to an LLM; 5 test
+3. Evaluation (`scripts/llm_eval.py`): the first 45 cases of `evals/cases.yaml` (40 apply to an LLM; 5 test
    protocol mechanics like expired quotes), each in a fresh state database, live Valio prices, the
    gateway's 60-calls/min Valio cap respected. Scored against the same expectations as the scripted eval
    plus "did the agent understand the buyer". Run per model, in CI (`llm-eval` job, network egress limited
@@ -75,32 +75,28 @@ Scaling).
 
 ## Results
 
-From `docs/LLM_EVAL.md` (45 cases, 40 apply to an LLM). Kimi ran in CI on CRACI runners against Verda
-Inference; Gemini is one local run.
+From `docs/LLM_EVAL.md`: 40 buyer sentences written by the team, live Valio prices, real model calls, both in CI on CRACI runners.
 
 | | `verda:kimi-k3-1-pro` | `gemini:gemini-4-hydrogen` |
 |---|---|---|
-| Matched the buyer's need without manual correction | 36/40 = 90 % | 37/40 = 92.5 % |
+| Run | CI 43511463514, 20f0a47, Fri 13.11 21:40Z | CI 43530717095, e84bb41, Sat 14.11 00:05Z |
+| Matched the buyer's need without manual correction | 36/40 = 90 % | 39/40 = 97.5 % |
 | Need understood (amount, unit, date, product) | 38/40 = 95 % | 39/40 = 97.5 % |
-| Unsafe requests blocked or escalated | 31/31 = 100 % | 31/31 = 100 % |
+| Unsafe requests blocked or escalated | 31/31 | 31/31 |
 | Mandate violations auto-ordered | 0 | 0 |
-| Tool calls / Valio API calls per request | 3.1 / 1.62 | 3.08 / 1.62 |
-| Tokens per request | 21,745 | 23,683 |
-| Latency per request (p50) | 8.4 s | 11.3 s |
-| Cost per request | not published in the run | $0.037 (list price) |
-| Buyer data stays in the EU | yes | no guarantee |
+| Tool calls / Valio API calls per request | 3.1 / 1.62 | 3.02 / 1.15 |
+| Tokens per request | 21,745 | 23,590 |
+| Latency per request (p50) | 8.4 s | 9.8 s |
+| Cost per request | not computed (no list price in the ledger; whole run $1.90 by `docs/COSTS.md`) | $0.037 (list price) |
+| Buyer data stays in the EU | yes (Germany) | no guarantee |
 
-The EU-hosted open-weight model is within 1 case of Gemini on matching and faster at p50. With both models the
-mandate engine kept every unsafe request blocked or escalated; 6 of the 7 misses failed safe (held for
-approval or nothing ordered), the seventh (Kimi, H09) was an in-mandate order for a different milk than the
-case expected. `deepseek-4-1-flash-1017` has not been run yet.
+The two columns are **not a like-for-like comparison**: Gemini's run is on newer code (gateway fix 5eaed68 and clearer wording for H09/P02/A04). In the same CI run as Gemini's 36/40 (43524836008, older code), Kimi scored 34/40. Kimi has not been re-measured on current code: in run 43530717095 Verda Inference returned empty HTTP 200s, and since ~00:15Z Sat Verda's API domains show a registrar suspension page. With every model the mandate engine kept every unsafe request blocked or escalated. `deepseek-4-1-flash-1017` has not been run.
 
-The harness itself is validated without a model: replaying the scripted plan through the same agent
-runtime passes 40/40 (`evals/llm_results.oracle.json`).
+The harness itself is validated without a model: replaying the scripted plan through the same agent runtime passes 40/40 (`evals/llm_results.oracle.json`).
 
-## Self-hosting the model on a Verda GPU (infrastructure we control)
+## Self-hosting the model on a Verda GPU (documented, not run)
 
-For a buyer (say, a hospital district) whose policy is "our purchasing data never leaves a machine we
+We have not run this; it is the recipe we would use. For a buyer (say, a hospital district) whose policy is "our purchasing data never leaves a machine we
 run", the same agent talks to a vLLM server on a Verda GPU instance in Finland instead of the shared
 Inference API:
 
@@ -131,10 +127,10 @@ is cheaper and already keeps data in the EU.
 ## Scaling from a demo to 20,000 kitchens
 
 - **Gateway.** Stateless FastAPI/MCP processes behind Caddy, state in MariaDB (system-versioned audit).
-  A kitchen orders a few times a day, mostly before the evening cut-off, so 20k kitchens is on the order of
+  These are estimates, not load tests (none was run). A kitchen orders a few times a day, mostly before the evening cut-off, so 20k kitchens is on the order of
   50-100k orders a day with a peak of a few orders per second: two or three CPU instances plus a managed
-  MariaDB, not a GPU problem. The binding limit is Valio's API: each request costs at most 2 live calls
-  (batched shortlist, cached), measured 0.95 per request in the scripted eval.
+  MariaDB, not a GPU problem. The binding limit is Valio's API: a quote costs 2 live calls (batched shortlist, cached), 4 when
+  substitutes are priced for options; 1.16 per request on average in the scripted eval.
 - **Model.** Tokens per request x requests per day decides the product: about 22k tokens per
   request in the eval (21,745 for Kimi K3.1 Pro). At 75k requests/day that is about 1.6 billion tokens/day; per-token
   Inference API pricing scales linearly with no idle cost and per-model rate limits (requests and tokens per
