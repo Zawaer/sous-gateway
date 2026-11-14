@@ -424,6 +424,16 @@ async function renderOrder(current, order) {
     const message = signed.status === order.status ? 'Receipt signature verified' :
       `Original receipt verified (${statuses[signed.status] || signed.status}). Current status reported by the gateway.`;
     content.append(element('p', message, 'verified'));
+    if (signed.status === order.status) {
+      content.append(actionButton('Download signed receipt', () => {
+        const url = URL.createObjectURL(new Blob([order.receipt_jws], { type: 'application/jose' }));
+        const link = element('a');
+        link.href = url;
+        link.download = `${signed.id}.jws`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }));
+    }
   } catch (error) {
     content.append(element('p', error.message, 'notice'));
   }
