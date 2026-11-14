@@ -63,6 +63,7 @@ Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it: scripted c
 - **Orders and approvals**: one order per quote, idempotency keys, cut-offs re-checked at order and at approval, signed receipts. A human approves or rejects from a phone link.
 - **Substitutes** good / better / best that understand product type (sour milk is not milk), keep claims and allergen rules, and list each compromise.
 - **Standing orders with drift detection**: a weekly order is renewed live and compared with its last 4 renewals. Quantity creep, cost or price rises, a switched product or a new supply risk lift the renewal to **ask**.
+- **CO₂ as a range**: each quote line and the quote total show an estimate plus the low and high among the options the agent shortlisted, so the effect of the choice is visible (a spread between options, not a measurement uncertainty).
 - **Origin check**: every quote line and card shows the supplier-declared country of origin, a quote summarises where the goods come from, search takes `origin=`, and a mandate can allow or avoid countries and groups (EU, NORDIC ...). Unknown origin is never treated as allowed. See [PROTOCOL.md section 30](docs/PROTOCOL.md).
 - **Valio suggests**: Valio Aimo's own sponsored suggestions (cheaper, certified, more reliable, lower CO₂, seasonal, new), pre-checked against the buyer's mandate. Offers only, never orders, and audited.
 - **Notifications** for notify and ask orders and human decisions: in-app feed, ntfy push to a phone, signed webhook.
