@@ -285,7 +285,8 @@ views.inbox = {
       ? `${orders.map((o) => inboxCard(o, !firstRender && !seen.has(o.id))).join("")}`
       : `<div class="empty"><div class="big">Nothing waiting</div>
           <p>Orders that fall outside an agent's mandate show up here for a human to approve or reject.</p>
-          <p><a href="#/orders">See all orders</a></p></div>`;
+          <p><a href="#/orders">See the last decided orders</a> · try it yourself: <a href="/docs#/sandbox">POST /sandbox</a> gives you
+            private copies of the demo buyers and a token to approve with.</p></div>`;
     view.innerHTML = `<div class="head"><div><h2>${orders.length ? "Waiting for a human" : "Approvals"}</h2>
       <div class="muted">${orders.length ? `${orders.length} order${orders.length > 1 ? "s" : ""} held by the mandate engine` : "Agents are ordering within their mandates."}</div></div></div>
       <div class="inbox-grid"><div>${main}</div>
@@ -1145,7 +1146,7 @@ views.stats = {
   key: "",
   async load() {
     const [{ orders: allOrders }, { events: allEvents }, chain] = await Promise.all([
-      api("/orders"), api("/audit?limit=10000"), api("/audit/verify")]);
+      api("/orders"), api("/audit?limit=5000")  /* 5000 = cap on older gateways (newer allow 20000) */, api("/audit/verify")]);
     const orders = noQA(allOrders, isQAOrder);
     const events = noQA(allEvents, isQAEvent);
     const key = (events[0]?.seq ?? "") + "|" + orders.length;
@@ -1293,7 +1294,7 @@ function route() {
   const [path, query] = location.hash.split("?", 2);
   const [, name, openId] = path.match(/^#\/(\w+)(?:\/([\w-]+))?\/?$/) || [];
   const same = current === name && openId;
-  current = views[name] ? name : "inbox";
+  current = views[name] ? name : "today";  // S5: Today is the front page
   if (current === "audit" && query !== undefined) {
     views.audit.q = new URLSearchParams(query).get("subject") || "";
   }
@@ -1304,6 +1305,7 @@ function route() {
     .catch((e) => toast("Can't open " + openId + ": " + e.message, 5000));
   if (same) return;
   document.querySelectorAll(".tabs a").forEach((a) => a.classList.toggle("on", a.dataset.tab === current));
+  document.querySelector(".tabs a.on")?.scrollIntoView({ block: "nearest", inline: "center" });
   view.dataset.view = "";
   views[current].key = "";
   view.innerHTML = `<div class="empty">Loading…</div>`;
