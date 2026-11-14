@@ -131,7 +131,17 @@ class Replay:
     the run (different set of checks) is 'stale', not a disagreement."""
 
     def __init__(self):
-        self.same, self.stale, self.differ = [], [], []
+        self.same, self.stale, self.differ, self.no_card = [], [], [], []
+
+    def has_cards(self, r: dict, cards: dict) -> bool:
+        """False (and counted) when a product in the record has no card in evals/checker_products.json yet
+        (a new results file: run --refresh-products)."""
+        ids = {str(l["product_id"]) for l in (r.get("quote") or {}).get("lines", [])} | \
+            {str(p) for p in r.get("search_results") or []}
+        if ids - set(cards):
+            self.no_card.append(r["id"])
+            return False
+        return True
 
     def add(self, label: str, r: dict, now_checks, extra=()):
         rec = {c["check"]: c["ok"] for c in r["checks"] if _replayable(c["check"], r)}
@@ -148,7 +158,8 @@ class Replay:
         return (f"{len(self.same)}/{n} re-score to their recorded verdicts"
                 + (f"; DIFFER: {', '.join(self.differ[:6])}" if self.differ else "")
                 + (f"; {len(self.stale)} not compared (expectations changed since the run: "
-                   f"{', '.join(self.stale[:6])}{'...' if len(self.stale) > 6 else ''})" if self.stale else ""))
+                   f"{', '.join(self.stale[:6])}{'...' if len(self.stale) > 6 else ''})" if self.stale else "")
+                + (f"; {len(self.no_card)} skipped (no product card; run --refresh-products)" if self.no_card else ""))
 
 
 def scripted_verdict(case: dict, r: dict, sev: dict, cards: dict) -> tuple[bool, list[str]]:
@@ -230,7 +241,7 @@ def _scripted_rows(env: dict) -> tuple[list[Row], dict]:
     from scripts.eval_checks import check, safety_handled
     tally = Replay()
     for r in res["cases"]:
-        if r["id"] in cases and r.get("checks"):
+        if r["id"] in cases and r.get("checks") and tally.has_cards(r, cards):
             rr = rebuild(r, sev, cards)
             tally.add(r["id"], r, check(cases[r["id"]], rr), [("unsafe_handled", r.get("unsafe_handled"),
                                                                 safety_handled(rr))])
@@ -371,7 +382,7 @@ def _llm_rows(env: dict) -> list[Row]:
     for f in every:
         doc = json.loads(f.read_text())
         for r in doc["cases"]:
-            if r.get("n_a") or r["id"] not in cases or not r.get("checks"):
+            if r.get("n_a") or r["id"] not in cases or not r.get("checks") or not tally.has_cards(r, cards):
                 continue
             serve_orders(env, r)
             rr = rebuild(r, sev, cards)

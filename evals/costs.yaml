@@ -28,6 +28,8 @@ runs:
   - {when: "2026-11-14 07:45", provider: gemini, model: gemini-4-hydrogen, purpose: "mandate drafting eval, 19 cases, 15/19 (CI on CRACI, run 43562850006, 1f65871)", tokens_in: 26519, tokens_out: 2260, usd: 0.0567}
   - {when: "2026-11-14 07:58", provider: gemini, model: gemini-4-hydrogen, purpose: "mandate drafting eval, 19 cases, 19/19 after the validator + prompt fixes (CI on CRACI, run 43563950578, 5c44284)", tokens_in: 32694, tokens_out: 2327, usd: 0.0665}
   - {when: "2026-11-14 08:23", provider: gemini, model: gemini-4-hydrogen, purpose: "mandate drafting eval, 23 cases, 23/23 with QA's never-approve / allowed-allergen / preference cases (CI on CRACI, run 43566010358, d158f4c)", tokens_in: 41773, tokens_out: 2808, usd: 0.0837}
+  - {when: "2026-11-14 11:40", provider: nvidia, model: nemotron-3-super-120b-a12b, purpose: "buyer LLM eval, llm_only dispatch (CI on CRACI, run 43581555078, 81bebbd)", tokens_in: 0, tokens_out: 0, usd: 0, note: "model id answered HTTP 404 to our key; every case failed before using tokens"}
+  - {when: "2026-11-14 12:39", provider: nvidia, model: nemotron-3.5-super-vl-120b-a12b, purpose: "buyer LLM eval, 60 cases / 48 run, 30/48 (CI llm_only dispatch on CRACI, run 43585403494, 04fb521)", tokens_in: 2766623, tokens_out: 35398}
   - {when: "2026-11-14 00:10", provider: openai, model: codex, purpose: "read-only security review of the trust core (Codex run 01a1d6fd)", tokens_in: 356000, tokens_out: 2400, note: "approximate, from the Codex run summary"}
   - {when: "2026-11-14 04:50", provider: openai, model: codex, purpose: "read-only security review of overnight trust changes (Codex run 01a1d86a)", tokens_in: 372700, tokens_out: 2334, note: "approximate, from the Codex run summary"}
 

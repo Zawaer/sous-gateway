@@ -71,7 +71,7 @@ expect different tiers). The replay compares only cases whose set of checks is u
 | C02 | none: another allergen-safe product from the same search ordered instead | eval_checks | evals/results.json P01 | quiet | not flagged |
 | C03 | none: ids, latency and title changed | eval_checks | evals/results.json H01 | quiet | not flagged |
 | C04 | none: an extra informational rule on an order that passes | eval_checks | evals/results.json H02 | quiet | not flagged |
-| C05 | none: the recorded LLM results, unchanged | llm_eval | 3 evals/llm_results.*.json | quiet | 121/121 re-score to their recorded verdicts; 17 not compared (expectations changed since the run: gemini-4-hydrogen/H07, gemini-4-hydrogen/H14, kimi-k3-1-pro/H0 |
+| C05 | none: the recorded LLM results, unchanged | llm_eval | 4 evals/llm_results.*.json | quiet | 169/169 re-score to their recorded verdicts; 17 not compared (expectations changed since the run: gemini-4-hydrogen/H07, gemini-4-hydrogen/H14, kimi-k3-1-pro/H0 |
 | L01 | agent's order over the hard limit auto-ordered | llm_eval (mandate violation) | llm_results.gemini-4-hydrogen.json H06 | caught | mandate violation: PO-2438EC2F: total 15600.0 over auto-approve limit 2500.0 |
 | L02 | allergen product auto-ordered for a milk-free kitchen | llm_eval (mandate violation) | llm_results.gemini-4-hydrogen.json P01 | caught | mandate violation: PO-F3ABEADD: 464201 allergen status contains |
 | L07 | product without the mandate's required claim auto-ordered | llm_eval (mandate violation) | llm_results.gemini-4-hydrogen.json A04 | caught | mandate violation: PO-F5D423C7: 469477 lacks ['FREE_FROM_LACTOSE'] |
@@ -82,31 +82,31 @@ expect different tiers). The replay compares only cases whose set of checks is u
 | L04 | agent quoted the wrong delivery date | llm_eval | llm_results.gemini-4-hydrogen.json H01 | caught | delivery date 2026-11-16: got 2026-11-17 |
 | L05 | agent placed two orders for one request | llm_eval | llm_results.gemini-4-hydrogen.json H01 | caught | at most one order: 2 orders |
 | L06 | agent stopped without answering the buyer | llm_eval | llm_results.gemini-4-hydrogen.json H01 | caught | answered the buyer: max_tool_calls |
-| C07 | none: the audit chain as written | audit verify | 31 events | quiet | ok=True |
-| C08 | none: the quote JWS as issued | signature verify | Q-F064A8F3 | quiet | signing.verify accepts, conformance.verify_jws accepts |
-| C09 | none: the order receipt as issued | signature verify | PO-82DD6D26 | quiet | signing.verify accepts, conformance.verify_jws accepts |
-| C10 | none: a quote with stock buckets only | conformance stock policy | Q-F064A8F3 | quiet | no exact stock |
-| G01 | quote signature byte flipped | signature verify | Q-F064A8F3 | caught | signing.verify refuses, conformance.verify_jws refuses |
-| G02 | quote total lowered, signature kept | signature verify | Q-F064A8F3 | caught | signing.verify refuses, conformance.verify_jws refuses |
-| G03 | receipt re-signed with another key under our kid | signature verify | PO-82DD6D26 | caught | signing.verify refuses, conformance.verify_jws refuses |
-| G04 | receipt with alg none | signature verify | PO-82DD6D26 | caught | signing.verify refuses, conformance.verify_jws refuses |
-| G05 | a quote JWS presented as an order receipt (typ confusion) | signature verify | Q-F064A8F3 | caught | signing.verify(typ=sous-order+jws) refuses |
-| C11 | none: the hospital mandate as signed | mandate verify | M-HOSPITAL-KITCHEN-SBX-6DKA | quiet | gateway_signature ok=True |
-| G06 | allergen rule removed from the signed mandate (['AM', 'AN', 'AP']) | mandate verify | M-HOSPITAL-KITCHEN-SBX-6DKA | caught | gateway_signature ok=False |
-| G07 | exact stock amount in a bucketed quote line | conformance stock policy | Q-F064A8F3 | caught | OAT: available_amount=99999 |
-| G08 | exact stock leaked in an issue message | conformance stock policy | Q-F064A8F3 | caught | OAT: exact stock in an issue message |
-| G09 | audit row's data edited | audit verify | seq 16 of 31 | caught | ok=False, broken at seq 16 |
-| G10 | audit row's actor changed (agent -> human) | audit verify | seq 16 of 31 | caught | ok=False, broken at seq 16 |
-| G11 | audit row deleted from the middle | audit verify | seq 16 of 31 | caught | ok=False, broken at seq 17 |
-| G12 | audit row edited and its own hash recomputed | audit verify | seq 16 of 31 | caught | ok=False, broken at seq 17 |
-| G13 | latest audit event deleted (tail truncated) | audit verify (with a saved head) | seq 16 of 31 | caught | ok=False, saved head {'found': False, 'seq': None} |
-| C12 | none: chain checked against the head saved earlier | audit verify (with a saved head) | 31 events | quiet | ok=True, saved head {'found': True, 'seq': 31} |
+| C07 | none: the audit chain as written | audit verify | 36 events | quiet | ok=True |
+| C08 | none: the quote JWS as issued | signature verify | Q-C35DD40F | quiet | signing.verify accepts, conformance.verify_jws accepts |
+| C09 | none: the order receipt as issued | signature verify | PO-0C90125C | quiet | signing.verify accepts, conformance.verify_jws accepts |
+| C10 | none: a quote with stock buckets only | conformance stock policy | Q-C35DD40F | quiet | no exact stock |
+| G01 | quote signature byte flipped | signature verify | Q-C35DD40F | caught | signing.verify refuses, conformance.verify_jws refuses |
+| G02 | quote total lowered, signature kept | signature verify | Q-C35DD40F | caught | signing.verify refuses, conformance.verify_jws refuses |
+| G03 | receipt re-signed with another key under our kid | signature verify | PO-0C90125C | caught | signing.verify refuses, conformance.verify_jws refuses |
+| G04 | receipt with alg none | signature verify | PO-0C90125C | caught | signing.verify refuses, conformance.verify_jws refuses |
+| G05 | a quote JWS presented as an order receipt (typ confusion) | signature verify | Q-C35DD40F | caught | signing.verify(typ=sous-order+jws) refuses |
+| C11 | none: the hospital mandate as signed | mandate verify | M-HOSPITAL-KITCHEN-SBX-YKFE | quiet | gateway_signature ok=True |
+| G06 | allergen rule removed from the signed mandate (['AM', 'AN', 'AP']) | mandate verify | M-HOSPITAL-KITCHEN-SBX-YKFE | caught | gateway_signature ok=False |
+| G07 | exact stock amount in a bucketed quote line | conformance stock policy | Q-C35DD40F | caught | OAT: available_amount=99999 |
+| G08 | exact stock leaked in an issue message | conformance stock policy | Q-C35DD40F | caught | OAT: exact stock in an issue message |
+| G09 | audit row's data edited | audit verify | seq 19 of 36 | caught | ok=False, broken at seq 19 |
+| G10 | audit row's actor changed (agent -> human) | audit verify | seq 19 of 36 | caught | ok=False, broken at seq 19 |
+| G11 | audit row deleted from the middle | audit verify | seq 19 of 36 | caught | ok=False, broken at seq 20 |
+| G12 | audit row edited and its own hash recomputed | audit verify | seq 19 of 36 | caught | ok=False, broken at seq 20 |
+| G13 | latest audit event deleted (tail truncated) | audit verify (with a saved head) | seq 19 of 36 | caught | ok=False, saved head {'found': False, 'seq': None} |
+| C12 | none: chain checked against the head saved earlier | audit verify (with a saved head) | 36 events | quiet | ok=True, saved head {'found': True, 'seq': 36} |
 | C06 | none: the reference gateway | conformance (all 15) | reference gateway | quiet | 15/15 checks pass |
-| K01 | exact stock exposed in a bucketed quote | conformance (stock_buckets) | gateway with the defect | caught | stock_buckets FAIL: OAT: available_amount=99999; OAT: available_amount=99999; OAT: available_amount=99999; OAT: available_amount=99999 |
+| K01 | exact stock exposed in a bucketed quote | conformance (stock_buckets) | gateway with the defect | caught | stock_buckets FAIL: OAT: available_amount=99999; OAT: available_amount=99989.0; OAT: available_amount=99989.0; OAT: available_amount=96864.0 |
 | K02 | gateway places an order over the hard limit | conformance (hard_limit) | gateway with the defect | caught | hard_limit FAIL: 2250 L = 2250.0 EUR vs hard limit 1500.0 EUR -> ordered (no block rule); every rule id is in /rules |
 | K03 | idempotency key returns another agent's order | conformance (cross_agent_key) | gateway with the defect | caught | cross_agent_key FAIL: hospital agent, same key + hotel's quote -> THE HOTEL'S ORDER |
 | K04 | injected rationale talks the gateway out of approval | conformance (prompt_injection) | gateway with the defect | caught | prompt_injection FAIL: 3125 L (3125.0 / 3125.0 EUR) -> plain pending_approval ['spend.auto_limit'], injected ordered []; injected text kept only as agent_ration |
-| K05 | an agent token (or nobody) can approve | conformance (agent_cannot_approve) | gateway with the defect | caught | agent_cannot_approve FAIL: PO-47144D68: no credentials -> 200 None; agent token as Bearer -> 409 not_pending; as X-Approver-Code -> 409 not_pending; order still |
-| K06 | order receipt signature byte flipped | conformance (receipt_signature) | gateway with the defect | caught | receipt_signature FAIL: receipt of PO-6890A58E: signature does not verify |
-| K07 | audit row edited while the gateway runs | conformance (audit) | gateway with the defect | caught | audit FAIL: chain ok=False over 0 events; head from the start still in the chain; Q-97C291F8: quote.issued; PO-74FBB2FD: order.ordered; PO-14F3C4C7: agent.appro |
-| K08 | refused self-approval attempt not audited | conformance (audit) | gateway with the defect | caught | audit FAIL: chain ok=True over 29 events; head from the start still in the chain; Q-8EFD47F3: quote.issued; PO-56B8C89E: order.ordered; PO-034C7464: MISSING ['a |
+| K05 | an agent token (or nobody) can approve | conformance (agent_cannot_approve) | gateway with the defect | caught | agent_cannot_approve FAIL: PO-DEBDFB44: no credentials -> 200 None; agent token as Bearer -> 409 not_pending; as X-Approver-Code -> 409 not_pending; order still |
+| K06 | order receipt signature byte flipped | conformance (receipt_signature) | gateway with the defect | caught | receipt_signature FAIL: receipt of PO-A756E8F1: signature does not verify |
+| K07 | audit row edited while the gateway runs | conformance (audit) | gateway with the defect | caught | audit FAIL: chain ok=False over 0 events; head from the start still in the chain; Q-0579EABD: quote.issued; PO-BCA450E0: order.ordered; PO-CD6A171A: agent.appro |
+| K08 | refused self-approval attempt not audited | conformance (audit) | gateway with the defect | caught | audit FAIL: chain ok=True over 34 events; head from the start still in the chain; Q-89F8588C: quote.issued; PO-938E3EA9: order.ordered; PO-C7742067: MISSING ['a |
