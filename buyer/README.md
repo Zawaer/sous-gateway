@@ -32,6 +32,6 @@ The verifier checks signatures, document types, quote binding and amendment hash
 
 For a multi-item request, select candidates for each product and click **Add to basket**. The basket shares one mandate and delivery date. **Get signed basket quote** shows requested and quoted quantities per item. Use **Find alternatives** on a shortage row to replace that basket item and request a fresh quote. On an existing order, the same action looks up alternatives for the missing quantity.
 
-Pending orders refresh automatically while the tab is visible. **View audit trail** opens the audit log filtered to the order ID.
+Orders awaiting approval and orders with a pending buyer amendment refresh automatically while the tab is visible. After a new amendment is reported on a completed order, reopen the link or choose **Refresh status** to load it. **View audit trail** opens the audit log filtered to the order ID.
 
 Run the isolated tests with `node --test buyer/buyer.test.mjs` on Node 22 or newer.

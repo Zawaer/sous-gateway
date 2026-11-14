@@ -470,6 +470,7 @@ async function renderOrder(current, order) {
   const { gateway, quote } = current;
   const content = document.createDocumentFragment();
   let verifiedStatus;
+  let pendingAmendment = false;
   if (quote.seeded?.sandbox) {
     content.append(element('p', 'Sandbox example priced from stored reference data.', 'notice'));
   }
@@ -478,6 +479,7 @@ async function renderOrder(current, order) {
   try {
     const signed = await gateway.receipt(order, quote);
     verifiedStatus = signed.status;
+    pendingAmendment = Boolean(signed.amendments?.some(amendment => amendment.status === 'pending_buyer'));
     const status = statuses[signed.status] || signed.status;
     const tier = signed.status === 'expired_cutoff' ? 'block' : statusTier[signed.status] || signed.decision?.outcome;
     content.prepend(outcomeLine(tier, (signed.status === 'ordered' && tierLabels[tier]) ||
@@ -534,6 +536,7 @@ async function renderOrder(current, order) {
     }
   } catch (error) {
     verifiedStatus = undefined;
+    pendingAmendment = false;
     content.replaceChildren(
       element('p', 'Order status could not be verified', 'notice total'),
       element('p', error.message, 'notice'));
@@ -551,7 +554,8 @@ async function renderOrder(current, order) {
     if (url?.origin === new URL(gateway.base).origin && !url.username && !url.password) approval = url.href;
   }
   $('approvals').href = approval;
-  $('approvals').hidden = verifiedStatus !== 'pending_approval';
+  $('approvals').hidden = verifiedStatus !== 'pending_approval' && !pendingAmendment;
+  $('approvals').textContent = pendingAmendment ? 'Review order changes ↗' : 'Open approval ↗';
   const audit = new URL(buyerPage?.href ?? `${gateway.base}/ui/`);
   const orderUrl = order.order_url && URL.parse(order.order_url, `${gateway.base}/`);
   const sandbox = orderUrl?.origin === audit.origin && orderUrl.searchParams.get('sandbox');
@@ -569,14 +573,20 @@ async function showOrder(gateway, order, quote) {
   scheduleStatus();
 }
 
+function orderNeedsRefresh() {
+  const order = state.order?.snapshot;
+  return order?.status === 'pending_approval' ||
+    Boolean(order?.amendments?.some(amendment => amendment.status === 'pending_buyer'));
+}
+
 function scheduleStatus() {
   clearTimeout(statusTimer);
-  if (state.order?.snapshot.status !== 'pending_approval') return;
+  if (!orderNeedsRefresh()) return;
   statusTimer = setTimeout(pollPendingOrder, statusPollMs);
 }
 
 async function pollPendingOrder() {
-  if (state.order?.snapshot.status !== 'pending_approval') return;
+  if (!orderNeedsRefresh()) return;
   clearTimeout(statusTimer);
   if (!document.hidden && !state.busy) {
     try { await refreshOrder(); } catch { /* refreshOrder shows the failure and the next poll retries. */ }
@@ -605,7 +615,7 @@ async function refreshOrder(force = false) {
     if (current === state.order) notice($('order-sync'));
   } catch (error) {
     if (current === state.order) {
-      notice($('order-sync'), 'Could not refresh this order. The status shown may be out of date. Automatic checks will retry while approval is pending.', true);
+      notice($('order-sync'), 'Could not refresh this order. The status shown may be out of date. Automatic checks will retry while an order or amendment decision is pending.', true);
     }
     throw error;
   } finally {
