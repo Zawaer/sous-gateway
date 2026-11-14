@@ -411,3 +411,24 @@ def test_no_next_date_lookup_when_the_product_is_blocked_for_another_reason(monk
     q = quote(["A"], day=SUN)["quote"]
     assert "options" not in q
     assert not any(day >= "2026-11-17" for _, day in CALLS)
+
+
+def test_next_date_option_preview_is_its_own_date_and_cutoff(monkeypatch):
+    """Judge audit: a next_date option said block (availability.cutoff_passed), order_cutoff null and
+    CUTOFF_UNKNOWN. Real Valio keeps reporting the earliest date (whose cut-off passed) when asked for a later
+    day, and a second item past its own cut-off must not make this option look blocked by a cut-off."""
+    monkeypatch.setattr(substitutes, "suggest", lambda *a, **k: {"options": []})
+    AVAIL["A"] = ("2026-11-16", None, "2026-11-13T12:00:00+0200")  # passed at NOW (Fri 21:00), on any day asked
+    AVAIL["B"] = ("2026-11-16", None, "2026-11-13T12:00:00+0200")
+    q = S.request_quote(S.QuoteRequest(agent_id="agent", mandate_id="M-T", delivery_date=MON, items=[
+        S.QuoteItem(product_ids=["A"], amount=100, unit="L"),
+        S.QuoteItem(product_ids=["B"], amount=50, unit="L")]))["quote"]
+    assert q["mandate_preview"]["outcome"] == "block"
+    nxt = [o for o in q["options"] if o["kind"] == "next_date"]
+    assert [o["item_index"] for o in nxt] == [0, 1]
+    for o in nxt:
+        assert o["delivery_dates"] == ["2026-11-17"]
+        assert o["mandate_preview"] == {"outcome": "ask", "rules": ["delivery.later_date"]}
+        # its own cut-off: the original's offset (12:00 three days before) applied to Tuesday, marked estimated
+        assert o["order_cutoff"]["estimated"] is True and o["order_cutoff"]["at"] == "2026-11-14T12:00:00+02:00"
+        assert "original date" in o["order_cutoff"]["basis"]

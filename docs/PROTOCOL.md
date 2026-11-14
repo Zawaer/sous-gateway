@@ -179,7 +179,8 @@ When an item can't be covered in full by the requested date (stock short, earlie
 | `tradeoff` | One plain-language sentence with the total. |
 | `substitute` | `null`, or `{tier: best|better|good, for, compromises[], match}` from `substitutes.suggest`. |
 | `same_as_quote` | True when the option is exactly the quote's own lines (e.g. "accept the later date"). |
-| `mandate_preview` | `{outcome, rules[]}`: the tier the whole quote would get with this option in place of the item's lines. |
+| `mandate_preview` | `{outcome, rules[]}`: the tier the whole quote would get with this option in place of the item's lines. For a `next_date` option it is the option's own: its lines priced for its own (later) date, next to the other items' orderable lines (another item's passed cut-off has its own options and doesn't make this one look blocked). |
+| `order_cutoff` | `next_date` only: `{at, estimated, basis}`, the option's own cut-off: Valio's `closingTime` for that date when reported, else estimated from the original date's real cut-off offset (else 17:00 Helsinki the day before delivery). |
 
 Ranking per item: options without a substitute first; then fully on time > part on time + rest later > later; split before a full substitute; substitute tier best > better > good, then type match and fewest compromises; then price. Options the mandate would block go last. Every option covers the full need, or it isn't listed (at most 5 per item).
 

@@ -75,14 +75,15 @@ def fmt_day(d: str) -> str:
     return f"{x:%a} {x.day}.{x.month}"
 
 
-def estimate_cutoff(delivery: date, reference: list[tuple[str, str]] | None = None) -> dict:
+def estimate_cutoff(delivery: date, reference: list[tuple[str, str]] | None = None,
+                    source: str = "last renewal's") -> dict:
     """The order cut-off for a future delivery day, before any live quote: the offset between the latest real
     (cut-off, delivery date) pair we know, applied to `delivery`; else Valio's Stock rule (17:00 the day before)."""
     for cut, day in reference or []:
         if cut and day:
             off = day_start(day) - _dt(cut)
             return {"at": (day_start(delivery) - off).isoformat(timespec="seconds"), "estimated": True,
-                    "basis": f"last renewal's Valio cut-off ({_dt(cut):%a %H:%M} for {fmt_day(day)})"}
+                    "basis": f"{source} Valio cut-off ({_dt(cut):%a %H:%M} for {fmt_day(day)})"}
     at = day_start(delivery) - timedelta(days=1) + timedelta(hours=DEFAULT_CUTOFF_HOUR)
     return {"at": at.isoformat(timespec="seconds"), "estimated": True,
             "basis": f"default: Valio Stock cut-off, {DEFAULT_CUTOFF_HOUR}:00 the day before delivery"}

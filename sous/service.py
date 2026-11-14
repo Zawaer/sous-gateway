@@ -599,15 +599,40 @@ def _options(body: dict, troubled: list, requested: date, mandate: Mandate | Non
                 subs = []
             subs = [s for s in subs if s["product_id"] not in item.product_ids]
             opts = OPT.build(item_index, item.amount, unit, offers, chosen, requested, subs, original, nxt)
+        for o in opts:
+            if o["kind"] == "next_date":
+                o["order_cutoff"] = _next_date_cutoff(o["_lines"], offers)
         out += opts
 
     def preview(opt: dict):
-        q = {**body, "lines": [l for l in body["lines"] if l.get("item_index") != opt["item_index"]] + opt["_lines"],
+        others = [l for l in body["lines"] if l.get("item_index") != opt["item_index"]]
+        if opt["kind"] == "next_date":
+            # Its own preview: its lines priced for its own (later) date, next to what the other items would really
+            # buy. Other items' unorderable lines (a passed cut-off of their own) have their own options; leaving
+            # them in would show this option as blocked by a cut-off it doesn't have.
+            others = [l for l in others if l.get("orderable", True)]
+        q = {**body, "lines": others + opt["_lines"],
              "uncovered": [g for g in body["uncovered"] if g["item_index"] != opt["item_index"]]}
         tier, findings = _evaluate(mandate, body["agent_id"], q, now)
         return tier, sorted({f.rule for f in findings if f.outcome != "silent" and f.rule != "mandate.ok"})
 
     return OPT.finish(out, body["id"], preview if mandate else None)
+
+
+def _next_date_cutoff(lines: list[dict], offers: list[dict]) -> dict | None:
+    """A next_date option's own order cut-off: the earliest one Valio reported for its lines' date, else an
+    estimate for that date from the original's real (cut-off, date) pair, else Valio's Stock rule (17:00 the day
+    before delivery, sous/deadline.py). {at, estimated, basis}."""
+    known = sorted(l["order_cutoff"] for l in lines if l.get("order_cutoff"))
+    if known:
+        return {"at": known[0], "estimated": False, "basis": "Valio closingTime for this date"}
+    days = sorted(l["delivery_date"] for l in lines if l.get("delivery_date"))
+    if not days:
+        return None
+    ids = {l["product_id"] for l in lines}
+    ref = [(o["order_cutoff"], o.get("available_date") or o.get("delivery_date")) for o in offers
+           if o["product_id"] in ids and o.get("order_cutoff")]
+    return deadline.estimate_cutoff(date.fromisoformat(days[0]), ref, "estimated from the original date's")
 
 
 def _evaluate(mandate: Mandate, agent_id: str, q: dict, now: datetime, extra_findings=None):
