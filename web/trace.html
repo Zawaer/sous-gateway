@@ -60,8 +60,20 @@
     .strip h2 { font: 400 1.5rem/1.15 var(--serif); margin: 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     .strip .meta { color: var(--ink-60); font-size: .88rem; margin-top: 4px; }
     .strip .acts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .verdict { margin: 0 0 18px; }
+    .verdict h2 { font: 400 clamp(1.5rem, 3.4vw, 2.1rem)/1.15 var(--serif); letter-spacing: -.01em; margin: 10px 0 6px; }
+    .verdict .why { font-size: 1.02rem; margin: 0 0 6px; max-width: 44rem; }
+    .verdict .meta { color: var(--ink-60); font-size: .86rem; margin: 0 0 18px; }
+    .verdict .how { color: var(--ink-60); font-size: .84rem; margin: -12px 0 0; }
+    details.hops > summary { cursor: pointer; width: fit-content; min-height: 40px; display: flex; align-items: center; padding: 0 16px;
+      border: 1px solid var(--rule); border-radius: 999px; font-weight: 500; font-size: .9rem; list-style: none; margin: 22px 0; }
+    details.hops > summary::-webkit-details-marker { display: none; }
+    details.hops > summary::before { content: "+"; margin-right: 8px; font-family: var(--mono); }
+    details.hops[open] > summary::before { content: "\2212"; }
+    details.hops .acts { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; }
+    main:not(:has(#hops[open])) .legend { display: none; }
     .proofs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 26px; padding: 0; list-style: none; }
-    .proofs li { font-size: .8rem; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--rule); color: var(--ink-80); }
+    .proofs li { font-size: .88rem; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--rule); color: var(--ink-80); }
     .proofs li.ok { border-color: var(--silent-line); color: var(--silent); }
     .proofs li.bad { border-color: var(--block-ink); color: var(--block-ink); }
     .proofs li .ms { font-size: 15px; margin-right: 3px; }
@@ -183,21 +195,17 @@
       </a>
       <nav class="nav" aria-label="Pages">
         <a href="/ui/live.html">Live view</a>
-        <a href="/ui/">Seller view</a>
-        <a href="/ui/buyer.html">Buyer side</a>
         <a href="/rules" target="_blank" rel="noopener">Rules</a>
-        <a href="/docs" target="_blank" rel="noopener">API</a>
       </nav>
-      <button class="btn solid" id="try" type="button"><span class="ms">play_arrow</span>Try it live</button>
+      <a class="btn solid" id="try" href="/ui/try.html"><span class="ms">play_arrow</span>Try it yourself</a>
     </div>
   </header>
 
   <main>
     <div class="intro">
       <div>
-        <h1>One order, every hop</h1>
-        <p class="lede">What happened between a buyer's purchasing agent and Valio Aimo, and why you can check it yourself:
-          each card comes from the gateway's API, and the signatures are verified here in your browser.</p>
+        <h1>One order, proven</h1>
+        <p class="lede">What an agent ordered from Valio Aimo, why it was allowed, and the signatures that prove it.</p>
       </div>
       <div class="picker">
         <label for="pick">Order</label>
@@ -217,7 +225,7 @@
 
   <footer class="foot">
     <span>Everything on this page is read from Sous's public API; nothing is filled in by the page.</span>
-    <span><a href="/.well-known/jwks.json">Signing key</a> · <a href="/audit/verify">Audit chain</a> · <a href="/ui/#/audit">Audit log</a></span>
+    <span><a href="/ui/">Valio Aimo's view</a> · <a href="/ui/buyer.html">Buyer's view</a> · <a href="/.well-known/jwks.json">Signing key</a> · <a href="/audit/verify">Audit chain</a> · <a href="/docs">API</a></span>
   </footer>
 
   <div class="drawer-bg" id="drawer-bg"></div>

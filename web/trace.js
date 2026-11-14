@@ -140,6 +140,7 @@ async function load(id) {
   render();
   setStatus(PENDING_NOTE);
   PENDING_NOTE = "";
+  verifyChain();
 }
 
 function showError(id, e) {
@@ -464,21 +465,35 @@ function hopHtml(h, n, c) {
   </article>`;
 }
 
+// The 20-second read: what happened, why, and four checks. The nine hops stay one click away.
+const HEADLINE = (o) => o.status === "ordered" ? (o.approval ? "Ordered after the buyer's human approved" : "Ordered by the agent alone")
+  : o.status === "pending_approval" ? "Waiting for the buyer's human" : STATUS[o.status] || o.status;
+
 function render() {
   const c = CTX, o = c.o;
   const sbx = SANDBOX ? `?sandbox=${encodeURIComponent(SANDBOX)}` : "";
+  const fs = o.decision?.findings || [];
+  const top = fs.find((f) => f.outcome === o.decision?.outcome) || fs[0];
+  const first = (o.lines || [])[0];
+  const open = store.get(sessionStorage, "sous-trace-open") === "1";
   $("#out").innerHTML = `
-    <section class="strip" aria-label="Order">
-      <div><h2><span class="mono" style="font-size:.8em">${esc(o.id)}</span> ${tierBadge(o.decision?.outcome)}</h2>
-        <div class="meta">${esc(o.buyer)} · ${esc(STATUS[o.status] || o.status)} · ${eur(o.total_ex_vat)} ex VAT · placed ${when(o.created_at)}</div></div>
-      <div class="acts"><button class="btn solid" type="button" id="replay"><span class="ms">replay</span>Replay</button>
-        <button class="btn" type="button" data-verify><span class="ms">link</span>Verify chain</button>
-        <a class="btn" href="/ui/${sbx}#/orders/${encodeURIComponent(o.id)}">Open order</a></div>
+    <section class="verdict" aria-label="Order">
+      <div>${tierBadge(o.decision?.outcome)}</div>
+      <h2>${eur(o.total_ex_vat)} · ${esc(HEADLINE(o))}</h2>
+      ${top ? `<p class="why">${esc(top.message)}</p>` : ""}
+      <p class="meta">${esc(o.buyer)}${first ? ` · ${esc(first.name)}${o.lines.length > 1 ? ` +${o.lines.length - 1}` : ""}` : ""} · ${when(o.created_at)} · <span class="mono">${esc(o.id)}</span></p>
+      <ul class="proofs" id="proofs" aria-label="What was checked here"></ul>
+      <p class="how">Checked in your browser with the gateway's public key. The decision is plain code: no AI in that step.</p>
     </section>
-    <ul class="proofs" id="proofs" aria-label="What was checked here"></ul>
-    <div class="board" id="board"><svg class="wires" id="wires" aria-hidden="true"></svg>${HOPS.map((h, i) => hopHtml(h, i + 1, c)).join("")}</div>`;
+    <details class="hops" id="hops"${open ? " open" : ""}>
+      <summary>Show all 9 steps, from the agent's request to Valio Aimo</summary>
+      <div class="acts"><button class="btn solid" type="button" id="replay"><span class="ms">replay</span>Replay</button>
+        <a class="btn" href="/ui/${sbx}#/orders/${encodeURIComponent(o.id)}">Open order</a></div>
+      <div class="board" id="board"><svg class="wires" id="wires" aria-hidden="true"></svg>${HOPS.map((h, i) => hopHtml(h, i + 1, c)).join("")}</div>
+    </details>`;
   renderProofs();
   $("#replay").addEventListener("click", replay);
+  $("#hops").addEventListener("toggle", (ev) => { store.set(sessionStorage, "sous-trace-open", ev.target.open ? "1" : ""); drawWires(); });
   wireBoard();
   light(9, stopHop(c));
 }
@@ -488,12 +503,15 @@ function renderProofs() {
   if (!c || !$("#proofs")) return;
   const item = (ok, label) => `<li class="${ok === true ? "ok" : ok === false ? "bad" : ""}"><span class="ms">${ok === true ? "check_circle" : ok === false ? "error" : "radio_button_unchecked"}</span>${label}</li>`;
   const sig = (v, mis) => (!v || v.state === "none" ? null : v.state === "ok" && !mis ? true : v.state === "bad" || mis ? false : null);
+  const say = (ok, yes, no, unknown) => item(ok, ok === true ? yes : ok === false ? no : unknown);
   $("#proofs").innerHTML = [
-    c.q ? item(sig(c.v.quote, c.mis.quote), "Quote signature") : item(null, "Quote not readable"),
-    c.m ? item(sig(c.v.mandate, c.mis.mandate), "Mandate signature") : item(null, "Mandate not readable"),
-    item(sig(c.v.receipt, c.mis.receipt), o_receiptLabel(c.o)),
-    item(c.chain ? !!c.chain.ok : null, c.chain ? (c.chain.ok ? `Audit chain (${c.chain.events} events)` : "Audit chain") : "Audit chain: press Verify"),
-    item(null, !c.claim?.text ? "No agent rationale" : c.claim.source === "system" ? "Seeded order: the text is Sous's, not an agent's" : "Agent's rationale: unverified, used by no rule"),
+    c.m ? say(sig(c.v.mandate, c.mis.mandate), "The buyer's mandate is signed", "The mandate's signature does not match", "Mandate signature not checked")
+      : item(null, "Mandate not readable"),
+    c.q ? say(sig(c.v.quote, c.mis.quote), "Sous signed the price it quoted", "The quote's signature does not match", "Quote signature not checked")
+      : item(null, "Quote not readable"),
+    c.o.receipt_jws ? say(sig(c.v.receipt, c.mis.receipt), "The order receipt is signed", "The receipt's signature does not match", "Receipt signature not checked")
+      : item(null, "No receipt yet: the order is not final"),
+    say(c.chain ? !!c.chain.ok : null, `The log is intact (${c.chain?.events ?? ""} entries)`, "The log's chain is broken", "Checking the log…"),
   ].join("");
 }
 const o_receiptLabel = (o) => (o.receipt_jws ? "Order receipt signature" : "No receipt (not final yet)");
@@ -634,45 +652,6 @@ function choose(id, push = true) {
 $("#pick").addEventListener("change", (ev) => choose(ev.target.value));
 addEventListener("popstate", () => { const id = new URLSearchParams(location.search).get("order"); if (id) choose(id, false); });
 
-// --- try it live: a private sandbox, the hotel quickstart quote + order, then this board -----------------------------
-async function tryLive() {
-  if (!confirm("Create a private sandbox (24 h, copies of the demo mandates) and run its quickstart: the hotel's agent asks for a signed quote for 100 L of lactose-free milk and orders it. Uses one quote's live Valio lookups. Continue?")) return;
-  const btn = $("#try");
-  btn.disabled = true;
-  let sb = null;
-  const go = (orderId, note) => {
-    // The agent token reads this sandbox's orders; kept for this tab only.
-    store.set(sessionStorage, TOKEN_KEY, sb.agent_token);
-    store.set(sessionStorage, NOTE_KEY, note || "");
-    const u = new URL(location.href);
-    u.searchParams.set("order", orderId);
-    if (sb.sandbox?.id) u.searchParams.set("sandbox", sb.sandbox.id);
-    location.assign(u.toString());
-  };
-  try {
-    setStatus("Creating a sandbox…");
-    sb = await get("/sandbox", { method: "POST" });
-    const m = /-d '(\{.*\})'\s*$/.exec(sb.quickstart?.curl_quote || "");
-    if (!m || !sb.agent_token) throw new Error("the sandbox answer has no quickstart quote");
-    const body = JSON.parse(m[1]);
-    const auth = { authorization: "Bearer " + sb.agent_token, "content-type": "application/json" };
-    setStatus(`Sandbox ${sb.sandbox?.id || ""}: the agent asks for a quote (live Valio price and stock)…`);
-    const qr = await get("/quotes", { method: "POST", headers: auth, body: JSON.stringify(body) });
-    const qid = qr.quote?.id;
-    if (!qid) throw new Error(qr.message || "no quote");
-    setStatus(`Quote ${qid} signed. The agent orders it…`);
-    const sid = sb.sandbox?.id || "";
-    const o = await get("/orders", { method: "POST", headers: auth, body: JSON.stringify({ agent_id: body.agent_id, mandate_id: body.mandate_id, quote_id: qid, idempotency_key: `${sid.toLowerCase()}-${qid}` }) });
-    if (!o.id) throw new Error(o.message || "no order");
-    go(o.id, `Your sandbox ${sid}: the hotel agent's quote and order, just now.`);
-  } catch (e) {
-    // The sandbox exists but the live quote failed (Valio down, past the cut-off): show its seeded held order instead.
-    if (sb?.agent_token && sb.seeded?.held_order_id) return go(sb.seeded.held_order_id, `The live quote failed (${e.message}). Showing your sandbox's seeded standing-order renewal, held for approval, instead.`);
-    setStatus(`Try it live stopped: ${e.message}${e.status === 429 ? " (rate limited, try again later)" : ""}`);
-  } finally { btn.disabled = false; }
-}
-$("#try").addEventListener("click", tryLive);
-
 // --- start ----------------------------------------------------------------------------------------------------------
 (async () => {
   PENDING_NOTE = store.get(sessionStorage, NOTE_KEY);
@@ -681,5 +660,5 @@ $("#try").addEventListener("click", tryLive);
   const orders = await loadPicker(want);
   const id = want || orders[0]?.id;
   if (id) choose(id, false);
-  else { $("#out").innerHTML = `<div class="msg"><b>No order to show</b>Pick an order, or press Try it live.</div>`; }
+  else { $("#out").innerHTML = `<div class="msg"><b>No order to show</b>Pick an order, or <a href="/ui/try.html">try it yourself</a>.</div>`; }
 })();

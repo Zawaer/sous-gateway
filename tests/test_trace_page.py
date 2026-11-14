@@ -18,7 +18,6 @@ USED = {
     ("GET", "/mandates/{mandate_id}"), ("GET", "/audit"), ("GET", "/audit/verify"),
     ("GET", "/.well-known/jwks.json"), ("GET", "/rules"), ("GET", "/rules/{rule_id}"),
     ("GET", "/orders/{order_id}/peppol/order.xml"), ("GET", "/orders/{order_id}/peppol/order-response.xml"),
-    ("POST", "/sandbox"), ("POST", "/quotes"), ("POST", "/orders"),
 }
 
 
