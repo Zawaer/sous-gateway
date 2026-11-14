@@ -386,7 +386,7 @@ function rememberBox(o) {
 }
 // Approve with changes (sous/approve_changes.py): edit quantities, re-priced live and re-checked by the gateway.
 function editBox(o) {
-  if (!(o.lines || []).length) return "";
+  if (!(o.lines || []).length || /approve\.html/.test(o.approval_url || "")) return "";  // passkey mandates: no edits
   return `<details class="qty-edit"><summary>${ic("edit")} Change quantities</summary>
     <div class="qty-rows">${o.lines.map((l, i) => `<label><span>${esc(pname(l.name))}</span>
       <input type="number" min="0" step="any" inputmode="decimal" data-line="${i}" data-was="${esc(l.quantity)}" value="${esc(l.quantity)}">

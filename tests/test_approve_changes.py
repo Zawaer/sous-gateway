@@ -50,3 +50,14 @@ def test_still_over_the_limit_is_approved_by_the_same_human_and_block_changes_no
     assert store.get_order(o2["id"])["status"] == "pending_approval" and len(store.list_orders()) == before
     assert change(c, o2["id"], (0, 10)).status_code == 422  # nothing changed
     assert change(c, o2["id"], (0, 500)).status_code == 422  # over 10x
+
+
+def test_passkey_mandate_is_refused_up_front_and_leaves_nothing_behind():
+    issue(auto_approve_limit_eur=5, hard_limit_eur=50, approval_method="passkey")
+    c = TestClient(__import__("sous.api", fromlist=["app"]).app)
+    o = held(10)
+    before = len(store.list_orders())
+    for q in (4, 8):
+        r = change(c, o["id"], (0, q))
+        assert r.status_code == 403 and r.json()["error"] == "passkey_required"
+    assert store.get_order(o["id"])["status"] == "pending_approval" and len(store.list_orders()) == before

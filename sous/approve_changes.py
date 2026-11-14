@@ -45,6 +45,10 @@ def approve_with_changes(order_id: str, req: ChangesIn, authority: str | None) -
         raise S.GatewayError("order_not_found", f"No order {order_id}.", 404)
     if o["status"] != "pending_approval":
         raise S.GatewayError("not_pending", f"Order {order_id} is {o['status']}, not waiting for approval.", 409)
+    if S._mandate(o["mandate_id"]).approval_method == "passkey":
+        raise S.GatewayError("passkey_required", f"Mandate {o['mandate_id']} requires passkey approval, which approve "
+                             f"with changes doesn't take: approve or reject {order_id} on the passkey page, or ask the "
+                             "agent for a new quote with the quantities you want.", 403)
     lines = o.get("lines") or []
     qty = {i: float(l.get("quantity") or 0) for i, l in enumerate(lines)}
     for c in req.changes:
@@ -87,7 +91,12 @@ def approve_with_changes(order_id: str, req: ChangesIn, authority: str | None) -
                              + " ".join(f["message"] for f in new["decision"]["findings"] if f["outcome"] == "block")
                              + f" {order_id} still waits for a decision.", 409)
     if new["status"] == "pending_approval":  # the human the mandate asks for is the one making the change
-        new, _ = S._decide_locked(new["id"], req.by, True, req.note, authority)
+        try:
+            new, _ = S._decide_locked(new["id"], req.by, True, req.note, authority)
+        except S.GatewayError:  # never leave a second held order behind: close the replacement, keep the original
+            S._decide_locked(new["id"], req.by, False, f"Approve with changes of {order_id} failed; replacement "
+                             "withdrawn.", authority)
+            raise
     if new["status"] != "ordered":
         raise S.GatewayError("changes_not_ordered", f"The changed order {new['id']} is {new['status']}: "
                              f"{(new.get('approval') or {}).get('result_reason') or ''} {order_id} still waits.", 409)
