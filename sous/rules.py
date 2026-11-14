@@ -139,6 +139,10 @@ def _build() -> list[dict]:
         _r("product.type_mismatch", "finding", ["ask"], "gateway",
            "Only another kind of product than the one asked for can be delivered (coffee milk for milk): it is "
            "quoted, but a human confirms it.", None),
+        _r("unit.interpreted", "finding", ["ask"], "gateway",
+           "The need's unit isn't one of the product's units (20 ST of a product sold per KI with no single piece "
+           "unit), so it was read as sales units: the line says so in unit_note and a human confirms the "
+           "quantity. A unit the product defines, or ST on its one piece unit (PRK, BOT, ...), stays silent.", None),
     ]
     R += [_r(f"availability.{c.lower()}", "finding", ["block"], "valio", t) for c, t in _VALIO_BLOCKING.items()]
     R += [_r(f"availability.{c.lower()}", "finding", ["block"], "gateway", t) for c, t in _GATEWAY_BLOCKING.items()]

@@ -179,6 +179,8 @@ def evaluate(
                 add("price.expires", "ask", f"{name}: {issue['message']}", pid)
             elif issue["code"] == "DATA_STALE":  # never order on last-known data without a human
                 add("availability.data_stale", "ask", f"{name}: {issue['message']}", pid)
+            elif issue["code"] == "UNIT_INTERPRETED":  # '20 ST' of a product without ST read as sales units
+                add("unit.interpreted", "ask", f"{name}: {issue['message']}", pid)
             elif issue["code"] == "TYPE_MISMATCH":  # not the kind of product asked for (coffee milk for milk)
                 add("product.type_mismatch", "ask", f"{name}: {issue['message']}", pid)
 

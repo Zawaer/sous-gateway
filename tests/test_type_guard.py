@@ -312,6 +312,39 @@ def test_pieces_of_a_product_coded_in_jars_are_jars(monkeypatch):
     assert line["covers"]["unit"] == "KI" and line["unit_note"] == o["unit_note"]
 
 
+def test_unit_fallback_asks_a_human_and_the_note_reaches_the_order_and_receipt(gw):
+    """rene-codex-qa 06:40Z: an ST fallback ('read as 20 KI = 120 PRK') went through SILENT and its unit_note was
+    lost from the order. Now UNIT_INTERPRETED -> unit.interpreted (ask); a clean piece mapping stays silent."""
+    from sous import rules as R
+    assert R.get("unit.interpreted")["tiers"] == ["ask"]
+    for p in (ARTI, ARTI2):
+        CATALOG[p["id"]], PRICE_PER_L[p["id"]] = p, 2.0
+    try:
+        q = gw(["43"], amount=20, unit="ST")  # ARTI2: two ratio-1 piece codes, no single piece -> fallback
+        [line] = q["lines"]
+        assert line["quantity"] == 20 and line["covers"]["unit"] == "KI"
+        assert "UNIT_INTERPRETED" in {i["code"] for i in line["issues"]}
+        assert "unit.interpreted" in rules(q) and q["mandate_preview"]["outcome"] == "ask"
+        o = S.place_order("a", "M", q["id"])
+        assert o["status"] == "pending_approval"
+        assert o["lines"][0]["unit_note"] == "ST is not a unit of this product; read as 20 KI = 120 PRK"
+        receipt = signing.verify(o["receipt_jws"], "sous-order+jws")
+        assert receipt["lines"][0]["unit_note"] == o["lines"][0]["unit_note"]
+
+        q = gw(["42"], amount=20, unit="ST")  # 465976 shape {PRK: 1, KI: 6}: 20 jars, a literal reading
+        [line] = q["lines"]
+        assert line["quantity"] == 4 and "UNIT_INTERPRETED" not in {i["code"] for i in line["issues"]}
+        assert "unit.interpreted" not in rules(q)
+        o = S.place_order("a", "M", q["id"])
+        assert o["status"] in ("ordered", "pending_approval") and "unit.interpreted" not in \
+            {f["rule"] for f in o["decision"]["findings"]}
+        assert o["lines"][0]["unit_note"].startswith("ST read as PRK")
+        assert signing.verify(o["receipt_jws"], "sous-order+jws")["lines"][0]["unit_note"] == o["lines"][0]["unit_note"]
+    finally:
+        for p in (ARTI, ARTI2):
+            CATALOG.pop(p["id"]), PRICE_PER_L.pop(p["id"])
+
+
 def test_substitutes_for_jar_pieces_size_by_the_jars(monkeypatch):
     cat = {"42": ARTI, "41": NO_ST}
     monkeypatch.setattr(catalog, "get", lambda pid: cat.get(pid))

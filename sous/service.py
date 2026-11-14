@@ -715,6 +715,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
         "requested_delivery_date": q["requested_delivery_date"],
         "lines": [{k: l.get(k) for k in ("product_id", "name", "quantity", "sales_unit", "unit_price_ex_vat",
                                          "line_total_ex_vat", "delivery_date", "logistic_model", "order_cutoff")}
+                  | ({"unit_note": l["unit_note"]} if l.get("unit_note") else {})  # how the unit was read
                   for l in q["lines"]],
         "decision": {"outcome": outcome, "findings": [f.model_dump() for f in findings], "by": "mandate-engine",
                      "at": now.isoformat(timespec="milliseconds")},

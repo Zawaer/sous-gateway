@@ -230,6 +230,10 @@ def build_offer(
         if is_packs(need_unit):
             qty = round_to_lot(need / per, su, product["allowed_lot_size"])
             note = pack_unit_note(product, need, need_unit, qty)
+            if resolve_pack_unit(product, need_unit)[2] == "fallback":
+                # the product has no such unit (or no single piece unit for ST): the gateway is guessing what
+                # the buyer meant, so a human confirms (mandate rule unit.interpreted, ask)
+                issues.append(Issue("UNIT_INTERPRETED", WARNING, note + ". A human confirms the quantity."))
         elif content and content[1] == need_unit:
             qty = round_to_lot(need / content[0], su, product["allowed_lot_size"])
         elif content:
