@@ -180,6 +180,57 @@ def test_identical_product_is_best(monkeypatch):
     assert r["options"][0]["compromises"] == []
 
 
+# judge audit: 'Oatly No Sugars' got Oddlygood Barista as 'best, no compromises' without its claims
+_OAT_ALLERGENS = {"declared": True, "contains": ["GO"], "may_contain": [], "free_from": []}
+NO_SUGARS = product("20", "Oatly Kaurajuoma Ei sokereita 1L", "Oatly Oat Drink No Sugars 1L", brand="Oatly",
+                    category="10402", allergens=_OAT_ALLERGENS,
+                    claims=["FREE_FROM_LACTOSE", "VEGAN", "NO_ADDED_SUGARS", "FREE_FROM_SOY"])
+BARISTA = product("21", "Oddlygood Barista kaurajuoma 1L", "Oddlygood Barista oat drink 1L", brand="Oddlygood",
+                  category="10402", allergens=_OAT_ALLERGENS, claims=["FREE_FROM_LACTOSE", "VEGAN"])
+SAME_CLAIMS = product("22", "Oatly Kaurajuoma Ei sokereita 1L ESL", "", brand="Oatly", category="10402",
+                      allergens=_OAT_ALLERGENS, claims=list(NO_SUGARS["claims"]))
+SUGARFREE_ONLY = product("23", "Kaurajuoma sokeriton 1L", "", brand="X", category="10402", allergens=_OAT_ALLERGENS,
+                         claims=["FREE_FROM_LACTOSE", "VEGAN", "NO_ADDED_SUGARS"])
+NOSOY = product("24", "Kaurajuoma soijaton 1L", "", brand="Y", category="10402", allergens=_OAT_ALLERGENS,
+                claims=["FREE_FROM_LACTOSE", "VEGAN", "FREE_FROM_SOY"])
+
+
+def test_claims_the_original_makes_are_compromises_when_lost(monkeypatch):
+    _setup(monkeypatch, [NO_SUGARS, BARISTA, SAME_CLAIMS, NOSOY])
+    r = S.suggest("20", date(2026, 11, 20), 10, "L", limit=6)
+    by = {o["product_id"]: o for o in r["options"]}
+    assert by["22"]["tier"] == "best" and by["22"]["compromises"] == []
+    assert by["24"]["tier"] == "better" and "not no added sugars (the original is)" in by["24"]["compromises"]
+    b = by["21"]
+    assert b["tier"] == "good"  # loses soy-free: a real trade-off, never 'best, no compromises'
+    assert "not soy-free (the original is)" in b["compromises"]
+    assert "not no added sugars (the original is)" in b["compromises"]
+
+
+def test_free_from_claim_is_required_when_the_buyer_avoids_that_allergen(monkeypatch):
+    _setup(monkeypatch, [NO_SUGARS, BARISTA, SAME_CLAIMS, SUGARFREE_ONLY])
+    r = S.suggest("20", date(2026, 11, 20), 10, "L", avoid_allergens=["AY"], limit=6)
+    assert "FREE_FROM_SOY" in r["constraints"]["required_claims"]
+    assert [o["product_id"] for o in r["options"]] == ["22"]
+    assert r["considered"]["excluded"]["claims"] == 2
+
+
+def test_options_come_back_best_first_with_consistent_labels(monkeypatch):
+    twin = product("6", "Valio kevytmaito 1 l laktoositon ESL", "")
+    twin2 = product("7", "Valio kevytmaito 1 l laktoositon", "", brand="Valio")
+    _setup(monkeypatch, [ORIG, SOUR, TEN, DRINK, WHOLE, twin, twin2])
+    for limit in (2, 3, 4, 6):
+        r = S.suggest("1", date(2026, 11, 20), 100, "L", limit=limit)
+        tiers = [o["tier"] for o in r["options"]]
+        rank = {"best": 0, "better": 1, "good": 2}
+        assert tiers == sorted(tiers, key=rank.get), tiers
+        assert len(tiers) == min(limit, 5)
+        for o in r["options"]:  # 'best' iff no compromises
+            assert (o["tier"] == "best") == (o["compromises"] == []), o
+    # both tiers are represented even at limit 2
+    assert [o["tier"] for o in S.suggest("1", date(2026, 11, 20), 100, "L", limit=2)["options"]] == ["best", "better"]
+
+
 # --- real catalog -----------------------------------------------------------------
 
 # (original, the top option's Finnish name must match, must not match)

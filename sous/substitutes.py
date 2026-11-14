@@ -22,11 +22,15 @@ Each candidate lists its compromises against the original in plain language; the
 tier follows from them:
 
   best:   no compromises
-  better: only minor ones (somewhat dearer, a certification label lost, different
-          pack size, compatible type)
+  better: only minor ones (somewhat dearer, a certification label or a claim such
+          as 'no added sugars' / 'organic' lost, different pack size, compatible type)
   good:   still usable, but with a real trade-off (much dearer, later delivery,
           low reliability, allergen data missing -> the mandate will ask a human,
-          type not recognised, different type as a last resort)
+          a free-from claim lost (soy-free), type not recognised, different type
+          as a last resort)
+
+Options come back best first. A free-from claim that guards an allergen the buyer
+avoids is a hard filter, like the dietary claims.
 
 Static filtering first; live price and availability only for the top ~25.
 """
@@ -609,6 +613,21 @@ def _same_category(category: str) -> list[dict]:
     return [json.loads(d) for (d,) in rows]
 
 
+# Free-from claims that stand for an allergen (GS1 codes in catalog.ALLERGENS): losing one is a major compromise,
+# and when the buyer avoids that allergen the claim is required.
+_ALLERGEN_CLAIMS: dict[str, tuple[str, ...]] = {
+    "FREE_FROM_LACTOSE": ("ML",), "LOW_LACTOSE": ("ML",), "FREE_FROM_MILK": ("AM", "ML"),
+    "FREE_FROM_GLUTEN": ("AW",), "FREE_FROM_WHEAT": ("UW",), "FREE_FROM_EGGS": ("AE",),
+    "FREE_FROM_NUTS": ("AN", "SA", "SH", "SW", "SC", "SP", "SR", "ST", "SM", "NM"), "FREE_FROM_SOY": ("AY",),
+}
+
+
+def _claim_text(claim: str) -> str:
+    """'NO_ADDED_SUGARS' -> 'no added sugars', 'FREE_FROM_SOY' -> 'soy-free', 'ORGANIC' -> 'organic'."""
+    words = claim.lower().replace("_", " ")
+    return words[len("free from "):] + "-free" if words.startswith("free from ") else words
+
+
 _TYPE_BONUS = {"same": 3.0, "compatible": 1.5, "unknown": 0.0, "different": -5.0}
 
 
@@ -642,6 +661,9 @@ def suggest(
     required_claims = set(orig["claims"]) & {
         "FREE_FROM_LACTOSE", "FREE_FROM_GLUTEN", "VEGAN", "VEGETARIAN", "LOW_LACTOSE", "FREE_FROM_MILK",
         "FREE_FROM_EGGS", "FREE_FROM_NUTS"} | set(mandate.required_claims if mandate else [])
+    # A free-from claim on the original that guards an allergen the buyer avoids is required too.
+    avoided = {c for a in avoid for c in catalog.ALLERGEN_GROUPS.get(a, {a})}
+    required_claims |= {c for c in orig["claims"] if set(_ALLERGEN_CLAIMS.get(c, ())) & avoided}
     measure = (orig["size_from_name"] or [None, None])[1]
     otype, opack = product_type(orig), _pack_of(orig)
 
@@ -728,6 +750,10 @@ def suggest(
         lost = sorted(set(orig["labels"]) - set(c["labels"]))
         if lost:
             minor.append("loses label " + ", ".join(lost))
+        # every other claim the original makes and the substitute doesn't is a compromise said out loud: an
+        # allergen-type free-from (soy-free) is major, the rest (no added sugars, organic) minor
+        for claim in sorted(set(orig["claims"]) - set(c["claims"])):
+            (major if claim in _ALLERGEN_CLAIMS else minor).append(f"not {_claim_text(claim)} (the original is)")
         if e["pack_note"]:
             minor.append(e["pack_note"])
         if (o_orig or {}).get("sales_unit") and o["sales_unit"] != o_orig["sales_unit"]:
@@ -771,13 +797,14 @@ def suggest(
     options.sort(key=lambda x: (rank[x["tier"]], type_rank[x["type"]["match"]], x["type"]["key"] != otype["key"],
                                 len(x["compromises"]), -x["match_score"],
                                 (x["offer"]["comparison_price"] or {}).get("ex_vat") or 1e9))
-    # one per tier first (good / better / best), then the rest
+    # pick one per tier first (best / better / good), then the rest; show them best first
     picked, seen = [], set()
     for x in options:
         if x["tier"] not in seen:
             picked.append(x)
             seen.add(x["tier"])
-    picked += [x for x in options if x not in picked]
+    picked = (picked + [x for x in options if x not in picked])[:limit]
+    picked.sort(key=options.index)
     return {
         "original": {"product_id": orig["id"], "name": orig["name"],
                      "why_substitute": [i["message"] for i in (o_orig or {}).get("issues", [])
@@ -791,7 +818,7 @@ def suggest(
                         "type": _public_type(otype)},
         "considered": {"in_category": len(pool) + sum(excluded.values()), "excluded": excluded,
                        "priced_live": len(shortlist)},
-        "options": picked[:limit],
+        "options": picked,
         "no_safe_substitute": None if picked else (
             "No product in this category meets every constraint and can be delivered. "
             "Nothing will be swapped automatically; a human needs to decide."),
