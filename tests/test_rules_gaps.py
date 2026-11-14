@@ -385,7 +385,9 @@ def test_peppol_order_and_order_response():
     issue(auto_approve_limit_eur=50)
     ok, held = order(20), order(60)
     cbc = "{" + peppol.NS["cbc"] + "}"
-    x = ET.fromstring(peppol.order_xml(S.get_order(ok["id"])))
+    raw = peppol.order_xml(S.get_order(ok["id"]))
+    assert b"<Order xmlns=" in raw and b"ns0:" not in raw
+    x = ET.fromstring(raw)
     assert x.tag.endswith("}Order") and x.find(cbc + "CustomizationID").text == peppol.CUSTOMIZATION_ORDER
     assert x.find(cbc + "ProfileID").text == peppol.PROFILE and x.find(cbc + "ID").text == ok["id"]
     line = x.find("{%s}OrderLine/{%s}LineItem" % (peppol.NS["cac"], peppol.NS["cac"]))

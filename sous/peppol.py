@@ -73,8 +73,9 @@ def _head(root, customization: str, doc_id: str, at: str) -> None:
     _el(root, "cbc:IssueTime", dt.astimezone(config.TZ).strftime("%H:%M:%S"))
 
 
-def _xml(root) -> bytes:
+def _xml(root, default_ns: str) -> bytes:
     ET.indent(root)
+    ET.register_namespace("", default_ns)  # <Order xmlns="...">, not <ns0:Order>
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
@@ -106,7 +107,7 @@ def order_xml(o: dict) -> bytes:
         it = _el(item, "cac:Item")
         _el(it, "cbc:Name", l.get("name") or l.get("product_id"))
         _el(_el(it, "cac:SellersItemIdentification"), "cbc:ID", l.get("product_id"))
-    return _xml(root)
+    return _xml(root, ORDER_NS)
 
 
 def response_code(o: dict) -> str:
@@ -141,4 +142,4 @@ def order_response_xml(o: dict) -> bytes:
             _el(item, "cbc:Quantity", f"{float(l.get('quantity') or 0):g}",
                 unitCode=UNIT.get(l.get("sales_unit") or "", "EA"))
             _el(_el(item, "cac:Item"), "cbc:Name", l.get("name") or l.get("product_id"))
-    return _xml(root)
+    return _xml(root, RESPONSE_NS)
