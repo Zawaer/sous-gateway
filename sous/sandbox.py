@@ -440,7 +440,7 @@ def quickstart(sid: str, base: str, token: str, approver: str, mandates: list[di
             "claude_ai": "Settings > Connectors > Add custom connector, URL above, Connect, paste agent_token",
             "chatgpt": "Settings > Apps > Advanced settings > Developer mode, Create app, URL above, "
                        "authentication OAuth, paste agent_token",
-            "docs": "https://github.com/Zawaer/sous/blob/main/docs/CONNECT.md",
+            "docs": "https://github.com/Zawaer/sous-gateway/blob/main/docs/CONNECT.md",
         },
         "curl_quote": (f"curl -s {base}/quotes -H 'Authorization: Bearer {token}' "
                        f"-H 'Content-Type: application/json' -d '{body}'"),

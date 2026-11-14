@@ -37,7 +37,7 @@ AP2_SCHEMAS = "https://github.com/google-agentic-commerce/AP2/tree/e1ea56d/code/
 UCP_CHECKOUT_VERSION = "dev.ucp.shopping.checkout 2026-04-08"
 A2A_PROTOCOL_VERSION = "1.0"
 MCP_SERVER_CARD_SCHEMA = "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json"
-REPO = "https://github.com/Zawaer/sous"
+REPO = "https://github.com/Zawaer/sous-gateway"
 MERCHANT = {"id": "valio-aimo", "name": "Valio Aimo", "website": "https://www.valioaimo.fi"}
 AGENT_URN = credentials.AGENT_URN
 

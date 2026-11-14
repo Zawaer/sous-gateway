@@ -78,7 +78,7 @@ app = FastAPI(
         "Discovery and open standards: A2A agent card at /.well-known/agent-card.json, MCP server card at "
         "/.well-known/mcp/server-card.json, signing keys at /.well-known/jwks.json, JSON Schemas at /schemas/{mandate,"
         "quote,order,receipt}.json, and AP2 / schema.org views of mandates, quotes and orders (tag `standards`). "
-        "Mapping and gaps: https://github.com/Zawaer/sous/blob/main/docs/STANDARDS.md"
+        "Mapping and gaps: https://github.com/Zawaer/sous-gateway/blob/main/docs/STANDARDS.md"
     ),
     lifespan=lifespan,
 )

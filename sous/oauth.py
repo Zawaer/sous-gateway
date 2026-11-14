@@ -45,7 +45,7 @@ CONNECT_PATH = "/connect/mcp"
 SCOPE = "agent"
 ACCESS_PREFIX, REFRESH_PREFIX = "vko_", "vkr_"
 CODE_TTL, ACCESS_TTL, REFRESH_TTL, CLIENT_TTL = 300, 3600, 30 * 86400, 90 * 86400
-DOCS = "https://github.com/Zawaer/sous/blob/main/docs/CONNECT.md"
+DOCS = "https://github.com/Zawaer/sous-gateway/blob/main/docs/CONNECT.md"
 _LOOPBACK = {"localhost", "127.0.0.1", "[::1]", "::1"}
 _clock = time.time  # patched in tests
 
