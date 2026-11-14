@@ -254,6 +254,13 @@ def test_chat_retries_429_then_succeeds_and_never_leaks_the_key():
         bad.chat([{"role": "user", "content": "hi"}])
     assert "401" in str(e.value) and "sk-secret" not in str(e.value)
 
+    # a 200 with an empty body (seen from Verda) is retried, then a clean LLMError, never a JSONDecodeError
+    empty = ChatClient(cfg_, http=httpx.Client(transport=httpx.MockTransport(
+        lambda req: httpx.Response(200, content=b""))), sleep=slept.append)
+    with pytest.raises(LLMError) as e:
+        empty.chat([{"role": "user", "content": "hi"}])
+    assert "non-JSON" in str(e.value)
+
 
 # --- the LLM eval's harness logic --------------------------------------------------------------
 

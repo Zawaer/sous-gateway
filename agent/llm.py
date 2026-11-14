@@ -176,7 +176,14 @@ class ChatClient:
                 self._sleep(_backoff(attempt))
                 continue
             if r.status_code == 200:
-                data = r.json()
+                try:
+                    data = r.json()
+                except ValueError:  # an empty or HTML 200 (seen from Verda): a provider glitch, retry it
+                    last = f"HTTP 200 with a non-JSON body ({len(r.content)} bytes)"
+                    if attempt == c.max_retries:
+                        break
+                    self._sleep(_backoff(attempt))
+                    continue
                 choice = (data.get("choices") or [{}])[0]
                 msg = dict(choice.get("message") or {})
                 msg["role"] = "assistant"

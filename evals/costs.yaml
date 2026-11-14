@@ -17,6 +17,8 @@ runs:
   - {when: "2026-11-14 01:26", provider: verda, model: kimi-k3-1-pro, purpose: "buyer LLM eval, 40 cases (CI on CRACI, run 43524836008)", tokens_in: 848184, tokens_out: 20939}
   - {when: "2026-11-14 01:30", provider: gemini, model: gemini-4-hydrogen, purpose: "recipe eval, 7 menus (CI run 43524836008)", tokens_in: 10172, tokens_out: 3934}
   - {when: "2026-11-14 01:30", provider: verda, model: kimi-k3-1-pro, purpose: "recipe eval, 7 menus (CI run 43524836008)", tokens_in: 7784, tokens_out: 5460}
+  - {when: "2026-11-14 02:04", provider: gemini, model: gemini-4-hydrogen, purpose: "buyer LLM eval, 40 cases (CI on CRACI, run 43530717095)", tokens_in: 931564, tokens_out: 12056, usd: 1.4878}
+  - {when: "2026-11-14 02:04", provider: verda, model: kimi-k3-1-pro, purpose: "buyer LLM eval, 40 cases (CI on CRACI, run 43530717095)", tokens_in: 0, tokens_out: 0, note: "Verda answered HTTP 200 with an empty body; every case failed before using tokens"}
   - {when: "2026-11-14 00:10", provider: openai, model: codex, purpose: "read-only security review of the trust core (Codex run 01a1d6fd)", tokens_in: 356000, tokens_out: 2400, note: "approximate, from the Codex run summary"}
 
 services:                      # running infrastructure, prorated
