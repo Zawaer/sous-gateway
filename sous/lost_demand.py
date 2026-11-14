@@ -115,6 +115,8 @@ def report(days: int | None = 7, now: datetime | None = None, with_buyers: bool 
             unit = g.get("unit") or item.get("unit") or "SALES_UNIT"
             label = (item.get("note") or item.get("product_type")
                      or _name((item.get("product_ids") or [None])[0]) or "unnamed item")
+            if QA_BUYER.match(label):  # a QA case's own item label ("QA missing product boundary")
+                continue
             u = uncovered.setdefault((label, unit), {"item": label, "unit": unit, "uncovered": 0.0, "quotes": 0,
                                                        "candidates": set()})
             u["uncovered"] += float(g.get("uncovered") or 0)
