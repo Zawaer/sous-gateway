@@ -81,7 +81,8 @@ function updateControls() {
   for (const control of requestForm.elements) control.disabled = busy || retry;
   const checked = shortlistForm.querySelectorAll('input:checked');
   for (const checkbox of shortlistForm.querySelectorAll('input')) {
-    checkbox.disabled = busy || retry || checkbox.dataset.unverified === 'true' || (checked.length >= 6 && !checkbox.checked);
+    checkbox.disabled = busy || retry || checkbox.dataset.held === 'true' || checkbox.dataset.unverified === 'true' ||
+      (checked.length >= 6 && !checkbox.checked);
   }
   $('request-quote').disabled = busy || retry || !checked.length;
   $('request-quote').hidden = Boolean(state.basket || state.editing !== null);
@@ -230,11 +231,13 @@ function renderSearch(need, mandate, products, original) {
     checkbox.type = 'checkbox';
     checkbox.name = 'product';
     checkbox.value = product.id;
+    checkbox.dataset.held = String(Boolean(product.held));
     const allergenStatus = product.allergen_check?.status;
     const unknownAllergens = allergenStatus === 'unknown' || !product.allergens?.declared;
     checkbox.dataset.unverified = String(Boolean(need.avoidAllergens.length && unknownAllergens));
     const content = element('span', product.name);
     const metadata = [`SKU ${product.id}`, product.category && `Category ${product.category}`, product.temperature].filter(Boolean);
+    if (product.held) metadata.push(product.held.reason ? `Supplier hold · ${product.held.reason}` : 'Supplier hold');
     if (unknownAllergens) {
       metadata.push(checkbox.dataset.unverified === 'true' ? 'Requested allergens could not be checked' : 'Allergen information unavailable');
     }
@@ -524,7 +527,7 @@ requestForm.addEventListener('submit', (event) => {
     renderSearch(need, mandate, products, original);
     const saved = state.basket?.entries[state.editing]?.productIds ?? [];
     for (const input of shortlistForm.querySelectorAll('input')) {
-      input.checked = saved.includes(input.value) && input.dataset.unverified !== 'true';
+      input.checked = saved.includes(input.value) && input.dataset.held !== 'true' && input.dataset.unverified !== 'true';
     }
     $('candidates').scrollIntoView({ block: 'start' });
   });
