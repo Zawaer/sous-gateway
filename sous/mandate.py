@@ -100,6 +100,10 @@ class Mandate(BaseModel):
         "whipping, laminated_pastry, baking, melting, cooking, drinking; levels exact (same product only: any "
         "substitute asks a human, also when substitutions allows it), same_spec (same kind, fat % and claims, any "
         "brand) or type (same kind). The most specific key wins; unset cells keep the table")
+    use_fit: Tier = Field(
+        "ask", description="Tier for a chosen product that doesn't fit the line's stated use (sous/use_fit.py, rule "
+        "product.use_fit): skimmed milk for a dessert, coffee cream for whipping or a sauce, a spread for laminated "
+        "pastry. silent = off; unknown specs never count")
     terminal_products: Tier = "silent"
     min_delivery_reliability: float | None = 0.9
     later_delivery: Literal["notify", "ask", "block"] = "ask"
@@ -548,6 +552,22 @@ def evaluate(
             if verdict and not verdict["ok"]:
                 add("substitution.use_sensitive", "ask", f"{name} replaces {subs[pid]}. {verdict['reason']}", pid,
                     f"{name} korvaa tuotteen {subs[pid]}. {verdict['reason_fi']}")
+
+        # Does the chosen product fit what it is for (sous/use_fit.py)? Skimmed milk for a dessert, coffee cream for
+        # whipping: a person looks. Unknown spec or no use: nothing.
+        if mandate.use_fit != "silent" and (l.get("use") or l.get("purpose")):
+            from .use_fit import check as _fit
+            if misfit := _fit(p or {"name": l.get("name")}, l.get("use") or l.get("purpose")):
+                sug = l.get("use_fit_suggestion") or {}
+                alt = (f" In the same search {readable_name(sug['name'] or sug['product_id'])} would fit."
+                       if sug.get("product_id") else f" It needs {misfit['want']}.")
+                alt_fi = (f" Samasta hausta sopisi {readable_name(sug['name'] or sug['product_id'])}."
+                          if sug.get("product_id") else f" Tarvitaan: {misfit['want_fi']}.")
+                tail = {"block": ("so it is refused", "joten se estetään"),
+                        "ask": ("a person should confirm", "ihmisen pitää vahvistaa"),
+                        "notify": ("the buyer is told", "ostajalle kerrotaan")}[mandate.use_fit]
+                add("product.use_fit", mandate.use_fit, f"{misfit['reason']}; {tail[0]} ({name}).{alt}", pid,
+                    f"{misfit['reason_fi']}; {tail[1]} ({name}).{alt_fi}")
 
         if l.get("logistic_model") == "Terminal":
             if mandate.terminal_products != "silent":

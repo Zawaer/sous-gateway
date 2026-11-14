@@ -273,6 +273,12 @@ def _build() -> list[dict]:
            "at most 5 short sentences): the order waits for a human, who sees the agent's own words. An agent's "
            "words can only raise the tier, never lower it; they are signed into the quote and the order receipt.",
            None),
+        _r("product.use_fit", "finding", _field_tiers("use_fit"), "buyer",
+           "The product chosen for a line doesn't fit what it is for (the line's use: stated, from the purpose or "
+           "the recipe): skimmed milk for a dessert, coffee cream or cooking cream for whipping, cream under 30 % "
+           "fat for whipping, coffee cream for a sauce, a spread for laminated pastry. The message says why and "
+           "names a fitting product from the same search when there is one. A product whose spec the name doesn't "
+           "reveal gets nothing. The requirements are in sous/use_fit.py.", "use_fit"),
         _r("product.held", "finding", ["block"], "valio",
            "Valio Aimo has put the product on hold (recall, quality hold or sales stop; GET /holds): it can't be "
            "quoted as orderable, ordered, or approved into an order, also on a quote issued before the hold.", None),
@@ -532,6 +538,8 @@ def mandate_summary(m: Mandate) -> list[dict]:
             f"piece than the product it replaces: {_TIER_SAYS[m.substitute_premium].replace('are ', '')}")
     if m.separate_approver:
         add("separate_approver_required", "four-eyes: whoever set the agent to work can't approve its held orders")
+    if m.use_fit != "ask":
+        add("product.use_fit", f"products that don't fit their stated use {_TIER_SAYS[m.use_fit]}")
     if m.terminal_products != "silent":
         add("supply.terminal", f"supplier-shipped products {_TIER_SAYS[m.terminal_products]}")
     if m.min_delivery_reliability is not None:

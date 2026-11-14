@@ -223,6 +223,19 @@ A dish can name several uses (lasagne: melting and cooking); the strictest one t
 
 **Effects.** `substitution.use_sensitive` (ask) fires on a substitute line the level doesn't accept, also when `substitutions` is `silent` or `notify`; its message says the why ("Whipping cream for a dessert: a different brand can whip differently (...), so a person should confirm the substitute (a different brand: Arla instead of Valio).") with a Finnish twin. When the level does accept it, the `substitution` finding says so ("Coffee cream for coffee: in coffee the brand barely matters ..."). `substitutes.suggest` adds `use` (`{use, source, classes, sensitivity, why}`) and, per option, `use_sensitivity`, `use_ok`, `use_reason`, `use_reason_fi`; an unacceptable option gets a major compromise (tier `good`), and for `exact` / `same_spec` acceptable and same-brand options rank first. **With purpose per item (section 32).** The two work together: `purpose` / `substitution` say how strict a product is for this buyer at all (`exact` refuses any substitute, `ask` always asks); the use table judges a particular substitute against what the product is for (same brand? same fat %?) and says why. An item's `purpose` counts as its use when `use` isn't given, so the recipe planner's `recipe: <dishes>` and a `coffee` purpose feed the table too. A remembered substitution (sous/remembered.py) is stored with its use and applies only to the same use (one approved for coffee asks again for a dessert); `substitution.use_sensitive` itself is never softened.
 
+### 5.1.2 Does the chosen product fit its use? (`sous/use_fit.py`)
+
+5.1.1 judges a substitute against the original; nothing there checks the product the agent *chose*. A request for "lactose-free milk for a dessert" could land on skimmed UHT milk and go through. So every line with a use (`use`, else the line's `purpose`, which the recipe planner sets) is checked against a few explicit requirements:
+
+| Use | Kind | Doesn't fit | Fits |
+|---|---|---|---|
+| whipping / a dessert | cream | coffee cream, cooking cream, cream with a known fat % under 30 | whipping cream (kuohukerma / vispikerma), cream at 30 % or more |
+| a dessert | milk | skimmed milk (0 % fat, `rasvaton`) | milk with a known fat % |
+| cooking / a sauce | cream | coffee cream (can split when it boils) | cooking cream, whipping cream |
+| laminated pastry | spread / butter | a spread (`levite`) | butter; bakery margarine |
+
+Coffee takes anything of the type; baking milk is not judged. A product whose type or fat % the name doesn't reveal gets nothing (unknown never nags). A mismatch is `product.use_fit` at the mandate's `use_fit` tier (default `ask`; `notify`, `block`, or `silent` = off), with a reason a kitchen manager reads at a glance ("Skimmed milk for a dessert: a fat-free milk changes the texture (...); a person should confirm (...)", Finnish twin in `explanations_fi`). When another candidate of the same item is of the same kind, orderable and fits with a known spec, the line carries `use_fit_suggestion: {product_id, name}` (the cheapest such) and the message names it; this uses only the offers the quote already fetched, never an extra Valio call. The gateway still picks by price; it doesn't swap the product on its own.
+
 ### 5.2 Stock exposure (`sous/exposure.py`, `SOUS_STOCK_EXPOSURE`)
 
 Why: a wholesaler doesn't want any agent, a competitor's included, to scrape exact stock levels by asking for quotes. Valio decides how much it shows:

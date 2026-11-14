@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from . import use_sensitivity as USE
 from . import controls
+from . import use_fit as FIT
 from . import account, agent_auth, aimo, allergen_ai, autonomy, catalog, clearance, clock, config, remembered, credentials, deadline, erp, exposure, fi, carbon, holds, notify, offers as OFFERS, options as OPT, origin, purpose as purposes, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
 from .mandate import Mandate, evaluate, product_refusals, readable_name
 
@@ -582,6 +583,7 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
                                               "message": mismatch[l["product_id"]]}]
             lines.append(l)
         picked = {l["product_id"] for l in chosen}
+        _suggest_fit(chosen, cands, picked)
         considered += [_considered(o, item_index, off_type.get(o["product_id"]), refused.get(o["product_id"]),
                                    chosen)
                        for o in sorted(offers, key=lambda o: (o["product_id"] not in refused,
@@ -655,6 +657,20 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
     # Finnish twins of the preview's findings and the lines' unit notes (sous/fi.py): unsigned, beside the JWS
     return {"quote": body, "jws": jws, **({"approver_view": sidecar} if sidecar else {}),
             "explanations_fi": fi.explanations(findings, body)}
+
+
+def _suggest_fit(chosen: list[dict], cands: list[dict], picked: set[str]) -> None:
+    """A line whose product doesn't fit its use (sous/use_fit.py: skimmed milk for a dessert) gets
+    use_fit_suggestion {product_id, name}: the cheapest orderable candidate of the same search that fits. No supplier
+    call: the candidates are this item's offers."""
+    for l in chosen:
+        said = l.get("use") or l.get("purpose")
+        if not said or not FIT.check(mine := catalog.get(l["product_id"]), said):
+            continue
+        others = [catalog.get(o["product_id"]) for o in sorted(cands, key=Q.rank_key)
+                  if o["orderable"] and o["product_id"] not in picked]
+        if sug := FIT.suggest(mine, said, others):
+            l["use_fit_suggestion"] = sug
 
 
 def _locked(item: QuoteItem, mandate: Mandate | None) -> list[str]:

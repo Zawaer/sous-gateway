@@ -337,6 +337,12 @@ RULES = {
                                   "korvaavat tuotteet itsestään. Tuotetyyppien ja käyttötarkoitusten taulukko on "
                                   "tiedostossa sous/use_sensitivity.py; tuntemattomille käytöille ja tyypeille pätee "
                                   "tavallinen korvaavuussääntö. Muistettu korvaus ei koskaan pehmennä tätä.",
+    "product.use_fit": "Riville valittu tuote ei sovi siihen, mihin se tulee (rivin käyttötarkoitus: pyynnöstä, "
+                       "tarkoituksesta tai reseptistä): rasvaton maito jälkiruokaan, kahvi- tai ruokakerma "
+                       "vaahdotukseen, alle 30 % kerma vaahdotukseen, kahvikerma kastikkeeseen, levite "
+                       "kerrostaikinaan. Viesti kertoo syyn ja nimeää samasta hausta sopivan tuotteen, jos sellainen "
+                       "on. Tuotteesta, jonka tietoja nimi ei kerro, ei huomauteta. Vaatimukset ovat tiedostossa "
+                       "sous/use_fit.py.",
     "product.held": "Valio Aimo on pysäyttänyt tuotteen (takaisinveto, laatupidätys tai myyntikielto; GET "
                     "/holds): sitä ei voi tarjota tilattavana, tilata eikä hyväksyä, ei edes ennen pysäytystä "
                     "annetulla tarjouksella.",
@@ -699,6 +705,8 @@ def summary_text(m, rule: str | None, idx: int = 0) -> str | None:
                 f"kilolta tai kappaleelta kuin korvattava tuote, {TIER_SAYS[m.substitute_premium]}")
     if rule == "separate_approver_required":
         return "neljän silmän periaate: agentin käyttöön ottanut ei voi hyväksyä sen odottavia tilauksia"
+    if rule == "product.use_fit":
+        return f"tuotteet, jotka eivät sovi ilmoitettuun käyttöön, {TIER_SAYS[m.use_fit]}"
     if rule == "supply.terminal":
         return f"toimittajan varastosta tulevat tuotteet {TIER_SAYS[m.terminal_products]}"
     if rule == "supply.reliability":
