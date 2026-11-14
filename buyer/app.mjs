@@ -32,6 +32,7 @@ function outcomeLine(tier, label, text, className = 'outcome') {
 const statuses = {
   ordered: 'Ordered in the demo gateway', pending_approval: 'Waiting for human approval',
   refused: 'Refused by the gateway', rejected: 'Rejected by the approver', expired: 'Order expired',
+  expired_cutoff: 'Approval deadline passed',
 };
 
 const pageParams = new URLSearchParams(location.search);
@@ -392,7 +393,7 @@ async function renderOrder(current, order) {
   const { gateway, quote } = current;
   const content = document.createDocumentFragment();
   const status = statuses[order.status] || order.status;
-  const tier = statusTier[order.status] || order.decision?.outcome;
+  const tier = order.status === 'expired_cutoff' ? 'block' : statusTier[order.status] || order.decision?.outcome;
   if (quote.seeded?.sandbox) {
     content.append(element('p', 'Sandbox example priced from stored reference data.', 'notice'));
   }
@@ -401,6 +402,13 @@ async function renderOrder(current, order) {
   appendList(content, 'Gateway decision', order.decision.findings.map((finding) => finding.message));
   try {
     const signed = await gateway.receipt(order, quote);
+    if (signed.status === 'pending_approval' && Number.isFinite(Date.parse(signed.approve_by))) {
+      content.append(element('p', `Approve by ${time(signed.approve_by)} Helsinki time.`));
+    }
+    if (signed.status === 'expired_cutoff' && signed.expiry) {
+      content.append(element('p', signed.expiry.reason, 'notice'));
+      if (signed.expiry.next_step) content.append(element('p', signed.expiry.next_step));
+    }
     if (signed.approval) {
       const action = signed.approval.approved ? 'Approved by' : 'Rejected by';
       content.append(element('p', `${action} ${signed.approval.by}`));
