@@ -159,6 +159,21 @@ export class Gateway {
     return quote;
   }
 
+  async proofBundle(order, quote) {
+    const envelope = await this.request(`/quotes/${encodeURIComponent(quote.id)}`);
+    const keys = await this.request('/.well-known/jwks.json');
+    const original = await verifyJws(envelope.jws, keys, documentTypes('quote'));
+    if (!equalJson(original, quote) || !equalJson(original, envelope.quote)) {
+      throw new Error('The exported signed quote does not match this order’s original quote.');
+    }
+    await this.receipt(order, quote);
+    return {
+      format: 'sous-order-proof/v1', gateway: this.base, jwks: keys,
+      quote_jws: envelope.jws, receipt_jws: order.receipt_jws,
+      amendment_jws: (order.amendments ?? []).map(amendment => amendment.jws),
+    };
+  }
+
   async receipt(order, quote) {
     const keys = await this.request('/.well-known/jwks.json');
     const signed = await verifyJws(order.receipt_jws, keys, documentTypes('order'));

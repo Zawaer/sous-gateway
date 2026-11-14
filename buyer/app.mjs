@@ -514,6 +514,15 @@ async function renderOrder(current, order) {
       `Original receipt verified (${statuses[signed.status] || signed.status}). Current status reported by the gateway.`;
     content.append(element('p', message, 'verified'));
     if (signed.status === order.status) {
+      content.append(actionButton('Download verification bundle', () => run(async () => {
+        const bundle = await gateway.proofBundle(order, quote);
+        const url = URL.createObjectURL(new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' }));
+        const link = element('a');
+        link.href = url;
+        link.download = `${signed.id}-proof.json`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      })));
       content.append(actionButton('Download signed receipt', () => {
         const url = URL.createObjectURL(new Blob([order.receipt_jws], { type: 'application/jose' }));
         const link = element('a');

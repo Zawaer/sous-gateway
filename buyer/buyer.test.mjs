@@ -300,6 +300,8 @@ test('reopens a short-pick order and verifies its original price, amended receip
   changedReason.amendments[0].reason = 'A fabricated seller reason';
   await assert.rejects(client.receipt(changedReason, quote), /amendment/);
   await assert.rejects(client.receipt({ ...order, amendments: [] }, quote), /amendment/);
+  const proof = await client.proofBundle(order, quote);
+  assert.deepEqual(proof.amendment_jws, [amendmentJws]);
   await assert.rejects(client.receipt({ ...order, original_total_ex_vat: 999 }, quote), /amendment/);
   const badDigest = { ...payload, amendments: [{ ...summary, jws_sha256: '0'.repeat(64) }] };
   await assert.rejects(client.receipt({ ...order, receipt_jws: token(badDigest, 'order', 'sous') }, quote), /amendment/);
@@ -319,4 +321,28 @@ test('reopens a short-pick order and verifies its original price, amended receip
   delete pendingOrder.original_total_ex_vat;
   delete pendingOrder.credit_notes;
   assert.deepEqual(await client.receipt(pendingOrder, quote), pendingReceipt);
+});
+
+test('exports signed verification material without buyer credentials and refuses a different quote or receipt', async () => {
+  const payload = { id: 'PO-proof', quote_id: quote.id, mandate_id: mandate.id,
+    total_ex_vat: quote.total_ex_vat, lines: [], decision: { outcome: 'notify' },
+    status: 'ordered', approval: null, updated_at: '2026-11-14T13:00:00Z' };
+  const receipt = token(payload, 'order', 'sous');
+  const order = { ...payload, agent_id: mandate.agent_id, receipt_jws: receipt };
+  let exportedQuote = quote;
+  const client = new Gateway('https://example.test', async url => {
+    if (url.endsWith('jwks.json')) return Response.json(jwks);
+    return Response.json({ quote: exportedQuote, jws: token(exportedQuote, 'quote', 'sous') });
+  }, 'private-agent-credential');
+  const bundle = await client.proofBundle(order, quote);
+  assert.equal(bundle.format, 'sous-order-proof/v1');
+  assert.deepEqual(bundle.jwks, jwks);
+  assert.equal(bundle.receipt_jws, receipt);
+  assert.deepEqual(bundle.amendment_jws, []);
+  assert.deepEqual(await verifyJws(bundle.quote_jws, bundle.jwks, 'sous-quote+jws'), quote);
+  assert.deepEqual(await verifyJws(bundle.receipt_jws, bundle.jwks, 'sous-order+jws'), payload);
+  assert.equal(JSON.stringify(bundle).includes('private-agent-credential'), false);
+  await assert.rejects(client.proofBundle({ ...order, receipt_jws: receipt + 'broken' }, quote));
+  exportedQuote = { ...quote, total_ex_vat: quote.total_ex_vat + 1 };
+  await assert.rejects(client.proofBundle(order, quote), /exported signed quote/);
 });
