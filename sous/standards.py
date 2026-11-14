@@ -535,13 +535,16 @@ def _ubl_root(doc: str, customization: str, doc_id: str, issued: str):
     return root
 
 
-def _party(parent, role: str, endpoint: tuple[str, str], ident: str | None, name: str, legal: str):
+def _party(parent, role: str, endpoint: tuple[str, str], ident: str | None, name: str, legal: str,
+           response: bool = False):
+    """A party. Peppol's Order Response (T76) data model has no PartyName or PostalAddress (rules B01502/B02402)."""
     p = _el(_el(parent, f"cac:{role}"), "cac:Party")
     _el(p, "cbc:EndpointID", endpoint[1], schemeID=endpoint[0])
     if ident:
         _el(_el(p, "cac:PartyIdentification"), "cbc:ID", ident)
-    _el(_el(p, "cac:PartyName"), "cbc:Name", name)
-    _el(_el(_el(p, "cac:PostalAddress"), "cac:Country"), "cbc:IdentificationCode", "FI")
+    if not response:
+        _el(_el(p, "cac:PartyName"), "cbc:Name", name)
+        _el(_el(_el(p, "cac:PostalAddress"), "cac:Country"), "cbc:IdentificationCode", "FI")
     _el(_el(p, "cac:PartyLegalEntity"), "cbc:RegistrationName", legal)
 
 
@@ -614,7 +617,7 @@ def peppol_order(order_id: str, base_url: str) -> bytes:
 
 
 def _line_item(order_line, i: int, l: dict, vat_rate, period: str, status: str | None = None,
-               notes: tuple[str, ...] = ()) -> None:
+               notes: tuple[str, ...] = (), response: bool = False) -> None:
     """One cac:LineItem (UBL 2.1 sequence: ID, Note, LineStatusCode, Quantity, LineExtensionAmount, Delivery,
     Price, Item). Line ids are the 1-based position in the order, the same in Order and Order Response."""
     item = _el(order_line, "cac:LineItem")
@@ -627,7 +630,8 @@ def _line_item(order_line, i: int, l: dict, vat_rate, period: str, status: str |
     if status:
         _el(item, "cbc:LineStatusCode", status)
     _el(item, "cbc:Quantity", f"{float(l.get('quantity') or 0):g}", unitCode=peppol_unit(unit))
-    _el(item, "cbc:LineExtensionAmount", _money(l.get("line_total_ex_vat")), currencyID="EUR")
+    if not response:  # T76 lines carry no amount or tax category (rules B03904/B05702)
+        _el(item, "cbc:LineExtensionAmount", _money(l.get("line_total_ex_vat")), currencyID="EUR")
     if l.get("delivery_date"):
         dp = _el(_el(item, "cac:Delivery"), f"cac:{period}")
         _el(dp, "cbc:StartDate", l["delivery_date"])
@@ -638,6 +642,9 @@ def _line_item(order_line, i: int, l: dict, vat_rate, period: str, status: str |
     it = _el(item, "cac:Item")
     _el(it, "cbc:Name", l["name"])
     _el(_el(it, "cac:SellersItemIdentification"), "cbc:ID", l["product_id"])
+    if response:
+        _el(_el(order_line, "cac:OrderLineReference"), "cbc:LineID", str(i + 1))  # the Order's line (B03802)
+        return
     tax = _el(it, "cac:ClassifiedTaxCategory")
     _el(tax, "cbc:ID", "S" if vat_rate else "Z")
     _el(tax, "cbc:Percent", f"{float(vat_rate or 0):g}")
@@ -669,14 +676,11 @@ def peppol_order_response(order_id: str, base_url: str) -> bytes:
             f["message"] for f in o["decision"]["findings"] if f["outcome"] == "block") or o["status"]
         _el(root, "cbc:Note", f"{_FINAL_ERROR.get(o['status'], o['status'])}: {reason}")
     _el(root, "cbc:DocumentCurrencyCode", "EUR")
+    # T76 has no AdditionalDocumentReference (rule B00111): the receipt hash travels on the Order (T01) only.
     _el(_el(root, "cac:OrderReference"), "cbc:ID", order_id)
-    ref = _el(root, "cac:AdditionalDocumentReference")
-    _el(ref, "cbc:ID", b64_sha256(o["receipt_jws"]))
-    _el(ref, "cbc:DocumentType", "Sous signed receipt sous-order+jws, SHA-256 base64url of the compact JWS")
-    _el(_el(_el(ref, "cac:Attachment"), "cac:ExternalReference"), "cbc:URI", f"{base_url}/orders/{order_id}")
-    _party(root, "SellerSupplierParty", PEPPOL_SELLER_ENDPOINT, None, MERCHANT["name"], SELLER_LEGAL_NAME)
+    _party(root, "SellerSupplierParty", PEPPOL_SELLER_ENDPOINT, None, MERCHANT["name"], SELLER_LEGAL_NAME, True)
     endpoint, num = _buyer(o)
-    _party(root, "BuyerCustomerParty", endpoint, num, o["buyer"], o["buyer"])
+    _party(root, "BuyerCustomerParty", endpoint, num, o["buyer"], o["buyer"], True)
     if code in ("AP", "CA"):
         period = _el(_el(root, "cac:Delivery"), "cac:PromisedDeliveryPeriod")
         _el(period, "cbc:StartDate", o.get("delivery_date") or o.get("requested_delivery_date"))
@@ -689,7 +693,7 @@ def peppol_order_response(order_id: str, base_url: str) -> bytes:
             if l.get("ordered_quantity") is not None:
                 notes += (f"Short pick: {float(l['quantity']):g} of {float(l['ordered_quantity']):g}",)
             _line_item(_el(root, "cac:OrderLine"), i, l, rates[i] if i < len(rates) else None,
-                       "PromisedDeliveryPeriod", "7" if l.get("cancelled") else "3", notes)
+                       "PromisedDeliveryPeriod", "7" if l.get("cancelled") else "3", notes, response=True)
     return _xml(root)
 
 

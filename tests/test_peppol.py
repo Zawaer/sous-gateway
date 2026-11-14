@@ -1,9 +1,8 @@
 """Peppol BIS Ordering 3.0 exports (sous/standards.py peppol_order / peppol_order_response). Offline, reusing
 test_standards.py's fixtures (temp DB, fake offers, fixed clock).
 
-Structural checks only: well-formed UBL 2.1, the elements Peppol BIS marks mandatory, UBL sequence order for the
-top-level elements, and amounts that add up. Schematron validation (Peppol's PEPPOL-T01 rules) is a next step:
-docs/STANDARDS.md."""
+Structural checks: well-formed UBL 2.1, the elements Peppol BIS marks mandatory, UBL sequence order for the
+top-level elements, and amounts that add up. The official XSD + schematron validation is tests/test_peppol_official.py."""
 
 import xml.etree.ElementTree as ET
 from decimal import Decimal

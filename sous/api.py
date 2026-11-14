@@ -565,7 +565,7 @@ def list_orders(status: Literal["ordered", "pending_approval", "refused", "rejec
 
 @app.get("/orders/{order_id}/peppol/order.xml", tags=["standards"], dependencies=[Depends(_read_order)])
 def order_peppol(order_id: str):
-    """The order as a Peppol BIS Ordering 3.0 UBL Order (shaped after the spec; not validated by Peppol tooling)."""
+    """The order as a Peppol BIS Ordering 3.0 UBL Order (passes the UBL 2.1 XSD and Peppol T01 schematron in CI)."""
     return Response(peppol.order_xml(S.get_order(order_id)), media_type="application/xml")
 
 

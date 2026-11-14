@@ -11,8 +11,8 @@ the gateway's decision:
   refused / rejected /       -> RE  rejected, with the rules that fired as the reason
   expired / expired_cutoff
 
-Shaped after the Peppol BIS Ordering 3.0 specification (CustomizationID / ProfileID below) but NOT validated with
-the official Peppol validator or exchanged over a Peppol access point; no Peppol participant ids are registered
+Passes the UBL 2.1 XSD and OpenPeppol's BIS schematron (T01 / T76) in CI (scripts/peppol_validate.py,
+tests/test_peppol_official.py); not exchanged over a Peppol access point; no Peppol participant ids are registered
 for the demo parties (the endpoint ids use scheme 0216, Finnish OVT, with placeholder values, marked as such).
 Items are identified by Valio Aimo's product id (SellersItemIdentification); the catalog file has no GTINs.
 """
@@ -53,11 +53,15 @@ def _amount(parent, tag: str, value) -> None:
     _el(parent, tag, f"{float(value or 0):.2f}", currencyID="EUR")
 
 
-def _party(parent, wrapper: str, name: str, endpoint: str) -> None:
+def _party(parent, wrapper: str, name: str, endpoint: str, response: bool = False) -> None:
+    """Peppol T01 needs PartyLegalEntity/RegistrationName; T76 (Order Response) has no PartyName."""
     party = _el(_el(parent, wrapper), "cac:Party")
     scheme, value = endpoint.split(":", 1)
     _el(party, "cbc:EndpointID", value, schemeID=scheme)
-    _el(_el(party, "cac:PartyName"), "cbc:Name", name)
+    if not response:
+        _el(_el(party, "cac:PartyName"), "cbc:Name", name)
+        _el(_el(_el(party, "cac:PostalAddress"), "cac:Country"), "cbc:IdentificationCode", "FI")
+    _el(_el(party, "cac:PartyLegalEntity"), "cbc:RegistrationName", name)
 
 
 def _buyer_endpoint(o: dict) -> str:
@@ -132,14 +136,7 @@ def order_response_xml(o: dict) -> bytes:
     _el(root, "cbc:Note", note[:1000])
     _el(root, "cbc:DocumentCurrencyCode", "EUR")
     _el(_el(root, "cac:OrderReference"), "cbc:ID", o["id"])
-    _party(root, "cac:SellerSupplierParty", SELLER["name"], SELLER["endpoint"])
-    _party(root, "cac:BuyerCustomerParty", o.get("buyer") or "Buyer", _buyer_endpoint(o))
-    if code == "AP":
-        for n, l in enumerate(o.get("lines") or [], 1):
-            item = _el(_el(root, "cac:OrderLine"), "cac:LineItem")
-            _el(item, "cbc:ID", n)
-            _el(item, "cbc:LineStatusCode", "5")  # UNCL 1229: 5 = accepted without amendment
-            _el(item, "cbc:Quantity", f"{float(l.get('quantity') or 0):g}",
-                unitCode=UNIT.get(l.get("sales_unit") or "", "EA"))
-            _el(_el(item, "cac:Item"), "cbc:Name", l.get("name") or l.get("product_id"))
+    _party(root, "cac:SellerSupplierParty", SELLER["name"], SELLER["endpoint"], True)
+    _party(root, "cac:BuyerCustomerParty", o.get("buyer") or "Buyer", _buyer_endpoint(o), True)
+    # No order lines: Peppol T76-R008 forbids them on AP (accepted as is), and AB / RE need none.
     return _xml(root, RESPONSE_NS)
