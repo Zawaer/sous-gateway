@@ -773,6 +773,8 @@ def expire_if_overdue(o: dict | None, now: datetime | None = None) -> dict | Non
     """A held order past its approve_by becomes expired_cutoff (terminal; nothing is ordered) and the buyer is
     told the next delivery date to ask for. Lazy: run on reads and decisions, and by the periodic sweep."""
     now = now or _now()
+    if o and o.get("status") == "pending_approval" and not o.get("approve_by"):
+        o = backfill_approve_by(o)
     if not o or not deadline.overdue(o, now):
         return o
     lost, nxt = deadline.lost_date(o), deadline.next_date(o)
@@ -796,9 +798,35 @@ def expire_if_overdue(o: dict | None, now: datetime | None = None) -> dict | Non
     return o
 
 
+def backfill_approve_by(o: dict) -> dict:
+    """A pending_approval order held before approve-by deadlines existed has none and would never expire: give it
+    the one it would have got (deadline.compute from its lines' cut-offs or else its delivery day, as of when it
+    was held), re-sign the receipt and audit order.approve_by_backfilled. Idempotent; the sweep then expires it
+    normally. Returns the order as stored."""
+    with _order_lock:
+        cur = store.get_order(o["id"]) or o
+        if cur.get("status") != "pending_approval" or cur.get("approve_by"):
+            return cur
+        held_at = datetime.fromisoformat(cur["created_at"]) if cur.get("created_at") else _now()
+        dl = deadline.compute(cur.get("lines") or [], deadline.delivery_days(cur), held_at)
+        if not dl:
+            return cur
+        cur = {**cur, "approve_by": dl["at"], "approve_by_detail": dl}
+        cur["receipt_jws"] = _receipt(cur)
+        if not store.update_order(cur, expected_status="pending_approval"):
+            return store.get_order(cur["id"]) or cur
+        store.audit("order.approve_by_backfilled", "deadline", "system", cur["id"], cur.get("buyer"),
+                    {"order_id": cur["id"], "approve_by": dl["at"], "approve_by_detail": dl})
+        return cur
+
+
 def sweep_overdue() -> int:
-    """Expire every held order past its approve_by. Returns how many expired."""
+    """Expire every held order past its approve_by (first giving older held orders without one theirs: run at
+    startup by the API's sweeper, then every minute). Returns how many expired."""
     now = _now()
+    for o in store.list_orders("pending_approval"):
+        if not o.get("approve_by"):
+            backfill_approve_by(o)
     return sum(1 for o in store.list_orders("pending_approval")
                if deadline.overdue(o, now) and expire_if_overdue(o, now)["status"] == "expired_cutoff")
 

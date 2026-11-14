@@ -416,6 +416,10 @@ to the buyer naming the lost delivery and the next date to ask for (the day afte
 option). This happens on reads (`GET /orders`, `GET /orders/{id}`, MCP `get_order`), on any decision and in a
 sweep every minute. Approving or rejecting afterwards is `409 approval_deadline_passed`.
 
+Orders held before deadlines existed have no `approve_by`. The sweep (which also runs at startup) and reads give
+each such `pending_approval` order the deadline it would have got when it was held (same rule, as of its
+`created_at`), re-sign its receipt and audit `order.approve_by_backfilled` once; it then expires like any other.
+
 ## 8. Standing orders and drift detection
 
 Source: `sous/standing.py`. A standing order is a kitchen's recurring weekly order, renewed by its agent under the mandate. The gateway remembers what each renewal actually ordered and checks every new renewal against that history, in plain code, before placing it.

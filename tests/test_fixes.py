@@ -173,7 +173,8 @@ def test_approve_after_delivery_date_is_expired(monkeypatch):
     stored = store.get_order(o["id"])
     for l in stored["lines"]:
         l["order_cutoff"] = None
-    stored["approve_by"] = None  # and the approve-by deadline (tests/test_deadline.py covers it)
+    # and the approve-by deadline (tests/test_deadline.py covers it; a missing one is backfilled, so push it out)
+    stored["approve_by"] = "2099-01-01T00:00:00+02:00"
     store.put_order(stored)
     monkeypatch.setattr(S, "_now", lambda: datetime(2026, 11, 17, 9, 0, tzinfo=config.TZ))
     r = S.decide(o["id"], "chef", True)

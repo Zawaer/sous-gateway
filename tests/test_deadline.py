@@ -128,3 +128,47 @@ def test_demo_clock_drives_the_deadline(monkeypatch):
         assert store.get_order(o["id"])["expiry"]["clock"]["mode"] == "demo"
     finally:
         clock.configure(None)
+
+
+def _pre_deadline_order(**kw):
+    """QA 06:04Z: a pending order stored before the deadline feature (no approve_by, no approve_by_detail)."""
+    o = held(**kw)
+    old = {k: v for k, v in store.get_order(o["id"]).items() if k not in ("approve_by", "approve_by_detail")}
+    assert store.update_order(old)
+    return old
+
+
+def test_sweep_backfills_old_pending_orders_and_expires_them(monkeypatch):
+    o = _pre_deadline_order()
+    at(monkeypatch, datetime(2026, 11, 14, 9, 0, tzinfo=config.TZ))  # before the deadline: backfilled, still pending
+    assert S.sweep_overdue() == 0
+    x = store.get_order(o["id"])
+    assert x["status"] == "pending_approval" and x["approve_by"] == "2026-11-15T16:45:00+02:00"
+    assert signing.verify(x["receipt_jws"], "sous-order+jws")["approve_by"] == x["approve_by"]
+    ev = [e for e in store.audit_events() if e["event"] == "order.approve_by_backfilled"]
+    assert [e["subject"] for e in ev] == [o["id"]] and ev[0]["data"]["approve_by"] == x["approve_by"]
+    assert S.sweep_overdue() == 0  # idempotent: no second backfill
+    assert len([e for e in store.audit_events() if e["event"] == "order.approve_by_backfilled"]) == 1
+    SENT.clear()
+    at(monkeypatch, datetime(2026, 11, 16, 9, 0, tzinfo=config.TZ))  # past the cut-off and into the delivery day
+    assert S.sweep_overdue() == 1
+    x = store.get_order(o["id"])
+    assert x["status"] == "expired_cutoff" and x["expiry"]["lost_delivery_date"] == "2026-11-16"
+    assert [e for e, _ in SENT] == ["order.expired"]
+
+
+def test_old_pending_order_without_cutoff_gets_the_delivery_day_start(monkeypatch):
+    o = _pre_deadline_order()
+    assert store.update_order({**o, "lines": [{**l, "order_cutoff": None} for l in o["lines"]]})
+    at(monkeypatch, datetime(2026, 11, 16, 0, 30, tzinfo=config.TZ))
+    x = S.get_order(o["id"])  # a read backfills and expires too
+    assert x["status"] == "expired_cutoff" and x["approve_by"] == "2026-11-16T00:00:00+02:00"
+    assert x["approve_by_detail"]["basis"] == "delivery_date"
+
+
+def test_backfill_leaves_decided_orders_alone():
+    o = _pre_deadline_order()
+    assert store.update_order({**o, "status": "rejected"})  # decided before the deadline feature
+    assert S.sweep_overdue() == 0 and S.get_order(o["id"])["status"] == "rejected"
+    assert not store.get_order(o["id"]).get("approve_by")
+    assert not [e for e in store.audit_events() if e["event"] == "order.approve_by_backfilled"]
