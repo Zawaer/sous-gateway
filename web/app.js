@@ -1806,10 +1806,10 @@ async function renderSandboxBanner() {
     const s = await api("/sandbox/" + encodeURIComponent(SANDBOX));
     const live = s.status === "active";
     el.classList.toggle("off", !live);
-    el.innerHTML = `<b>Sandbox ${esc(s.id)}</b> <span class="state${live ? "" : " off"}">${esc(s.status)}</span>
-      <span>${esc(s.orders?.total ?? 0)} ${(s.orders?.total ?? 0) === 1 ? "order" : "orders"} · ${esc(s.quotes_left)} of ${esc(s.quotes_limit)}
-      live lookups left · until ${when(s.expires_at)}</span>
-      <a href="/ui/try.html">Back to the guide</a>`;
+    // A quiet line, not a banner: it sits on every page of the sandbox.
+    el.innerHTML = live
+      ? `<span>Sandbox <b>${esc(s.id)}</b> · ${esc(s.quotes_left)} of ${esc(s.quotes_limit)} live lookups left</span><a href="/ui/try.html">Back to the guide</a>`
+      : `<span>Sandbox <b>${esc(s.id)}</b> <span class="state off">${esc(s.status)}</span></span><a href="/ui/try.html">Start a new one</a>`;
   } catch (e) {
     el.classList.add("off");
     el.innerHTML = `<b>Sandbox ${esc(SANDBOX)}</b> <span>${esc(e.message)}</span> <a href="${location.pathname}">Leave sandbox</a>`;

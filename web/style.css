@@ -527,3 +527,9 @@ div.mstat:hover { background: none; }
 .also { margin: 2px 0 10px; font-size: .9rem; }
 .also > summary { cursor: pointer; color: var(--ink-60); width: fit-content; padding: 4px 0; }
 .also .findings.plain { margin: 6px 0 0; }
+/* The sandbox line: small and muted, so it stays out of the way (and out of screenshots). */
+.sbx { background: none; padding: 8px 24px 0; margin-top: 0; font-size: .78rem; color: var(--ink-60); justify-content: flex-end; gap: 4px 14px; }
+.sbx b { font: 400 .78rem var(--mono); color: var(--ink-80); }
+.sbx a { margin-left: 0; color: var(--ink-60); }
+.sbx.off { background: none; color: var(--block-ink); }
+@media (max-width: 860px) { .sbx { margin: 0; padding: 8px 16px 0; justify-content: flex-start; } }
