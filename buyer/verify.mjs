@@ -34,7 +34,16 @@ async function verify(tamper = false) {
       }
       throw new Error('The altered receipt was unexpectedly accepted.');
     }
-    show('Proof verified', `${receipt.id} · signed status: ${receipt.status} · ${receipt.total_ex_vat} ex VAT · ${receipt.amendments?.length ?? 0} signed amendments.`, true);
+    show('Signed snapshot verified', `${receipt.id} · signed status: ${receipt.status} · ${receipt.total_ex_vat} ex VAT · ${receipt.amendments?.length ?? 0} signed amendments.`, true);
+    if (receipt.updated_at) {
+      const timestamp = document.createElement('p');
+      timestamp.textContent = `Signed update time: ${receipt.updated_at}`;
+      result.append(timestamp);
+    }
+    const freshness = document.createElement('p');
+    freshness.className = 'muted';
+    freshness.textContent = 'This file may predate later decisions or amendments. Open the order at your trusted gateway to check its current state.';
+    result.append(freshness);
     const details = document.createElement('details');
     const summary = document.createElement('summary');
     summary.textContent = 'Signed decision details';

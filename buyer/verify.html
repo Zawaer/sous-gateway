@@ -17,6 +17,7 @@
       <label>Order proof JSON<input id="proof-file" type="file" accept=".json,application/json" required></label>
       <label>Trusted gateway JWKS JSON<input id="keys-file" type="file" accept=".json,application/json" required></label>
       <p class="muted">The keys embedded in a bundle do not establish who signed it. Use your independently saved key file.</p>
+      <p class="muted">Verification checks the signed snapshot in your file. It does not contact the gateway or check for later decisions or amendments.</p>
       <div class="actions">
         <button type="submit">Verify proof</button>
         <button id="tamper-proof" type="button" class="secondary">Try changing the signature</button>
