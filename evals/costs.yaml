@@ -19,6 +19,12 @@ runs:
   - {when: "2026-11-14 01:30", provider: verda, model: kimi-k3-1-pro, purpose: "recipe eval, 7 menus (CI run 43524836008)", tokens_in: 7784, tokens_out: 5460}
   - {when: "2026-11-14 02:04", provider: gemini, model: gemini-4-hydrogen, purpose: "buyer LLM eval, 40 cases (CI on CRACI, run 43530717095)", tokens_in: 931564, tokens_out: 12056, usd: 1.4878}
   - {when: "2026-11-14 02:04", provider: verda, model: kimi-k3-1-pro, purpose: "buyer LLM eval, 40 cases (CI on CRACI, run 43530717095)", tokens_in: 0, tokens_out: 0, note: "Verda answered HTTP 200 with an empty body; every case failed before using tokens"}
+  - {when: "2026-11-14 02:31", provider: gemini, model: gemini-4-hydrogen, purpose: "buyer LLM eval, 51 cases / 43 run (CI push on CRACI, run 43533142451, 768efee)", tokens_in: 1178762, tokens_out: 13443, usd: 1.869}
+  - {when: "2026-11-14 02:38", provider: verda, model: kimi-k3-1-pro, purpose: "buyer LLM eval, 51 cases / 43 run (CI push on CRACI, run 43533142451, 768efee)", tokens_in: 1073314, tokens_out: 21598}
+  - {when: "2026-11-14 03:33", provider: gemini, model: gemini-4-hydrogen, purpose: "buyer LLM eval, 59 cases / 49 run (CI push on CRACI, run 43539740484, a4644a0)", tokens_in: 1324375, tokens_out: 15330, usd: 2.1015}
+  - {when: "2026-11-14 03:40", provider: verda, model: kimi-k3-1-pro, purpose: "buyer LLM eval, 59 cases / 49 run (CI push on CRACI, run 43539740484, a4644a0)", tokens_in: 1205877, tokens_out: 27178}
+  - {when: "2026-11-14 06:50", provider: gemini, model: gemini-4-hydrogen, purpose: "buyer LLM eval, 59 cases / 49 run (CI push on CRACI, run 43557209740, 0b0ad68)", tokens_in: 1379854, tokens_out: 15075, usd: 2.1828}
+  - {when: "2026-11-14 06:57", provider: verda, model: kimi-k3-1-pro, purpose: "buyer LLM eval, 59 cases / 49 run (CI push on CRACI, run 43557209740, 0b0ad68)", tokens_in: 1265705, tokens_out: 26299}
   - {when: "2026-11-14 00:10", provider: openai, model: codex, purpose: "read-only security review of the trust core (Codex run 01a1d6fd)", tokens_in: 356000, tokens_out: 2400, note: "approximate, from the Codex run summary"}
 
 services:                      # running infrastructure, prorated
