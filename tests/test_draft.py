@@ -2,6 +2,7 @@
 the deterministic validator on a scripted (fake) model's output, and POST /agent/draft-mandate's guardrails."""
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -179,3 +180,105 @@ def test_signing_page_reads_the_draft_fragment():
     agent = (Path(__file__).resolve().parents[1] / "web" / "agent.html").read_text(encoding="utf-8")
     assert "/agent/draft-mandate" in agent and "sign-mandate.html#draft=" in agent
     assert json.loads(json.dumps(DR.DRAFT_SCHEMA))["required"] == ["fields", "open_questions", "unsupported"]
+
+
+# --- closing the eval loop: Gemini's recorded drafts (evals/draft_results.gemini.json, run 43562850006) ---------
+
+GEMINI_RUN = json.loads((Path(__file__).resolve().parents[1] / "evals" / "draft_results.gemini.json")
+                        .read_text(encoding="utf-8"))
+FIELD_CUES = {"avoid_allergens": r"free|ton\b|pähkin|peanut|nuts", "required_claims": r"free|ton\b",
+              "later_delivery": r"late", "substitutions": r"substitut|korvaav", "unknown_allergens": r"allergen",
+              "allow_may_contain": r"may contain", "unusual_quantity_factor": r"usual", "valid_days": r"voimassa|valid"}
+
+
+def _clause_for(text: str, f: str, value) -> str:
+    """A plausible model quote: the clause with the number, or with the field's cue words."""
+    inj = DR._injection_spans(text)
+    parts = [text[a:b] for sa, sb in DR._sentences(text) for a, b in DR._clauses(text, sa, sb)
+             if not any(a < y and x < b for x, y in inj)]
+    if DR.FIELDS[f]["kind"] in ("money", "factor", "days"):
+        return next(p for p in parts if DR.grounded(float(value), p))
+    return next((p for p in parts if re.search(FIELD_CUES.get(f, "$^"), p, re.I)), parts[0])
+
+
+def _recorded_answer(r: dict) -> dict:
+    """Gemini's recorded answer for one case, rebuilt as the structured output (quotes picked from the text)."""
+    t = r["text"]
+    fields = []
+    for f, v in r["proposed"].items():
+        item = {"field": f, "quote": _clause_for(t, f, v)}
+        kind = DR.FIELDS[f]["kind"]
+        if kind in ("money", "factor", "days"):
+            item["number"] = v
+        elif kind in ("enum", "bool"):
+            item["text"] = str(v).lower()
+        else:
+            item["codes"] = v
+        fields.append(item)
+    last = DR._sentences(t)[-1]
+    return _answer(fields, [{"question": q, "quote": t} for q in r["open_questions"]],
+                   [{"why": u, "quote": t[last[0]:last[1]]} for u in r["unsupported"] if u != DR.INJECTION_WHY])
+
+
+def test_gemini_recorded_drafts_now_pass_every_case():
+    """The four misses of run 43562850006 (15/19) are fixed by the validator, not by the model: the same answers
+    replayed through today's validator pass 19/19."""
+    assert GEMINI_RUN["passed"] == 15 and {r["id"] for r in GEMINI_RUN["results"] if not r["pass"]} == \
+        {"D01", "D05", "D11", "D18"}
+    by_id = {r["id"]: r for r in GEMINI_RUN["results"]}
+    llm = FakeLLM("gemini", "gemini-4-hydrogen", [_recorded_answer(by_id[c["id"]]) for c in CASES])
+    out = E.run("gemini", CASES, llm=llm)
+    assert [(r["id"], r["fails"]) for r in out["results"] if not r["pass"]] == []
+    res = {r["id"]: r for r in out["results"]}
+    assert res["D05"]["proposed"]["avoid_allergens"] == ["AM", "AW"] and "required_claims" not in res["D05"]["proposed"]
+    assert any("Weekly budgets aren't supported" in q for q in res["D11"]["open_questions"])
+    for cid in ("D01", "D18"):   # stricter kept, but asked
+        assert "AP" in res[cid]["proposed"]["avoid_allergens"]
+        assert any("also avoid peanuts" in q for q in res[cid]["open_questions"])
+
+
+def test_free_from_claims_with_an_allergen_become_avoided_allergens():
+    assert DR.claim_allergen("FREE_FROM_GLUTEN") == "AW" and DR.claim_allergen("FREE_FROM_LACTOSE") == "ML"
+    assert DR.claim_allergen("FREE_FROM_MILK") == "AM" and DR.claim_allergen("FREE_FROM_NUTS") == "AN"
+    assert DR.claim_allergen("FREE_FROM_EGGS") == "AE" and DR.claim_allergen("FREE_FROM_SOYA") == "AY"
+    assert DR.claim_allergen("FREE_FROM_PEANUTS") == "AP"
+    assert DR.claim_allergen("FREE_FROM_PRESERVATIVES") is None and DR.claim_allergen("ORGANIC") is None
+    text = "Gluten-free, and no preservatives in anything."
+    llm = FakeLLM("gemini", "gemini-4-hydrogen", [_answer([
+        {"field": "required_claims", "codes": ["FREE_FROM_GLUTEN", "FREE_FROM_PRESERVATIVES"], "quote": text}])])
+    d = DR.draft_mandate(text, provider="gemini", llm=llm)
+    assert d["proposed"] == {"avoid_allergens": ["AW"], "required_claims": ["FREE_FROM_PRESERVATIVES"]}
+    row = next(r for r in d["diff"] if r["field"] == "avoid_allergens")
+    assert "FREE_FROM_GLUTEN was drafted as a required claim" in row["note"]
+    assert any(i.startswith("Rewritten by the validator") for i in d["info"])
+    assert not d["open_questions"]   # gluten is named: nothing to ask
+
+
+def test_weekly_amount_gets_a_question_even_without_a_usable_quote():
+    text = "Spend at most 3000 € per week."
+    llm = FakeLLM("gemini", "gemini-4-hydrogen", [
+        _answer([], [], [{"why": "Weekly budgets are not supported.", "quote": "weekly budget"}]),  # not in text
+        _answer([{"field": "hard_limit_eur", "number": 3000, "quote": text}])])       # mis-mapped to per order
+    d = DR.draft_mandate(text, provider="gemini", llm=llm)
+    assert d["proposed"] == {} and [q["field"] for q in d["open_questions"]] == ["daily_limit_eur"]
+    assert "€3000" in d["open_questions"][0]["question"] and "428" not in d["open_questions"][0]["question"]
+    d = DR.draft_mandate(text, provider="gemini", llm=llm)
+    assert d["proposed"] == {} and any(r["field"] == "hard_limit_eur" and "weekly" in r["why"] for r in d["rejected"])
+    assert d["open_questions"] and d["unsupported"]
+    d = DR.draft_mandate(text, provider="rules")   # the rule parser's own question is not duplicated
+    assert len(d["open_questions"]) == 1
+
+
+def test_unnamed_allergen_is_kept_but_asked_and_the_eval_needs_the_question():
+    llm = FakeLLM("gemini", "gemini-4-hydrogen", [_answer([
+        {"field": "avoid_allergens", "codes": ["AN", "AP", "SA", "AF"], "quote": "No nuts"}])])
+    d = DR.draft_mandate("No nuts.", provider="gemini", llm=llm)
+    assert d["proposed"]["avoid_allergens"] == ["AN", "AP", "SA", "AF"]   # SA is in the nut family: not asked
+    qs = [q["question"] for q in d["open_questions"]]
+    assert len(qs) == 2 and "You wrote 'nuts'; also avoid peanuts" in qs[0] and "fish (AF)" in qs[1]
+    case = {"id": "X", "text": "No nuts.", "expect": {"avoid_allergens": ["AN"]},
+            "stricter_if_asked": {"avoid_allergens": ["AP"]}}
+    silent = {"proposed": {"avoid_allergens": ["AN", "AP"]}, "open_questions": [], "unsupported": [], "diff": []}
+    assert E.score(case, silent) == ["avoid_allergens: added ['AP'] beyond the text without asking"]
+    asked = {**silent, "open_questions": [{"field": "avoid_allergens", "question": "?"}]}
+    assert E.score(case, asked) == []

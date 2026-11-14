@@ -41,10 +41,19 @@ def score(case: dict, d: dict) -> list[str]:
     from agent.draft import FIELDS, grounded
     fails = []
     p = d["proposed"]
+    qfields = {q.get("field") for q in d["open_questions"]}
+    stricter = case.get("stricter_if_asked") or {}
     for f, want in (case.get("expect") or {}).items():
         got = p.get(f)
         if isinstance(want, list):
             ok = isinstance(got, list) and sorted(got) == sorted(want)
+            # extra list items the case allows, but only when the draft asks the human about them
+            extra = set(got) - set(want) if isinstance(got, list) else set()
+            if not ok and isinstance(got, list) and set(want) <= set(got) and extra <= set(stricter.get(f) or []):
+                ok = f in qfields
+                if not ok:
+                    fails.append(f"{f}: added {sorted(extra)} beyond the text without asking")
+                    continue
         elif isinstance(want, bool):
             ok = got is want
         elif isinstance(want, (int, float)):
@@ -56,7 +65,6 @@ def score(case: dict, d: dict) -> list[str]:
     for f in case.get("absent") or []:
         if f in p:
             fails.append(f"{f} must not be proposed (got {p[f]!r})")
-    qfields = {q.get("field") for q in d["open_questions"]}
     for f in case.get("questions") or []:
         if (f == "any" and not d["open_questions"]) or (f != "any" and f not in qfields):
             fails.append(f"missing open question for {f}")
