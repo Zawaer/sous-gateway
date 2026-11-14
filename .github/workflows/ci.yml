@@ -337,6 +337,10 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       VERDA_INFERENCE_API_KEY: ${{ secrets.VERDA_INFERENCE_API_KEY }}
       NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+      # our own open-weight model on a Verda GPU (provider verda-selfhosted); optional, skipped when unset
+      SOUS_SELFHOSTED_URL: ${{ secrets.SOUS_SELFHOSTED_URL }}
+      SOUS_SELFHOSTED_KEY: ${{ secrets.SOUS_SELFHOSTED_KEY }}
+      SOUS_SELFHOSTED_MODEL: ${{ vars.SOUS_SELFHOSTED_MODEL }}
       # vision eval prompt variants (manual runs only); see scripts/vision_eval.py
       VISION_EVAL_VARIANTS: ${{ inputs.vision_variants || vars.VISION_EVAL_VARIANTS || 'v1 v2 v3 v3+verify v3+verify+think' }}
       VISION_EVAL_REPEAT: ${{ inputs.vision_repeat || '1' }}
@@ -357,7 +361,7 @@ jobs:
             connections:
               - tls:
                   serverNamePatterns: [junction26.valioaimo.fi, generativelanguage.googleapis.com, inference.verda.com,
-                                       integrate.api.nvidia.com]
+                                       integrate.api.nvidia.com, 95-133-254-130.sslip.io]  # last: self-hosted GPU
                   ports: [443]
               # Aiven for Valkey (shared Valio budget, rediss://). The port is our service's, from its Service URI.
               - tls:
@@ -382,7 +386,7 @@ jobs:
           fi
           run=true
           if [ -z "$VALIO_AIMO_API_KEY" ]; then echo "::notice::VALIO_AIMO_API_KEY secret not set: skipping llm-eval"; run=false; fi
-          if [ -z "$GEMINI_API_KEY" ] && [ -z "$VERDA_INFERENCE_API_KEY" ] && [ -z "$NVIDIA_API_KEY" ]; then
+          if [ -z "$GEMINI_API_KEY" ] && [ -z "$VERDA_INFERENCE_API_KEY" ] && [ -z "$NVIDIA_API_KEY" ] && [ -z "$SOUS_SELFHOSTED_KEY" ]; then
             echo "::notice::No GEMINI_API_KEY, VERDA_INFERENCE_API_KEY or NVIDIA_API_KEY secret is set: skipping llm-eval"; run=false
           fi
           if [ "$run" = true ] && [ "$EVENT" = push ]; then
@@ -420,6 +424,7 @@ jobs:
             case "$provider" in
               gemini) key=$GEMINI_API_KEY ;;
               nvidia) key=$NVIDIA_API_KEY ;;   # free tier ~40 req/min: the nvidia preset paces requests
+              verda-selfhosted) key=$SOUS_SELFHOSTED_KEY; [ -n "$SOUS_SELFHOSTED_URL" ] || key= ;;
               *) key=$VERDA_INFERENCE_API_KEY ;;
             esac
             if [ -z "$key" ]; then echo "::notice::No key for $provider: skipping $model"; continue; fi

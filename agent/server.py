@@ -57,6 +57,7 @@ DISPLAY = {
     "gemini-4-hydrogen": "Gemini 4 Hydrogen", "gemini-4-argon": "Gemini 4 Argon", "gemini-4-carbon": "Gemini 4 Carbon",
     "gemini-3.8-flash": "Gemini 3.8 Flash", "nvidia/nemotron-3.5-super-vl-120b-a12b": "NVIDIA Nemotron 3.5 Super VL",
     "kimi-k3-1-pro": "Kimi K3.1 Pro",
+    "Qwen/Qwen3-30B-A3B-Instruct-2507": "Qwen3 30B-A3B (self-hosted on Verda)",
 }
 
 
@@ -245,8 +246,17 @@ def _preset_env(provider: str) -> dict:
     """Only the provider's own key: the server ignores LLM_PROVIDER / LLM_MODEL / LLM_BASE_URL overrides, so the
     page always runs (and names) the preset model. Empty when the key is not set."""
     from .llm import PRESETS
-    key_env = PRESETS[provider]["key_env"]
-    return {key_env: os.environ[key_env]} if os.environ.get(key_env) else {}
+    p = PRESETS[provider]
+    if not os.environ.get(p["key_env"]):
+        return {}
+    env = {p["key_env"]: os.environ[p["key_env"]]}
+    for k in ("base_url_env", "model_env"):  # verda-selfhosted: endpoint and model id come from the environment
+        if p.get(k):
+            if not os.environ.get(p[k]) and k == "base_url_env":
+                return {}
+            if os.environ.get(p[k]):
+                env[p[k]] = os.environ[p[k]]
+    return env
 
 
 def make_llm(provider: str):
@@ -255,7 +265,8 @@ def make_llm(provider: str):
     env = _preset_env(provider)
     if not env:
         return None
-    cfg = config_from_env(provider, PRESETS[provider]["model"], env=env)
+    p = PRESETS[provider]
+    cfg = config_from_env(provider, env.get(p.get("model_env") or "") or p["model"], env=env)
     cfg.timeout_s, cfg.max_retries = LLM_TIMEOUT_S, 2
     return ChatClient(cfg)
 
@@ -463,9 +474,9 @@ class AskIn(BaseModel):
     text: str = Field(..., min_length=3, max_length=600, examples=["1,000 litres of lactose-free milk by Monday"])
     mandate_id: str
     agent_id: str
-    provider: Literal["auto", "gemini", "verda"] = Field(
-        "auto", description="gemini (Gemini 4 Hydrogen), verda (Kimi K3.1 Pro on Verda) or auto (Gemini if "
-                            "configured, else Verda)")
+    provider: Literal["auto", "gemini", "verda", "verda-selfhosted"] = Field(
+        "auto", description="gemini (Gemini 4 Hydrogen), verda (Kimi K3.1 Pro on Verda Inference), verda-selfhosted "
+                            "(our own open-weight model on a Verda GPU) or auto (Gemini if configured, else Verda)")
     allow_order: bool = Field(True, description="false: the agent may quote but not call place_order")
 
 
@@ -482,7 +493,9 @@ def ask(req: AskIn, request: Request, token: str | None = Depends(_token)):
     if llm is None:
         raise AgentError("llm_unavailable", "This server has no key for "
                          + " or ".join({"gemini": "Gemini (GEMINI_API_KEY)",
-                                        "verda": "Verda (VERDA_INFERENCE_API_KEY)"}[p] for p in order) + ".", 503)
+                                        "verda": "Verda (VERDA_INFERENCE_API_KEY)",
+                                        "verda-selfhosted": "the self-hosted model (SOUS_SELFHOSTED_URL, "
+                                                            "SOUS_SELFHOSTED_KEY)"}[p] for p in order) + ".", 503)
     meter = Meter(llm)
     rid = _reserve(_client_ip(request), "ask", llm.cfg.provider, llm.cfg.model, req.mandate_id)
     status = "error"

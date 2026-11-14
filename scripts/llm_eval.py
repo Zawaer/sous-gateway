@@ -498,7 +498,7 @@ def write_report(results_dir: Path, out: Path) -> None:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cases", nargs="*", help="case ids (default: all)")
-    ap.add_argument("--provider", help="gemini | verda | local | oracle (default $LLM_PROVIDER or gemini)")
+    ap.add_argument("--provider", help="gemini | verda | verda-selfhosted | nvidia | local | oracle (default $LLM_PROVIDER or gemini)")
     ap.add_argument("--model")
     ap.add_argument("--base-url", help="override the preset's base URL (LLM_BASE_URL)")
     ap.add_argument("--file", default=str(ROOT / "evals" / "cases.yaml"))

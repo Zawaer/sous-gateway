@@ -184,3 +184,30 @@ def test_report_renders(tmp_path, worker):
     R.write_report(tmp_path, [r], s)
     text = (tmp_path / "report.md").read_text()
     assert "Valio prices replayed from snapshot 2026-11-14" in text and "| over_limit | 1 |" in text
+
+
+# --- the verda-selfhosted provider (our vLLM on a Verda GPU) ---------------------------------------------------
+
+def test_selfhosted_preset_reads_url_key_and_model_from_env():
+    from agent.llm import config_from_env, key_present
+    env = {"SOUS_SELFHOSTED_URL": "https://gpu.example/v1/", "SOUS_SELFHOSTED_KEY": "k"}
+    cfg = config_from_env("verda-selfhosted", env=env)
+    assert cfg.base_url == "https://gpu.example/v1" and cfg.api_key == "k"
+    assert cfg.model == "Qwen/Qwen3-30B-A3B-Instruct-2507" and "'k'" not in repr(cfg)
+    assert config_from_env("verda-selfhosted", env={**env, "SOUS_SELFHOSTED_MODEL": "m"}).model == "m"
+    assert key_present("verda-selfhosted", env) and not key_present("verda-selfhosted", {"SOUS_SELFHOSTED_KEY": "k"})
+    with pytest.raises(ValueError):
+        config_from_env("verda-selfhosted", env={"SOUS_SELFHOSTED_KEY": "k"})
+
+
+def test_agent_server_offers_selfhosted_only_when_configured(monkeypatch):
+    from agent import server
+    for k in ("SOUS_SELFHOSTED_URL", "SOUS_SELFHOSTED_KEY", "SOUS_SELFHOSTED_MODEL"):
+        monkeypatch.delenv(k, raising=False)
+    assert server.make_llm("verda-selfhosted") is None
+    monkeypatch.setenv("SOUS_SELFHOSTED_KEY", "k")
+    assert server.make_llm("verda-selfhosted") is None  # no URL yet
+    monkeypatch.setenv("SOUS_SELFHOSTED_URL", "https://gpu.example/v1")
+    monkeypatch.setenv("SOUS_SELFHOSTED_MODEL", "Qwen/Qwen3-30B-A3B-Instruct-2507")
+    llm = server.make_llm("verda-selfhosted")
+    assert llm.cfg.base_url == "https://gpu.example/v1" and llm.cfg.model == "Qwen/Qwen3-30B-A3B-Instruct-2507"

@@ -7,6 +7,8 @@ One small httpx client covers every provider we use, because they all speak the 
     verda   https://inference.verda.com/v1                             VERDA_INFERENCE_API_KEY  kimi-k3-1-pro
     nvidia  https://integrate.api.nvidia.com/v1                        NVIDIA_API_KEY           nvidia/nemotron-3.5-super-vl-120b-a12b
             (also the LLM eval's buyer agent, text + tools; nemotron-3-super-120b-a12b answered 404 to our key)
+    verda-selfhosted  $SOUS_SELFHOSTED_URL (our vLLM on a Verda GPU)  SOUS_SELFHOSTED_KEY  $SOUS_SELFHOSTED_MODEL
+            (default Qwen/Qwen3-30B-A3B-Instruct-2507)
     local   $LLM_BASE_URL (vLLM, Ollama, llama.cpp server, ...)       LLM_API_KEY (optional)   $LLM_MODEL
 
 LLM_BASE_URL / LLM_API_KEY / LLM_MODEL override any preset; LLM_PROVIDER picks the preset when none is
@@ -42,6 +44,12 @@ PRESETS: dict[str, dict] = {
                "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
                "min_interval_s": 1.6,  # free tier: ~40 requests/min per key
                "where": "NVIDIA API catalog (build.nvidia.com; NVIDIA-hosted NIM, US)"},
+    # Our own open-weight model on a Verda GPU (vLLM behind an authenticated HTTPS proxy; docs/VERDA.md). URL, key
+    # and model id come from the environment, so the endpoint can move without a code change.
+    "verda-selfhosted": {"base_url": "", "base_url_env": "SOUS_SELFHOSTED_URL", "key_env": "SOUS_SELFHOSTED_KEY",
+                         "model": "Qwen/Qwen3-30B-A3B-Instruct-2507", "model_env": "SOUS_SELFHOSTED_MODEL",
+                         "reasoning_effort": None,
+                         "where": "self-hosted open-weight model, vLLM on our own Verda GPU (Finland)"},
     "local": {"base_url": "http://127.0.0.1:8000/v1", "key_env": "LLM_API_KEY", "model": "",
               "reasoning_effort": None, "where": "self-hosted OpenAI-compatible server (e.g. vLLM on a Verda GPU)"},
 }
@@ -99,7 +107,7 @@ def config_from_env(provider: str | None = None, model: str | None = None, env: 
     if provider not in PRESETS:
         raise ValueError(f"Unknown LLM provider {provider!r}; use one of {sorted(PRESETS)}.")
     p = PRESETS[provider]
-    model = model or env.get("LLM_MODEL") or p["model"]
+    model = model or env.get("LLM_MODEL") or (env.get(p["model_env"]) if p.get("model_env") else None) or p["model"]
     if not model:
         raise ValueError(f"Set LLM_MODEL (or --model) for provider {provider!r}.")
     effort = env.get("LLM_REASONING_EFFORT", p["reasoning_effort"]) or None
@@ -110,7 +118,11 @@ def config_from_env(provider: str | None = None, model: str | None = None, env: 
     if provider == "nvidia" and env.get("LLM_THINKING") in ("1", "true", "on"):
         extra["chat_template_kwargs"] = {"enable_thinking": True}
     interval = float(env["LLM_MIN_INTERVAL_S"]) if env.get("LLM_MIN_INTERVAL_S") else p.get("min_interval_s", 0.0)
-    return LLMConfig(provider=provider, base_url=(env.get("LLM_BASE_URL") or p["base_url"]).rstrip("/"),
+    base_url = env.get("LLM_BASE_URL") or (env.get(p["base_url_env"]) if p.get("base_url_env") else None) \
+        or p["base_url"]
+    if not base_url:
+        raise ValueError(f"Set {p.get('base_url_env') or 'LLM_BASE_URL'} for provider {provider!r}.")
+    return LLMConfig(provider=provider, base_url=base_url.rstrip("/"),
                      model=model, api_key=env.get("LLM_API_KEY") or env.get(p["key_env"], ""),
                      reasoning_effort=effort,
                      price_in=price_in, price_out=price_out, where=p["where"], extra_body=extra or None,
@@ -119,7 +131,10 @@ def config_from_env(provider: str | None = None, model: str | None = None, env: 
 
 def key_present(provider: str, env: dict | None = None) -> bool:
     env = os.environ if env is None else env
-    return bool(env.get("LLM_API_KEY") or env.get(PRESETS[provider]["key_env"]))
+    p = PRESETS[provider]
+    if p.get("base_url_env") and not (env.get("LLM_BASE_URL") or env.get(p["base_url_env"])):
+        return False  # no endpoint configured
+    return bool(env.get("LLM_API_KEY") or env.get(p["key_env"]))
 
 
 @dataclass
