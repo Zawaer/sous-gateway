@@ -242,6 +242,19 @@ def test_only_a_human_resume_clears_the_hold():
     assert events("standing.resumed")[0]["data"]["needs_review_id"] == rev["id"]
 
 
+def test_buyer_signed_update_runs_the_same_review(monkeypatch):
+    from sous import credentials as C
+    monkeypatch.setattr(config, "BUYER_KEY_TOFU", True)
+    key = C.new_key()
+    body = {"id": "M-VC", "buyer": "Kide", "agent_id": "a", "issued_by": "Aino", "avoid_allergens": ["AM"]}
+    S.issue_credential_mandate(C.sign_vc(key, body, NOW - timedelta(hours=2), NOW + timedelta(days=30)))
+    so = standing.create(standing.StandingOrderIn(mandate_id="M-VC", agent_id="a", name="Breakfast",
+                                                  items=[{"product_ids": ["GRA"], "amount": 1}]))
+    out = S.issue_credential_mandate(C.sign_vc(key, {**body, "avoid_allergens": ["AM", "AN"]},
+                                               NOW - timedelta(hours=1), NOW + timedelta(days=30)))
+    assert [x["id"] for x in out["needs_review"]["held"]] == [so["id"]] and SS.get(so["id"])["active"] is False
+
+
 # --- 4. the rule is registered ---------------------------------------------------------------------------------
 
 def test_rule_registered_with_finnish():
