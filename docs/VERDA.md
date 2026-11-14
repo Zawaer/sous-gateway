@@ -140,9 +140,12 @@ is cheaper and already keeps data in the EU.
 ## Scaling from a demo to 20,000 kitchens
 
 - **Gateway.** Stateless FastAPI/MCP processes behind Caddy, state in MariaDB (system-versioned audit).
-  These are estimates, not load tests (none was run). A kitchen orders a few times a day, mostly before the evening cut-off, so 20k kitchens is on the order of
-  50-100k orders a day with a peak of a few orders per second: two or three CPU instances plus a managed
-  MariaDB, not a GPU problem. The binding limit is Valio's API: a quote costs 2 live calls (batched shortlist, cached), 4 when
+  A kitchen orders a few times a day, mostly before the evening cut-off, so 20k kitchens is on the order of
+  50-100k orders a day with a peak of a few orders per second. **Measured** ([CAPACITY.md](CAPACITY.md),
+  `scripts/loadtest.py`, Valio replayed, 4 pinned CPUs + MariaDB): one uvicorn process saturates at ~23 req/s
+  (~3 orders/s, ~7.5 quotes/s) on about one core (GIL, plus the per-process order lock). More workers need
+  cross-process order locking first (MariaDB row locks or sharding by Valio customer); then two or three CPU
+  instances plus a managed MariaDB, not a GPU problem. The binding limit is Valio's API: a quote costs 2 live calls (batched shortlist, cached), 4 when
   substitutes are priced for options; 1.0 per request on average in the scripted eval.
 - **Model.** Tokens per request x requests per day decides the product: about 26-28k tokens per
   request in the eval (~27k for Kimi K3.1 Pro, CI 43587725624). At 75k requests/day that is about 2 billion tokens/day; per-token

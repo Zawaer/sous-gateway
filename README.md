@@ -69,6 +69,7 @@ Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it (our own ca
 - [docs/STANDARDS.md](docs/STANDARDS.md): mapping to AP2, ACP, A2A, MCP server cards, schema.org, W3C VC 2.0, JOSE, and Peppol BIS Ordering 3.0 (UBL Order and Order Response per order).
 - [docs/EVAL_INTEGRITY.md](docs/EVAL_INTEGRITY.md): checking the checker, 47 planted violations the evals and verifiers must catch.
 - [docs/ROBUSTNESS.md](docs/ROBUSTNESS.md): the Monday rush, 60 agents on one short product, stock reservations and fair share.
+- [docs/CAPACITY.md](docs/CAPACITY.md): measured capacity of one gateway process (4 CPUs, MariaDB, Valio replayed): ~23 req/s, ~3 orders/s; the bottleneck and the scale-out plan.
 - [docs/CRACI.md](docs/CRACI.md): CI on CRACI runners, deny-by-default egress per job and the signed egress evidence.
 - [docs/COSTS.md](docs/COSTS.md): every paid model run and running service.
 - [docs/LLM_EVAL.md](docs/LLM_EVAL.md) (per-model LLM eval, case by case), [docs/CI.md](docs/CI.md), [docs/VERDA.md](docs/VERDA.md), [docs/GEMINI.md](docs/GEMINI.md), [docs/NEMOTRON.md](docs/NEMOTRON.md), [docs/AIVEN.md](docs/AIVEN.md), [docs/demo-runbook.md](docs/demo-runbook.md).
