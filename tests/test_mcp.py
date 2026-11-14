@@ -52,7 +52,7 @@ def run(coro_fn):
 
 def test_tools_and_annotations():
     tools = {t.name: t for t in run(lambda c: c.list_tools()).tools}
-    assert set(tools) == {"search_products", "get_product", "my_mandates", "request_quote", "suggest_substitutes",
+    assert set(tools) == {"search_products", "get_product", "my_mandates", "request_quote", "can_i_order", "suggest_substitutes",
                           "place_order", "get_order", "get_mandate", "get_suggestions", "list_offers",
                           "create_standing_order", "renew_standing_order", "get_standing_order"}
     for name in ("search_products", "get_product", "get_order", "get_mandate", "suggest_substitutes",
@@ -119,3 +119,24 @@ def test_resources_and_prompt():
     assert allergens["codes"]["AM"] == "milk" and "SA" in allergens["groups"]["AN"]
     assert json.loads(m.contents[0].text)["mandate"]["avoid_allergens"] == ["AN"]
     assert "place_order" in p.messages[0].content.text
+
+
+def test_can_i_order_answers_in_one_step(monkeypatch):
+    from sous import mcp_server as M, service as S
+
+    def fake(req, agent_token=None, approver=False, tier="ask"):
+        return {"quote": {"id": "Q-1", "expires_at": "2026-11-16T10:00:00+02:00", "total_ex_vat": 560.0,
+                          "lines": [{"product_id": "OAT", "name": "Oat drink", "quantity": 400, "sales_unit": "ST",
+                                     "line_total_ex_vat": 560.0, "orderable": True}], "uncovered": [],
+                          "mandate_preview": {"outcome": fake.tier, "findings": [
+                              {"rule": "spend.auto_limit", "outcome": "ask", "message": "Over the €400 limit."}]}}}
+    for tier, answer in (("ask", "needs_a_human"), ("notify", "yes"), ("block", "no")):
+        fake.tier = tier
+        monkeypatch.setattr(S, "request_quote", fake)
+        r = M.can_i_order(mandate_id="M", delivery_date="2026-11-16", agent_id="a",
+                          items=[S.QuoteItem(product_ids=["OAT"], amount=400, unit="L")])
+        assert r["answer"] == answer and r["quote_id"] == "Q-1" and r["tier"] == tier
+    assert r["why"] == ["Over the €400 limit."] and r["lines"][0]["quantity"] == 400
+    titles = {t.name: t.title for t in run(lambda c: c.list_tools()).tools}
+    assert sum(t.startswith("Core ") for t in titles.values()) == 5  # 4 core + the can_i_order shortcut
+    assert all(t.startswith(("Core ", "Optional: ")) for t in titles.values())

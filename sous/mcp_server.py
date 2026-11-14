@@ -36,35 +36,29 @@ from .standards import OrderDoc, QuoteDoc
 log = logging.getLogger(__name__)
 
 INSTRUCTIONS = """\
-You buy from Valio Aimo (Finnish food-service wholesaler) for a buyer whose mandate (sous) you hold.
-You need the mandate_id; the mandate is issued to exactly one agent_id. Start with my_mandates: it lists the
-mandates your credential covers (buyer, label such as hotel / hospital / school, agent_id, rules in one line).
-Pick the one whose buyer the user names ("the hotel"); don't ask the user for ids that my_mandates gives you.
-With a credential that covers the mandate, agent_id may be left out of request_quote and place_order.
+You buy from Valio Aimo (Finnish food-service wholesaler) for a buyer, under the mandate that buyer signed. The
+gateway's rules decide what you may order alone; you can't override them.
 
-Typical flow, 3-4 calls (after my_mandates):
-1. search_products: put dietary needs in filters, not just the query text: claims=["FREE_FROM_LACTOSE"],
-   avoid_allergens=["AM"] (GS1 codes; resource sous://allergens). No price or stock here, and it is free.
-2. request_quote with mandate_id: one item per need, with SEVERAL candidate product_ids and the amount in
-   unit "L" or "KG" (e.g. 1000 L of milk), not pack counts. The gateway prices live, picks pack sizes,
-   checks cut-off and stock, splits across products, and returns quote.mandate_preview.
-   Read mandate_preview (outcome silent | notify | ask | block, with findings) and quote.uncovered BEFORE ordering.
-   If quote.options is present (an item can't be covered as asked), present them to the buyer or pick per the
-   mandate, then request_quote(option_id=...); never silently drop the uncovered amount.
-   If a line is not orderable or the preview blocks it, call suggest_substitutes and re-quote with
-   substitute_for=<original id>.
-3. place_order(quote_id, mandate_id, idempotency_key=<unique string you reuse on retry>).
-   Result status: ordered | pending_approval (a human decides; give them approval_url, check get_order later)
-   | refused (tell the buyer which rule fired; you cannot override it).
-   An ordered order is placed with Sous (signed receipt). Its `erp` block is the hand-off to Valio Aimo's
-   order system: when erp.simulated is true (status "simulated", confirmation_id "SIM-..."), nothing was sent to
-   Valio. Say "placed with Sous; Valio hand-off simulated in this demo", never that Valio or its ERP confirmed it.
+Core tools, in this order: my_mandates -> search_products -> request_quote (or can_i_order) -> place_order.
+Every other tool is optional.
 
-If the mandate has require_agent_auth, quotes, orders and renewals need your agent credential: connect with
-the header "Authorization: Bearer <token>" (or, where headers are impossible, pass agent_token). Never print it.
+Worked example. The user (the hotel) says: "1,000 litres of lactose-free milk for Monday."
+1. my_mandates() -> pick the hotel's mandate, e.g. "M-HOTEL-AURORA". Never ask the user for ids it gives you.
+2. search_products(query="milk", claims=["FREE_FROM_LACTOSE"]) -> several plain lactose-free milk ids.
+   Dietary needs go in the filters (claims, avoid_allergens), not only the text. Free; no prices here.
+3. can_i_order(mandate_id="M-HOTEL-AURORA", delivery_date=<Monday, YYYY-MM-DD>,
+   items=[{product_ids: [the ids], amount: 1000, unit: "L", product_type: "milk"}]) -> answer "yes" (order it),
+   "needs_a_human" (ordering sends it to the buyer's human) or "no" (say why, with the rule), plus the quote_id.
+   request_quote returns the same quote in full: read its mandate_preview, uncovered and options before ordering.
+   If options are offered, show them or take one with request_quote(option_id=...); never drop a shortfall silently.
+4. place_order(mandate_id="M-HOTEL-AURORA", quote_id=<quote_id>, idempotency_key=<unique, reused on retry>)
+   -> ordered | pending_approval (give the user approval_url) | refused (tell them which rule).
 
-On an error, follow its "hint" field. Never state a price, stock level, delivery date or allergen fact
-that a tool did not return; say "unknown" instead. Allergen data marked 'unknown' is not safe."""
+Ask for amounts in L or KG with several candidate ids per need; mark substitutes with substitute_for
+(suggest_substitutes finds them). Send your credential as "Authorization: Bearer <token>" and never print it.
+An ordered order is placed with Sous; when erp.simulated is true, say the Valio hand-off is simulated in this demo.
+On an error follow its "hint". Never state a price, stock level, date or allergen fact a tool didn't return:
+say "unknown". Missing allergen data is not safe."""
 if clock.is_demo():
     INSTRUCTIONS += (f"\n\nDEMO CLOCK: this gateway evaluates cut-offs, quote expiry and daily limits as if it were "
                      f"{clock.info()['configured']} ({'frozen' if not clock.info()['advancing'] else 'advancing in real time'}), "
@@ -195,6 +189,21 @@ class QuoteOut(_Open):
     """request_quote: the quote payload and its JWS (typ sous-quote+jws). Schema of `quote`: /schemas/quote.json."""
     quote: QuoteBodyOut
     jws: str = Field(description="Compact JWS over `quote`, verifiable with /.well-known/jwks.json")
+
+
+class CanIOrderOut(_Open):
+    """can_i_order: the mandate's answer for this request, in one step, and the quote to order it with."""
+    answer: Literal["yes", "needs_a_human", "no"] = Field(description="yes: place_order orders it (tier silent or "
+        "notify); needs_a_human: place_order holds it for the buyer's human (ask); no: the mandate refuses it (block)")
+    tier: str = Field(description="silent | notify | ask | block")
+    why: list[str] = Field(description="The rules that decided, in plain words (empty when nothing stood out)")
+    quote_id: str
+    expires_at: str
+    total_ex_vat: float
+    lines: list[dict[str, Any]] = Field(description="What would be ordered: product_id, name, quantity, unit, total")
+    uncovered: list[dict[str, Any]] = Field(description="Amounts the quote can't cover; see options")
+    options: int = Field(description="How many alternatives the full quote offers (request_quote shows them)")
+    next_step: str
 
 
 class SubstituteOptionOut(_Open):
@@ -465,7 +474,7 @@ READ_LIVE = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempot
 
 # --- tools ------------------------------------------------------------------
 
-@_tool(SearchOut, title="Search the catalog", annotations=READ_LOCAL)
+@_tool(SearchOut, title="Core 2/4: Search the catalog", annotations=READ_LOCAL)
 def search_products(
     query: str,
     claims: list[str] | None = None,
@@ -501,7 +510,7 @@ def search_products(
                     temperature=temperature, limit=limit, food_only=food_only, origins=origins)
 
 
-@_tool(ProductOut, title="Product details", annotations=READ_LOCAL)
+@_tool(ProductOut, title="Optional: Product details", annotations=READ_LOCAL)
 def get_product(product_id: str) -> dict:
     """Full static details of one product: names, pack sizes, allergens, claims, labels, reliability, CO2 estimate.
 
@@ -513,7 +522,7 @@ def get_product(product_id: str) -> dict:
     return p
 
 
-@_tool(QuoteOut, title="Request a quote (live price and stock)",
+@_tool(QuoteOut, title="Core 3/4: Quote with live price, stock and the mandate check",
        annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False,
                                    open_world_hint=True))
 def request_quote(
@@ -562,7 +571,46 @@ def request_quote(
                            approver=exposure.is_approver(_reader(ctx, agent_token)))
 
 
-@_tool(SubstitutesOut, title="Suggest substitutes", annotations=READ_LIVE)
+@_tool(CanIOrderOut, title="Core 3/4 shortcut: Can I order this?",
+       annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False,
+                                   open_world_hint=True))
+def can_i_order(
+    mandate_id: str,
+    delivery_date: str,
+    items: list[S.QuoteItem],
+    agent_id: str | None = None,
+    rationale: str | None = None,
+    agent_token: str | None = None,
+    ctx: Context | None = None,
+) -> dict:
+    """What am I allowed to do? One step: quotes the request live under the mandate (same as request_quote) and
+    answers yes / needs_a_human / no, with the rules that decided, the lines it would order and the quote_id.
+    Places no order. If the answer is yes or needs_a_human, call place_order with quote_id (and an idempotency_key)
+    before expires_at; if no, tell the user why. items as in request_quote (amount in L or KG, several ids)."""
+    agent_id = _agent_for(agent_id, mandate_id, ctx, agent_token)
+    r = S.request_quote(S.QuoteRequest(agent_id=agent_id, mandate_id=mandate_id, delivery_date=_date(delivery_date),
+                                       items=items, rationale=rationale),
+                        agent_token=_agent_token(ctx, agent_token),
+                        approver=exposure.is_approver(_reader(ctx, agent_token)))
+    q = r["quote"]
+    prev = q.get("mandate_preview") or {}
+    tier = prev.get("outcome") or "block"
+    answer = {"silent": "yes", "notify": "yes", "ask": "needs_a_human"}.get(tier, "no")
+    why = [f["message"] for f in prev.get("findings") or [] if f.get("outcome") in ("notify", "ask", "block")
+           and f.get("rule") != "mandate.ok"]
+    nxt = {"yes": "place_order with quote_id: it will be ordered" + (" and the buyer told" if tier == "notify" else ""),
+           "needs_a_human": "place_order with quote_id holds it for the buyer's human; give them the approval_url",
+           "no": "don't order; tell the user why. request_quote shows alternatives (options) when there are any"}[answer]
+    if q.get("uncovered"):
+        nxt += ". Part of the request can't be covered: see uncovered and request_quote's options"
+    return {"answer": answer, "tier": tier, "why": why, "quote_id": q["id"], "expires_at": q["expires_at"],
+            "total_ex_vat": q.get("total_ex_vat", 0.0),
+            "lines": [{k: l.get(k) for k in ("product_id", "name", "quantity", "sales_unit", "line_total_ex_vat",
+                                              "delivery_date", "orderable")} for l in q.get("lines") or []],
+            "uncovered": q.get("uncovered") or [], "options": len(q.get("options") or []), "next_step": nxt}
+
+
+@_tool(SubstitutesOut, title="Optional: Suggest substitutes", annotations=READ_LIVE)
 def suggest_substitutes(
     agent_id: str,
     product_id: str,
@@ -589,7 +637,7 @@ def suggest_substitutes(
                                  reader=_reader(ctx, agent_token))
 
 
-@_tool(OrderOut, title="Place an order under the mandate",
+@_tool(OrderOut, title="Core 4/4: Place the order",
        # idempotent: a retry with the same idempotency_key returns the same order instead of ordering again.
        annotations=ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=True,
                                    open_world_hint=True))
@@ -615,7 +663,7 @@ def place_order(mandate_id: str, quote_id: str, agent_id: str | None = None, ide
                          agent_token=_agent_token(ctx, agent_token), rationale=rationale)
 
 
-@_tool(OrderOut, title="Order status", annotations=READ_LOCAL)
+@_tool(OrderOut, title="Optional: Order status", annotations=READ_LOCAL)
 def get_order(order_id: str, agent_token: str | None = None, ctx: Context | None = None) -> dict:
     """Current status of an order (ordered, pending_approval, refused, rejected, expired, expired_cutoff) and any human decision.
     Only orders under your own mandate: send your Authorization: Bearer header (or agent_token).
@@ -629,7 +677,7 @@ def get_order(order_id: str, agent_token: str | None = None, ctx: Context | None
     return access.label_order(S.get_order(order_id))
 
 
-@_tool(MyMandatesOut, title="Which mandates am I acting under?", annotations=READ_LOCAL)
+@_tool(MyMandatesOut, title="Core 1/4: Which mandates am I acting under?", annotations=READ_LOCAL)
 def my_mandates(agent_token: str | None = None, ctx: Context | None = None) -> dict:
     """Call this first. The mandates your credential (Authorization: Bearer agent token, or the OAuth sign-in of
     this connector) was issued for: mandate_id, buyer, label (e.g. hotel / hospital / school), agent_id and a
@@ -658,7 +706,7 @@ def my_mandates(agent_token: str | None = None, ctx: Context | None = None) -> d
     return {"mandates": out, "note": note}
 
 
-@_tool(MandateOut, title="Read the mandate", annotations=READ_LOCAL)
+@_tool(MandateOut, title="Optional: Read the mandate", annotations=READ_LOCAL)
 def get_mandate(mandate_id: str, agent_token: str | None = None, ctx: Context | None = None) -> dict:
     """The mandate you act under (spend limits, allergen and claim rules, what needs a human), with its signature.
     Only your own mandate (send your Authorization: Bearer header or agent_token) or a public demo mandate.
@@ -667,7 +715,7 @@ def get_mandate(mandate_id: str, agent_token: str | None = None, ctx: Context | 
     return S.get_mandate(mandate_id)
 
 
-@_tool(SuggestionsOut, title="Valio Aimo's suggestions (sponsored)", annotations=READ_LIVE)
+@_tool(SuggestionsOut, title="Optional: Valio Aimo's suggestions (sponsored)", annotations=READ_LIVE)
 def get_suggestions(mandate_id: str, agent_id: str, delivery_date: str, limit: int = 5,
                     basis: list[str] | None = None, agent_token: str | None = None,
                     ctx: Context | None = None) -> dict:
@@ -688,7 +736,7 @@ def get_suggestions(mandate_id: str, agent_id: str, delivery_date: str, limit: i
                                agent_token=_agent_token(ctx, agent_token), reader=_reader(ctx, agent_token))
 
 
-@_tool(OffersOut, title="Valio Aimo's offers (sponsored)", annotations=READ_LOCAL)
+@_tool(OffersOut, title="Optional: Valio Aimo's offers (sponsored)", annotations=READ_LOCAL)
 def list_offers(mandate_id: str, agent_token: str | None = None, ctx: Context | None = None) -> dict:
     """Valio Aimo's active COMMERCIAL offers made to your buyer: signed (jws, typ sous-offer+jws) prices below the
     current one for a reason (near best-before, seasonal, a replacement for a recalled product, a new product),
@@ -701,7 +749,7 @@ def list_offers(mandate_id: str, agent_token: str | None = None, ctx: Context | 
     return offers.for_mandate(mandate_id)
 
 
-@_tool(StandingOrderOut, title="Create a weekly standing order",
+@_tool(StandingOrderOut, title="Optional: Create a weekly standing order",
        annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False,
                                    open_world_hint=False))
 def create_standing_order(mandate_id: str, agent_id: str, name: str, items: list[standing.StandingItem],
@@ -715,7 +763,7 @@ def create_standing_order(mandate_id: str, agent_id: str, name: str, items: list
                                                     items=items, weekday=weekday))
 
 
-@_tool(RenewalOut, title="Renew a standing order (with drift check)",
+@_tool(RenewalOut, title="Optional: Renew a standing order (with drift check)",
        annotations=ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False,
                                    open_world_hint=True))
 def renew_standing_order(standing_id: str, agent_id: str | None = None, delivery_date: str | None = None,
@@ -738,7 +786,7 @@ def renew_standing_order(standing_id: str, agent_id: str | None = None, delivery
                           rationale=rationale)
 
 
-@_tool(StandingDetailOut, title="Standing order, history and drift baseline", annotations=READ_LOCAL)
+@_tool(StandingDetailOut, title="Optional: Standing order, history and drift baseline", annotations=READ_LOCAL)
 def get_standing_order(standing_id: str, agent_token: str | None = None, ctx: Context | None = None) -> dict:
     """A standing order with its renewals (newest first, simulated ones marked) and the drift baseline.
     Returns {standing_order, renewals, baseline, next_delivery_date, versions, rules}."""
@@ -807,10 +855,11 @@ Mandate: {mandate_id}. Act as agent_id {agent_id}. Delivery: {when}.
 1. get_mandate {mandate_id}: note avoid_allergens, required_claims and the spend limits.
 2. search_products for each need, passing the mandate's required_claims as claims and its avoid_allergens
    (plus any the request implies) as avoid_allergens. Shortlist 3-6 suitable ids per need.
-3. request_quote with mandate_id, one item per need, all shortlisted ids, amount in L or KG where possible.
-4. Show the buyer: chosen products, quantities, total ex VAT, delivery date, anything in quote.uncovered,
-   and mandate_preview (outcome and each finding). If a line is not orderable or blocked, use
-   suggest_substitutes and re-quote with substitute_for.
+3. can_i_order with mandate_id, one item per need, all shortlisted ids, amount in L or KG where possible: it
+   answers yes / needs_a_human / no with the rules that decided and a quote_id. (request_quote gives the full
+   quote, with options when part of the request can't be covered.)
+4. Show the buyer: products, quantities, total ex VAT, delivery date, the answer and why, anything uncovered.
+   If a line is not orderable or refused, use suggest_substitutes and re-quote with substitute_for.
 5. place_order with the quote id and a fresh idempotency_key. Report the status exactly as returned:
    ordered, pending_approval (share approval_url) or refused (quote the rule).
 Use only facts the tools return."""
