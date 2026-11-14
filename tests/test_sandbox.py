@@ -168,6 +168,27 @@ def test_sandbox_rules_text_names_allergens_not_codes():
     assert "avoids milk, tree nuts, peanuts" in sandbox._rules(m)
 
 
+def test_sandbox_rules_text_lists_every_active_rule():
+    from scripts.seed import MANDATES
+    from sous import rules
+    hotel = next(m for m in MANDATES if m.id == "M-HOTEL-AURORA")
+    text = sandbox._rules(hotel)
+    for part in ("FYI above €1,000", "auto-approve up to €2,500", "refused above €10,000", "€8,000 a day",
+                 "€25,000 a week", "price cap: milk at €2.50 per L or kg", "20% off the last one paid",
+                 "3× the usual quantity", "new products", "substitutes need a human", "under 90%",
+                 "deliveries later than asked need a human"):
+        assert part in text, (part, text)
+    m = Mandate(id="M", buyer="b", agent_id="a", issued_by="x", required_claims=["FREE_FROM_LACTOSE"],
+                max_comparison_price_eur={"L": 2.5}, terminal_products="ask", unknown_allergens="block",
+                avoid_allergens=["AM"], require_agent_auth=True)
+    text = sandbox._rules(m)
+    assert "everything sold per L at €2.50/L" in text and "free from lactose" in text
+    assert "supplier-shipped products need a human" in text and "no allergen data: refused" in text
+    assert "the agent must present its token" in text
+    detail = sandbox._rules_detail(m)
+    assert all(rules.get(d["rule"]) and d["url"].endswith("/rules/" + d["rule"]) for d in detail)
+
+
 def test_per_ip_and_global_limits(c, monkeypatch):
     for _ in range(3):
         new(c, "10.0.0.1")

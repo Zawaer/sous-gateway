@@ -240,6 +240,71 @@ def _build() -> list[dict]:
     return R
 
 
+_TIER_SAYS = {"silent": "go through", "notify": "go through with an FYI", "ask": "need a human",
+              "block": "are refused"}
+
+
+def mandate_summary(m: Mandate) -> list[dict]:
+    """Every active rule of a mandate in plain language, one {rule, text} per rule, most important first.
+    Built from the mandate's fields (an unset rule is left out), so a summary never hides a rule that can fire."""
+    from . import catalog
+    out: list[dict] = []
+
+    def add(rule, text):
+        out.append({"rule": rule, "text": text})
+
+    def eur(x):
+        return f"€{x:,.2f}".replace(".00", "")
+
+    if m.notify_above_eur is not None:
+        add("spend.notify", f"FYI above {eur(m.notify_above_eur)} an order")
+    add("spend.auto_limit", f"auto-approve up to {eur(m.auto_approve_limit_eur)} an order, a human approves above")
+    if m.hard_limit_eur is not None:
+        add("spend.hard_limit", f"refused above {eur(m.hard_limit_eur)} an order")
+    if m.daily_limit_eur is not None:
+        add("spend.daily_limit", f"a human approves past {eur(m.daily_limit_eur)} a day")
+    if m.weekly_limit_eur is not None:
+        add("spend.weekly_limit", f"a human approves past {eur(m.weekly_limit_eur)} a week")
+    if m.split_window_minutes:
+        add("spend.split_orders", f"small orders within {m.split_window_minutes} min are added up against the "
+                                  "auto-approve limit")
+    caps = [f"{k} at {eur(v)} per L or kg" for k, v in m.comparison_price_caps.items()]
+    caps += [f"anything else sold per {u} at {eur(v)}/{u}" if m.comparison_price_caps
+             else f"everything sold per {u} at {eur(v)}/{u}" for u, v in m.max_comparison_price_eur.items()]
+    if caps:
+        add("price.comparison_cap", "price cap: " + ", ".join(caps) + ", a human approves above")
+    if m.max_price_change_pct:
+        add("price.changed", f"a price more than {m.max_price_change_pct:g}% off the last one paid needs a human")
+    if m.unusual_quantity_factor:
+        add("quantity.unusual", f"more than {m.unusual_quantity_factor:g}× the usual quantity needs a human")
+    if m.avoid_allergens:
+        add("allergen.contains", "avoids " + ", ".join(catalog.ALLERGENS.get(a, a) for a in m.avoid_allergens)
+            + ("" if m.allow_may_contain else " (may-contain too)")
+            + f"; no allergen data: {'refused' if m.unknown_allergens == 'block' else 'a human decides'}")
+    if m.required_claims:
+        add("product.claims", "only products claiming " + ", ".join(
+            c.replace("_", " ").lower() for c in m.required_claims))
+    if m.allowed_categories is not None:
+        add("product.category", "only categories " + ", ".join(m.allowed_categories))
+    if m.first_time_products:
+        known = f" (beyond {len(m.usual_products)} usual products)" if m.usual_products else ""
+        add("product.first_time", f"new products{known} {_TIER_SAYS[m.first_time_products]}")
+    add("substitution", f"substitutes {_TIER_SAYS[m.substitutions]}")
+    if m.terminal_products != "silent":
+        add("supply.terminal", f"supplier-shipped products {_TIER_SAYS[m.terminal_products]}")
+    if m.min_delivery_reliability is not None:
+        add("supply.reliability", f"products delivered in full under {m.min_delivery_reliability:.0%} of the time "
+                                  "need a human")
+    add("delivery.later_date", f"deliveries later than asked {_TIER_SAYS[m.later_delivery]}")
+    if days := getattr(m, "delivery_days", None):  # if a mandate field for delivery days is added
+        add(None, "delivery only on " + ", ".join(map(str, days)))
+    if m.require_agent_auth:
+        add("agent_auth_required", "the agent must present its token")
+    if m.valid_until:
+        add("mandate.expired", f"valid until {m.valid_until:%d.%m.%Y %H:%M}")
+    return out
+
+
 def register() -> list[dict]:
     base = config.PUBLIC_BASE_URL
     return [{**r, "url": f"{base}/rules/{r['id']}"} for r in _build()]

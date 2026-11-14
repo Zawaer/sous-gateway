@@ -254,7 +254,7 @@ def create(ip: str, base_url: str = "") -> dict:
         S.issue_mandate(m, False)
         token = agent_auth.mint(m, f"sandbox {sid}", token=token)["token"]
         out_mandates.append({"scenario": name, "mandate_id": m.id, "agent_id": m.agent_id, "buyer": m.buyer,
-                             "rules": _rules(m)})
+                             "rules": _rules(m), "rules_detail": _rules_detail(m)})
     store.audit("sandbox.created", "sandbox", "system", sid, None,
                 {"sandbox": sid, "mandates": list(mandates.values()), "expires_at": _iso(expires),
                  "quotes_limit": config.SANDBOX_QUOTES})
@@ -406,15 +406,16 @@ def hold_reasons(findings: list[dict]) -> list[str]:
 
 
 def _rules(m: Mandate) -> str:
-    parts = [f"auto-approve up to €{m.auto_approve_limit_eur:,.0f}"]
-    if m.notify_above_eur is not None:
-        parts.insert(0, f"FYI above €{m.notify_above_eur:,.0f}")
-    if m.hard_limit_eur is not None:
-        parts.append(f"refused above €{m.hard_limit_eur:,.0f}")
-    if m.avoid_allergens:
-        parts.append("avoids " + ", ".join(catalog.ALLERGENS.get(a, a) for a in m.avoid_allergens))
-    parts.append(f"substitutes: {m.substitutions}")
-    return "; ".join(parts)
+    """Every active rule of the mandate in one plain-language line (rules.mandate_summary)."""
+    from .rules import mandate_summary
+    return "; ".join(r["text"] for r in mandate_summary(m))
+
+
+def _rules_detail(m: Mandate) -> list[dict]:
+    """The same rules one by one, each linked to its entry in the rule register."""
+    from .rules import mandate_summary
+    return [{**r, "url": f"{config.PUBLIC_BASE_URL}/rules/{r['rule']}" if r["rule"] else None}
+            for r in mandate_summary(m)]
 
 
 def quickstart(sid: str, base: str, token: str, approver: str, mandates: list[dict]) -> dict:
