@@ -40,7 +40,7 @@ import threading
 import time
 from datetime import date, datetime, timedelta
 
-from . import agent_auth, aimo, config, store
+from . import agent_auth, aimo, catalog, config, store
 from .mandate import Mandate
 
 log = logging.getLogger(__name__)
@@ -406,7 +406,7 @@ def _rules(m: Mandate) -> str:
     if m.hard_limit_eur is not None:
         parts.append(f"refused above €{m.hard_limit_eur:,.0f}")
     if m.avoid_allergens:
-        parts.append("avoids " + ", ".join(m.avoid_allergens))
+        parts.append("avoids " + ", ".join(catalog.ALLERGENS.get(a, a) for a in m.avoid_allergens))
     parts.append(f"substitutes: {m.substitutions}")
     return "; ".join(parts)
 

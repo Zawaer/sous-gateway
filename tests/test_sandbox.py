@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from sous import aimo, api, catalog, config, notify, quote as Q, sandbox, service as S, signing, store
+from sous.mandate import Mandate
 
 NOW = datetime(2026, 11, 13, 21, 0, tzinfo=config.TZ)
 OAT = {
@@ -157,6 +158,11 @@ def test_create_gives_signed_mandate_copies_tokens_and_quickstarts(c):
     st = c.get(f"/sandbox/{sid.lower()}").json()
     assert st["status"] == "active" and st["quotes_used"] == 1 and st["quotes_left"] == 14  # 2 were cached
     assert "token" not in json.dumps(st)
+
+
+def test_sandbox_rules_text_names_allergens_not_codes():
+    m = Mandate(id="M", buyer="b", agent_id="a", issued_by="x", avoid_allergens=["AM", "AN", "AP"])
+    assert "avoids milk, tree nuts, peanuts" in sandbox._rules(m)
 
 
 def test_per_ip_and_global_limits(c, monkeypatch):
