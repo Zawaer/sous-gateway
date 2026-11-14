@@ -25,7 +25,7 @@ We asked a general shopping agent for "1,000 litres of lactose-free milk by Mond
 In a real run, Claude Code on a laptop connected over MCP and ordered 1,000 × Valio Eila 1 L (€1,400 ex VAT). Above the hotel's notify threshold, it went through and the manager was told. 2 Valio API calls in total.
 
 ### Exceptions it handles
-Terminal (supplier-shipped) products show an order cut-off that has already passed while still promising Monday delivery; the gateway rejects them and picks a stocked product. About 46 % of products have no allergen declaration; for a mandate with allergen rules, unknown means a human decides. Also: out of stock, later delivery, prices expiring before delivery, lot sizes, short stock, idempotent retries, quote expiry, and Valio rate limits (last-known data is marked stale and always goes to a human).
+Terminal (supplier-shipped) products show an order cut-off that has already passed while still promising Monday delivery; the gateway rejects them and picks a stocked product. About 30 % of food products (4,118 of 13,546) have no allergen declaration; for a mandate with allergen rules, unknown means a human decides. Also: out of stock, later delivery, prices expiring before delivery, lot sizes, short stock, idempotent retries, quote expiry, and Valio rate limits (last-known data is marked stale and always goes to a human).
 
 ### Why it's trustworthy
 - **The LLM never decides.** Limits, allergens, cut-offs, drift and tiers are plain code with plain-language reasons.

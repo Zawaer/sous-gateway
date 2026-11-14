@@ -28,7 +28,7 @@ The quote splits across products when one can't cover the quantity, and lists ev
 **8. Your API says Monday. Why do you say it can't be delivered?**
 In the live mock, Terminal (supplier-shipped) products have an order cut-off that already passed (Thursday) while still promising Monday. We trust the cut-off over the promise, block that line and pick a stocked product. It's listed as an assumption, and we'd ask Valio Aimo which field is authoritative.
 
-**9. ~46% of products have no allergen data. Isn't treating them all as unsafe too strict?**
+**9. 30 % of food products (46 % of all products) have no allergen data. Isn't treating them all as unsafe too strict?**
 For a hotel ordering milk, allergen rules don't apply, so nothing is held. For a hospital or school with allergen rules, "we don't know" is not "safe". That order goes to a human with the reason, or is blocked if the mandate says so. Strict here is cheap: one tap on a phone. A wrong guess isn't.
 
 **10. How do you know nobody changed the record afterwards?**
@@ -61,7 +61,7 @@ Because "same as usual" is where creep hides. Each renewal is quoted live and co
 - 17,546 products, fi/sv/en. Search: SQLite FTS5 trigram, no API calls.
 - Quote: 2 batched Valio API calls (price + availability), up to 4 with substitute options; 1.0 per request on average with the cache. Signed, expiring.
 - Search first-result accuracy 56 % → 100 % on 39 fi/sv/en queries.
-- ~46 % of products have no allergen declaration: unknown → human.
+- 30 % of food products (4,118 of 13,546) have no allergen declaration: unknown → human.
 - Hotel run: Valio Eila 1 L × 1,000 at €1.40/L, €1,400 ex VAT, notify tier, 2 API calls total.
 - Hotel mandate: notify above €1,000, auto-approve to €2,500, hard limit €10,000, daily limit €8,000.
 - Hospital mandate: auto-approve to €400, avoids milk / nuts, unknown allergens → ask, substitutions → ask.

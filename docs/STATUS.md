@@ -163,7 +163,7 @@ Before 8d9efc1 the set caught two gateway bugs (now fixed, cases kept as regress
 - Terminal products: `closingTime` already in the past (Thu 12.11) while `availableDate` is Mon 16.11.
 - Some Stock products also had a cut-off today 13:00 (passed).
 - Out of stock = Stock with `availableAmount` 0 and no date; undeliverable = empty `scheduleLines` and no logistic model.
-- ~46 % of products have no allergen declaration at all.
+- 46 % of all products (8,110 of 17,546) have no allergen declaration; of food products 30 % (4,118 of 13,546; non-food is almost never declared). Live figures on /proof.
 - The shared API key can return HTTP 429 when several jobs call at once; CI's LLM eval runs after the eval at 30 Valio calls/min.
 
 ## Open questions for the Valio Aimo mentors

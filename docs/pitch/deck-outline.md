@@ -45,7 +45,7 @@ One idea per slide. Big type, few words. Numbers must match `docs/STATUS.md` and
 
 ### 8. Exceptions we found in the real API
 - Terminal products show an order cut-off that has already passed while still promising Monday delivery.
-- ~46 % of products have no allergen declaration. We treat unknown as unsafe: a human decides.
+- 30 % of food products (4,118 of 13,546) have no allergen declaration. We treat unknown as unsafe: a human decides.
 - Also handled: out of stock, later delivery date, short stock (split, or ask), price expiring before delivery, lot sizes, cut-off unknown for the requested date, rate limits (last-known data marked stale → human).
 - **Visual:** annotated API response with the passed `closingTime` and `availableDate` highlighted.
 
