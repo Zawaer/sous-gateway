@@ -260,3 +260,17 @@ test('shows a shortage when a single offer quotes more stock than it can deliver
   assert.equal(row.missing, 9);
   assert.deepEqual(row.reasons, ['Only three packs available.']);
 });
+
+test('reports all 15 kg of rice missing when the gateway returns blocked lines and no explicit gap', () => {
+  const item = { note: 'rice', amount: 15, unit: 'KG', product_ids: ['rice-sku'] };
+  const [row] = quoteCoverage({
+    ...quote, items: [item], uncovered: [],
+    lines: [{ item_index: 0, orderable: false, quantity: 3,
+      covers: { unit: 'KG', amount: 15 }, delivery_date: need.deliveryDate,
+      issues: [{ severity: 'blocking', message: 'Cut-off passed.' }] }],
+  });
+  assert.equal(row.quoted, 0);
+  assert.equal(row.missing, 15);
+  assert.deepEqual(row.reasons, ['Cut-off passed.']);
+  assert.equal(row.referenceSku, 'rice-sku');
+});
