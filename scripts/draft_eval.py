@@ -158,6 +158,11 @@ def main(argv: list[str] | None = None) -> int:
         cost = llm.cfg.cost_usd(t["prompt_tokens"], t["completion_tokens"])
         print(f"model calls {t['calls']}, tokens in {t['prompt_tokens']}, out {t['completion_tokens']}"
               + (f", ~${cost}" if cost is not None else "") + "  -> add a line to evals/costs.yaml")
+    from datetime import datetime, timezone
+
+    from sous.proof import run_provenance
+    out = {"generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "provenance": run_provenance(),
+           **out}
     out_path = Path(a.json) if a.json else Path(str(RESULTS).format(a.provider))
     out_path.write_text(json.dumps(out, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     return 0 if out["passed"] == out["cases"] else 1

@@ -19,14 +19,14 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
-from . import access, agent_auth, aimo, catalog, clock, config, exposure, holds, pause, quote as Q, rules, sandbox, service as S, signing, standing, store
+from . import access, agent_auth, aimo, catalog, clock, config, exposure, holds, pause, proof, quote as Q, rules, sandbox, service as S, signing, standing, store
 from .mandate import Mandate
 from .mcp_server import mcp
 
@@ -224,6 +224,24 @@ async def validation_error(_: Request, e: RequestValidationError):
         "error": "invalid_request",
         "message": "; ".join(problems) + ". Dates are YYYY-MM-DD (e.g. delivery_date=2026-11-16).",
         "details": jsonable_encoder(e.errors())})
+
+
+@app.get("/proof", include_in_schema=False)
+def proof_page():
+    """The evidence page for judges (web/proof.html); it renders GET /proof/data."""
+    page = WEB_DIR / "proof.html"
+    if not page.is_file():
+        return RedirectResponse("/proof/data")
+    return FileResponse(page, media_type="text/html")
+
+
+@app.get("/proof/data", tags=["meta"])
+def proof_data():
+    """Our evidence, each figure with its source file and what that file records about its run (scripted eval,
+    LLM agents per model, drafting, recipe, vision, conformance, rule count, allergen-data audit of the loaded
+    catalog). Read from files and the loaded catalog only; computed once per process. A missing source is
+    reported as not available, never as a number."""
+    return proof.data()
 
 
 @app.get("/favicon.ico", include_in_schema=False)

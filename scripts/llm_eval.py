@@ -596,7 +596,9 @@ def main(argv=None) -> int:
 
     summary = summarize(results, cfg)
     out = Path(a.out or ROOT / "evals" / f"llm_results.{slug(cfg.model if provider != 'oracle' else 'oracle')}.json")
-    doc = {"generated_at": datetime.now(config.TZ).isoformat(timespec="seconds"), "provider": cfg.provider,
+    from sous.proof import run_provenance
+    doc = {"generated_at": datetime.now(config.TZ).isoformat(timespec="seconds"), "provenance": run_provenance(),
+           "provider": cfg.provider,
            "model": cfg.model, "model_label": cfg.label, "where": cfg.where, "base_url": cfg.base_url,
            "reasoning_effort": cfg.reasoning_effort, "price_usd_per_1m": [cfg.price_in, cfg.price_out],
            "valio_api_base": config.AIMO_API_BASE, "cases_file": str(Path(a.file).resolve().relative_to(ROOT))

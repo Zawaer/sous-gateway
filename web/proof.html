@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f8f8f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141412" media="(prefers-color-scheme: dark)">
+<title>Evidence · Sous</title>
+<link rel="stylesheet" href="/ui/style.css">
+<link rel="stylesheet" href="/ui/tokens.css">
+<style>
+  [hidden] { display: none !important; }
+  main { max-width: 920px; margin: 0 auto; padding: 32px 20px 48px; }
+  h1 { font: 400 2.2rem/1.1 var(--serif); letter-spacing: -.01em; margin: 0 0 12px; }
+  h2 { font: 400 1.45rem/1.2 var(--serif); margin: 0 0 6px; }
+  section { border-top: 1px solid var(--rule); padding: 28px 0 8px; margin-top: 8px; }
+  .lead { color: var(--ink-80); max-width: 66ch; margin: 0 0 8px; }
+  .fine { color: var(--ink-60); font-size: .86rem; max-width: 70ch; margin: 6px 0 0; }
+  .who-tag { font: .74rem var(--mono); color: var(--ink-60); margin-left: auto; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 24px 0 4px; }
+  .stat { background: var(--panel); border-radius: 8px; padding: 16px 18px; }
+  .stat .v { font: 400 2rem/1.1 var(--serif); display: block; }
+  .stat .l { color: var(--ink-80); font-size: .9rem; display: block; margin-top: 4px; }
+  .stat .s { color: var(--ink-60); font: .72rem var(--mono); display: block; margin-top: 8px; word-break: break-word; }
+
+  .src { color: var(--ink-60); font: .74rem/1.5 var(--mono); margin: 8px 0 14px; word-break: break-word; }
+  .src b { font-weight: 500; color: var(--ink-80); }
+  .na { color: var(--ink-60); font-style: italic; }
+
+  .tbl { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 10px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+  th, td { text-align: left; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-weight: 500; color: var(--ink-60); font-size: .78rem; white-space: nowrap; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.id { font-family: var(--mono); font-size: .8rem; white-space: nowrap; }
+  .ok { color: var(--silent); font-weight: 500; }
+  .bad { color: var(--block-ink); font-weight: 500; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; min-height: var(--tap); display: flex; align-items: center; color: var(--aimo); }
+  dl.defs { margin: 10px 0; font-size: .88rem; }
+  dl.defs dt { font-weight: 500; margin-top: 8px; }
+  dl.defs dd { margin: 2px 0 0; color: var(--ink-80); }
+  pre { background: var(--panel); border-radius: 6px; padding: 10px 12px; overflow-x: auto; font: .82rem/1.5 var(--mono); margin: 4px 0 12px; }
+  .cmd-what { font-size: .9rem; margin: 12px 0 0; }
+  .tier.tier-silent::before, .tier.tier-notify::before, .tier.tier-ask::before, .tier.tier-block::before {
+    width: auto; height: auto; background: none; border-radius: 0; }
+
+  @media (max-width: 560px) {
+    h1 { font-size: 1.8rem; }
+    .stat .v { font-size: 1.7rem; }
+    .hide-sm { display: none; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="/ui/">
+      <svg class="logo" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 4h4l5 11 5-11h4l-7.5 16h-3z" fill="currentColor"/></svg>
+      <span class="name">Sous</span>
+    </a>
+    <span class="who-tag" id="built"></span>
+  </div>
+</header>
+
+<main>
+  <h1>Evidence</h1>
+  <p class="lead">Every number on this page is read from a result file in the repository or computed from the
+    catalog this gateway serves, at the moment the page loads. Each one names its file and what that file records
+    about its run. Where a source is missing, the page says so instead of showing a number.</p>
+  <p class="fine">Raw data: <a href="/proof/data">/proof/data</a> (JSON) · <a href="/rules">/rules</a> ·
+    <a href="https://github.com/Zawaer/sous">source code</a>. All cases are our own; none is held out.</p>
+  <p id="err" class="fine bad" hidden></p>
+
+  <div class="stats" id="headline" aria-live="polite"></div>
+
+  <section id="s-scripted"><h2>Scripted eval</h2>
+    <p class="lead">Buyer requests run through the gateway's service layer with live Valio Aimo prices and
+      availability. No language model: each case's plan is written in <code>evals/cases.yaml</code>, so this
+      measures the rules engine, quotes and orders.</p>
+    <div id="scripted"></div></section>
+
+  <section id="s-unsafe"><h2>Unsafe actions blocked</h2>
+    <p class="lead">Requests where an automatic order would be wrong: allergens, budget, cut-off, stock, wrong agent,
+      revoked mandate, order slicing, self-approval, prompt injection, unusual quantity. Handled means refused or held
+      for a human, never ordered on its own.</p>
+    <div id="unsafe"></div></section>
+
+  <section id="s-llm"><h2>LLM buyer agents</h2>
+    <p class="lead">The same cases as one buyer sentence each, through a real model that calls the gateway's MCP
+      tools. The model never decides: the mandate engine does. A separate check re-reads every auto-approved order
+      against the signed mandate.</p>
+    <div id="llm"></div></section>
+
+  <section id="s-conf"><h2>Conformance checks</h2>
+    <p class="lead">A black-box kit (<code>scripts/conformance.py</code>) that checks a deployed gateway over HTTP
+      only: signatures, tampering, idempotency, private reads, hard limit, prompt injection, self-approval, audit,
+      stock exposure.</p>
+    <div id="conf"></div></section>
+
+  <section id="s-allergen"><h2>Allergen-data audit</h2>
+    <p class="lead">How much of Valio Aimo's catalog actually says what is in it. Products without allergen data are
+      never treated as safe: if a mandate avoids an allergen, the order goes to a human.</p>
+    <div id="allergen"></div></section>
+
+  <section id="s-more"><h2>Other evals</h2>
+    <div id="more"></div></section>
+
+  <section id="s-repro"><h2>How to reproduce</h2>
+    <p class="lead">From a clone of the repository, with <a href="https://docs.astral.sh/uv/">uv</a>.
+      Live evals need <code>data/</code> (fetched with the Valio Aimo API key) and, for the agents, a model key.</p>
+    <div id="repro"></div></section>
+</main>
+
+<footer class="foot">
+  <span>Sous · an open gateway for purchasing agents at Valio Aimo</span>
+  <span><a href="/ui/">Seller UI</a> · <a href="/ui/break.html">Try to break it</a> · <a href="/docs">API</a> · <a href="/.well-known/jwks.json">Signing key</a></span>
+</footer>
+
+<script>
+(() => {
+  const NA = '<span class="na">not available</span>';
+  const $ = (id) => document.getElementById(id);
+  const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+  const num = (v, unit = '') => (v === null || v === undefined) ? NA : esc(typeof v === 'number' ? v.toLocaleString('en-US') : v) + unit;
+  const pct = (v) => (v === null || v === undefined) ? NA : esc(v) + ' %';
+  const frac = (a, b) => (a === null || a === undefined || b === null || b === undefined) ? NA : `${esc(a)}/${esc(b)}`;
+  const TIER = {silent: 'Auto', notify: 'Auto + FYI', ask: 'Needs approval', block: 'Refused'};
+  const tier = (t) => TIER[t] ? `<span class="tier tier-${t}">${TIER[t]}</span>` : esc(t || '-');
+  const table = (head, rows) => `<div class="tbl"><table><thead><tr>${head.map(h => `<th class="${h[1] || ''}">${h[0]}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+
+  function src(s) {
+    if (!s) return '';
+    const bits = [`<b>Source</b> ${esc(s.path)}`];
+    if (s.generated_at) bits.push(`generated ${esc(s.generated_at)}`);
+    if (s.run_date) bits.push(`run ${esc(s.run_date)}${s.run_time ? ' ' + esc(s.run_time) : ''}`);
+    if (s.origin) bits.push(s.origin === 'ci' ? `CI run ${s.ci_run_url ? `<a href="${esc(s.ci_run_url)}">${esc(s.ci_run_id)}</a>` : esc(s.ci_run_id)}`
+                           : s.origin === 'local' ? 'local run' : s.origin === 'not recorded' ? 'local or CI: not recorded in the file' : esc(s.origin));
+    if (s.run_commit) bits.push(`run at commit ${esc(s.run_commit)}`);
+    if (s.file_last_commit) bits.push(`file last committed in ${esc(s.file_last_commit)}`);
+    if (s.data_file_modified_at) bits.push(`data file from ${esc(s.data_file_modified_at)}`);
+    return `<p class="src">${bits.join(' · ')}</p>`;
+  }
+  const missing = (sec) => `<p class="na">Not available: ${esc(sec?.reason || 'source missing')}.</p>${src(sec?.source)}`;
+
+  function stat(v, label, s) { return `<div class="stat"><span class="v">${v}</span><span class="l">${label}</span>${s ? `<span class="s">${esc(s)}</span>` : ''}</div>`; }
+
+  function headline(d) {
+    const h = d.headline, a = d.allergen_audit, out = [];
+    out.push(stat(h.scripted_cases ? frac(h.scripted_cases.passed, h.scripted_cases.total) : NA, 'scripted eval cases passed', h.scripted_cases?.source));
+    out.push(stat(h.unsafe_blocked_or_escalated ? frac(h.unsafe_blocked_or_escalated.passed, h.unsafe_blocked_or_escalated.total) : NA, 'unsafe requests blocked or held for a human', h.unsafe_blocked_or_escalated?.source));
+    for (const m of h.llm_models) out.push(stat(frac(m.passed, m.run), `${esc(m.model_label)}: buyer sentences handled · ${num(m.mandate_violations_auto_ordered)} mandate violations auto-ordered`, 'evals/llm_results.*.json'));
+    out.push(stat(num(h.rules), 'rules in the register', 'sous/rules.py, live'));
+    out.push(stat(a.available ? pct(a.food.no_declaration_pct) : NA, 'of food products have no allergen declaration', a.available ? 'live catalog' : 'no catalog loaded'));
+    $('headline').innerHTML = out.join('');
+  }
+
+  function scripted(d) {
+    const e = d.scripted_eval;
+    if (!e.available) { $('scripted').innerHTML = missing(e); return; }
+    const s = e.summary, t = s.decisions_by_tier || {};
+    const rows = e.cases.map(c => `<tr><td class="id">${esc(c.id)}</td><td>${esc(c.title)}</td><td>${c.unsafe ? 'unsafe' : ''}</td><td>${tier(c.tier)}</td><td class="n hide-sm">${num(c.valio_api_calls)}</td><td class="n hide-sm">${frac(c.checks_ok, c.checks_total)}</td><td class="${c.passed ? 'ok' : 'bad'}">${c.passed ? 'pass' : 'fail'}</td></tr>`);
+    $('scripted').innerHTML = src(e.source) + table([['Metric'], ['Value', 'n']], [
+      ['Cases passed', frac(s.cases_passed, s.cases_total)],
+      ['Individual checks held', frac(e.checks_ok, e.checks_total)],
+      ['Unsafe requests blocked or held', frac(s.unsafe_blocked_or_escalated, s.unsafe_requests)],
+      ['Order decisions by tier', Object.keys(TIER).map(k => `${TIER[k]} ${num(t[k] ?? 0)}`).join(' · ')],
+      ['Human approval rate', pct(s.human_approval_rate_pct) + ` of ${num(s.order_decisions)} decisions`],
+      ['Live Valio Aimo calls per request', `avg ${num(s.valio_api_calls_per_request_avg)}, max ${num(s.valio_api_calls_per_request_max)} (${num(s.valio_api_calls_total)} calls, ${num(s.valio_cache_hits)} cache hits)`],
+      ['Latency per request', `mean ${num(s.latency_ms_mean, ' ms')}, max ${num(s.latency_ms_max, ' ms')}`],
+    ].map(r => `<tr><td>${r[0]}</td><td class="n">${r[1]}</td></tr>`)) +
+      `<details><summary>All ${e.cases.length} cases</summary>` +
+      table([['Case'], ['What'], [''], ['Outcome'], ['Valio calls', 'n hide-sm'], ['Checks', 'n hide-sm'], ['Result']], rows) + '</details>' +
+      `<details><summary>Definitions (from the result file)</summary><dl class="defs">${Object.entries(e.definitions).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></details>`;
+  }
+
+  function unsafe(d) {
+    const e = d.scripted_eval, a = d.attack_eval;
+    if (!e.available) { $('unsafe').innerHTML = missing(e); return; }
+    const s = e.summary, rows = e.cases.filter(c => c.unsafe);
+    let h = src(e.source) + `<p>${frac(s.unsafe_blocked_or_escalated, s.unsafe_requests)} unsafe requests handled. How the unsafe step was stopped:</p>` + table([['Handled by'], ['Cases', 'n']], Object.entries(e.unsafe_handled_by).map(([k, v]) => `<tr><td>${TIER[k] ? tier(k) : esc(k)}</td><td class="n">${esc(v)}</td></tr>`));
+    h += table([['Rule behind an ask or block'], ['Unsafe cases', 'n']], e.unsafe_rules_fired.map(r => `<tr><td class="id"><a href="/rules/${encodeURIComponent(r.rule)}">${esc(r.rule)}</a></td><td class="n">${esc(r.cases)}</td></tr>`));
+    h += `<details><summary>The ${rows.length} unsafe cases</summary>` + table([['Case'], ['What'], ['Stopped by'], ['Handled']],
+      rows.map(c => `<tr><td class="id">${esc(c.id)}</td><td>${esc(c.title)}</td><td>${TIER[c.handled_by] ? tier(c.handled_by) : esc(c.handled_by)}</td><td class="${c.unsafe_handled ? 'ok' : 'bad'}">${c.unsafe_handled ? 'yes' : 'no'}</td></tr>`)) + '</details>';
+    if (a.available) {
+      const as = a.summary;
+      h += `<p style="margin-top:18px">Attacks on the controls (slicing, self-approval, prompt injection, unusual quantity): ${frac(as.cases_passed, as.cases_total)} cases passed, ${frac(as.unsafe_blocked_or_escalated, as.unsafe_requests)} unsafe handled.</p>` + src(a.source) +
+        table([['Case'], ['What'], ['Outcome'], ['Result']], a.cases.map(c => `<tr><td class="id">${esc(c.id)}</td><td>${esc(c.title)}</td><td>${tier(c.tier)}</td><td class="${c.passed ? 'ok' : 'bad'}">${c.passed ? 'pass' : 'fail'}</td></tr>`));
+    }
+    $('unsafe').innerHTML = h;
+  }
+
+  function llm(d) {
+    const e = d.llm_agents;
+    if (!e.available) { $('llm').innerHTML = missing(e); return; }
+    const f = (m, k) => m.summary[k];
+    const rows = [
+      ['Where it ran', m => esc(m.where)],
+      ['Cases run (one sentence each)', m => `${num(f(m, 'cases_run'))} of ${num(f(m, 'cases_total'))} (${num(f(m, 'cases_n_a'))} protocol cases n/a)`],
+      ['Handled as expected', m => `${frac(f(m, 'cases_passed'), f(m, 'cases_run'))} (${pct(f(m, 'matched_without_correction_pct'))})`],
+      ['Unsafe blocked or held', m => frac(f(m, 'unsafe_blocked_or_escalated'), f(m, 'unsafe_requests'))],
+      ['Mandate violations auto-ordered', m => num(f(m, 'mandate_violations_auto_ordered'))],
+      ['Missed cases', m => esc((f(m, 'failed_cases') || []).join(', ') || 'none')],
+      ['Tool calls per request (avg)', m => num(f(m, 'tool_calls_per_request_avg'))],
+      ['Latency p50', m => num(f(m, 'latency_ms_p50'), ' ms')],
+      ['Cost per request', m => f(m, 'cost_usd_per_request') == null ? NA : '$' + esc(f(m, 'cost_usd_per_request'))],
+    ];
+    let h = table([['']].concat(e.models.map(m => [esc(m.model_label)])), rows.map(r => `<tr><td>${r[0]}</td>${e.models.map(m => `<td>${r[1](m)}</td>`).join('')}</tr>`));
+    h += e.models.map(m => `<div class="src"><b>${esc(m.model_label)}</b></div>` + src(m.source)).join('');
+    if (e.excluded.length) h += `<p class="fine">Not shown as a model score: ${e.excluded.map(x => `${esc(x.path)} (${esc(x.reason)})`).join('; ')}.</p>`;
+    $('llm').innerHTML = h;
+  }
+
+  function conf(d) {
+    const e = d.conformance;
+    if (!e.available) { $('conf').innerHTML = missing(e) + (e.kit_checks ? `<p class="fine">The kit has ${esc(e.kit_checks)} checks.</p>` : ''); return; }
+    let h = `<p>${esc(e.passed)} passed, ${esc(e.failed)} failed, ${esc(e.skipped)} skipped of ${esc(e.total)} checks${e.target ? ` against ${esc(e.target)}` : ''}.${e.kit_checks ? ` The kit currently defines ${esc(e.kit_checks)} checks.` : ''}</p>` + src(e.source);
+    h += table([['Check'], ['What'], ['Result']], e.checks.map(c => `<tr><td class="id">${esc(c.id)}</td><td>${esc(c.title)}${c.detail ? `<div class="fine">${esc(c.detail)}</div>` : ''}</td><td class="${c.status === 'PASS' ? 'ok' : 'bad'}">${esc(c.status.toLowerCase())}</td></tr>`));
+    if (e.note) h += `<p class="fine">${esc(e.note)}</p>`;
+    if (e.ci_test) h += `<p class="fine">The same kit also runs offline against the in-process app in the test suite (${esc(e.ci_test)}).</p>`;
+    $('conf').innerHTML = h;
+  }
+
+  function allergen(d) {
+    const a = d.allergen_audit;
+    if (!a.available) { $('allergen').innerHTML = missing(a); return; }
+    const row = (label, b) => `<tr><td>${label}</td><td class="n">${num(b.products)}</td><td class="n">${num(b.no_declaration)} (${pct(b.no_declaration_pct)})</td><td class="n">${num(b.no_allergen_list)} (${pct(b.no_allergen_list_pct)})</td></tr>`;
+    $('allergen').innerHTML = src(a.source) +
+      table([['Products'], ['Count', 'n'], ['No declaration', 'n'], ['No allergen list', 'n']],
+        [row('All active', a.all_active), row('Food', a.food), row('Non-food', a.non_food)]) +
+      `<p class="fine">${num(a.products_total)} products in the catalog, ${num(a.deleted)} flagged deleted. "Of all products" and "of food products" differ because ${num(a.non_food.no_declaration)} of the ${num(a.non_food.products)} non-food products (equipment, cleaning, disposables) have no declaration either.</p>` +
+      `<dl class="defs">${Object.entries(a.definitions).map(([k, v]) => `<dt>${esc(k.replaceAll('_', ' '))}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
+  }
+
+  function more(d) {
+    let h = '';
+    const r = d.rules;
+    h += `<h3 style="font-weight:500;margin:6px 0 0">Rule register</h3>` + (r.available
+      ? `<p>${esc(r.count)} rules: ${Object.entries(r.by_kind).map(([k, v]) => `${esc(v)} ${esc(k)}s`).join(', ')}; owned by ${Object.entries(r.by_owner).map(([k, v]) => `${esc(k)} ${esc(v)}`).join(', ')}. <a href="/rules">GET /rules</a></p>` + src(r.source) : missing(r));
+    const dr = d.drafting;
+    h += `<h3 style="font-weight:500;margin:18px 0 0">Mandate drafting (a sentence becomes a draft mandate a human signs)</h3>` + (dr.available
+      ? table([['Parser'], ['Passed', 'n'], ['Trap cases', 'n'], ['Model calls', 'n']], dr.runs.map(x => `<tr><td>${esc(x.parser || x.provider)}</td><td class="n">${frac(x.passed, x.cases)}</td><td class="n">${frac(x.traps_passed, x.traps)}</td><td class="n">${num(x.llm_calls)}</td></tr>`)) + dr.runs.map(x => src(x.source)).join('') : missing(dr));
+    const rc = d.recipe;
+    h += `<h3 style="font-weight:500;margin:18px 0 0">Recipe planner (a menu becomes one basket quote)</h3>` + (rc.available
+      ? table([['Reader'], ['Passed', 'n'], ['Valio calls', 'n'], ['Missed']], rc.runs.map(x => `<tr><td>${esc(x.provider)}</td><td class="n">${frac(x.passed, x.cases)}</td><td class="n">${num(x.valio_api_calls)}</td><td>${esc(x.failed.join(', ') || 'none')}</td></tr>`)) + src(rc.source) : missing(rc));
+    const v = d.vision;
+    h += `<h3 style="font-weight:500;margin:18px 0 0">Vision (a photo of an order list becomes a quote)</h3>` + (v.available
+      ? table([['Variant'], ['Pages read', 'n'], ['Auto-ordered correctly', 'n'], ['Silent errors', 'n'], ['Traps', 'n'], ['Ran at']], v.variants.map(x => `<tr><td class="id">${esc(x.variant)}</td><td class="n">${num(x.summary.pages)}</td><td class="n">${x.summary.auto_correct == null ? NA : esc(Math.round(x.summary.auto_correct * 1000) / 10) + ' %'}</td><td class="n">${num(x.summary.silent_errors)}</td><td class="n">${num(x.summary.traps_ok)}</td><td class="id">${esc(x.ran_at)}</td></tr>`)) + src(v.source) + `<p class="fine">${esc(v.note)}</p>` : missing(v));
+    const q = d.search_quality;
+    h += `<h3 style="font-weight:500;margin:18px 0 0">Search quality</h3>` + (q.available
+      ? `<p>${esc(q.queries)} buyer queries in English, Finnish and Swedish, each with a check every top-3 result must meet (e.g. ${q.examples.slice(0, 5).map(esc).join(', ')}).</p>` + src(q.source) + `<p class="fine">${esc(q.note)}</p>` : missing(q));
+    $('more').innerHTML = h;
+  }
+
+  function repro(d) {
+    $('repro').innerHTML = d.reproduce.filter(r => r.script_present !== false).map(r => `<p class="cmd-what">${esc(r.what)}</p><pre>${esc(r.cmd)}</pre>`).join('');
+  }
+
+  fetch('/proof/data').then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(d => {
+    $('built').textContent = `computed ${d.generated_at}${d.gateway_commit ? ' · build ' + d.gateway_commit : ''}`;
+    for (const f of [headline, scripted, unsafe, llm, conf, allergen, more, repro]) {
+      try { f(d); } catch (e) { console.error(f.name, e); }
+    }
+  }).catch(e => { $('err').hidden = false; $('err').textContent = 'Could not load /proof/data: ' + e.message; });
+})();
+</script>
+</body>
+</html>

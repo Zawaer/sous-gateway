@@ -289,7 +289,8 @@ def main() -> int:
                 print(f"       x {n}: {d}")
 
     summary = summarize(results)
-    out = {"generated_at": datetime.now(config.TZ).isoformat(timespec="seconds"),
+    from sous.proof import run_provenance
+    out = {"generated_at": datetime.now(config.TZ).isoformat(timespec="seconds"), "provenance": run_provenance(),
            "valio_api_base": config.AIMO_API_BASE, "cases_file": _rel(args.file),
            "summary": summary, "definitions": DEFINITIONS, "cases": results}
     Path(args.out).write_text(json.dumps(out, ensure_ascii=False, indent=1) + "\n")

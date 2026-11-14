@@ -10,6 +10,10 @@ COPY web ./web
 COPY buyer ./buyer
 COPY agent ./agent
 RUN uv sync --frozen --no-dev
+# Eval results, the conformance doc and the search-quality cases: GET /proof reads them (no data/, no secrets).
+COPY evals ./evals
+COPY docs/CONFORMANCE.md ./docs/CONFORMANCE.md
+COPY tests/test_search_quality.py ./tests/test_search_quality.py
 # Build id for /health: docker build --build-arg SOUS_COMMIT=$(git rev-parse --short HEAD) (compose passes it
 # from the environment). Late in the file so a new commit doesn't invalidate the dependency layers.
 ARG SOUS_COMMIT=unknown
