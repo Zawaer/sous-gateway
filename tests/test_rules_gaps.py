@@ -212,6 +212,8 @@ def test_demo_policy_substitutes_and_new_products_ask_and_seed_upgrades_deployme
     assert all(m.substitutions == "ask" and m.first_time_products == "ask" and m.weekly_limit_eur
                for m in seed.MANDATES)
     assert {"464119", "476240", "464201"} <= set(hotel.usual_products)  # the judge quickstart's milks
+    school = next(m for m in seed.MANDATES if m.id == "M-SCHOOL-ESPOO")
+    assert school.autonomy == "reorder" and all(m.autonomy == "order" for m in seed.MANDATES if m is not school)
     # a deployment seeded before the policy: the next start re-signs it with the policy fields, keeps the rest
     S.issue_mandate(Mandate(**{**hotel.model_dump(), "substitutions": "notify", "first_time_products": None,
                                "usual_products": [], "weekly_limit_eur": None, "auto_approve_limit_eur": 1234}))

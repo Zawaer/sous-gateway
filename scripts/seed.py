@@ -95,6 +95,7 @@ MANDATES = [
         hard_limit_eur=1500,
         weekly_limit_eur=3000,
         first_time_products="ask",
+        autonomy="reorder",  # the school's agent reorders the usual products alone; anything new waits for a human
         usual_products=SCHOOL_USUAL,
         avoid_allergens=["AW", "AE"],
         unknown_allergens="block",
@@ -150,7 +151,7 @@ MANDATES = [
 
 # Demo policy fields the seed brings existing deployments up to date on (re-signed at startup when they differ).
 POLICY_FIELDS = ("substitutions", "first_time_products", "usual_products", "weekly_limit_eur",
-                 "max_comparison_price_eur", "comparison_price_caps", "customer_number")
+                 "max_comparison_price_eur", "comparison_price_caps", "customer_number", "autonomy")
 
 
 def _print_credential(mid: str, cred: dict) -> None:
