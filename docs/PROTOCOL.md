@@ -332,6 +332,7 @@ stateDiagram-v2
     pending_approval --> rejected: rejected by human
     pending_approval --> expired: approved after a cut-off or the delivery date
     pending_approval --> refused: approved, but mandate revoked or expired meanwhile
+    pending_approval --> expired_cutoff: nobody decided by approve_by
 ```
 
 | Status | Meaning |
@@ -340,7 +341,8 @@ stateDiagram-v2
 | `pending_approval` | Waiting for a human. `approval_url` points to the UI. |
 | `refused` | Blocked by the mandate, or approved after the mandate was revoked or expired. |
 | `rejected` | A human rejected it. |
-| `expired` | A human approved it, but a line's cut-off or the delivery date had already passed. |
+| `expired` | A human approved it, but a line's cut-off or the delivery date had already passed (orders held before approve_by existed). |
+| `expired_cutoff` | Nobody decided by `approve_by` (section 7.1). Terminal; nothing was ordered. |
 
 Approve or reject: `POST /orders/{id}/approve` or `/reject` with `{"by": "<name>", "note": "..."}` and the approver header. Only `pending_approval` orders can be decided (`not_pending` otherwise, also when a concurrent decision won). The result is stored in `approval {by, authority, approved, note, at, result_reason}`: `by` is the name the approver gives, `authority` the credential that let them decide (`global approver code`, `sandbox approver SBX-…`, or `open (no approver code configured)`); `order.approved` / `order.rejected_by_human` audit events carry it too.
 
@@ -375,9 +377,26 @@ The `receipt_jws` is signed when the order is placed and **re-signed after the h
 | `agent_auth_required` | 401 | The mandate requires agent authentication and no `Authorization: Bearer` token was sent (section 16). | no, send the token |
 | `agent_auth_invalid` | 403 | Wrong, rotated or revoked agent token, or none issued for this mandate (section 16). | no |
 | `agent_cannot_approve` | 403 | Approve or reject called with an agent credential: only a human decides (section 6.2). Audited as `agent.approval_attempt_refused`. | no |
+| `approval_deadline_passed` | 409 | Approve or reject after the order's `approve_by` (section 7.1); the order is `expired_cutoff`. The message names the next delivery date to ask for. | no, re-quote |
 | `rule_not_found` | 404 | `GET /rules/{id}` for an id not in the register. | no |
 
 Over MCP each error also carries `hint` (what the agent should do next) and `retryable`.
+
+### 7.1 Approve-by deadline (`sous/deadline.py`)
+
+A held order is useless if the human approves after Valio's order cut-off, so every `pending_approval` order carries
+`approve_by` (ISO time) and `approve_by_detail {at, basis: cutoff|delivery_date, cutoff, product_id, margin_minutes,
+delivery_date}`: the earliest `order_cutoff` (Valio `closingTime`) among its lines minus `SOUS_APPROVE_MARGIN_MIN`
+(default 15; dropped when the order was held inside the margin), or the start of the delivery day if that is
+earlier or no line has a cut-off. It is in the signed receipt, the `order.pending_approval` audit event and the
+`order.ask` notification ("Approve by Sun 15.11 16:45 or delivery on Mon 16.11 is lost"; `data.deadline`).
+
+When business time (the demo clock applies, section 21) passes `approve_by` with no decision, the order becomes
+**`expired_cutoff`**: `approval_url` cleared, receipt re-signed, `expiry {at, approve_by, reason, lost_delivery_date,
+next_delivery_date, next_step, clock}`, audit event `order.expired_cutoff`, and an `order.expired` notification
+to the buyer naming the lost delivery and the next date to ask for (the day after, as the quote's `next_date`
+option). This happens on reads (`GET /orders`, `GET /orders/{id}`, MCP `get_order`), on any decision and in a
+sweep every minute. Approving or rejecting afterwards is `409 approval_deadline_passed`.
 
 ## 8. Standing orders and drift detection
 
@@ -403,6 +422,13 @@ Renew: `POST /standing-orders/{id}/renew` (MCP `renew_standing_order`) with `{de
 | `standing.new_reliability` | ask | A low-reliability product appears where the last renewal had none. |
 
 The response is `{renewal, order, drift {findings, summary, baseline}}`; `drift.summary` is one plain sentence for the human. `GET /standing-orders/{id}` (MCP `get_standing_order`) returns the standing order with its renewals (newest first) and the baseline. Pause and resume are human actions.
+
+**Renewal timing.** Each standing order has `renew_lead_hours` (create field; default `SOUS_RENEW_LEAD_HOURS`, 24).
+`GET /standing-orders/{id}` returns `next_delivery_date`, `cutoff {at, estimated, basis}` (that delivery's cut-off,
+estimated from the last real renewal's Valio cut-off at the same offset, else 17:00 the day before, Valio's Stock
+rule), `next_renewal_at` = cut-off minus the lead, and `renewal_schedule {..., renew_due}`. A delivery whose
+estimated cut-off has passed is skipped (the default renewal date moves a week on). A held renewal's order carries
+`approve_by` (section 7.1), also on the renewal record and the `standing.renewed` audit event.
 
 Demo history: `POST /standing-orders/{id}/simulate-history` (human) stores past renewals marked `simulated: true`. Only the amounts are made up; they are priced at a real signed quote under the same mandate, never at an invented Valio response. With `scripts/demo_standing.py`, the hotel's milk is +18 % over its 4-week median and the cost +€135 (+16 %), so the renewal is held for a human.
 

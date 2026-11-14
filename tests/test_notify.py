@@ -114,7 +114,8 @@ def test_ask_tier_has_deadline_default_and_approve_action(env, monkeypatch):
     assert o["status"] == "pending_approval"
     [n] = notifications_store.list_("Hotel")
     assert n["message"].startswith("Approval needed: Lactose-free milk 1 l has no allergen data")
-    assert "Approve by Sun 15.11 17:00 (cut-off)." in n["message"]
+    assert "Approve by Sun 15.11 16:45 or delivery on Mon 16.11 is lost." in n["message"]
+    assert n["data"]["deadline"] == o["approve_by"] == "2026-11-15T16:45:00+02:00"
     assert n["message"].endswith("If nobody answers, it expires and nothing is ordered.")
     assert n["url"] == o["approval_url"]
     act = env.calls[0]["json"]["actions"][0]

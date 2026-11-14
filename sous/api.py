@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import functools
 import importlib.metadata
@@ -39,9 +40,21 @@ mcp_app = mcp.streamable_http_app(
 async def lifespan(app: FastAPI):
     access.startup_check()  # fail closed: no prod/staging/demo gateway without an approver code
     catalog._db()  # build the index on first start
+    sweeper = asyncio.create_task(_sweep_overdue())
     async with contextlib.AsyncExitStack() as stack:
         await stack.enter_async_context(mcp_app.router.lifespan_context(mcp_app))
         yield
+    sweeper.cancel()
+
+
+async def _sweep_overdue(every: float = 60):
+    """Held orders past their approve_by become expired_cutoff (and the buyer is told) within a minute."""
+    while True:
+        try:
+            await asyncio.to_thread(S.sweep_overdue)
+        except Exception:  # noqa: BLE001 - reads expire lazily too; never kill the app over the sweep
+            pass
+        await asyncio.sleep(every)
 
 
 app = FastAPI(
@@ -420,7 +433,7 @@ def place_order(req: OrderRequest, token: str | None = Depends(agent_token)):
 
 
 @app.get("/orders", tags=["ordering"])
-def list_orders(status: Literal["ordered", "pending_approval", "refused", "rejected", "expired"] | None = None,
+def list_orders(status: Literal["ordered", "pending_approval", "refused", "rejected", "expired", "expired_cutoff"] | None = None,
                 mandate_id: str | None = None, sandbox_id: str | None = _SANDBOX_Q,
                 r: access.Reader = Depends(access.reader)):
     """Orders you may read (see docs/PROTOCOL.md "Read access"), newest first."""
@@ -428,6 +441,7 @@ def list_orders(status: Literal["ordered", "pending_approval", "refused", "rejec
     scope = sandbox.list_scope(sandbox_id)
     if scope is None:
         return {"orders": []}
+    S.sweep_overdue()  # held orders past approve_by show as expired_cutoff
     idx, ok = sandbox.index(), access.readable_mandates(r)
     return {"orders": [access.label_order(o) for o in store.list_orders(status, mandate_id)
                        if ((mandate_id and not sandbox_id) or sandbox.keep(scope, o["mandate_id"], idx))

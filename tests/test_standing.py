@@ -309,3 +309,32 @@ def test_mariadb_versions_standing_order(monkeypatch):
     assert r["order"]["status"] == "pending_approval"
     assert len(standing.get(so["id"])["renewals"]) == 5
     store._conn = None
+
+
+# --- cut-off-aware renewals (sous/deadline.py) ------------------------------
+
+def test_schedule_renews_lead_hours_before_the_cutoff(monkeypatch):
+    so = create()
+    assert so["renew_lead_hours"] == 24
+    g = standing.get(so["id"])
+    # no renewal yet: Valio's Stock rule, 17:00 the day before the Monday delivery
+    assert g["cutoff"]["at"] == "2026-11-15T17:00:00+02:00" and g["cutoff"]["estimated"]
+    assert g["next_renewal_at"] == "2026-11-14T17:00:00+02:00" and g["renewal_schedule"]["renew_due"] is False
+    early = create(renew_lead_hours=48)
+    s = standing.get(early["id"])["renewal_schedule"]
+    assert s["next_renewal_at"] == "2026-11-13T17:00:00+02:00" and s["renew_due"] is True  # NOW is Fri 21:00
+    # past the Monday's cut-off, the next delivery is the following Monday
+    monkeypatch.setattr(S, "_now", lambda: datetime(2026, 11, 15, 18, 0, tzinfo=config.TZ))
+    assert standing.get(so["id"])["next_delivery_date"] == "2026-11-23"
+
+
+def test_held_renewal_carries_approve_by_and_schedule_uses_its_cutoff():
+    so = create()
+    seed(so, [[300, 20, 30]] * 4)
+    r = standing.renew(so["id"], MON)  # milk 400 vs median 300: held
+    assert r["order"]["status"] == "pending_approval"
+    assert r["order"]["approve_by"] == r["renewal"]["approve_by"] == "2026-11-15T16:45:00+02:00"
+    assert events("standing.renewed")[-1]["data"]["approve_by"] == "2026-11-15T16:45:00+02:00"
+    g = standing.get(so["id"])
+    assert g["cutoff"]["basis"].startswith("last renewal's Valio cut-off")
+    assert g["cutoff"]["at"] == "2026-11-15T17:00:00+02:00"  # the real Sun 17:00 for Mon, applied to Mon 16.11

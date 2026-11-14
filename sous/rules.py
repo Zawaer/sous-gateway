@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import typing
 
-from . import config
+from . import config, deadline
 from .mandate import UNUSUAL_MIN_HISTORY, Mandate
 
 OWNERS = {
@@ -197,6 +197,11 @@ def _build() -> list[dict]:
            "A judge sandbox has used its share of the live Valio key.", None, status=429),
         _r("sandbox_expired", "refusal", ["block"], "gateway",
            "The judge sandbox has expired or was closed.", None, status=410),
+        _r("approval_deadline_passed", "refusal", ["block"], "gateway",
+           "A held order can be approved only until its approve_by: the earliest order cut-off among its lines "
+           f"minus {deadline.MARGIN_MIN:g} minutes (or the start of the delivery day). After that it is "
+           "expired_cutoff, nothing is ordered, and the buyer is told the next delivery date to ask for.",
+           None, status=409),
     ]
     return R
 

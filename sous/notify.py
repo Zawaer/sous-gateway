@@ -16,7 +16,8 @@ delivery is audited as notification.sent or notification.failed.
 
 Events: order.notify, order.ask (to the buyer's human), order.decided (FYI to the agent
 side after a human approves or rejects), product.held (Valio put a product on hold that the buyer has
-open, standing or, for a recall, recently placed orders for; sous/holds.py), test.
+open, standing or, for a recall, recently placed orders for; sous/holds.py), order.expired (a held order
+passed its approve_by: delivery lost, next date suggested), test.
 """
 
 from __future__ import annotations
@@ -37,6 +38,7 @@ from .mandate import Mandate
 log = logging.getLogger(__name__)
 
 AUDIENCE = {"order.notify": "buyer", "order.ask": "buyer", "order.decided": "agent", "product.held": "buyer",
+            "order.expired": "buyer",
             "test": "buyer"}
 
 
@@ -82,6 +84,13 @@ def fmt_time(ts: str) -> str:
     return f"{dt:%a} {dt.day}.{dt.month} {dt:%H:%M}"
 
 
+def _day(d: str | None) -> str:
+    if not d:
+        return "the requested day"
+    x = datetime.fromisoformat(d)
+    return f"{x:%a} {x.day}.{x.month}"
+
+
 def earliest_cutoff(order: dict) -> str | None:
     cuts = [l["order_cutoff"] for l in order.get("lines") or [] if l.get("order_cutoff")]
     return min(cuts, key=lambda c: datetime.fromisoformat(c)) if cuts else None
@@ -114,13 +123,23 @@ def compose(event: str, order: dict, mandate: Mandate) -> dict:
         fs = _findings(order, "ask")
         reason = _sentence(fs[0]["message"]) if fs else "This order is outside what the agent may do alone"
         more = f" (+{len(fs) - 1} more reason{'s' if len(fs) > 2 else ''})" if len(fs) > 1 else ""
-        cut = earliest_cutoff(order)
-        by = f"Approve by {fmt_time(cut)} (cut-off)" if cut else "Approve or reject it"
+        cut = order.get("approve_by") or earliest_cutoff(order)
+        lost = (order.get("approve_by_detail") or {}).get("delivery_date") or order.get("delivery_date")
+        by = (f"Approve by {fmt_time(cut)} or delivery on {_day(lost)} is lost" if cut and lost
+              else f"Approve by {fmt_time(cut)}" if cut else "Approve or reject it")
         msg = (f"Approval needed: {reason}{more}. {by}. "
                f"Order: {what(order)} for {total} ex VAT. "
                "If nobody answers, it expires and nothing is ordered.")
         return {"title": f"Approval needed: {oid} ({total})", "message": msg,
                 "url": order.get("approval_url") or url, "deadline": cut}
+    if event == "order.expired":
+        x = order.get("expiry") or {}
+        lost, nxt = x.get("lost_delivery_date"), x.get("next_delivery_date")
+        msg = (f"Nobody approved {oid} by {fmt_time(x.get('approve_by') or order.get('approve_by'))}, the deadline "
+               f"before Valio's order cut-off: delivery on {_day(lost)} is lost and nothing was ordered. "
+               f"Order: {what(order)} for {total} ex VAT."
+               + (f" Next option: ask your agent to quote it for {_day(nxt)}." if nxt else ""))
+        return {"title": f"Expired: {oid} missed the cut-off", "message": msg, "url": url}
     if event == "order.decided":
         a = order.get("approval") or {}
         who, status, note = a.get("by") or "A human", order.get("status"), a.get("note")

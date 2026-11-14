@@ -403,7 +403,7 @@ def _signed_order(order_id: str) -> dict:
     return {**o, **r}  # the signed fields win over the stored copy
 
 
-_FINAL_ERROR = {"refused": "mandate_refused", "rejected": "rejected_by_human", "expired": "expired"}
+_FINAL_ERROR = {"refused": "mandate_refused", "rejected": "rejected_by_human", "expired": "expired", "expired_cutoff": "approval_deadline_passed"}
 
 
 def ap2_receipt(order_id: str, base_url: str) -> dict:
@@ -430,7 +430,8 @@ def ap2_receipt(order_id: str, base_url: str) -> dict:
 
 
 _ORDER_STATUS = {"ordered": "OrderProcessing", "pending_approval": "OrderProblem", "refused": "OrderCancelled",
-                 "rejected": "OrderCancelled", "expired": "OrderCancelled"}
+                 "rejected": "OrderCancelled", "expired": "OrderCancelled",
+                 "expired_cutoff": "OrderCancelled"}
 
 
 def schema_org_order(order_id: str, base_url: str) -> dict:
@@ -556,7 +557,7 @@ class ApprovalDoc(_Open):
     result_reason: str | None = None
 
 
-OrderStatus = Literal["ordered", "pending_approval", "refused", "rejected", "expired"]
+OrderStatus = Literal["ordered", "pending_approval", "refused", "rejected", "expired", "expired_cutoff"]
 
 
 class ReceiptDoc(_Open):

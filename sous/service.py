@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import agent_auth, aimo, catalog, clock, config, credentials, exposure, holds, notify, options as OPT, quote as Q, sandbox, signing, store, substitutes, usual
+from . import agent_auth, aimo, catalog, clock, config, credentials, deadline, exposure, holds, notify, options as OPT, quote as Q, sandbox, signing, store, substitutes, usual
 from .mandate import Mandate, evaluate
 
 
@@ -695,6 +695,9 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
         "created_at": now.isoformat(timespec="milliseconds"), "updated_at": now.isoformat(timespec="milliseconds"),
         "clock": clock.info(now),
     }
+    if status == "pending_approval":  # the human must decide before the cut-off (sous/deadline.py)
+        dl = deadline.compute(order["lines"], [order["delivery_date"], order["requested_delivery_date"]], now)
+        order["approve_by"], order["approve_by_detail"] = (dl["at"], dl) if dl else (None, None)
     order["receipt_jws"] = _receipt(order)
     # Claim the quote and store the order together: if storing fails, the quote is released again.
     if not store.claim_quote(quote_id, oid):
@@ -711,6 +714,8 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
     store.audit(f"order.{status}", "mandate-engine", "system", oid, mandate.buyer,
                 {"order_id": oid, "quote_id": quote_id, "agent_id": agent_id, "outcome": outcome,
                  "total_ex_vat": q["total_ex_vat"], "agent_rationale": order["agent_rationale"],
+                 **({"approve_by": order.get("approve_by"), "approve_by_detail": order.get("approve_by_detail")}
+                    if status == "pending_approval" else {}),
                  "fired": [f.model_dump() for f in findings if f.outcome != "silent"] or [findings[-1].model_dump()]})
     return order, mandate
 
@@ -718,17 +723,53 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
 def _receipt(order: dict) -> str:
     """Signed receipt of the order's current state (re-issued after a human decision)."""
     return signing.sign({k: order.get(k) for k in ("id", "quote_id", "mandate_id", "status", "total_ex_vat",
-                                                   "lines", "decision", "approval", "updated_at", "clock")},
+                                                   "lines", "decision", "approval", "updated_at", "clock", "approve_by",
+                                                   "expiry")},
                         "sous-order+jws")
 
 
 def decide(order_id: str, approver: str, approve: bool, note: str | None = None, authority: str | None = None) -> dict:
     """`approver` is the name the human gives (free text); `authority` is which credential let them decide
     ("global approver code", "sandbox approver SBX-..."), recorded alongside so the audit shows authority."""
+    expire_if_overdue(store.get_order(order_id))
     with _order_lock:
         o, mandate = _decide(order_id, approver, approve, note, authority)
     notify.send("order.decided", o, mandate)  # FYI to the agent side
     return o
+
+
+def expire_if_overdue(o: dict | None, now: datetime | None = None) -> dict | None:
+    """A held order past its approve_by becomes expired_cutoff (terminal; nothing is ordered) and the buyer is
+    told the next delivery date to ask for. Lazy: run on reads and decisions, and by the periodic sweep."""
+    now = now or _now()
+    if not o or not deadline.overdue(o, now):
+        return o
+    lost, nxt = deadline.lost_date(o), deadline.next_date(o)
+    o = {**o, "status": "expired_cutoff", "approval_url": None, "updated_at": now.isoformat(timespec="milliseconds"),
+         "expiry": {"at": now.isoformat(timespec="milliseconds"), "approve_by": o["approve_by"],
+                    "reason": f"Nobody approved by {o['approve_by']}, the deadline before the order cut-off: "
+                              f"delivery on {lost} is lost and nothing was ordered.",
+                    "lost_delivery_date": lost, "next_delivery_date": nxt,
+                    "next_step": f"Ask the agent for a new quote for {nxt} (the next_date option) or another day.",
+                    "clock": clock.info(now)}}
+    o["receipt_jws"] = _receipt(o)
+    if not store.update_order(o, expected_status="pending_approval"):
+        return store.get_order(o["id"])
+    store.audit("order.expired_cutoff", "deadline", "system", o["id"], o["buyer"],
+                {"order_id": o["id"], "approve_by": o["approve_by"], "approve_by_detail": o.get("approve_by_detail"),
+                 "lost_delivery_date": lost, "next_delivery_date": nxt})
+    try:
+        notify.send("order.expired", o, _mandate(o["mandate_id"]))
+    except GatewayError:
+        pass
+    return o
+
+
+def sweep_overdue() -> int:
+    """Expire every held order past its approve_by. Returns how many expired."""
+    now = _now()
+    return sum(1 for o in store.list_orders("pending_approval")
+               if deadline.overdue(o, now) and expire_if_overdue(o, now)["status"] == "expired_cutoff")
 
 
 def refuse_agent_approval(order_id: str, token: str, action: Literal["approve", "reject"]) -> GatewayError:
@@ -791,6 +832,11 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
     o = store.get_order(order_id)
     if not o:
         raise GatewayError("order_not_found", f"No order {order_id}.", 404)
+    if o["status"] == "expired_cutoff" or deadline.overdue(o, _now()):
+        raise GatewayError("approval_deadline_passed",
+                           f"Order {order_id} could only be decided until {o.get('approve_by')} (before the order "
+                           f"cut-off); it is expired_cutoff and nothing was ordered. Next delivery date to ask for: "
+                           f"{deadline.next_date(o)}.", 409)
     if o["status"] != "pending_approval":
         raise GatewayError("not_pending", f"Order {order_id} is {o['status']}, not waiting for approval.", 409)
     now = _now()
@@ -817,7 +863,7 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
 
 
 def get_order(order_id: str) -> dict:
-    o = store.get_order(order_id)
+    o = expire_if_overdue(store.get_order(order_id))
     if not o:
         raise GatewayError("order_not_found", f"No order {order_id}.", 404)
     return o

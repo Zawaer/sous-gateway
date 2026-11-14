@@ -13,6 +13,11 @@ the order to at least "ask":
 - standing.new_terminal / standing.new_reliability: a Terminal (supplier-stock) or low-reliability
   product appears where the last renewal had none
 
+Renewal timing is cut-off aware: next_renewal_at = the next delivery's order cut-off (estimated from the
+last real renewal's Valio closingTime, else 17:00 the day before) minus renew_lead_hours (default
+SOUS_RENEW_LEAD_HOURS = 24), so a held renewal still leaves the human time to approve; its order's approve_by
+is that cut-off minus the safety margin (sous/deadline.py). A delivery whose cut-off has passed is skipped.
+
 The baseline is the renewals that ended up ordered (approved drift becomes the new normal);
 refused, rejected and still-pending renewals don't count. Synthetic history for demos is stored
 with simulated=True and priced from a real signed quote, never from made-up Valio responses.
@@ -21,12 +26,12 @@ with simulated=True and priced from a real signed quote, never from made-up Vali
 from __future__ import annotations
 
 import statistics
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import catalog, quote as Q, service as S, signing, standing_store as SS, store
+from . import catalog, config, deadline, quote as Q, service as S, signing, standing_store as SS, store
 from .mandate import Finding
 
 HISTORY_WEEKS = 4        # baseline = median of this many past renewals
@@ -34,6 +39,7 @@ QTY_CREEP = 0.15         # +15 % amount vs median
 TREND_RUN = 3            # this many increases in a row
 COST_DRIFT = 0.10        # +10 % total or price per unit vs median
 WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+RENEW_LEAD_HOURS = float(config.env("RENEW_LEAD_HOURS", "24"))  # renew this long before the order cut-off
 
 
 class StandingItem(BaseModel):
@@ -51,6 +57,9 @@ class StandingOrderIn(BaseModel):
     items: list[StandingItem] = Field(min_length=1, max_length=20)
     weekday: Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"] = Field(
         "mon", description="Weekly delivery day")
+    renew_lead_hours: float | None = Field(
+        None, ge=0, le=168, description="Renew this many hours before the next delivery's order cut-off, so a held "
+                                        "renewal can still be approved in time (default SOUS_RENEW_LEAD_HOURS, 24)")
 
 
 # --- standing orders --------------------------------------------------------
@@ -69,6 +78,7 @@ def create(req: StandingOrderIn) -> dict:
     now = S._now().isoformat(timespec="milliseconds")
     so = {"id": S._id("SO"), "mandate_id": m.id, "agent_id": req.agent_id, "buyer": m.buyer, "name": req.name,
           "items": items, "cadence": {"every": "week", "weekday": req.weekday}, "active": True,
+          "renew_lead_hours": req.renew_lead_hours if req.renew_lead_hours is not None else RENEW_LEAD_HOURS,
           "created_at": now, "updated_at": now}
     SS.put(so)
     store.audit("standing.created", req.agent_id, "agent", so["id"], m.buyer, {"standing_order": so})
@@ -100,16 +110,51 @@ def get(standing_id: str) -> dict:
     so = _get(standing_id)
     rens = [_with_status(r) for r in SS.renewals(standing_id)]
     hist = [r for r in rens if r["status"] == "ordered"][-HISTORY_WEEKS:]
+    sched = schedule(so)
     return {"standing_order": so, "renewals": rens[::-1], "baseline": _baseline(so, hist),
-            "next_delivery_date": next_delivery(so).isoformat(), "versions": SS.versions(standing_id),
+            "next_delivery_date": sched["next_delivery_date"], "cutoff": sched["cutoff"],
+            "next_renewal_at": sched["next_renewal_at"], "renewal_schedule": sched,
+            "versions": SS.versions(standing_id),
             "rules": {"history_weeks": HISTORY_WEEKS, "quantity_creep": QTY_CREEP, "trend_run": TREND_RUN,
                       "cost_drift": COST_DRIFT}}
 
 
-def next_delivery(so: dict, today: date | None = None) -> date:
-    today = today or S._now().date()
+def next_delivery(so: dict, today: date | None = None, now: datetime | None = None) -> date:
+    """The next delivery weekday whose order cut-off (estimated) hasn't passed yet."""
+    now = now or S._now()
+    today = today or now.date()
     wd = WEEKDAYS.index(so["cadence"]["weekday"])
-    return today + timedelta(days=(wd - today.weekday()) % 7 or 7)
+    d = today + timedelta(days=(wd - today.weekday()) % 7 or 7)
+    if datetime.fromisoformat(estimate_cutoff(so, d)["at"]) <= now:
+        d += timedelta(weeks=1)
+    return d
+
+
+def _cutoff_reference(so: dict) -> list[tuple[str, str]]:
+    """(earliest order cut-off, delivery date) of the newest real renewal whose order has a cut-off."""
+    for r in reversed(SS.renewals(so["id"])):
+        o = store.get_order(r["order_id"]) if r.get("order_id") else None
+        cuts = [l["order_cutoff"] for l in (o or {}).get("lines") or [] if l.get("order_cutoff")]
+        if cuts:
+            return [(min(cuts, key=datetime.fromisoformat), r["delivery_date"])]
+    return []
+
+
+def estimate_cutoff(so: dict, delivery: date) -> dict:
+    return deadline.estimate_cutoff(delivery, _cutoff_reference(so))
+
+
+def schedule(so: dict, now: datetime | None = None) -> dict:
+    """When to renew: the next delivery's (estimated) order cut-off minus renew_lead_hours.
+    renew_due = it's time (or past time) to renew for that delivery."""
+    now = now or S._now()
+    nxt = next_delivery(so, now=now)
+    cut = estimate_cutoff(so, nxt)
+    lead = so.get("renew_lead_hours", RENEW_LEAD_HOURS)
+    at = datetime.fromisoformat(cut["at"]) - timedelta(hours=lead)
+    return {"next_delivery_date": nxt.isoformat(), "cutoff": cut, "renew_lead_hours": lead,
+            "next_renewal_at": at.isoformat(timespec="seconds"), "renew_due": now >= at,
+            "approve_by_margin_minutes": deadline.MARGIN_MIN}
 
 
 def _with_status(r: dict) -> dict:
@@ -318,11 +363,13 @@ def place_renewal(so: dict, items: list[dict], q: dict, when: date, rens: list[d
            "quote_id": q["id"], "order_id": order["id"], "status": order["status"],
            "outcome": order["decision"]["outcome"], **snap,
            "drift": [x.model_dump() for x in findings], "summary": text,
+           "approve_by": order.get("approve_by"),
            "created_at": S._now().isoformat(timespec="milliseconds"), **(mark or {})}
     SS.add_renewal(ren)
     store.audit("standing.renewed", so["agent_id"], "agent", standing_id, so["buyer"],
                 {"standing_id": standing_id, "renewal_id": ren["id"], "order_id": order["id"],
-                 "status": order["status"], "outcome": ren["outcome"], "drift_rules": [x.rule for x in findings]})
+                 "status": order["status"], "outcome": ren["outcome"], "drift_rules": [x.rule for x in findings],
+                 "approve_by": order.get("approve_by")})
     return {"renewal": ren, "order": order,
             "drift": {"findings": ren["drift"], "summary": text, "baseline": base}}
 

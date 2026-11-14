@@ -488,7 +488,7 @@ def place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key: 
 
 @_tool(OrderOut, title="Order status", annotations=READ_LOCAL)
 def get_order(order_id: str, agent_token: str | None = None, ctx: Context | None = None) -> dict:
-    """Current status of an order (ordered, pending_approval, refused, rejected, expired) and any human decision.
+    """Current status of an order (ordered, pending_approval, refused, rejected, expired, expired_cutoff) and any human decision.
     Only orders under your own mandate: send your Authorization: Bearer header (or agent_token).
     Returns the order (schema /schemas/order.json) with approval {by, approved, note, at} once a human decided,
     a fresh receipt_jws, and agent_claim (the rationale, labelled unverified)."""
