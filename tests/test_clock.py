@@ -53,6 +53,8 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(aimo, "prices", lambda ids, d: {i: PRICE for i in ids})
     monkeypatch.setattr(aimo, "availability", lambda ids, d: {i: AVAIL for i in ids})
     monkeypatch.setattr(S.notify, "send", lambda *a, **k: None)
+    # a troubled line (cut-off passed) makes the quote look up substitutes, which needs the catalog index
+    monkeypatch.setattr(S.substitutes, "suggest", lambda *a, **k: {"options": []})
     real = RealClock(AFTER_CUTOFF)
     monkeypatch.setattr(clock, "real_now", real)
     clock.configure(None)
