@@ -237,3 +237,16 @@ def test_substitute_lookup_failure_still_returns_the_quote(monkeypatch):
     monkeypatch.setattr(substitutes, "suggest", boom)
     q = quote(["A"])["quote"]
     assert q["mandate_preview"]["outcome"] == "block" and "options" not in q
+
+
+def test_single_product_short_is_capped_at_stock_and_the_rest_is_uncovered(monkeypatch):
+    """Approving must never commit to stock that doesn't exist: the line is sized to stock, the rest is a gap."""
+    AVAIL["A"] = ("2026-11-16", 60, None)
+    monkeypatch.setattr(substitutes, "suggest", fake_suggest([("S", "better", "compatible", [])]))
+    q = quote(["A"])["quote"]
+    assert [(l["product_id"], l["quantity"]) for l in q["lines"]] == [("A", 60)]
+    assert not any(i["code"] == "PARTIAL_STOCK" for i in q["lines"][0]["issues"])
+    assert [g["uncovered"] for g in q["uncovered"]] == [40]
+    rules = {f["rule"] for f in q["mandate_preview"]["findings"]}
+    assert "need.partial" in rules and q["mandate_preview"]["outcome"] == "ask"
+    assert {o["kind"] for o in q["options"]} == {"split_with_substitute", "substitute"}

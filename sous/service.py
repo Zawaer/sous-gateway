@@ -423,8 +423,9 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset()) -> d
             gaps.append({"item": item.model_dump(), "item_index": item_index, "uncovered": item.amount, "unit": item.unit,
                          "reason": "No such product ids."})
             continue
-        chosen, uncovered = Q.plan(item.amount, unit, offers) if len(offers) > 1 else (
-            [offers[0]] if offers[0]["orderable"] else [], 0.0 if offers[0]["orderable"] else item.amount)
+        # Sized to known stock, even for one named product: what isn't in stock goes to `uncovered` (and options),
+        # never into a line a human could approve for stock that doesn't exist.
+        chosen, uncovered = Q.plan(item.amount, unit, offers)
         if not chosen and (blocked := [o for o in offers if not o["orderable"]]):
             # Nothing orderable for this need: keep the products that can't be ordered as (unorderable) lines,
             # so the mandate engine checks them and the refusal names the real reasons (allergen, undeliverable,

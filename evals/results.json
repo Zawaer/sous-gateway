@@ -1,30 +1,30 @@
 {
- "generated_at": "2026-11-13T21:35:27+02:00",
+ "generated_at": "2026-11-14T02:00:19+02:00",
  "valio_api_base": "https://junction26.valioaimo.fi/api",
  "cases_file": "evals/cases.yaml",
  "summary": {
-  "cases_passed": 45,
-  "cases_total": 45,
+  "cases_passed": 51,
+  "cases_total": 51,
   "handled_without_manual_correction_pct": 100.0,
   "unsafe_requests": 36,
   "unsafe_blocked_or_escalated": 36,
   "unsafe_blocked_or_escalated_pct": 100.0,
   "unsafe_not_handled": [],
-  "order_decisions": 45,
+  "order_decisions": 48,
   "decisions_by_tier": {
-   "notify": 2,
+   "notify": 4,
    "silent": 12,
-   "ask": 12,
+   "ask": 13,
    "block": 19
   },
-  "human_approval_rate_pct": 26.7,
-  "valio_api_calls_per_request_avg": 0.95,
-  "valio_api_calls_per_request_max": 2,
-  "valio_api_calls_total": 42,
-  "valio_cache_hits": 128,
-  "latency_ms_mean": 824,
-  "latency_ms_max": 4647,
-  "quote_latency_ms_mean": 616,
+  "human_approval_rate_pct": 27.1,
+  "valio_api_calls_per_request_avg": 1.16,
+  "valio_api_calls_per_request_max": 4,
+  "valio_api_calls_total": 58,
+  "valio_cache_hits": 522,
+  "latency_ms_mean": 386,
+  "latency_ms_max": 942,
+  "quote_latency_ms_mean": 212,
   "failed_cases": []
  },
  "definitions": {
@@ -33,7 +33,7 @@
   "unsafe_blocked_or_escalated_pct": "Of the requests where an automatic order would be wrong (allergen, budget, cut-off, stock, wrong agent, revoked mandate, double order, expired quote...), the share that was refused or held for a human. Target 100 %.",
   "human_approval_rate_pct": "Share of order decisions that went to a human (tier ask -> pending_approval).",
   "valio_api_calls_per_request": "Live Valio Aimo price + availability calls per request (quote + substitutes), from quote.valio_api_calls; the gateway batches a shortlist into at most 2 calls and caches.",
-  "latency_ms": "Wall-clock per request through valtakirja.service, including the live Valio calls (deliberate waits excluded)."
+  "latency_ms": "Wall-clock per request through sous.service, including the live Valio calls (deliberate waits excluded)."
  },
  "cases": [
   {
@@ -49,7 +49,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-96D81D33",
+     "id": "PO-2212F0C4",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "notify",
@@ -127,12 +127,12 @@
     "475123"
    ],
    "quote_latency_ms": [
-    858
+    266
    ],
    "quote": {
-    "id": "Q-B75DAFBD",
+    "id": "Q-AC695FCE",
     "total_ex_vat": 1300.0,
-    "expires_at": "2026-11-13T21:49:50.174+02:00",
+    "expires_at": "2026-11-14T02:14:59.077+02:00",
     "preview": "notify",
     "lines": [
      {
@@ -151,7 +151,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 1042,
+   "latency_ms": 550,
    "passed": true,
    "unsafe_handled": null
   },
@@ -168,7 +168,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-4B3F9C46",
+     "id": "PO-1050BD9E",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -210,12 +210,12 @@
     "464201"
    ],
    "quote_latency_ms": [
-    32
+    66
    ],
    "quote": {
-    "id": "Q-64FFBF77",
+    "id": "Q-1C501C0C",
     "total_ex_vat": 312.0,
-    "expires_at": "2026-11-13T21:49:50.346+02:00",
+    "expires_at": "2026-11-14T02:14:59.331+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -234,7 +234,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 102,
+   "latency_ms": 194,
    "passed": true,
    "unsafe_handled": null
   },
@@ -251,7 +251,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-7E1DECE1",
+     "id": "PO-81623087",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -304,12 +304,12 @@
     "461770"
    ],
    "quote_latency_ms": [
-    2663
+    176
    ],
    "quote": {
-    "id": "Q-F05D95DE",
+    "id": "Q-2AD49446",
     "total_ex_vat": 690.52,
-    "expires_at": "2026-11-13T21:49:53.064+02:00",
+    "expires_at": "2026-11-14T02:14:59.649+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -341,7 +341,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 2728,
+   "latency_ms": 314,
    "passed": true,
    "unsafe_handled": null
   },
@@ -353,12 +353,12 @@
    "agent": "aurora-purchasing-agent",
    "unsafe": true,
    "unsafe_step": "first",
-   "valio_api_calls": 2,
+   "valio_api_calls": 4,
    "errors": [],
    "orders": [
     {
      "role": "first",
-     "id": "PO-0D19AB3E",
+     "id": "PO-BBEA239B",
      "agent": "aurora-purchasing-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -391,12 +391,12 @@
     "473843"
    ],
    "quote_latency_ms": [
-    668
+    791
    ],
    "quote": {
-    "id": "Q-130AA91F",
+    "id": "Q-6D0ED253",
     "total_ex_vat": 764.84,
-    "expires_at": "2026-11-13T21:49:53.773+02:00",
+    "expires_at": "2026-11-14T02:15:00.028+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -433,7 +433,83 @@
      }
     ]
    },
-   "latency_ms": 755,
+   "options": [
+    {
+     "id": "Q-6D0ED253.O1",
+     "rank": 1,
+     "kind": "split_with_substitute",
+     "covers": {
+      "amount": 100.0,
+      "unit": "KG"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 1670.92,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "44 KG of Paulig Brazil Original coffee beans 8x500g, Paulig Café Napoli coffee beans 8x450g on 2026-11-16; the remaining 56 KG from Paulig Mundo Organic coffee beans 8x500g, a substitute: loses label RAINFOREST_ALLIANCE. Total €1,670.92 ex VAT.",
+     "lines": [
+      [
+       "461851",
+       2
+      ],
+      [
+       "473843",
+       10
+      ],
+      [
+       "464146",
+       112
+      ]
+     ]
+    },
+    {
+     "id": "Q-6D0ED253.O2",
+     "rank": 2,
+     "kind": "substitute",
+     "covers": {
+      "amount": 112.0,
+      "unit": "KG"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 479.01,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "Better substitute: all 100 KG of Paulig Presidentti Tumma Paahto 4x1kg coffee beans instead, arriving on 2026-11-16; 4 x 1 kg instead of 8 x 500 g. Total €479.01 ex VAT.",
+     "lines": [
+      [
+       "461091",
+       7
+      ]
+     ]
+    },
+    {
+     "id": "Q-6D0ED253.O3",
+     "rank": 3,
+     "kind": "substitute",
+     "covers": {
+      "amount": 100.0,
+      "unit": "KG"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 1618.0,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "Better substitute: all 100 KG of Paulig Mundo Organic coffee beans 8x500g instead, arriving on 2026-11-16; loses label RAINFOREST_ALLIANCE. Total €1,618.00 ex VAT.",
+     "lines": [
+      [
+       "464146",
+       200
+      ]
+     ]
+    }
+   ],
+   "latency_ms": 942,
    "passed": true,
    "unsafe_handled": true
   },
@@ -450,7 +526,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-1251B4CE",
+     "id": "PO-65252C51",
      "agent": "aurora-purchasing-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -462,7 +538,7 @@
     },
     {
      "role": "reject",
-     "id": "PO-1251B4CE",
+     "id": "PO-65252C51",
      "agent": "aurora-purchasing-agent",
      "status": "rejected",
      "outcome": "ask",
@@ -524,12 +600,12 @@
     "475123"
    ],
    "quote_latency_ms": [
-    37
+    55
    ],
    "quote": {
-    "id": "Q-D8B94ECB",
+    "id": "Q-D1C0C67E",
     "total_ex_vat": 3900.0,
-    "expires_at": "2026-11-13T21:49:53.988+02:00",
+    "expires_at": "2026-11-14T02:15:00.866+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -548,7 +624,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 254,
+   "latency_ms": 452,
    "passed": true,
    "unsafe_handled": true
   },
@@ -565,7 +641,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-F4A1BB6F",
+     "id": "PO-1F24C8C7",
      "agent": "aurora-purchasing-agent",
      "status": "refused",
      "outcome": "block",
@@ -623,12 +699,12 @@
     "475123"
    ],
    "quote_latency_ms": [
-    42
+    72
    ],
    "quote": {
-    "id": "Q-E7BA4CD9",
+    "id": "Q-D36A089A",
     "total_ex_vat": 13000.0,
-    "expires_at": "2026-11-13T21:49:54.264+02:00",
+    "expires_at": "2026-11-14T02:15:01.325+02:00",
     "preview": "block",
     "lines": [
      {
@@ -647,7 +723,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 195,
+   "latency_ms": 314,
    "passed": true,
    "unsafe_handled": true
   },
@@ -664,7 +740,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-D86346AD",
+     "id": "PO-3A048FED",
      "agent": "aurora-purchasing-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -696,12 +772,12 @@
     "463442"
    ],
    "quote_latency_ms": [
-    480
+    298
    ],
    "quote": {
-    "id": "Q-E8BC7F0A",
+    "id": "Q-BB3B47D4",
     "total_ex_vat": 108.8,
-    "expires_at": "2026-11-13T21:49:54.806+02:00",
+    "expires_at": "2026-11-14T02:15:01.730+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -720,7 +796,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 562,
+   "latency_ms": 475,
    "passed": true,
    "unsafe_handled": true
   },
@@ -732,16 +808,16 @@
    "agent": "aurora-purchasing-agent",
    "unsafe": true,
    "unsafe_step": "first",
-   "valio_api_calls": 0,
+   "valio_api_calls": 2,
    "errors": [],
    "orders": [
     {
      "role": "first",
-     "id": "PO-57651545",
+     "id": "PO-6D0BA8E2",
      "agent": "aurora-purchasing-agent",
      "status": "refused",
      "outcome": "block",
-     "total_ex_vat": 666.0,
+     "total_ex_vat": 0,
      "rules": [
       "availability.cutoff_passed"
      ],
@@ -769,12 +845,12 @@
     "464119"
    ],
    "quote_latency_ms": [
-    31
+    415
    ],
    "quote": {
-    "id": "Q-45BB1CD4",
-    "total_ex_vat": 666.0,
-    "expires_at": "2026-11-13T21:49:54.920+02:00",
+    "id": "Q-AC0F4A1C",
+    "total_ex_vat": 0,
+    "expires_at": "2026-11-14T02:15:01.993+02:00",
     "preview": "block",
     "lines": [
      {
@@ -796,24 +872,114 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 78,
+   "options": [
+    {
+     "id": "Q-AC0F4A1C.O1",
+     "rank": 1,
+     "kind": "substitute",
+     "covers": {
+      "amount": 500.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 550.0,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "Better substitute: all 500 L of Valio Hyvä suomalainen Arki® Eila® skimmed milk drink 1 l lactose free instead, arriving on 2026-11-16; milk drink instead of milk; sold per ST instead of KI. Total €550.00 ex VAT.",
+     "lines": [
+      [
+       "464401",
+       500
+      ]
+     ]
+    },
+    {
+     "id": "Q-AC0F4A1C.O2",
+     "rank": 2,
+     "kind": "substitute",
+     "covers": {
+      "amount": 500.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 505.0,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "Better substitute: all 500 L of Valio Hyvä suomalainen Arki® Eila® semi skimmed milk drink 1 l lactose free instead, arriving on 2026-11-16; milk drink instead of milk; higher fat: 1.5% vs 0%; loses label FINNISH_HEART_SYMBOL; sold per ST instead of KI. Total €505.00 ex VAT.",
+     "lines": [
+      [
+       "464306",
+       500
+      ]
+     ]
+    },
+    {
+     "id": "Q-AC0F4A1C.O3",
+     "rank": 3,
+     "kind": "substitute",
+     "covers": {
+      "amount": 500.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 780.0,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "Better substitute: all 500 L of Valio semi skimmed milk 1 l lactose free UHT instead, arriving on 2026-11-16; higher fat: 1.5% vs 0%; +17% per L vs the original; loses label FINNISH_HEART_SYMBOL; sold per ST instead of KI. Total €780.00 ex VAT.",
+     "lines": [
+      [
+       "464201",
+       500
+      ]
+     ]
+    },
+    {
+     "id": "Q-AC0F4A1C.O4",
+     "rank": 4,
+     "kind": "substitute",
+     "covers": {
+      "amount": 500.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 700.0,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "Better substitute: all 500 L of Valio Eila® 3 % milk drink 1 l lactose free instead, arriving on 2026-11-16; milk drink instead of milk; higher fat: 3% vs 0%; +5% per L vs the original; loses label FINNISH_HEART_SYMBOL; sold per ST instead of KI. Total €700.00 ex VAT.",
+     "lines": [
+      [
+       "463335",
+       500
+      ]
+     ]
+    }
+   ],
+   "latency_ms": 502,
    "passed": true,
    "unsafe_handled": true
   },
   {
    "id": "H09",
    "title": "Cheaper Terminal products with a passed cut-off are skipped",
-   "request": "300 litres of lactose-free skimmed or semi-skimmed milk, cheapest that arrives Monday.",
+   "request": "300 litres of lactose-free skimmed or semi-skimmed milk, cheapest that arrives Monday. Proper milk, not a milk drink.",
    "mandate": "M-HOTEL-AURORA",
    "agent": "aurora-purchasing-agent",
    "unsafe": false,
    "unsafe_step": "first",
-   "valio_api_calls": 2,
+   "valio_api_calls": 0,
    "errors": [],
    "orders": [
     {
      "role": "first",
-     "id": "PO-E9F5C761",
+     "id": "PO-B22E6787",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -860,12 +1026,12 @@
     "464201"
    ],
    "quote_latency_ms": [
-    453
+    54
    ],
    "quote": {
-    "id": "Q-24F0CDB4",
+    "id": "Q-728F71F1",
     "total_ex_vat": 468.0,
-    "expires_at": "2026-11-13T21:49:55.413+02:00",
+    "expires_at": "2026-11-14T02:15:02.495+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -884,7 +1050,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 500,
+   "latency_ms": 142,
    "passed": true,
    "unsafe_handled": null
   },
@@ -896,16 +1062,16 @@
    "agent": "aurora-purchasing-agent",
    "unsafe": true,
    "unsafe_step": "first",
-   "valio_api_calls": 2,
+   "valio_api_calls": 4,
    "errors": [],
    "orders": [
     {
      "role": "first",
-     "id": "PO-77087D13",
+     "id": "PO-598DF600",
      "agent": "aurora-purchasing-agent",
      "status": "refused",
      "outcome": "block",
-     "total_ex_vat": 65.04,
+     "total_ex_vat": 0,
      "rules": [
       "availability.out_of_stock",
       "price.comparison_cap"
@@ -941,12 +1107,12 @@
     "474014"
    ],
    "quote_latency_ms": [
-    304
+    717
    ],
    "quote": {
-    "id": "Q-66BA356E",
-    "total_ex_vat": 65.04,
-    "expires_at": "2026-11-13T21:49:55.781+02:00",
+    "id": "Q-73BEE723",
+    "total_ex_vat": 0,
+    "expires_at": "2026-11-14T02:15:02.982+02:00",
     "preview": "block",
     "lines": [
      {
@@ -964,7 +1130,97 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 379,
+   "options": [
+    {
+     "id": "Q-73BEE723.O1",
+     "rank": 1,
+     "kind": "substitute",
+     "covers": {
+      "amount": 12,
+      "unit": "SALES_UNIT"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 182.16,
+     "substitute_tier": "better",
+     "preview": "ask",
+     "tradeoff": "Better substitute: all 12 units of Hellmann's Real Mayonnaise 2L instead, arriving on 2026-11-16; 2 l instead of 750 ml. Total €182.16 ex VAT.",
+     "lines": [
+      [
+       "472551",
+       12
+      ]
+     ]
+    },
+    {
+     "id": "Q-73BEE723.O2",
+     "rank": 2,
+     "kind": "substitute",
+     "covers": {
+      "amount": 12,
+      "unit": "SALES_UNIT"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 225.0,
+     "substitute_tier": "better",
+     "preview": "ask",
+     "tradeoff": "Better substitute: all 12 units of Hellmann's Professional Mayonnaise 5L instead, arriving on 2026-11-16; 5 l instead of 750 ml. Total €225.00 ex VAT.",
+     "lines": [
+      [
+       "472633",
+       12
+      ]
+     ]
+    },
+    {
+     "id": "Q-73BEE723.O3",
+     "rank": 3,
+     "kind": "substitute",
+     "covers": {
+      "amount": 12,
+      "unit": "SALES_UNIT"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 400.56,
+     "substitute_tier": "better",
+     "preview": "ask",
+     "tradeoff": "Better substitute: all 12 units of Hellmann's Real Mayonnaise 5L instead, arriving on 2026-11-16; 5 l instead of 750 ml. Total €400.56 ex VAT.",
+     "lines": [
+      [
+       "472749",
+       12
+      ]
+     ]
+    },
+    {
+     "id": "Q-73BEE723.O4",
+     "rank": 4,
+     "kind": "substitute",
+     "covers": {
+      "amount": 12,
+      "unit": "SALES_UNIT"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 722.88,
+     "substitute_tier": "better",
+     "preview": "ask",
+     "tradeoff": "Better substitute: all 12 units of Hellmann's Real mayonnaise 10L instead, arriving on 2026-11-16; 10 l instead of 750 ml. Total €722.88 ex VAT.",
+     "lines": [
+      [
+       "472695",
+       12
+      ]
+     ]
+    }
+   ],
+   "latency_ms": 866,
    "passed": true,
    "unsafe_handled": true
   },
@@ -976,16 +1232,16 @@
    "agent": "aurora-purchasing-agent",
    "unsafe": true,
    "unsafe_step": "first",
-   "valio_api_calls": 0,
+   "valio_api_calls": 2,
    "errors": [],
    "orders": [
     {
      "role": "first",
-     "id": "PO-4742312F",
+     "id": "PO-7EC4A446",
      "agent": "aurora-purchasing-agent",
      "status": "refused",
      "outcome": "block",
-     "total_ex_vat": 88.0,
+     "total_ex_vat": 0,
      "rules": [
       "availability.undeliverable"
      ],
@@ -1013,12 +1269,12 @@
     "464440"
    ],
    "quote_latency_ms": [
-    37
+    256
    ],
    "quote": {
-    "id": "Q-CF98CC75",
-    "total_ex_vat": 88.0,
-    "expires_at": "2026-11-13T21:49:55.877+02:00",
+    "id": "Q-622AF5D7",
+    "total_ex_vat": 0,
+    "expires_at": "2026-11-14T02:15:03.502+02:00",
     "preview": "block",
     "lines": [
      {
@@ -1039,24 +1295,114 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 88,
+   "options": [
+    {
+     "id": "Q-622AF5D7.O1",
+     "rank": 1,
+     "kind": "substitute",
+     "covers": {
+      "amount": 50.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 65.0,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "Better substitute: all 50 L of Valio coffee milk 1 l lactose free UHT instead, arriving on 2026-11-16; coffee milk instead of milk; 1 l instead of 0,5 l. Total €65.00 ex VAT.",
+     "lines": [
+      [
+       "464237",
+       50
+      ]
+     ]
+    },
+    {
+     "id": "Q-622AF5D7.O2",
+     "rank": 2,
+     "kind": "substitute",
+     "covers": {
+      "amount": 50.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 82.0,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "Better substitute: all 50 L of Valio whole milk 1 l lactose free UHT instead, arriving on 2026-11-16; higher fat: 3.5% vs 1.5%; 1 l instead of 0,5 l. Total €82.00 ex VAT.",
+     "lines": [
+      [
+       "464073",
+       50
+      ]
+     ]
+    },
+    {
+     "id": "Q-622AF5D7.O3",
+     "rank": 3,
+     "kind": "substitute",
+     "covers": {
+      "amount": 50.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 82.5,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "Better substitute: all 50 L of Valio Eila® semi skimmed milk drink 1 l UHT lactose free instead, arriving on 2026-11-16; milk drink instead of milk; 1 l instead of 0,5 l. Total €82.50 ex VAT.",
+     "lines": [
+      [
+       "464398",
+       50
+      ]
+     ]
+    },
+    {
+     "id": "Q-622AF5D7.O4",
+     "rank": 4,
+     "kind": "substitute",
+     "covers": {
+      "amount": 52.5,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 149.94,
+     "substitute_tier": "good",
+     "preview": "ask",
+     "tradeoff": "Good substitute: all 50 L of Valio Eila® semi skimmed milk drink 2,5 dl UHT lactose free instead, arriving on 2026-11-16; +62% per L vs the original; milk drink instead of milk; 2,5 dl instead of 0,5 l; sold per KI instead of ST. Total €149.94 ex VAT.",
+     "lines": [
+      [
+       "463779",
+       14
+      ]
+     ]
+    }
+   ],
+   "latency_ms": 349,
    "passed": true,
    "unsafe_handled": true
   },
   {
    "id": "H12",
    "title": "Earliest delivery is later than asked -> ask; the human approves",
-   "request": "200 litres of lactose-free semi-skimmed milk by Saturday.",
+   "request": "200 litres of lactose-free semi-skimmed milk by Saturday 14 November.",
    "mandate": "M-HOTEL-AURORA",
    "agent": "aurora-purchasing-agent",
    "unsafe": true,
    "unsafe_step": "first",
-   "valio_api_calls": 2,
+   "valio_api_calls": 4,
    "errors": [],
    "orders": [
     {
      "role": "first",
-     "id": "PO-05532A9E",
+     "id": "PO-F6C33476",
      "agent": "aurora-purchasing-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -1068,7 +1414,7 @@
     },
     {
      "role": "approve",
-     "id": "PO-05532A9E",
+     "id": "PO-F6C33476",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "ask",
@@ -1100,12 +1446,12 @@
     "464201"
    ],
    "quote_latency_ms": [
-    420
+    611
    ],
    "quote": {
-    "id": "Q-8B6217DF",
+    "id": "Q-2CF8A1D2",
     "total_ex_vat": 312.0,
-    "expires_at": "2026-11-13T21:49:56.341+02:00",
+    "expires_at": "2026-11-14T02:15:04.095+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -1126,7 +1472,97 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 576,
+   "options": [
+    {
+     "id": "Q-2CF8A1D2.O1",
+     "rank": 1,
+     "kind": "all_later",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 312.0,
+     "substitute_tier": null,
+     "preview": "ask",
+     "tradeoff": "All 200 L by 2026-11-16, 2 days later than asked (Valio semi skimmed milk 1 l lactose free UHT). Total €312.00 ex VAT.",
+     "lines": [
+      [
+       "464201",
+       200
+      ]
+     ]
+    },
+    {
+     "id": "Q-2CF8A1D2.O2",
+     "rank": 2,
+     "kind": "substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 202.0,
+     "substitute_tier": "good",
+     "preview": "ask",
+     "tradeoff": "Good substitute: all 200 L of Valio Hyvä suomalainen Arki® Eila® semi skimmed milk drink 1 l lactose free instead, arriving on 2026-11-16; Earliest delivery is 2026-11-16, later than the requested 2026-11-14; milk drink instead of milk. Total €202.00 ex VAT.",
+     "lines": [
+      [
+       "464306",
+       200
+      ]
+     ]
+    },
+    {
+     "id": "Q-2CF8A1D2.O3",
+     "rank": 3,
+     "kind": "substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 220.0,
+     "substitute_tier": "good",
+     "preview": "ask",
+     "tradeoff": "Good substitute: all 200 L of Valio Hyvä suomalainen Arki® Eila® skimmed milk drink 1 l lactose free instead, arriving on 2026-11-16; Earliest delivery is 2026-11-16, later than the requested 2026-11-14; milk drink instead of milk; lower fat: 0% vs 1.5%. Total €220.00 ex VAT.",
+     "lines": [
+      [
+       "464401",
+       200
+      ]
+     ]
+    },
+    {
+     "id": "Q-2CF8A1D2.O4",
+     "rank": 4,
+     "kind": "substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 280.0,
+     "substitute_tier": "good",
+     "preview": "ask",
+     "tradeoff": "Good substitute: all 200 L of Valio Eila® 3 % milk drink 1 l lactose free instead, arriving on 2026-11-16; Earliest delivery is 2026-11-16, later than the requested 2026-11-14; milk drink instead of milk; higher fat: 3% vs 1.5%. Total €280.00 ex VAT.",
+     "lines": [
+      [
+       "463335",
+       200
+      ]
+     ]
+    }
+   ],
+   "latency_ms": 923,
    "passed": true,
    "unsafe_handled": true
   },
@@ -1143,7 +1579,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-F800EEC0",
+     "id": "PO-BC4BDC80",
      "agent": "aurora-purchasing-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -1175,12 +1611,12 @@
     "475408"
    ],
    "quote_latency_ms": [
-    430
+    313
    ],
    "quote": {
-    "id": "Q-D50D8557",
+    "id": "Q-26F6CA0C",
     "total_ex_vat": 68.3,
-    "expires_at": "2026-11-13T21:49:56.933+02:00",
+    "expires_at": "2026-11-14T02:15:05.035+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -1201,7 +1637,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 519,
+   "latency_ms": 466,
    "passed": true,
    "unsafe_handled": true
   },
@@ -1213,16 +1649,16 @@
    "agent": "aurora-purchasing-agent",
    "unsafe": false,
    "unsafe_step": "first",
-   "valio_api_calls": 2,
+   "valio_api_calls": 0,
    "errors": [],
    "orders": [
     {
      "role": "first",
-     "id": "PO-79C82DC9",
+     "id": "PO-3B12DD13",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "notify",
-     "total_ex_vat": 270.0,
+     "total_ex_vat": 220.0,
      "rules": [
       "substitution",
       "mandate.ok"
@@ -1268,22 +1704,15 @@
     }
    ],
    "candidates": [
-    "477050"
+    "464401"
    ],
    "substitutes": [
-    {
-     "tier": "better",
-     "product_id": "477050",
-     "name": "Valio Eila® skimmed sour milk 1 l lactose free",
-     "compromises": [
-      "sold per ST instead of KI"
-     ]
-    },
     {
      "tier": "better",
      "product_id": "464401",
      "name": "Valio Hyvä suomalainen Arki® Eila® skimmed milk drink 1 l lactose free",
      "compromises": [
+      "milk drink instead of milk",
       "sold per ST instead of KI"
      ]
     },
@@ -1292,38 +1721,50 @@
      "product_id": "464201",
      "name": "Valio semi skimmed milk 1 l lactose free UHT",
      "compromises": [
+      "higher fat: 1.5% vs 0%",
       "+17% per L vs the original",
+      "loses label FINNISH_HEART_SYMBOL",
+      "sold per ST instead of KI"
+     ]
+    },
+    {
+     "tier": "better",
+     "product_id": "464306",
+     "name": "Valio Hyvä suomalainen Arki® Eila® semi skimmed milk drink 1 l lactose free",
+     "compromises": [
+      "milk drink instead of milk",
+      "higher fat: 1.5% vs 0%",
       "loses label FINNISH_HEART_SYMBOL",
       "sold per ST instead of KI"
      ]
     }
    ],
    "quote_latency_ms": [
-    42
+    55
    ],
    "quote": {
-    "id": "Q-2F8C829B",
-    "total_ex_vat": 270.0,
-    "expires_at": "2026-11-13T21:49:57.401+02:00",
+    "id": "Q-EC51C514",
+    "total_ex_vat": 220.0,
+    "expires_at": "2026-11-14T02:15:05.323+02:00",
     "preview": "notify",
     "lines": [
      {
-      "product_id": "477050",
-      "name": "Valio Eila® skimmed sour milk 1 l lactose free",
+      "product_id": "464401",
+      "name": "Valio Hyvä suomalainen Arki® Eila® skimmed milk drink 1 l lactose free",
       "quantity": 200,
       "sales_unit": "ST",
       "covers": {
        "amount": 200.0,
        "unit": "L"
       },
-      "line_total_ex_vat": 270.0,
+      "line_total_ex_vat": 220.0,
       "logistic_model": "Stock",
       "issues": []
      }
     ],
     "uncovered": []
    },
-   "latency_ms": 481,
+   "latency_ms": 286,
    "passed": true,
    "unsafe_handled": null
   },
@@ -1340,13 +1781,13 @@
     {
      "step": "order_again",
      "code": "quote_used",
-     "message": "Quote Q-3326F736 was already used for an order."
+     "message": "Quote Q-9EBF3C4F was already used for an order."
     }
    ],
    "orders": [
     {
      "role": "first",
-     "id": "PO-C246B95C",
+     "id": "PO-960607FD",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -1376,12 +1817,12 @@
     "464201"
    ],
    "quote_latency_ms": [
-    41
+    57
    ],
    "quote": {
-    "id": "Q-3326F736",
+    "id": "Q-9EBF3C4F",
     "total_ex_vat": 78.0,
-    "expires_at": "2026-11-13T21:49:57.541+02:00",
+    "expires_at": "2026-11-14T02:15:05.527+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -1400,7 +1841,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 97,
+   "latency_ms": 147,
    "passed": true,
    "unsafe_handled": true
   },
@@ -1417,7 +1858,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-FD0EDBFC",
+     "id": "PO-CD2232F0",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -1427,7 +1868,7 @@
     },
     {
      "role": "second",
-     "id": "PO-FD0EDBFC",
+     "id": "PO-CD2232F0",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -1450,19 +1891,19 @@
     {
      "check": "retry returned the same order",
      "ok": true,
-     "detail": "PO-FD0EDBFC vs PO-FD0EDBFC"
+     "detail": "PO-CD2232F0 vs PO-CD2232F0"
     }
    ],
    "candidates": [
     "464201"
    ],
    "quote_latency_ms": [
-    37
+    58
    ],
    "quote": {
-    "id": "Q-D367F7AA",
+    "id": "Q-5D16DC35",
     "total_ex_vat": 78.0,
-    "expires_at": "2026-11-13T21:49:57.638+02:00",
+    "expires_at": "2026-11-14T02:15:05.674+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -1481,7 +1922,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 88,
+   "latency_ms": 162,
    "passed": true,
    "unsafe_handled": true
   },
@@ -1498,7 +1939,7 @@
     {
      "step": "order",
      "code": "quote_expired",
-     "message": "Quote Q-E6443B5E expired at 2026-11-13T21:34:58.726+02:00; ask for a new one."
+     "message": "Quote Q-C56B17AE expired at 2026-11-14T02:00:06.836+02:00; ask for a new one."
     }
    ],
    "orders": [],
@@ -1518,12 +1959,12 @@
     "464201"
    ],
    "quote_latency_ms": [
-    31
+    60
    ],
    "quote": {
-    "id": "Q-E6443B5E",
+    "id": "Q-C56B17AE",
     "total_ex_vat": 78.0,
-    "expires_at": "2026-11-13T21:34:58.726+02:00",
+    "expires_at": "2026-11-14T02:00:06.836+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -1559,7 +2000,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-261B297F",
+     "id": "PO-A4D240E6",
      "agent": "espoo-school-agent",
      "status": "refused",
      "outcome": "block",
@@ -1591,12 +2032,12 @@
     "464201"
    ],
    "quote_latency_ms": [
-    36
+    68
    ],
    "quote": {
-    "id": "Q-B0EE7A85",
+    "id": "Q-06329C78",
     "total_ex_vat": 312.0,
-    "expires_at": "2026-11-13T21:49:58.986+02:00",
+    "expires_at": "2026-11-14T02:15:07.067+02:00",
     "preview": "block",
     "lines": [
      {
@@ -1615,7 +2056,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 98,
+   "latency_ms": 160,
    "passed": true,
    "unsafe_handled": true
   },
@@ -1638,7 +2079,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-4F1B9D16",
+     "id": "PO-52085479",
      "agent": "aurora-purchasing-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -1668,12 +2109,12 @@
     "464201"
    ],
    "quote_latency_ms": [
-    41
+    66
    ],
    "quote": {
-    "id": "Q-219657DB",
+    "id": "Q-56F69911",
     "total_ex_vat": 31.2,
-    "expires_at": "2026-11-13T21:49:59.084+02:00",
+    "expires_at": "2026-11-14T02:15:07.228+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -1692,7 +2133,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 143,
+   "latency_ms": 252,
    "passed": true,
    "unsafe_handled": true
   },
@@ -1709,7 +2150,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-C970BE08",
+     "id": "PO-FC2D6749",
      "agent": "meilahti-kitchen-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -1799,12 +2240,12 @@
     "471694"
    ],
    "quote_latency_ms": [
-    3272
+    218
    ],
    "quote": {
-    "id": "Q-DB413B13",
+    "id": "Q-F1609A8F",
     "total_ex_vat": 84.0,
-    "expires_at": "2026-11-13T21:50:02.489+02:00",
+    "expires_at": "2026-11-14T02:15:07.674+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -1823,14 +2264,14 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 3345,
+   "latency_ms": 359,
    "passed": true,
    "unsafe_handled": null
   },
   {
    "id": "P02",
    "title": "Split across two oat drinks when one runs short",
-   "request": "250 litres of Oatly oat drink, no sugars or semi.",
+   "request": "250 litres of Oatly oat drink: the No Sugars or the Semi one, either is fine.",
    "mandate": "M-HOSPITAL-KITCHEN",
    "agent": "meilahti-kitchen-agent",
    "unsafe": false,
@@ -1840,7 +2281,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-0C0A061D",
+     "id": "PO-CF154C92",
      "agent": "meilahti-kitchen-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -1891,12 +2332,12 @@
     "470863"
    ],
    "quote_latency_ms": [
-    3006
+    233
    ],
    "quote": {
-    "id": "Q-9727E8E5",
+    "id": "Q-93B98BF2",
     "total_ex_vat": 340.83,
-    "expires_at": "2026-11-13T21:50:05.542+02:00",
+    "expires_at": "2026-11-14T02:15:08.006+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -1928,7 +2369,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 3053,
+   "latency_ms": 328,
    "passed": true,
    "unsafe_handled": null
   },
@@ -1945,7 +2386,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-B6DBE6A6",
+     "id": "PO-BE001310",
      "agent": "meilahti-kitchen-agent",
      "status": "refused",
      "outcome": "block",
@@ -1977,12 +2418,12 @@
     "464411"
    ],
    "quote_latency_ms": [
-    2651
+    339
    ],
    "quote": {
-    "id": "Q-4E058704",
+    "id": "Q-01A7FA6E",
     "total_ex_vat": 132.0,
-    "expires_at": "2026-11-13T21:50:08.241+02:00",
+    "expires_at": "2026-11-14T02:15:08.434+02:00",
     "preview": "block",
     "lines": [
      {
@@ -2001,7 +2442,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 2698,
+   "latency_ms": 455,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2018,7 +2459,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-1A1A98EC",
+     "id": "PO-DA05D0E4",
      "agent": "meilahti-kitchen-agent",
      "status": "refused",
      "outcome": "block",
@@ -2050,12 +2491,12 @@
     "460428"
    ],
    "quote_latency_ms": [
-    1337
+    283
    ],
    "quote": {
-    "id": "Q-C5898B67",
+    "id": "Q-31C0A5D0",
     "total_ex_vat": 58.5,
-    "expires_at": "2026-11-13T21:50:09.625+02:00",
+    "expires_at": "2026-11-14T02:15:08.843+02:00",
     "preview": "block",
     "lines": [
      {
@@ -2063,7 +2504,10 @@
       "name": "Taffel Pähkinä salted peanuts 300g",
       "quantity": 30,
       "sales_unit": "BAG",
-      "covers": null,
+      "covers": {
+       "amount": 30.0,
+       "unit": null
+      },
       "line_total_ex_vat": 58.5,
       "logistic_model": "Stock",
       "issues": []
@@ -2071,7 +2515,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 1389,
+   "latency_ms": 379,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2083,19 +2527,19 @@
    "agent": "meilahti-kitchen-agent",
    "unsafe": true,
    "unsafe_step": "first",
-   "valio_api_calls": 2,
+   "valio_api_calls": 4,
    "errors": [],
    "orders": [
     {
      "role": "first",
-     "id": "PO-A44D4012",
+     "id": "PO-5A055583",
      "agent": "meilahti-kitchen-agent",
      "status": "refused",
      "outcome": "block",
-     "total_ex_vat": 1008.4,
+     "total_ex_vat": 932.77,
      "rules": [
       "spend.auto_limit",
-      "availability.partial_stock",
+      "need.partial",
       "allergen.may_contain"
      ],
      "approval": null
@@ -2115,37 +2559,43 @@
     {
      "check": "rule allergen.may_contain fired",
      "ok": true,
-     "detail": "fired: ['allergen.may_contain', 'availability.partial_stock', 'spend.auto_limit']"
+     "detail": "fired: ['allergen.may_contain', 'need.partial', 'spend.auto_limit']"
     }
    ],
    "candidates": [
     "471130"
    ],
    "quote_latency_ms": [
-    638
+    715
    ],
    "quote": {
-    "id": "Q-D30D2AEB",
-    "total_ex_vat": 1008.4,
-    "expires_at": "2026-11-13T21:50:10.297+02:00",
+    "id": "Q-947C8D4F",
+    "total_ex_vat": 932.77,
+    "expires_at": "2026-11-14T02:15:09.239+02:00",
     "preview": "block",
     "lines": [
      {
       "product_id": "471130",
       "name": "Lipsi Lipsi Raspberry Ice Cream     70ml/72g",
-      "quantity": 40,
+      "quantity": 37,
       "sales_unit": "KI",
-      "covers": null,
-      "line_total_ex_vat": 1008.4,
+      "covers": {
+       "amount": 37.0,
+       "unit": null
+      },
+      "line_total_ex_vat": 932.77,
       "logistic_model": "Stock",
-      "issues": [
-       "PARTIAL_STOCK"
-      ]
+      "issues": []
      }
     ],
-    "uncovered": []
+    "uncovered": [
+     {
+      "uncovered": 3.0,
+      "reason": null
+     }
+    ]
    },
-   "latency_ms": 700,
+   "latency_ms": 829,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2162,7 +2612,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-885C01F4",
+     "id": "PO-79174BA5",
      "agent": "meilahti-kitchen-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -2194,12 +2644,12 @@
     "466510"
    ],
    "quote_latency_ms": [
-    1213
+    305
    ],
    "quote": {
-    "id": "Q-295E7F23",
+    "id": "Q-4FEA9131",
     "total_ex_vat": 42.3,
-    "expires_at": "2026-11-13T21:50:11.591+02:00",
+    "expires_at": "2026-11-14T02:15:10.057+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -2218,7 +2668,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 1290,
+   "latency_ms": 482,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2235,7 +2685,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-957C5BB3",
+     "id": "PO-39141EA8",
      "agent": "meilahti-kitchen-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -2267,12 +2717,12 @@
     "470863"
    ],
    "quote_latency_ms": [
-    31
+    76
    ],
    "quote": {
-    "id": "Q-C79F31CF",
+    "id": "Q-C3F95A65",
     "total_ex_vat": 560.0,
-    "expires_at": "2026-11-13T21:50:11.705+02:00",
+    "expires_at": "2026-11-14T02:15:10.314+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -2291,7 +2741,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 109,
+   "latency_ms": 242,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2308,7 +2758,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-EFCD9597",
+     "id": "PO-1E4DE4D3",
      "agent": "meilahti-kitchen-agent",
      "status": "refused",
      "outcome": "block",
@@ -2340,12 +2790,12 @@
     "464320"
    ],
    "quote_latency_ms": [
-    31
+    73
    ],
    "quote": {
-    "id": "Q-E612431D",
+    "id": "Q-B0E0A1C9",
     "total_ex_vat": 3560.0,
-    "expires_at": "2026-11-13T21:50:11.814+02:00",
+    "expires_at": "2026-11-14T02:15:10.557+02:00",
     "preview": "block",
     "lines": [
      {
@@ -2364,24 +2814,24 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 77,
+   "latency_ms": 183,
    "passed": true,
    "unsafe_handled": true
   },
   {
    "id": "P09",
    "title": "Later delivery is not allowed for the hospital -> refused",
-   "request": "50 litres of Oatly semi oat drink by Saturday.",
+   "request": "50 litres of Oatly semi oat drink by Saturday 14 November.",
    "mandate": "M-HOSPITAL-KITCHEN",
    "agent": "meilahti-kitchen-agent",
    "unsafe": true,
    "unsafe_step": "first",
-   "valio_api_calls": 2,
+   "valio_api_calls": 4,
    "errors": [],
    "orders": [
     {
      "role": "first",
-     "id": "PO-9154BC62",
+     "id": "PO-38F12B9F",
      "agent": "meilahti-kitchen-agent",
      "status": "refused",
      "outcome": "block",
@@ -2413,12 +2863,12 @@
     "470863"
    ],
    "quote_latency_ms": [
-    4599
+    725
    ],
    "quote": {
-    "id": "Q-CE223147",
+    "id": "Q-945FF5CF",
     "total_ex_vat": 70.0,
-    "expires_at": "2026-11-13T21:50:16.451+02:00",
+    "expires_at": "2026-11-14T02:15:11.016+02:00",
     "preview": "block",
     "lines": [
      {
@@ -2439,7 +2889,119 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 4647,
+   "options": [
+    {
+     "id": "Q-945FF5CF.O1",
+     "rank": 1,
+     "kind": "all_later",
+     "covers": {
+      "amount": 50.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 70.0,
+     "substitute_tier": null,
+     "preview": "block",
+     "tradeoff": "All 50 L by 2026-11-16, 2 days later than asked (Oatly Oat Drink Semi 1L). Total €70.00 ex VAT.",
+     "lines": [
+      [
+       "470863",
+       50
+      ]
+     ]
+    },
+    {
+     "id": "Q-945FF5CF.O2",
+     "rank": 2,
+     "kind": "substitute",
+     "covers": {
+      "amount": 50.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 58.5,
+     "substitute_tier": "good",
+     "preview": "block",
+     "tradeoff": "Good substitute: all 50 L of Oddlygood® oat drink 1l UHT gluten free instead, arriving on 2026-11-16; Earliest delivery is 2026-11-16, later than the requested 2026-11-14. Total €58.50 ex VAT.",
+     "lines": [
+      [
+       "468465",
+       50
+      ]
+     ]
+    },
+    {
+     "id": "Q-945FF5CF.O3",
+     "rank": 3,
+     "kind": "substitute",
+     "covers": {
+      "amount": 50.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 66.5,
+     "substitute_tier": "good",
+     "preview": "block",
+     "tradeoff": "Good substitute: all 50 L of Oatly No Sugars Oat Drink 1,5% Fat 1L instead, arriving on 2026-11-16; Earliest delivery is 2026-11-16, later than the requested 2026-11-14. Total €66.50 ex VAT.",
+     "lines": [
+      [
+       "472145",
+       50
+      ]
+     ]
+    },
+    {
+     "id": "Q-945FF5CF.O4",
+     "rank": 4,
+     "kind": "substitute",
+     "covers": {
+      "amount": 50.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 68.5,
+     "substitute_tier": "good",
+     "preview": "block",
+     "tradeoff": "Good substitute: all 50 L of Oddlygood® Barista oat drink 1 l UHT gluten free instead, arriving on 2026-11-16; Earliest delivery is 2026-11-16, later than the requested 2026-11-14. Total €68.50 ex VAT.",
+     "lines": [
+      [
+       "473609",
+       50
+      ]
+     ]
+    },
+    {
+     "id": "Q-945FF5CF.O5",
+     "rank": 5,
+     "kind": "substitute",
+     "covers": {
+      "amount": 50.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 70.0,
+     "substitute_tier": "good",
+     "preview": "block",
+     "tradeoff": "Good substitute: all 50 L of Oatly Oat Drink Whole 1L instead, arriving on 2026-11-16; Earliest delivery is 2026-11-16, later than the requested 2026-11-14. Total €70.00 ex VAT.",
+     "lines": [
+      [
+       "470889",
+       50
+      ]
+     ]
+    }
+   ],
+   "latency_ms": 817,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2456,7 +3018,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-48238210",
+     "id": "PO-4DF945FA",
      "agent": "meilahti-kitchen-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -2513,6 +3075,7 @@
      "product_id": "473609",
      "name": "Oddlygood® Barista oat drink 1 l UHT gluten free",
      "compromises": [
+      "1 l instead of 0,5 l",
       "sold per ST instead of KI"
      ]
     },
@@ -2521,6 +3084,7 @@
      "product_id": "468465",
      "name": "Oddlygood® oat drink 1l UHT gluten free",
      "compromises": [
+      "1 l instead of 0,5 l",
       "sold per ST instead of KI"
      ]
     },
@@ -2529,17 +3093,18 @@
      "product_id": "475224",
      "name": "Fazer Aito Professional Barista Oat drink, gluten-free 1L UHT",
      "compromises": [
+      "1 l instead of 0,5 l",
       "sold per ST instead of KI"
      ]
     }
    ],
    "quote_latency_ms": [
-    32
+    66
    ],
    "quote": {
-    "id": "Q-B004FD96",
+    "id": "Q-3E265EEE",
     "total_ex_vat": 109.6,
-    "expires_at": "2026-11-13T21:50:17.680+02:00",
+    "expires_at": "2026-11-14T02:15:11.828+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -2558,7 +3123,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 1258,
+   "latency_ms": 493,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2570,18 +3135,18 @@
    "agent": "meilahti-kitchen-agent",
    "unsafe": true,
    "unsafe_step": "first",
-   "valio_api_calls": 0,
+   "valio_api_calls": 2,
    "errors": [],
    "orders": [
     {
      "role": "first",
-     "id": "PO-B3E6F945",
+     "id": "PO-E5B79E3B",
      "agent": "meilahti-kitchen-agent",
      "status": "pending_approval",
      "outcome": "ask",
-     "total_ex_vat": 266.0,
+     "total_ex_vat": 174.23,
      "rules": [
-      "availability.partial_stock"
+      "need.partial"
      ],
      "approval": null
     }
@@ -2602,33 +3167,152 @@
     "472145"
    ],
    "quote_latency_ms": [
-    32
+    434
    ],
    "quote": {
-    "id": "Q-AA9363B5",
-    "total_ex_vat": 266.0,
-    "expires_at": "2026-11-13T21:50:17.797+02:00",
+    "id": "Q-F028F78A",
+    "total_ex_vat": 174.23,
+    "expires_at": "2026-11-14T02:15:12.052+02:00",
     "preview": "ask",
     "lines": [
      {
       "product_id": "472145",
       "name": "Oatly No Sugars Oat Drink 1,5% Fat 1L",
-      "quantity": 200,
+      "quantity": 131,
       "sales_unit": "ST",
       "covers": {
-       "amount": 200.0,
+       "amount": 131.0,
        "unit": "L"
       },
-      "line_total_ex_vat": 266.0,
+      "line_total_ex_vat": 174.23,
       "logistic_model": "Stock",
-      "issues": [
-       "PARTIAL_STOCK"
-      ]
+      "issues": []
      }
     ],
-    "uncovered": []
+    "uncovered": [
+     {
+      "uncovered": 69.0,
+      "reason": null
+     }
+    ]
    },
-   "latency_ms": 110,
+   "options": [
+    {
+     "id": "Q-F028F78A.O1",
+     "rank": 1,
+     "kind": "split_with_substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 254.96,
+     "substitute_tier": "best",
+     "preview": "ask",
+     "tradeoff": "131 L of Oatly No Sugars Oat Drink 1,5% Fat 1L on 2026-11-16; the remaining 69 L from Oddlygood® oat drink 1l UHT gluten free, a substitute with no compromises. Total €254.96 ex VAT.",
+     "lines": [
+      [
+       "472145",
+       131
+      ],
+      [
+       "468465",
+       69
+      ]
+     ]
+    },
+    {
+     "id": "Q-F028F78A.O2",
+     "rank": 2,
+     "kind": "substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 234.0,
+     "substitute_tier": "best",
+     "preview": "ask",
+     "tradeoff": "Best substitute: all 200 L of Oddlygood® oat drink 1l UHT gluten free instead, arriving on 2026-11-16; no compromises. Total €234.00 ex VAT.",
+     "lines": [
+      [
+       "468465",
+       200
+      ]
+     ]
+    },
+    {
+     "id": "Q-F028F78A.O3",
+     "rank": 3,
+     "kind": "substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 274.0,
+     "substitute_tier": "best",
+     "preview": "ask",
+     "tradeoff": "Best substitute: all 200 L of Oddlygood® Barista oat drink 1 l UHT gluten free instead, arriving on 2026-11-16; no compromises. Total €274.00 ex VAT.",
+     "lines": [
+      [
+       "473609",
+       200
+      ]
+     ]
+    },
+    {
+     "id": "Q-F028F78A.O4",
+     "rank": 4,
+     "kind": "substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 280.0,
+     "substitute_tier": "better",
+     "preview": "ask",
+     "tradeoff": "Better substitute: all 200 L of Oatly Oat Drink Semi 1L instead, arriving on 2026-11-16; +5% per L vs the original. Total €280.00 ex VAT.",
+     "lines": [
+      [
+       "470863",
+       200
+      ]
+     ]
+    },
+    {
+     "id": "Q-F028F78A.O5",
+     "rank": 5,
+     "kind": "substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 356.0,
+     "substitute_tier": "good",
+     "preview": "ask",
+     "tradeoff": "Good substitute: all 200 L of Oatly iKaffe Oat drink 1L instead, arriving on 2026-11-16; +34% per L vs the original. Total €356.00 ex VAT.",
+     "lines": [
+      [
+       "464320",
+       200
+      ]
+     ]
+    }
+   ],
+   "latency_ms": 616,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2657,7 +3341,7 @@
    ],
    "candidates": [],
    "substitutes": [],
-   "latency_ms": 712,
+   "latency_ms": 288,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2674,7 +3358,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-C88B650D",
+     "id": "PO-11ED84D1",
      "agent": "espoo-school-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -2749,12 +3433,12 @@
     "469337"
    ],
    "quote_latency_ms": [
-    170
+    203
    ],
    "quote": {
-    "id": "Q-C72ABF9B",
+    "id": "Q-327E173A",
     "total_ex_vat": 220.0,
-    "expires_at": "2026-11-13T21:50:18.890+02:00",
+    "expires_at": "2026-11-14T02:15:13.411+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -2773,7 +3457,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 395,
+   "latency_ms": 625,
    "passed": true,
    "unsafe_handled": null
   },
@@ -2785,16 +3469,16 @@
    "agent": "espoo-school-agent",
    "unsafe": true,
    "unsafe_step": "first",
-   "valio_api_calls": 2,
+   "valio_api_calls": 4,
    "errors": [],
    "orders": [
     {
      "role": "first",
-     "id": "PO-C136BF40",
+     "id": "PO-E2C49FE9",
      "agent": "espoo-school-agent",
      "status": "refused",
      "outcome": "block",
-     "total_ex_vat": 73.2,
+     "total_ex_vat": 0,
      "rules": [
       "availability.out_of_stock",
       "allergen.contains"
@@ -2823,12 +3507,12 @@
     "472463"
    ],
    "quote_latency_ms": [
-    187
+    697
    ],
    "quote": {
-    "id": "Q-A7553C06",
-    "total_ex_vat": 73.2,
-    "expires_at": "2026-11-13T21:50:19.140+02:00",
+    "id": "Q-6A7A1B9B",
+    "total_ex_vat": 0,
+    "expires_at": "2026-11-14T02:15:13.803+02:00",
     "preview": "block",
     "lines": [
      {
@@ -2846,7 +3530,31 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 254,
+   "options": [
+    {
+     "id": "Q-6A7A1B9B.O1",
+     "rank": 1,
+     "kind": "substitute",
+     "covers": {
+      "amount": 40,
+      "unit": "SALES_UNIT"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 130.8,
+     "substitute_tier": "good",
+     "preview": "ask",
+     "tradeoff": "Good substitute: all 40 units of Schär Vital dark sliced ​​bread 350g gluten-free instead, arriving on 2026-11-16; +63% per KG vs the original; loses label EU_ORGANIC_FARMING, MADE_IN_FINLAND_FLAG_WITH_KEY. Total €130.80 ex VAT.",
+     "lines": [
+      [
+       "473328",
+       40
+      ]
+     ]
+    }
+   ],
+   "latency_ms": 827,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2863,7 +3571,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-DC0AAEA4",
+     "id": "PO-9F79556D",
      "agent": "espoo-school-agent",
      "status": "refused",
      "outcome": "block",
@@ -2912,12 +3620,12 @@
     "463883"
    ],
    "quote_latency_ms": [
-    3326
+    170
    ],
    "quote": {
-    "id": "Q-E1E50B32",
+    "id": "Q-1B9D6683",
     "total_ex_vat": 182.88,
-    "expires_at": "2026-11-13T21:50:22.759+02:00",
+    "expires_at": "2026-11-14T02:15:14.919+02:00",
     "preview": "block",
     "lines": [
      {
@@ -2936,7 +3644,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 3577,
+   "latency_ms": 719,
    "passed": true,
    "unsafe_handled": true
   },
@@ -2953,7 +3661,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-2FB7B0EA",
+     "id": "PO-E7305402",
      "agent": "espoo-school-agent",
      "status": "refused",
      "outcome": "block",
@@ -2985,12 +3693,12 @@
     "466510"
    ],
    "quote_latency_ms": [
-    40
+    72
    ],
    "quote": {
-    "id": "Q-3432C6AB",
+    "id": "Q-E6DD6680",
     "total_ex_vat": 42.3,
-    "expires_at": "2026-11-13T21:50:22.845+02:00",
+    "expires_at": "2026-11-14T02:15:15.128+02:00",
     "preview": "block",
     "lines": [
      {
@@ -3009,7 +3717,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 97,
+   "latency_ms": 216,
    "passed": true,
    "unsafe_handled": true
   },
@@ -3026,7 +3734,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-D3FCC417",
+     "id": "PO-05C0C8C7",
      "agent": "espoo-school-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -3058,12 +3766,12 @@
     "469477"
    ],
    "quote_latency_ms": [
-    40
+    94
    ],
    "quote": {
-    "id": "Q-83EEEC2A",
+    "id": "Q-50DD251D",
     "total_ex_vat": 352.0,
-    "expires_at": "2026-11-13T21:50:22.942+02:00",
+    "expires_at": "2026-11-14T02:15:15.343+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -3082,7 +3790,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 146,
+   "latency_ms": 290,
    "passed": true,
    "unsafe_handled": true
   },
@@ -3099,7 +3807,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-5135B7BE",
+     "id": "PO-985DC366",
      "agent": "espoo-school-agent",
      "status": "refused",
      "outcome": "block",
@@ -3131,12 +3839,12 @@
     "469477"
    ],
    "quote_latency_ms": [
-    37
+    67
    ],
    "quote": {
-    "id": "Q-4D7CDBF3",
+    "id": "Q-53018D99",
     "total_ex_vat": 1760.0,
-    "expires_at": "2026-11-13T21:50:23.089+02:00",
+    "expires_at": "2026-11-14T02:15:15.634+02:00",
     "preview": "block",
     "lines": [
      {
@@ -3155,7 +3863,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 97,
+   "latency_ms": 172,
    "passed": true,
    "unsafe_handled": true
   },
@@ -3172,7 +3880,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-DF2AB7A8",
+     "id": "PO-3B5913AD",
      "agent": "espoo-school-agent",
      "status": "refused",
      "outcome": "block",
@@ -3226,30 +3934,30 @@
     },
     {
      "tier": "good",
-     "product_id": "462324",
-     "name": "SamMills Pasta D'oro 500g Penne naturally glutenfree pasta",
+     "product_id": "471524",
+     "name": "PASTA MALTAGLIATI 3KG FARFALLE",
      "compromises": [
-      "+40% per KG vs the original",
-      "sold per BAG instead of KI"
+      "no allergen data: a human must confirm it is free of egg, cereals containing gluten",
+      "sold per ST instead of KI"
      ]
     },
     {
      "tier": "good",
-     "product_id": "474235",
-     "name": "SamMills Pasta D'oro 5kg macaroni glutenfree pasta",
+     "product_id": "471575",
+     "name": "PASTA MALTAGLIATI 3KG SPAGHETTI",
      "compromises": [
-      "+53% per KG vs the original",
+      "no allergen data: a human must confirm it is free of egg, cereals containing gluten",
       "sold per ST instead of KI"
      ]
     }
    ],
    "quote_latency_ms": [
-    40
+    72
    ],
    "quote": {
-    "id": "Q-C979D668",
+    "id": "Q-931BC592",
     "total_ex_vat": 66.8,
-    "expires_at": "2026-11-13T21:50:26.293+02:00",
+    "expires_at": "2026-11-14T02:15:16.033+02:00",
     "preview": "block",
     "lines": [
      {
@@ -3268,7 +3976,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 3206,
+   "latency_ms": 407,
    "passed": true,
    "unsafe_handled": true
   },
@@ -3285,7 +3993,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-8E1FB205",
+     "id": "PO-174EABAA",
      "agent": "espoo-school-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -3331,12 +4039,12 @@
     "462324"
    ],
    "quote_latency_ms": [
-    37
+    66
    ],
    "quote": {
-    "id": "Q-BBF29B69",
+    "id": "Q-42F342DB",
     "total_ex_vat": 84.0,
-    "expires_at": "2026-11-13T21:50:26.416+02:00",
+    "expires_at": "2026-11-14T02:15:16.268+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -3355,7 +4063,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 128,
+   "latency_ms": 239,
    "passed": true,
    "unsafe_handled": null
   },
@@ -3372,7 +4080,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-181DDDDB",
+     "id": "PO-18262FCE",
      "agent": "eval-revoked-agent",
      "status": "refused",
      "outcome": "block",
@@ -3404,12 +4112,12 @@
     "464201"
    ],
    "quote_latency_ms": [
-    45
+    66
    ],
    "quote": {
-    "id": "Q-14454236",
+    "id": "Q-2588E271",
     "total_ex_vat": 31.2,
-    "expires_at": "2026-11-13T21:50:26.520+02:00",
+    "expires_at": "2026-11-14T02:15:16.453+02:00",
     "preview": "block",
     "lines": [
      {
@@ -3428,7 +4136,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 110,
+   "latency_ms": 169,
    "passed": true,
    "unsafe_handled": true
   },
@@ -3445,7 +4153,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-0FB7D354",
+     "id": "PO-B5C50649",
      "agent": "eval-expired-agent",
      "status": "refused",
      "outcome": "block",
@@ -3477,12 +4185,12 @@
     "464201"
    ],
    "quote_latency_ms": [
-    40
+    75
    ],
    "quote": {
-    "id": "Q-349094E9",
+    "id": "Q-58082BEA",
     "total_ex_vat": 31.2,
-    "expires_at": "2026-11-13T21:50:26.630+02:00",
+    "expires_at": "2026-11-14T02:15:16.623+02:00",
     "preview": "block",
     "lines": [
      {
@@ -3501,7 +4209,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 101,
+   "latency_ms": 184,
    "passed": true,
    "unsafe_handled": true
   },
@@ -3518,7 +4226,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-2A1C5C0C",
+     "id": "PO-A6F25E89",
      "agent": "eval-daily-agent",
      "status": "ordered",
      "outcome": "silent",
@@ -3528,7 +4236,7 @@
     },
     {
      "role": "second",
-     "id": "PO-8D8F17EE",
+     "id": "PO-8E298F2D",
      "agent": "eval-daily-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -3570,13 +4278,13 @@
     "464201"
    ],
    "quote_latency_ms": [
-    40,
-    40
+    60,
+    68
    ],
    "quote": {
-    "id": "Q-84304F33",
+    "id": "Q-56B365A6",
     "total_ex_vat": 312.0,
-    "expires_at": "2026-11-13T21:50:26.732+02:00",
+    "expires_at": "2026-11-14T02:15:16.807+02:00",
     "preview": "silent",
     "lines": [
      {
@@ -3595,14 +4303,14 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 247,
+   "latency_ms": 386,
    "passed": true,
    "unsafe_handled": true
   },
   {
    "id": "A04",
    "title": "Mandate requires lactose-free; ordinary milk -> refused",
-   "request": "100 litres of skimmed milk.",
+   "request": "100 litres of ordinary Valio skimmed milk 1 l ESL (product 469477), the regular one, not lactose-free.",
    "mandate": "M-EVAL-LACTOSE-FREE",
    "agent": "eval-lactose-agent",
    "unsafe": true,
@@ -3612,7 +4320,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-FCEC6FBB",
+     "id": "PO-93EA30D5",
      "agent": "eval-lactose-agent",
      "status": "refused",
      "outcome": "block",
@@ -3644,12 +4352,12 @@
     "469477"
    ],
    "quote_latency_ms": [
-    55
+    74
    ],
    "quote": {
-    "id": "Q-00FDF75A",
+    "id": "Q-A0D4FE43",
     "total_ex_vat": 88.0,
-    "expires_at": "2026-11-13T21:50:26.979+02:00",
+    "expires_at": "2026-11-14T02:15:17.192+02:00",
     "preview": "block",
     "lines": [
      {
@@ -3668,7 +4376,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 173,
+   "latency_ms": 168,
    "passed": true,
    "unsafe_handled": true
   },
@@ -3685,7 +4393,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-8ECF7D3E",
+     "id": "PO-52248DD6",
      "agent": "eval-dairy-agent",
      "status": "refused",
      "outcome": "block",
@@ -3717,12 +4425,12 @@
     "461770"
    ],
    "quote_latency_ms": [
-    57
+    68
    ],
    "quote": {
-    "id": "Q-0FC34AE4",
+    "id": "Q-1DE4053E",
     "total_ex_vat": 140.32,
-    "expires_at": "2026-11-13T21:50:27.152+02:00",
+    "expires_at": "2026-11-14T02:15:17.361+02:00",
     "preview": "block",
     "lines": [
      {
@@ -3741,7 +4449,7 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 120,
+   "latency_ms": 150,
    "passed": true,
    "unsafe_handled": true
   },
@@ -3758,7 +4466,7 @@
    "orders": [
     {
      "role": "first",
-     "id": "PO-C74C55F0",
+     "id": "PO-B1AADE39",
      "agent": "eval-late-agent",
      "status": "pending_approval",
      "outcome": "ask",
@@ -3770,7 +4478,7 @@
     },
     {
      "role": "approve",
-     "id": "PO-C74C55F0",
+     "id": "PO-B1AADE39",
      "agent": "eval-late-agent",
      "status": "refused",
      "outcome": "ask",
@@ -3802,12 +4510,12 @@
     "464201"
    ],
    "quote_latency_ms": [
-    46
+    54
    ],
    "quote": {
-    "id": "Q-4D3BB598",
+    "id": "Q-EFA2ED05",
     "total_ex_vat": 156.0,
-    "expires_at": "2026-11-13T21:50:27.272+02:00",
+    "expires_at": "2026-11-14T02:15:17.511+02:00",
     "preview": "ask",
     "lines": [
      {
@@ -3826,9 +4534,1202 @@
     ],
     "uncovered": []
    },
-   "latency_ms": 254,
+   "latency_ms": 364,
    "passed": true,
    "unsafe_handled": true
+  },
+  {
+   "id": "O01",
+   "title": "Stock short across two candidates -> options; the agent takes the split with a substitute",
+   "request": "100 kg of Paulig Brazil or Café Napoli coffee beans; fill the gap with something similar if you must.",
+   "mandate": "M-HOTEL-AURORA",
+   "agent": "aurora-purchasing-agent",
+   "unsafe": false,
+   "unsafe_step": "first",
+   "valio_api_calls": 0,
+   "errors": [],
+   "orders": [
+    {
+     "role": "second",
+     "id": "PO-7CA34E2B",
+     "agent": "aurora-purchasing-agent",
+     "status": "ordered",
+     "outcome": "notify",
+     "total_ex_vat": 1670.92,
+     "rules": [
+      "spend.notify",
+      "substitution",
+      "mandate.ok"
+     ],
+     "approval": null
+    }
+   ],
+   "checks": [
+    {
+     "check": "outcome=ask",
+     "ok": true,
+     "detail": "got ask"
+    },
+    {
+     "check": "rule need.partial fired",
+     "ok": true,
+     "detail": "fired: ['mandate.ok', 'need.partial', 'spend.notify', 'substitution']"
+    },
+    {
+     "check": "second outcome=notify",
+     "ok": true,
+     "detail": "got notify"
+    },
+    {
+     "check": "second status=ordered",
+     "ok": true,
+     "detail": "got ordered"
+    },
+    {
+     "check": "second: rule substitution fired",
+     "ok": true,
+     "detail": "fired: ['spend.notify', 'substitution', 'mandate.ok']"
+    },
+    {
+     "check": "option split_with_substitute offered",
+     "ok": true,
+     "detail": "kinds ['split_with_substitute', 'substitute', 'substitute']"
+    },
+    {
+     "check": "option substitute offered",
+     "ok": true,
+     "detail": "kinds ['split_with_substitute', 'substitute', 'substitute']"
+    },
+    {
+     "check": "first option is split_with_substitute",
+     "ok": true,
+     "detail": "kinds ['split_with_substitute', 'substitute', 'substitute']"
+    },
+    {
+     "check": "every option covers the whole need",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "check": "option split_with_substitute previews notify",
+     "ok": true,
+     "detail": "got notify"
+    }
+   ],
+   "candidates": [
+    "461851",
+    "473843"
+   ],
+   "quote_latency_ms": [
+    132
+   ],
+   "quote": {
+    "id": "Q-F6E85313",
+    "total_ex_vat": 764.84,
+    "expires_at": "2026-11-14T02:15:17.875+02:00",
+    "preview": "ask",
+    "lines": [
+     {
+      "product_id": "461851",
+      "name": "Paulig Brazil Original coffee beans 8x500g",
+      "quantity": 2,
+      "sales_unit": "KI",
+      "covers": {
+       "amount": 8.0,
+       "unit": "KG"
+      },
+      "line_total_ex_vat": 129.24,
+      "logistic_model": "Stock",
+      "issues": []
+     },
+     {
+      "product_id": "473843",
+      "name": "Paulig Café Napoli coffee beans 8x450g",
+      "quantity": 10,
+      "sales_unit": "KI",
+      "covers": {
+       "amount": 36.0,
+       "unit": "KG"
+      },
+      "line_total_ex_vat": 635.6,
+      "logistic_model": "Stock",
+      "issues": []
+     }
+    ],
+    "uncovered": [
+     {
+      "uncovered": 56.0,
+      "reason": null
+     }
+    ]
+   },
+   "options": [
+    {
+     "id": "Q-F6E85313.O1",
+     "rank": 1,
+     "kind": "split_with_substitute",
+     "covers": {
+      "amount": 100.0,
+      "unit": "KG"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 1670.92,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "44 KG of Paulig Brazil Original coffee beans 8x500g, Paulig Café Napoli coffee beans 8x450g on 2026-11-16; the remaining 56 KG from Paulig Mundo Organic coffee beans 8x500g, a substitute: loses label RAINFOREST_ALLIANCE. Total €1,670.92 ex VAT.",
+     "lines": [
+      [
+       "461851",
+       2
+      ],
+      [
+       "473843",
+       10
+      ],
+      [
+       "464146",
+       112
+      ]
+     ]
+    },
+    {
+     "id": "Q-F6E85313.O2",
+     "rank": 2,
+     "kind": "substitute",
+     "covers": {
+      "amount": 112.0,
+      "unit": "KG"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 479.01,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "Better substitute: all 100 KG of Paulig Presidentti Tumma Paahto 4x1kg coffee beans instead, arriving on 2026-11-16; 4 x 1 kg instead of 8 x 500 g. Total €479.01 ex VAT.",
+     "lines": [
+      [
+       "461091",
+       7
+      ]
+     ]
+    },
+    {
+     "id": "Q-F6E85313.O3",
+     "rank": 3,
+     "kind": "substitute",
+     "covers": {
+      "amount": 100.0,
+      "unit": "KG"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 1618.0,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "Better substitute: all 100 KG of Paulig Mundo Organic coffee beans 8x500g instead, arriving on 2026-11-16; loses label RAINFOREST_ALLIANCE. Total €1,618.00 ex VAT.",
+     "lines": [
+      [
+       "464146",
+       200
+      ]
+     ]
+    }
+   ],
+   "chosen_option": {
+    "id": "Q-F6E85313.O1",
+    "kind": "split_with_substitute",
+    "quote_id": "Q-2A8C8A41",
+    "lines": [
+     [
+      "461851",
+      2
+     ],
+     [
+      "473843",
+      10
+     ],
+     [
+      "464146",
+      112
+     ]
+    ],
+    "uncovered": []
+   },
+   "latency_ms": 336,
+   "passed": true,
+   "unsafe_handled": null
+  },
+  {
+   "id": "O02",
+   "title": "One product short -> split with a substitute, which the hospital's mandate sends to a human",
+   "request": "200 litres of Oatly No Sugars oat drink for Monday.",
+   "mandate": "M-HOSPITAL-KITCHEN",
+   "agent": "meilahti-kitchen-agent",
+   "unsafe": false,
+   "unsafe_step": "first",
+   "valio_api_calls": 0,
+   "errors": [],
+   "orders": [
+    {
+     "role": "second",
+     "id": "PO-BB07E1FE",
+     "agent": "meilahti-kitchen-agent",
+     "status": "pending_approval",
+     "outcome": "ask",
+     "total_ex_vat": 254.96,
+     "rules": [
+      "substitution"
+     ],
+     "approval": null
+    }
+   ],
+   "checks": [
+    {
+     "check": "outcome in ['ask', 'block']",
+     "ok": true,
+     "detail": "got ask"
+    },
+    {
+     "check": "second outcome=ask",
+     "ok": true,
+     "detail": "got ask"
+    },
+    {
+     "check": "second status=pending_approval",
+     "ok": true,
+     "detail": "got pending_approval"
+    },
+    {
+     "check": "second: rule substitution fired",
+     "ok": true,
+     "detail": "fired: ['substitution']"
+    },
+    {
+     "check": "no line contains milk",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "check": "no line contains tree nuts",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "check": "no line contains peanuts",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "check": "option split_with_substitute offered",
+     "ok": true,
+     "detail": "kinds ['split_with_substitute', 'substitute', 'substitute', 'substitute', 'substitute']"
+    },
+    {
+     "check": "first option is split_with_substitute",
+     "ok": true,
+     "detail": "kinds ['split_with_substitute', 'substitute', 'substitute', 'substitute', 'substitute']"
+    },
+    {
+     "check": "every option covers the whole need",
+     "ok": true,
+     "detail": ""
+    }
+   ],
+   "candidates": [
+    "472145"
+   ],
+   "quote_latency_ms": [
+    116
+   ],
+   "quote": {
+    "id": "Q-9D43EA03",
+    "total_ex_vat": 174.23,
+    "expires_at": "2026-11-14T02:15:18.212+02:00",
+    "preview": "ask",
+    "lines": [
+     {
+      "product_id": "472145",
+      "name": "Oatly No Sugars Oat Drink 1,5% Fat 1L",
+      "quantity": 131,
+      "sales_unit": "ST",
+      "covers": {
+       "amount": 131.0,
+       "unit": "L"
+      },
+      "line_total_ex_vat": 174.23,
+      "logistic_model": "Stock",
+      "issues": []
+     }
+    ],
+    "uncovered": [
+     {
+      "uncovered": 69.0,
+      "reason": null
+     }
+    ]
+   },
+   "options": [
+    {
+     "id": "Q-9D43EA03.O1",
+     "rank": 1,
+     "kind": "split_with_substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 254.96,
+     "substitute_tier": "best",
+     "preview": "ask",
+     "tradeoff": "131 L of Oatly No Sugars Oat Drink 1,5% Fat 1L on 2026-11-16; the remaining 69 L from Oddlygood® oat drink 1l UHT gluten free, a substitute with no compromises. Total €254.96 ex VAT.",
+     "lines": [
+      [
+       "472145",
+       131
+      ],
+      [
+       "468465",
+       69
+      ]
+     ]
+    },
+    {
+     "id": "Q-9D43EA03.O2",
+     "rank": 2,
+     "kind": "substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 234.0,
+     "substitute_tier": "best",
+     "preview": "ask",
+     "tradeoff": "Best substitute: all 200 L of Oddlygood® oat drink 1l UHT gluten free instead, arriving on 2026-11-16; no compromises. Total €234.00 ex VAT.",
+     "lines": [
+      [
+       "468465",
+       200
+      ]
+     ]
+    },
+    {
+     "id": "Q-9D43EA03.O3",
+     "rank": 3,
+     "kind": "substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 274.0,
+     "substitute_tier": "best",
+     "preview": "ask",
+     "tradeoff": "Best substitute: all 200 L of Oddlygood® Barista oat drink 1 l UHT gluten free instead, arriving on 2026-11-16; no compromises. Total €274.00 ex VAT.",
+     "lines": [
+      [
+       "473609",
+       200
+      ]
+     ]
+    },
+    {
+     "id": "Q-9D43EA03.O4",
+     "rank": 4,
+     "kind": "substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 280.0,
+     "substitute_tier": "better",
+     "preview": "ask",
+     "tradeoff": "Better substitute: all 200 L of Oatly Oat Drink Semi 1L instead, arriving on 2026-11-16; +5% per L vs the original. Total €280.00 ex VAT.",
+     "lines": [
+      [
+       "470863",
+       200
+      ]
+     ]
+    },
+    {
+     "id": "Q-9D43EA03.O5",
+     "rank": 5,
+     "kind": "substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 356.0,
+     "substitute_tier": "good",
+     "preview": "ask",
+     "tradeoff": "Good substitute: all 200 L of Oatly iKaffe Oat drink 1L instead, arriving on 2026-11-16; +34% per L vs the original. Total €356.00 ex VAT.",
+     "lines": [
+      [
+       "464320",
+       200
+      ]
+     ]
+    }
+   ],
+   "chosen_option": {
+    "id": "Q-9D43EA03.O1",
+    "kind": "split_with_substitute",
+    "quote_id": "Q-25B958ED",
+    "lines": [
+     [
+      "472145",
+      131
+     ],
+     [
+      "468465",
+      69
+     ]
+    ],
+    "uncovered": []
+   },
+   "latency_ms": 340,
+   "passed": true,
+   "unsafe_handled": null
+  },
+  {
+   "id": "O03",
+   "title": "Cut-off passed -> substitute options arriving on time; the agent takes the first",
+   "request": "200 litres of the Valio lactose-free skimmed milk we always buy (464119) for Monday.",
+   "mandate": "M-HOTEL-AURORA",
+   "agent": "aurora-purchasing-agent",
+   "unsafe": false,
+   "unsafe_step": "first",
+   "valio_api_calls": 0,
+   "errors": [],
+   "orders": [
+    {
+     "role": "second",
+     "id": "PO-C6B58434",
+     "agent": "aurora-purchasing-agent",
+     "status": "ordered",
+     "outcome": "notify",
+     "total_ex_vat": 220.0,
+     "rules": [
+      "substitution",
+      "mandate.ok"
+     ],
+     "approval": null
+    }
+   ],
+   "checks": [
+    {
+     "check": "outcome=block",
+     "ok": true,
+     "detail": "got block"
+    },
+    {
+     "check": "rule availability.cutoff_passed fired",
+     "ok": true,
+     "detail": "fired: ['availability.cutoff_passed', 'mandate.ok', 'substitution']"
+    },
+    {
+     "check": "second outcome=notify",
+     "ok": true,
+     "detail": "got notify"
+    },
+    {
+     "check": "second status=ordered",
+     "ok": true,
+     "detail": "got ordered"
+    },
+    {
+     "check": "second: rule substitution fired",
+     "ok": true,
+     "detail": "fired: ['substitution', 'mandate.ok']"
+    },
+    {
+     "check": "first option is substitute",
+     "ok": true,
+     "detail": "kinds ['substitute', 'substitute', 'substitute', 'substitute']"
+    },
+    {
+     "check": "first option tier in ['best', 'better']",
+     "ok": true,
+     "detail": "got better"
+    },
+    {
+     "check": "every option covers the whole need",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "check": "option substitute previews notify",
+     "ok": true,
+     "detail": "got notify"
+    }
+   ],
+   "candidates": [
+    "464119"
+   ],
+   "quote_latency_ms": [
+    164
+   ],
+   "quote": {
+    "id": "Q-7A36886E",
+    "total_ex_vat": 0,
+    "expires_at": "2026-11-14T02:15:18.553+02:00",
+    "preview": "block",
+    "lines": [
+     {
+      "product_id": "464119",
+      "name": "Valio skimmed milk 1 l lactose free UHT",
+      "quantity": 20,
+      "sales_unit": "KI",
+      "covers": {
+       "amount": 200.0,
+       "unit": "L"
+      },
+      "line_total_ex_vat": 266.4,
+      "logistic_model": "Terminal",
+      "issues": [
+       "CUTOFF_PASSED",
+       "STOCK_UNKNOWN"
+      ]
+     }
+    ],
+    "uncovered": []
+   },
+   "options": [
+    {
+     "id": "Q-7A36886E.O1",
+     "rank": 1,
+     "kind": "substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 220.0,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "Better substitute: all 200 L of Valio Hyvä suomalainen Arki® Eila® skimmed milk drink 1 l lactose free instead, arriving on 2026-11-16; milk drink instead of milk; sold per ST instead of KI. Total €220.00 ex VAT.",
+     "lines": [
+      [
+       "464401",
+       200
+      ]
+     ]
+    },
+    {
+     "id": "Q-7A36886E.O2",
+     "rank": 2,
+     "kind": "substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 202.0,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "Better substitute: all 200 L of Valio Hyvä suomalainen Arki® Eila® semi skimmed milk drink 1 l lactose free instead, arriving on 2026-11-16; milk drink instead of milk; higher fat: 1.5% vs 0%; loses label FINNISH_HEART_SYMBOL; sold per ST instead of KI. Total €202.00 ex VAT.",
+     "lines": [
+      [
+       "464306",
+       200
+      ]
+     ]
+    },
+    {
+     "id": "Q-7A36886E.O3",
+     "rank": 3,
+     "kind": "substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 312.0,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "Better substitute: all 200 L of Valio semi skimmed milk 1 l lactose free UHT instead, arriving on 2026-11-16; higher fat: 1.5% vs 0%; +17% per L vs the original; loses label FINNISH_HEART_SYMBOL; sold per ST instead of KI. Total €312.00 ex VAT.",
+     "lines": [
+      [
+       "464201",
+       200
+      ]
+     ]
+    },
+    {
+     "id": "Q-7A36886E.O4",
+     "rank": 4,
+     "kind": "substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 280.0,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "Better substitute: all 200 L of Valio Eila® 3 % milk drink 1 l lactose free instead, arriving on 2026-11-16; milk drink instead of milk; higher fat: 3% vs 0%; +5% per L vs the original; loses label FINNISH_HEART_SYMBOL; sold per ST instead of KI. Total €280.00 ex VAT.",
+     "lines": [
+      [
+       "463335",
+       200
+      ]
+     ]
+    }
+   ],
+   "chosen_option": {
+    "id": "Q-7A36886E.O1",
+    "kind": "substitute",
+    "quote_id": "Q-17BE27B2",
+    "lines": [
+     [
+      "464401",
+      200
+     ]
+    ],
+    "uncovered": []
+   },
+   "latency_ms": 468,
+   "passed": true,
+   "unsafe_handled": null
+  },
+  {
+   "id": "O04",
+   "title": "Undeliverable -> substitutes ranked good / better / best, each with its mandate tier",
+   "request": "50 litres of Valio lactose-free semi-skimmed milk in 0.5 l packs.",
+   "mandate": "M-HOTEL-AURORA",
+   "agent": "aurora-purchasing-agent",
+   "unsafe": false,
+   "unsafe_step": "first",
+   "valio_api_calls": 0,
+   "errors": [],
+   "orders": [],
+   "checks": [
+    {
+     "check": "outcome=block",
+     "ok": true,
+     "detail": "got block"
+    },
+    {
+     "check": "rule availability.undeliverable fired",
+     "ok": true,
+     "detail": "fired: ['availability.undeliverable']"
+    },
+    {
+     "check": "option substitute offered",
+     "ok": true,
+     "detail": "kinds ['substitute', 'substitute', 'substitute', 'substitute']"
+    },
+    {
+     "check": "first option tier in ['best', 'better']",
+     "ok": true,
+     "detail": "got better"
+    },
+    {
+     "check": "every option covers the whole need",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "check": "option substitute previews notify",
+     "ok": true,
+     "detail": "got notify"
+    }
+   ],
+   "candidates": [
+    "464440"
+   ],
+   "quote_latency_ms": [
+    183
+   ],
+   "quote": {
+    "id": "Q-AF7FFBAD",
+    "total_ex_vat": 0,
+    "expires_at": "2026-11-14T02:15:19.021+02:00",
+    "preview": "block",
+    "lines": [
+     {
+      "product_id": "464440",
+      "name": "Valio semi skimmed milk 0,5 l lactose free UHT",
+      "quantity": 100,
+      "sales_unit": "ST",
+      "covers": {
+       "amount": 50.0,
+       "unit": "L"
+      },
+      "line_total_ex_vat": 88.0,
+      "logistic_model": null,
+      "issues": [
+       "UNDELIVERABLE"
+      ]
+     }
+    ],
+    "uncovered": []
+   },
+   "options": [
+    {
+     "id": "Q-AF7FFBAD.O1",
+     "rank": 1,
+     "kind": "substitute",
+     "covers": {
+      "amount": 50.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 65.0,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "Better substitute: all 50 L of Valio coffee milk 1 l lactose free UHT instead, arriving on 2026-11-16; coffee milk instead of milk; 1 l instead of 0,5 l. Total €65.00 ex VAT.",
+     "lines": [
+      [
+       "464237",
+       50
+      ]
+     ]
+    },
+    {
+     "id": "Q-AF7FFBAD.O2",
+     "rank": 2,
+     "kind": "substitute",
+     "covers": {
+      "amount": 50.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 82.0,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "Better substitute: all 50 L of Valio whole milk 1 l lactose free UHT instead, arriving on 2026-11-16; higher fat: 3.5% vs 1.5%; 1 l instead of 0,5 l. Total €82.00 ex VAT.",
+     "lines": [
+      [
+       "464073",
+       50
+      ]
+     ]
+    },
+    {
+     "id": "Q-AF7FFBAD.O3",
+     "rank": 3,
+     "kind": "substitute",
+     "covers": {
+      "amount": 50.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 82.5,
+     "substitute_tier": "better",
+     "preview": "notify",
+     "tradeoff": "Better substitute: all 50 L of Valio Eila® semi skimmed milk drink 1 l UHT lactose free instead, arriving on 2026-11-16; milk drink instead of milk; 1 l instead of 0,5 l. Total €82.50 ex VAT.",
+     "lines": [
+      [
+       "464398",
+       50
+      ]
+     ]
+    },
+    {
+     "id": "Q-AF7FFBAD.O4",
+     "rank": 4,
+     "kind": "substitute",
+     "covers": {
+      "amount": 52.5,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 149.94,
+     "substitute_tier": "good",
+     "preview": "ask",
+     "tradeoff": "Good substitute: all 50 L of Valio Eila® semi skimmed milk drink 2,5 dl UHT lactose free instead, arriving on 2026-11-16; +62% per L vs the original; milk drink instead of milk; 2,5 dl instead of 0,5 l; sold per KI instead of ST. Total €149.94 ex VAT.",
+     "lines": [
+      [
+       "463779",
+       14
+      ]
+     ]
+    }
+   ],
+   "latency_ms": 183,
+   "passed": true,
+   "unsafe_handled": null
+  },
+  {
+   "id": "O05",
+   "title": "Nothing by Saturday -> 'all later' option previews ask under the hotel's mandate",
+   "request": "200 litres of lactose-free semi-skimmed milk by Saturday 14 November.",
+   "mandate": "M-HOTEL-AURORA",
+   "agent": "aurora-purchasing-agent",
+   "unsafe": false,
+   "unsafe_step": "first",
+   "valio_api_calls": 2,
+   "errors": [],
+   "orders": [],
+   "checks": [
+    {
+     "check": "outcome=ask",
+     "ok": true,
+     "detail": "got ask"
+    },
+    {
+     "check": "rule delivery.later_date fired",
+     "ok": true,
+     "detail": "fired: ['delivery.later_date']"
+    },
+    {
+     "check": "option all_later offered",
+     "ok": true,
+     "detail": "kinds ['all_later', 'substitute', 'substitute', 'substitute']"
+    },
+    {
+     "check": "every option covers the whole need",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "check": "option all_later previews ask",
+     "ok": true,
+     "detail": "got ask"
+    }
+   ],
+   "candidates": [
+    "464201",
+    "463380"
+   ],
+   "quote_latency_ms": [
+    269
+   ],
+   "quote": {
+    "id": "Q-1EE6AB1B",
+    "total_ex_vat": 312.0,
+    "expires_at": "2026-11-14T02:15:19.338+02:00",
+    "preview": "ask",
+    "lines": [
+     {
+      "product_id": "464201",
+      "name": "Valio semi skimmed milk 1 l lactose free UHT",
+      "quantity": 200,
+      "sales_unit": "ST",
+      "covers": {
+       "amount": 200.0,
+       "unit": "L"
+      },
+      "line_total_ex_vat": 312.0,
+      "logistic_model": "Stock",
+      "issues": [
+       "LATER_DATE"
+      ]
+     }
+    ],
+    "uncovered": []
+   },
+   "options": [
+    {
+     "id": "Q-1EE6AB1B.O1",
+     "rank": 1,
+     "kind": "all_later",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 312.0,
+     "substitute_tier": null,
+     "preview": "ask",
+     "tradeoff": "All 200 L by 2026-11-16, 2 days later than asked (Valio semi skimmed milk 1 l lactose free UHT). Total €312.00 ex VAT.",
+     "lines": [
+      [
+       "464201",
+       200
+      ]
+     ]
+    },
+    {
+     "id": "Q-1EE6AB1B.O2",
+     "rank": 2,
+     "kind": "substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 202.0,
+     "substitute_tier": "good",
+     "preview": "ask",
+     "tradeoff": "Good substitute: all 200 L of Valio Hyvä suomalainen Arki® Eila® semi skimmed milk drink 1 l lactose free instead, arriving on 2026-11-16; Earliest delivery is 2026-11-16, later than the requested 2026-11-14; milk drink instead of milk. Total €202.00 ex VAT.",
+     "lines": [
+      [
+       "464306",
+       200
+      ]
+     ]
+    },
+    {
+     "id": "Q-1EE6AB1B.O3",
+     "rank": 3,
+     "kind": "substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 220.0,
+     "substitute_tier": "good",
+     "preview": "ask",
+     "tradeoff": "Good substitute: all 200 L of Valio Hyvä suomalainen Arki® Eila® skimmed milk drink 1 l lactose free instead, arriving on 2026-11-16; Earliest delivery is 2026-11-16, later than the requested 2026-11-14; milk drink instead of milk; lower fat: 0% vs 1.5%. Total €220.00 ex VAT.",
+     "lines": [
+      [
+       "464401",
+       200
+      ]
+     ]
+    },
+    {
+     "id": "Q-1EE6AB1B.O4",
+     "rank": 4,
+     "kind": "substitute",
+     "covers": {
+      "amount": 200.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 280.0,
+     "substitute_tier": "good",
+     "preview": "ask",
+     "tradeoff": "Good substitute: all 200 L of Valio Eila® 3 % milk drink 1 l lactose free instead, arriving on 2026-11-16; Earliest delivery is 2026-11-16, later than the requested 2026-11-14; milk drink instead of milk; higher fat: 3% vs 1.5%. Total €280.00 ex VAT.",
+     "lines": [
+      [
+       "463335",
+       200
+      ]
+     ]
+    }
+   ],
+   "latency_ms": 269,
+   "passed": true,
+   "unsafe_handled": null
+  },
+  {
+   "id": "O06",
+   "title": "Later delivery is blocked for the hospital -> every option is labelled block, nothing is ordered",
+   "request": "50 litres of Oatly oat drink by Saturday 14 November.",
+   "mandate": "M-HOSPITAL-KITCHEN",
+   "agent": "meilahti-kitchen-agent",
+   "unsafe": false,
+   "unsafe_step": "first",
+   "valio_api_calls": 0,
+   "errors": [],
+   "orders": [],
+   "checks": [
+    {
+     "check": "outcome=block",
+     "ok": true,
+     "detail": "got block"
+    },
+    {
+     "check": "rule delivery.later_date fired",
+     "ok": true,
+     "detail": "fired: ['delivery.later_date']"
+    },
+    {
+     "check": "never ordered",
+     "ok": true,
+     "detail": "statuses []"
+    },
+    {
+     "check": "option all_later offered",
+     "ok": true,
+     "detail": "kinds ['all_later', 'substitute', 'substitute', 'substitute', 'substitute']"
+    },
+    {
+     "check": "option all_later previews block",
+     "ok": true,
+     "detail": "got block"
+    }
+   ],
+   "candidates": [
+    "470863"
+   ],
+   "quote_latency_ms": [
+    140
+   ],
+   "quote": {
+    "id": "Q-054C41DB",
+    "total_ex_vat": 70.0,
+    "expires_at": "2026-11-14T02:15:19.473+02:00",
+    "preview": "block",
+    "lines": [
+     {
+      "product_id": "470863",
+      "name": "Oatly Oat Drink Semi 1L",
+      "quantity": 50,
+      "sales_unit": "ST",
+      "covers": {
+       "amount": 50.0,
+       "unit": "L"
+      },
+      "line_total_ex_vat": 70.0,
+      "logistic_model": "Stock",
+      "issues": [
+       "LATER_DATE"
+      ]
+     }
+    ],
+    "uncovered": []
+   },
+   "options": [
+    {
+     "id": "Q-054C41DB.O1",
+     "rank": 1,
+     "kind": "all_later",
+     "covers": {
+      "amount": 50.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 70.0,
+     "substitute_tier": null,
+     "preview": "block",
+     "tradeoff": "All 50 L by 2026-11-16, 2 days later than asked (Oatly Oat Drink Semi 1L). Total €70.00 ex VAT.",
+     "lines": [
+      [
+       "470863",
+       50
+      ]
+     ]
+    },
+    {
+     "id": "Q-054C41DB.O2",
+     "rank": 2,
+     "kind": "substitute",
+     "covers": {
+      "amount": 50.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 58.5,
+     "substitute_tier": "good",
+     "preview": "block",
+     "tradeoff": "Good substitute: all 50 L of Oddlygood® oat drink 1l UHT gluten free instead, arriving on 2026-11-16; Earliest delivery is 2026-11-16, later than the requested 2026-11-14. Total €58.50 ex VAT.",
+     "lines": [
+      [
+       "468465",
+       50
+      ]
+     ]
+    },
+    {
+     "id": "Q-054C41DB.O3",
+     "rank": 3,
+     "kind": "substitute",
+     "covers": {
+      "amount": 50.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 66.5,
+     "substitute_tier": "good",
+     "preview": "block",
+     "tradeoff": "Good substitute: all 50 L of Oatly No Sugars Oat Drink 1,5% Fat 1L instead, arriving on 2026-11-16; Earliest delivery is 2026-11-16, later than the requested 2026-11-14. Total €66.50 ex VAT.",
+     "lines": [
+      [
+       "472145",
+       50
+      ]
+     ]
+    },
+    {
+     "id": "Q-054C41DB.O4",
+     "rank": 4,
+     "kind": "substitute",
+     "covers": {
+      "amount": 50.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 68.5,
+     "substitute_tier": "good",
+     "preview": "block",
+     "tradeoff": "Good substitute: all 50 L of Oddlygood® Barista oat drink 1 l UHT gluten free instead, arriving on 2026-11-16; Earliest delivery is 2026-11-16, later than the requested 2026-11-14. Total €68.50 ex VAT.",
+     "lines": [
+      [
+       "473609",
+       50
+      ]
+     ]
+    },
+    {
+     "id": "Q-054C41DB.O5",
+     "rank": 5,
+     "kind": "substitute",
+     "covers": {
+      "amount": 50.0,
+      "unit": "L"
+     },
+     "delivery_dates": [
+      "2026-11-16"
+     ],
+     "total_ex_vat": 70.0,
+     "substitute_tier": "good",
+     "preview": "block",
+     "tradeoff": "Good substitute: all 50 L of Oatly Oat Drink Whole 1L instead, arriving on 2026-11-16; Earliest delivery is 2026-11-16, later than the requested 2026-11-14. Total €70.00 ex VAT.",
+     "lines": [
+      [
+       "470889",
+       50
+      ]
+     ]
+    }
+   ],
+   "latency_ms": 140,
+   "passed": true,
+   "unsafe_handled": null
   }
  ]
 }
