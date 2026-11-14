@@ -492,9 +492,12 @@ async function renderOrder(current, order) {
     verifiedStatus = signed.status;
     pendingAmendment = Boolean(signed.amendments?.some(amendment => amendment.status === 'pending_buyer'));
     const status = statuses[signed.status] || signed.status;
-    const tier = signed.status === 'expired_cutoff' ? 'block' : statusTier[signed.status] || signed.decision?.outcome;
-    content.prepend(outcomeLine(tier, (signed.status === 'ordered' && tierLabels[tier]) ||
-      statusLabels[signed.status] || status, `${signed.id} · ${status}`, 'outcome total'));
+    const approvedOrder = signed.status === 'ordered' && signed.approval?.approved;
+    const tier = approvedOrder ? 'notify' :
+      signed.status === 'expired_cutoff' ? 'block' : statusTier[signed.status] || signed.decision?.outcome;
+    const label = approvedOrder ? 'Approved and ordered' :
+      (signed.status === 'ordered' && tierLabels[tier]) || statusLabels[signed.status] || status;
+    content.prepend(outcomeLine(tier, label, `${signed.id} · ${status}`, 'outcome total'));
     appendFindings(content, 'Gateway decision', signed.decision.findings, gateway);
     if (signed.amendments?.length) {
       content.append(element('h3', 'Current signed order'),
