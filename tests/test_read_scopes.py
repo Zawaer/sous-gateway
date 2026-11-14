@@ -48,7 +48,7 @@ def detail_paths(mid, qid, oid):
     return [f"/mandates/{mid}", f"/mandates/{mid}/history", f"/mandates/{mid}/verify", f"/mandates/{mid}/ap2",
             f"/mandates/{mid}/agent-credential", f"/quotes/{qid}", f"/quotes/{qid}/ap2",
             f"/quotes/{qid}/schema-org", f"/orders/{oid}", f"/orders/{oid}/history", f"/orders/{oid}/ap2",
-            f"/orders/{oid}/schema-org"]
+            f"/orders/{oid}/schema-org", f"/orders/{oid}/peppol"]
 
 
 def test_without_credentials_only_public_demo_data_is_readable(c):
@@ -97,8 +97,8 @@ def test_global_approver_code_reads_everything(c):
     assert r.headers["x-sous-read-scope"] == "all" and "M-PRIVATE" in [m["id"] for m in r.json()["mandates"]]
     assert {o["id"] for o in c.get("/orders", headers=AC).json()["orders"]} == {po["id"], ho["id"]}
     for path in detail_paths("M-PRIVATE", pq["id"], po["id"]):
-        if path.startswith("/orders") and path.endswith("/ap2"):
-            continue
+        if path.startswith("/orders") and path.endswith(("/ap2", "/peppol")):
+            continue  # final / ordered orders only; this one is held for approval
         assert c.get(path, headers=AC).status_code == 200, path
     assert po["id"] in json.dumps(c.get("/audit", headers=AC).json())
     assert po["id"] in json.dumps(c.get("/notifications", headers=AC).json())
@@ -117,8 +117,8 @@ def test_agent_token_reads_its_own_mandate_quotes_and_orders_only(c):
     assert "M-OTHER" not in [m["id"] for m in r.json()["mandates"]]
     assert {o["id"] for o in c.get("/orders", headers=h).json()["orders"]} == {po["id"], ho["id"]}
     for path in detail_paths("M-PRIVATE", pq["id"], po["id"]):
-        if path.startswith("/orders") and path.endswith("/ap2"):
-            continue
+        if path.startswith("/orders") and path.endswith(("/ap2", "/peppol")):
+            continue  # final / ordered orders only; this one is held for approval
         assert c.get(path, headers=h).status_code == 200, path
     for path in detail_paths("M-OTHER", oq["id"], oo["id"]):
         assert c.get(path, headers=h).status_code == 404, path

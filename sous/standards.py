@@ -14,6 +14,7 @@ Spec versions targeted (checked 2026-11-13):
 - MCP Server Card, SEP-2127 / modelcontextprotocol/experimental-ext-server-card, schema v1.
 - schema.org (Offer, Product, TypeAndQuantityNode, UnitPriceSpecification, Order, OrderItem).
 - W3C VC Data Model 2.0 secured with JOSE (vc+jwt), did:key; JSON Schema 2020-12.
+- Peppol BIS Ordering 3.0 (OpenPeppol poacc), Order and Order Response as UBL 2.1 XML.
 """
 
 from __future__ import annotations
@@ -21,12 +22,14 @@ from __future__ import annotations
 import base64
 import hashlib
 import inspect
+import xml.etree.ElementTree as ET
 from datetime import datetime
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import credentials, service as S, signing, store
+from . import account, config, credentials, service as S, signing, store
 from .mandate import Finding, Mandate
 
 AP2_VERSION = "0.2.0"
@@ -464,6 +467,199 @@ def schema_org_order(order_id: str, base_url: str) -> dict:
         "subjectOf": {"@type": "DigitalDocument", "url": f"{base_url}/orders/{order_id}",
                       "encodingFormat": "application/jose", "description": "Signed receipt (sous-order+jws)"},
     }
+
+
+# --- order -> Peppol BIS Ordering 3.0 (UBL 2.1 XML) ---------------------------------------------------------
+# Order (urn:fdc:peppol.eu:poacc:trns:order:3) and Order Response (…:order_response:3) in the Ordering process
+# (urn:fdc:peppol.eu:poacc:bis:ordering:3). Elements are written in UBL 2.1 schema sequence order. Built from the
+# signed receipt plus the signed quote (VAT rates and orderability live on the quote lines; order lines are copied
+# 1:1 from them). Only orderable lines are OrderLines, so they sum to the order total, as in the native order.
+
+PEPPOL_ORDER_CUSTOMIZATION = "urn:fdc:peppol.eu:poacc:trns:order:3"
+PEPPOL_ORDER_RESPONSE_CUSTOMIZATION = "urn:fdc:peppol.eu:poacc:trns:order_response:3"
+PEPPOL_ORDERING_PROFILE = "urn:fdc:peppol.eu:poacc:bis:ordering:3"
+_UBL = {"cbc": "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2",
+        "cac": "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"}
+_UBL_DOC = {"Order": "urn:oasis:names:specification:ubl:schema:xsd:Order-2",
+            "OrderResponse": "urn:oasis:names:specification:ubl:schema:xsd:OrderResponse-2"}
+# Peppol participant ids (EAS scheme 0216 = Finnish OVT code, 0037 = Finnish business id). Sous's customer master
+# has no Peppol ids yet: these are labelled placeholders until Valio Aimo's customer master supplies them.
+PEPPOL_SELLER_ENDPOINT = ("0216", "PLACEHOLDER-VALIO-AIMO-OVT")
+PEPPOL_BUYER_ENDPOINT_SCHEME = "0216"
+SELLER_LEGAL_NAME = "Valio Aimo Oy"
+# Valio sales unit -> UN/ECE Recommendation 20 unit code, or a Rec. 21 package code with the "X" prefix (Peppol's
+# unit code list allows both). Unknown pack codes fall back to XPK (package) and keep Valio's code in a line Note.
+PEPPOL_UNIT_CODES = {
+    "ST": "H87", "PCS": "H87", "KPL": "H87",  # piece
+    "KG": "KGM", "L": "LTR", "DZ": "DZN",
+    "KI": "XCT",  # kartonki / carton
+    "PAL": "XPX",  # pallet
+    "PAK": "XPK", "CS": "XCS",  # package, case
+    "BAG": "XBG", "PSS": "XBG",  # bag, pussi
+    "BOT": "XBO", "PLO": "XBO",  # bottle, pullo
+    "PRK": "XJR",  # purkki / jar or tub
+    "RAS": "XBX", "RS": "XBX",  # rasia / box
+    "TLK": "XCX",  # tölkki / can
+    "KAN": "XCI",  # kanisteri / canister
+    "SK": "XSA",  # säkki / sack
+    "KOR": "XBK",  # kori / basket
+    "NIP": "XBE",  # nippu / bundle
+}
+_RESPONSE_CODE = {"ordered": "AP", "refused": "RE", "rejected": "RE", "expired": "RE", "expired_cutoff": "RE"}
+
+
+def peppol_unit(valio_unit: str | None) -> str:
+    return PEPPOL_UNIT_CODES.get((valio_unit or "").upper(), "XPK")
+
+
+def _money(x) -> str:
+    return str(Decimal(str(x or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _el(parent, tag: str, text=None, **attrs):
+    prefix, name = tag.split(":")
+    e = ET.SubElement(parent, f"{{{_UBL[prefix]}}}{name}", attrs)
+    if text is not None:
+        e.text = str(text)
+    return e
+
+
+def _ubl_root(doc: str, customization: str, doc_id: str, issued: str):
+    root = ET.Element(f"{{{_UBL_DOC[doc]}}}{doc}")
+    _el(root, "cbc:CustomizationID", customization)
+    _el(root, "cbc:ProfileID", PEPPOL_ORDERING_PROFILE)
+    _el(root, "cbc:ID", doc_id)
+    dt = datetime.fromisoformat(issued).astimezone(config.TZ)
+    _el(root, "cbc:IssueDate", dt.date().isoformat())
+    _el(root, "cbc:IssueTime", dt.strftime("%H:%M:%S"))
+    return root
+
+
+def _party(parent, role: str, endpoint: tuple[str, str], ident: str | None, name: str, legal: str):
+    p = _el(_el(parent, f"cac:{role}"), "cac:Party")
+    _el(p, "cbc:EndpointID", endpoint[1], schemeID=endpoint[0])
+    if ident:
+        _el(_el(p, "cac:PartyIdentification"), "cbc:ID", ident)
+    _el(_el(p, "cac:PartyName"), "cbc:Name", name)
+    _el(_el(_el(p, "cac:PostalAddress"), "cac:Country"), "cbc:IdentificationCode", "FI")
+    _el(_el(p, "cac:PartyLegalEntity"), "cbc:RegistrationName", legal)
+
+
+def _buyer(o: dict) -> tuple[tuple[str, str], str | None]:
+    try:
+        m = S._mandate(o["mandate_id"])
+        acct = account.for_mandate(m)
+    except S.GatewayError:
+        m = acct = None
+    num = getattr(m, "customer_number", None) or (acct.customer_number if acct else None)
+    return (PEPPOL_BUYER_ENDPOINT_SCHEME, f"PLACEHOLDER-OVT-{num or 'UNKNOWN'}"), num
+
+
+def _xml(root) -> bytes:
+    for prefix, ns in _UBL.items():
+        ET.register_namespace(prefix, ns)
+    ET.indent(root)
+    out = ET.tostring(root, encoding="UTF-8", xml_declaration=True)
+    # The document namespace is the only unregistered one, so ElementTree calls it ns0; make it the default
+    # namespace as UBL instances usually are (text content is escaped, so "<ns0:" only occurs in tags).
+    return out.replace(b"<ns0:", b"<").replace(b"</ns0:", b"</").replace(b"xmlns:ns0=", b"xmlns=")
+
+
+def peppol_order(order_id: str, base_url: str) -> bytes:
+    """The order as a Peppol BIS Ordering 3.0 Order (UBL 2.1 XML), for orders that went through (`ordered`)."""
+    o = _signed_order(order_id)
+    if o["status"] != "ordered":
+        raise S.GatewayError("peppol_not_ordered", f"Order {order_id} is {o['status']}: a Peppol Order is only "
+                             "issued for orders that went through. Ask for ?doc=order_response for a final "
+                             "refusal or rejection.", 409)
+    q, _ = _signed_quote(o["quote_id"])
+    root = _ubl_root("Order", PEPPOL_ORDER_CUSTOMIZATION, order_id, o["created_at"])
+    _el(root, "cbc:OrderTypeCode", "220")
+    _el(root, "cbc:Note", f"Placed by purchasing agent {o.get('agent_id')} under Sous mandate {o['mandate_id']} "
+                          f"(decision: {o['decision']['outcome']}). Prices are Valio Aimo list prices ex VAT as "
+                          "quoted; the ERP prices with the customer's own conditions.")
+    _el(root, "cbc:DocumentCurrencyCode", "EUR")
+    _el(root, "cbc:CustomerReference", order_id)
+    _el(_el(root, "cac:QuotationDocumentReference"), "cbc:ID", o["quote_id"])
+    refs = [(o["mandate_id"], "Sous mandate (sous-mandate+jws)", f"{base_url}/mandates/{o['mandate_id']}"),
+            (b64_sha256(o["receipt_jws"]), "Sous signed receipt sous-order+jws, SHA-256 base64url of the compact JWS",
+             f"{base_url}/orders/{order_id}")]
+    for rid, kind, uri in refs:
+        ref = _el(root, "cac:AdditionalDocumentReference")
+        _el(ref, "cbc:ID", rid)
+        _el(ref, "cbc:DocumentType", kind)
+        _el(_el(_el(ref, "cac:Attachment"), "cac:ExternalReference"), "cbc:URI", uri)
+    endpoint, num = _buyer(o)
+    _party(root, "BuyerCustomerParty", endpoint, num, o["buyer"], o["buyer"])
+    _party(root, "SellerSupplierParty", PEPPOL_SELLER_ENDPOINT, None, MERCHANT["name"], SELLER_LEGAL_NAME)
+    period = _el(_el(root, "cac:Delivery"), "cac:RequestedDeliveryPeriod")
+    _el(period, "cbc:StartDate", o.get("requested_delivery_date"))
+    _el(period, "cbc:EndDate", o.get("delivery_date") or o.get("requested_delivery_date"))
+    lines = [(i, l, ql) for i, (l, ql) in enumerate(zip(o["lines"], q["lines"]))
+             if ql.get("orderable") and l.get("quantity")]
+    line_sum = sum((Decimal(_money(l.get("line_total_ex_vat"))) for _, l, _ in lines), Decimal("0"))
+    tax_sum = sum((Decimal(_money(ql.get("line_total_inc_vat"))) - Decimal(_money(ql.get("line_total_ex_vat")))
+                   for _, _, ql in lines), Decimal("0"))
+    _el(_el(root, "cac:TaxTotal"), "cbc:TaxAmount", _money(tax_sum), currencyID="EUR")
+    tot = _el(root, "cac:AnticipatedMonetaryTotal")
+    _el(tot, "cbc:LineExtensionAmount", _money(line_sum), currencyID="EUR")
+    _el(tot, "cbc:TaxExclusiveAmount", _money(line_sum), currencyID="EUR")
+    _el(tot, "cbc:TaxInclusiveAmount", _money(line_sum + tax_sum), currencyID="EUR")
+    _el(tot, "cbc:PayableAmount", _money(line_sum + tax_sum), currencyID="EUR")
+    for i, l, ql in lines:
+        item = _el(_el(root, "cac:OrderLine"), "cac:LineItem")
+        unit = l.get("sales_unit") or ""
+        _el(item, "cbc:ID", str(i + 1))
+        if peppol_unit(unit) == "XPK" and unit.upper() not in PEPPOL_UNIT_CODES:
+            _el(item, "cbc:Note", f"Valio sales unit {unit or 'unknown'}")
+        _el(item, "cbc:Quantity", f"{float(l['quantity']):g}", unitCode=peppol_unit(unit))
+        _el(item, "cbc:LineExtensionAmount", _money(l.get("line_total_ex_vat")), currencyID="EUR")
+        if l.get("delivery_date"):
+            dp = _el(_el(item, "cac:Delivery"), "cac:RequestedDeliveryPeriod")
+            _el(dp, "cbc:StartDate", l["delivery_date"])
+            _el(dp, "cbc:EndDate", l["delivery_date"])
+        price = _el(item, "cac:Price")
+        _el(price, "cbc:PriceAmount", _money(l.get("unit_price_ex_vat")), currencyID="EUR")
+        _el(price, "cbc:BaseQuantity", "1", unitCode=peppol_unit(unit))
+        it = _el(item, "cac:Item")
+        _el(it, "cbc:Name", l["name"])
+        _el(_el(it, "cac:SellersItemIdentification"), "cbc:ID", l["product_id"])
+        rate = ql.get("vat_rate")
+        tax = _el(it, "cac:ClassifiedTaxCategory")
+        _el(tax, "cbc:ID", "S" if rate else "Z")
+        _el(tax, "cbc:Percent", f"{float(rate or 0):g}")
+        _el(_el(tax, "cac:TaxScheme"), "cbc:ID", "VAT")
+    return _xml(root)
+
+
+def peppol_order_response(order_id: str, base_url: str) -> bytes:
+    """A Peppol BIS Ordering 3.0 Order Response at header level: AP (accepted) for `ordered`, RE (rejected) for
+    refused / rejected / expired orders. No line detail: under AP and RE Peppol needs none."""
+    o = _signed_order(order_id)
+    code = _RESPONSE_CODE.get(o["status"])
+    if code is None:
+        raise S.GatewayError("peppol_not_final", f"Order {order_id} is {o['status']}: an Order Response is "
+                             "issued once the order is final (ordered, refused, rejected or expired).", 409)
+    root = _ubl_root("OrderResponse", PEPPOL_ORDER_RESPONSE_CUSTOMIZATION, f"{order_id}-R", o["updated_at"])
+    _el(root, "cbc:OrderResponseCode", code)
+    if code == "RE":
+        reason = (o.get("approval") or {}).get("result_reason") or "; ".join(
+            f["message"] for f in o["decision"]["findings"] if f["outcome"] == "block") or o["status"]
+        _el(root, "cbc:Note", f"{_FINAL_ERROR.get(o['status'], o['status'])}: {reason}")
+    _el(root, "cbc:DocumentCurrencyCode", "EUR")
+    _el(_el(root, "cac:OrderReference"), "cbc:ID", order_id)
+    ref = _el(root, "cac:AdditionalDocumentReference")
+    _el(ref, "cbc:ID", b64_sha256(o["receipt_jws"]))
+    _el(ref, "cbc:DocumentType", "Sous signed receipt sous-order+jws, SHA-256 base64url of the compact JWS")
+    _el(_el(_el(ref, "cac:Attachment"), "cac:ExternalReference"), "cbc:URI", f"{base_url}/orders/{order_id}")
+    _party(root, "SellerSupplierParty", PEPPOL_SELLER_ENDPOINT, None, MERCHANT["name"], SELLER_LEGAL_NAME)
+    endpoint, num = _buyer(o)
+    _party(root, "BuyerCustomerParty", endpoint, num, o["buyer"], o["buyer"])
+    if code == "AP":
+        period = _el(_el(root, "cac:Delivery"), "cac:PromisedDeliveryPeriod")
+        _el(period, "cbc:StartDate", o.get("delivery_date") or o.get("requested_delivery_date"))
+        _el(period, "cbc:EndDate", o.get("delivery_date") or o.get("requested_delivery_date"))
+    return _xml(root)
 
 
 # --- JSON Schemas of the native objects --------------------------------------

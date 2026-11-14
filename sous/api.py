@@ -360,6 +360,15 @@ def order_schema_org(order_id: str, request: Request):
                         media_type="application/ld+json")
 
 
+@app.get("/orders/{order_id}/peppol", tags=["standards"], dependencies=[Depends(_read_order)],
+         response_class=Response, responses={200: {"content": {"application/xml": {}}}})
+def order_peppol(order_id: str, request: Request, doc: Literal["order", "order_response"] = "order"):
+    """The order as Peppol BIS Ordering 3.0 UBL 2.1 XML: an Order (doc=order, `ordered` orders) or a header-level
+    Order Response (doc=order_response: AP for ordered, RE for refused/rejected/expired). docs/STANDARDS.md."""
+    build = STD.peppol_order if doc == "order" else STD.peppol_order_response
+    return Response(build(order_id, STD.base_url(str(request.base_url))), media_type="application/xml")
+
+
 @functools.cache
 def _build() -> dict:
     """Which build is running: `version` from pyproject (the installed package), `commit` from SOUS_COMMIT
