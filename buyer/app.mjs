@@ -652,7 +652,7 @@ requestForm.addEventListener('input', (event) => {
     $('available-mandates-label').hidden = true;
     $('available-mandates').replaceChildren();
   }
-  if (event.target !== $('intent')) clearSearch();
+  clearSearch();
 });
 $('load-mandates').addEventListener('click', () => run(async () => {
   $('available-mandates-label').hidden = true;
