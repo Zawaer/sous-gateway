@@ -67,7 +67,7 @@ def approve_with_changes(order_id: str, req: ChangesIn, authority: str | None) -
     mandate = S._mandate(o["mandate_id"])
     when = date.fromisoformat(o.get("requested_delivery_date") or o["delivery_date"])
     req_q = S.QuoteRequest(agent_id=o["agent_id"], mandate_id=o["mandate_id"], delivery_date=when, items=items,
-                           rationale=f"Approver {req.by} changed {order_id}")
+                           rationale=o.get("agent_rationale"))  # the agent's own reason stays the agent's
     try:  # the approver's call, so no agent token (S.request_quote would ask for one); same quote path otherwise
         with S.sandbox.metered(mandate):
             q = S._request_quote(req_q, approver=True)["quote"]

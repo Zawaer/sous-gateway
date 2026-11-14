@@ -461,3 +461,24 @@ div.mstat:hover { background: none; }
 .bar { flex: 1; height: 6px; background: var(--pill); border-radius: 3px; overflow: hidden; align-self: center; min-width: 40px; }
 .bar i { display: block; height: 100%; background: var(--ask); border-radius: 3px; }
 @media (max-width: 860px) { .mstats.four .mstat:last-child { grid-column: auto; } .mstats.four .mstat:nth-last-child(-n+2) { border-bottom: 0; } }
+
+/* approve: remember clearance, change quantities */
+.remember { display: flex; gap: 10px; align-items: flex-start; font-size: .88rem; margin: 10px 0; cursor: pointer; }
+.remember input, .actionbar.decide .remember input { margin: 3px 0 0; accent-color: var(--silent); flex: none; width: auto; padding: 0; }
+.qty-edit { margin: 8px 0; }
+.qty-edit > summary { display: inline-flex; gap: 6px; align-items: center; font: 500 .88rem var(--sans); color: var(--ink-80); }
+.qty-rows { display: grid; gap: 8px; margin: 10px 0 6px; }
+.qty-rows label { display: grid; grid-template-columns: 1fr 96px auto; gap: 10px; align-items: center; font-size: .9rem; }
+.qty-rows input, .amend-grid input, .amend-grid select { width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: 8px;
+  border: 1px solid var(--rule); background: var(--panel); color: var(--ink); font: inherit; }
+.note-line { display: flex; gap: 8px; align-items: flex-start; font-size: .92rem; }
+.note-line .ms { color: var(--notify); }
+/* after the order */
+.amends { list-style: none; padding: 0; margin: 8px 0; border-top: 1px solid var(--rule); }
+.amend { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--rule); }
+.amend-acts { display: flex; gap: 8px; margin-top: 8px; }
+.amend-form > summary { display: inline-flex; gap: 6px; align-items: center; font: 500 .88rem var(--sans); color: var(--ink-80); margin-top: 6px; }
+.amend-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 10px 0; }
+.amend-grid label { display: grid; gap: 4px; font-size: .8rem; color: var(--ink-55); }
+.amend-grid .wide { grid-column: 1 / -1; }
+.actionbar.decide .qty-edit, .actionbar.decide .remember { flex-basis: 100%; }

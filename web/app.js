@@ -367,11 +367,94 @@ function inboxCard(o, isNew = false) {
       <dt>Order</dt><dd><a href="#" data-open="${esc(o.id)}" class="mono">${esc(o.id)}</a> · ${eur(o.total_inc_vat)} incl. VAT · delivery ${dateOnly(o.delivery_date)}</dd>
     </dl>
     <textarea data-note rows="2" placeholder="Note for the agent and the log (optional)"></textarea>
+    ${rememberBox(o)}
+    ${editBox(o)}
     <div class="actions">
       <button class="btn no" data-act="reject">Reject</button>
       <button class="btn yes" data-act="approve">Approve ${eur(o.total_ex_vat)}</button>
     </div>
   </article>`;
+}
+
+// Remember a human's allergen clearance (sous/clearance.py): offered only when the order waits on allergen.unknown.
+function rememberBox(o) {
+  const fs = (o.decision?.findings || []).filter((f) => f.rule === "allergen.unknown");
+  if (!fs.length) return "";
+  const names = [...new Set(fs.map((f) => pname((o.lines || []).find((l) => l.product_id === f.product_id)?.name || f.product_id)))];
+  return `<label class="remember"><input type="checkbox" data-remember>
+    <span>I checked ${esc(names.join(", "))} myself: don't ask again for ${esc(bn(o.buyer))}</span></label>`;
+}
+// Approve with changes (sous/approve_changes.py): edit quantities, re-priced live and re-checked by the gateway.
+function editBox(o) {
+  if (!(o.lines || []).length) return "";
+  return `<details class="qty-edit"><summary>${ic("edit")} Change quantities</summary>
+    <div class="qty-rows">${o.lines.map((l, i) => `<label><span>${esc(pname(l.name))}</span>
+      <input type="number" min="0" step="any" inputmode="decimal" data-line="${i}" data-was="${esc(l.quantity)}" value="${esc(l.quantity)}">
+      <span class="muted small">${esc(unit(l.sales_unit))}</span></label>`).join("")}</div>
+    <p class="small muted">Re-priced live with Valio Aimo and checked against the mandate again; 0 removes a line.</p>
+    <button class="btn yes" data-act="changes">${ic("published_with_changes")} Re-price and approve</button></details>`;
+}
+
+// After the order (sous/amendments.py): Valio reports a delay, short pick or cancelled line; the buyer's mandate
+// decides whether it just applies (FYI) or waits for the buyer.
+const AMEND_KIND = { delay: ["schedule", "Delivery delayed"], short_pick: ["inventory_2", "Short delivery"],
+  cancel_line: ["remove_shopping_cart", "Line cancelled"], substitution_at_pick: ["swap_horiz", "Substituted at picking"] };
+const AMEND_STATUS = { applied: "Applied", pending_buyer: "Waiting for the buyer", accepted: "Accepted", rejected: "Rejected" };
+function amendSection(o) {
+  const list = (o.amendments || []).map((am) => {
+    const [icon, label] = AMEND_KIND[am.kind] || ["edit_note", am.kind];
+    const l = am.line != null ? o.lines[am.line] : null;
+    const what = am.kind === "delay" ? `to ${dateOnly(am.new_delivery_date)}${l ? ` (${esc(pname(l.name))})` : ""}`
+      : am.kind === "short_pick" ? `${esc(am.delivered_quantity)} of ${esc(l?.quantity ?? "")} ${esc(unit(l?.sales_unit))} ${esc(pname(l?.name || ""))}`
+      : l ? esc(pname(l.name)) : "";
+    return `<li class="amend">${ic(icon, am.status === "pending_buyer" ? "st-ask" : "st-notify")}
+      <div><b>${label}</b> ${what} <span class="muted small">· ${esc(AMEND_STATUS[am.status] || am.status)} · ${when(am.reported_at)}</span>
+        <div class="small muted">${esc(am.reason)}</div>
+        ${am.status === "pending_buyer" ? `<div class="amend-acts"><button class="btn plain sm" data-amend="${esc(am.id)}" data-res="reject">Reject</button>
+          <button class="btn yes sm" data-amend="${esc(am.id)}" data-res="accept">Accept</button></div>` : ""}</div></li>`;
+  }).join("");
+  const can = o.status === "ordered";
+  return `<h3>After the order</h3>
+    ${list ? `<ul class="amends">${list}</ul>` : `<p class="small muted">No delays or short deliveries reported.</p>`}
+    ${can ? `<details class="amend-form"><summary>${ic("report")} Report a delivery exception (Valio)</summary>
+      <div class="amend-grid">
+        <label>What<select data-k="kind"><option value="delay">Delivery delayed</option><option value="short_pick">Short delivery</option><option value="cancel_line">Line can't be delivered</option></select></label>
+        <label>Line<select data-k="line"><option value="">Whole order</option>${o.lines.map((l, i) => `<option value="${i}">${esc(pname(l.name))}</option>`).join("")}</select></label>
+        <label data-for="delay">New date<input type="date" data-k="new_delivery_date"></label>
+        <label data-for="short_pick" hidden>Delivered<input type="number" min="0" step="any" data-k="delivered_quantity"></label>
+        <label class="wide">Reason<input type="text" data-k="reason" maxlength="300" placeholder="e.g. Truck breakdown, delivery moves a day"></label>
+      </div>
+      <button class="btn yes sm" data-amend-report>Report it</button></details>` : ""}`;
+}
+function wireAmendments(o) {
+  const root = $("#sheet-body");
+  const form = root.querySelector(".amend-form");
+  if (form) {
+    const kind = form.querySelector('[data-k="kind"]');
+    const sync = () => form.querySelectorAll("[data-for]").forEach((x) => { x.hidden = x.dataset.for !== kind.value; });
+    kind.addEventListener("change", sync); sync();
+    form.querySelector("[data-amend-report]").addEventListener("click", async (e) => {
+      const v = (k) => form.querySelector(`[data-k="${k}"]`).value.trim();
+      const body = { kind: v("kind"), reason: v("reason") || "Reported by Valio Aimo", by: approver() || "Valio Aimo" };
+      if (v("line") !== "") body.line = +v("line");
+      if (body.kind === "delay") body.new_delivery_date = v("new_delivery_date");
+      if (body.kind === "short_pick") body.delivered_quantity = +v("delivered_quantity");
+      e.target.disabled = true;
+      try {
+        await api(`/orders/${encodeURIComponent(o.id)}/amendments`, { method: "POST", body });
+        toast("Reported. The buyer has been told.", 4000); openOrder(o.id);
+      } catch (err) { toast("Failed: " + err.message, 6000); e.target.disabled = false; }
+    });
+  }
+  root.querySelectorAll("[data-amend]").forEach((b) => b.addEventListener("click", async () => {
+    const by = approver() || (prompt("Your name, for the audit log:") || "").trim();
+    if (!by) return;
+    b.disabled = true;
+    try {
+      await api(`/orders/${encodeURIComponent(o.id)}/amendments/${encodeURIComponent(b.dataset.amend)}/${b.dataset.res}`, { method: "POST", body: { by } });
+      toast(b.dataset.res === "accept" ? "Accepted." : "Rejected: that part is cancelled with a credit.", 4000); openOrder(o.id);
+    } catch (err) { toast("Failed: " + err.message, 6000); b.disabled = false; }
+  }));
 }
 
 function wireDecision(card, onDone) {
@@ -386,12 +469,27 @@ function wireDecision(card, onDone) {
         setApprover(by);
       }
       const act = b.dataset.act;
+      const note = card.querySelector("[data-note]")?.value.trim() || null;
+      let changes = [];
+      if (act === "changes") {
+        changes = [...card.querySelectorAll("[data-line]")].map((x) => ({ line: +x.dataset.line, quantity: +x.value, was: +x.dataset.was }))
+          .filter((c) => Number.isFinite(c.quantity) && c.quantity !== c.was).map(({ line, quantity }) => ({ line, quantity }));
+        if (!changes.length) { toast("Change a quantity first."); return; }
+      }
       card.querySelectorAll("button").forEach((x) => (x.disabled = true));
       try {
+        if (act === "changes") {
+          const r = await api(`/orders/${encodeURIComponent(id)}/approve-with-changes`, { method: "POST", body: { by, note, changes } });
+          toast(`Approved with changes as ${r.order.id}: ${eur(r.order.total_ex_vat)} (was ${eur(r.replaced.total_ex_vat)}).`, 6000);
+          views.inbox.key = ""; if (current === "orders") views.orders.key = "";
+          refresh(); onDone?.(r.order); openOrder(r.order.id);
+          return;
+        }
+        const remember = act === "approve" && !!card.querySelector("[data-remember]")?.checked;
         const o = await api(`/orders/${encodeURIComponent(id)}/${act}`, {
-          method: "POST", body: { by, note: card.querySelector("[data-note]")?.value.trim() || null },
+          method: "POST", body: { by, note, ...(remember ? { remember_allergen_clearance: true } : {}) },
         });
-        const msg = o.status === "ordered" ? `${id} approved and ordered.`
+        const msg = o.status === "ordered" ? `${id} approved and ordered.${o.allergen_clearances?.length ? " Clearance remembered." : ""}`
           : o.status === "rejected" ? `${id} rejected. The agent has been told.`
           : `${id}: ${STATUS_LABEL[o.status] || o.status}. ${o.approval?.result_reason || ""}`;
         toast(msg, 5000);
@@ -503,9 +601,14 @@ async function openOrder(id) {
     ${a ? `<h3>Human decision</h3>
       <p>${a.approved ? "Approved" : "Rejected"} by <b>${esc(a.by)}</b> at ${when(a.at)}${a.note ? `: “${esc(a.note)}”` : ""}</p>
       ${a.result_reason && a.result_reason !== a.note ? `<p class="muted">${esc(a.result_reason)}</p>` : ""}` : ""}
+    ${a?.replaced_by ? `<p class="note-line">${ic("published_with_changes")} Approved with changes as <a href="#/orders/${esc(a.replaced_by)}">${esc(a.replaced_by)}</a>.</p>` : ""}
+    ${o.approval_changes ? `<p class="note-line">${ic("published_with_changes")} ${esc(o.approval_changes.by)} changed
+      <a href="#/orders/${esc(o.approval_changes.from_order)}">${esc(o.approval_changes.from_order)}</a> before approving:
+      ${o.approval_changes.changes.map((c) => `${esc(pname(c.name))} ${esc(c.from)} → ${esc(c.to)} ${esc(unit(c.unit))}`).join("; ")}. Re-priced live.</p>` : ""}
     <div id="asof"></div>
     <h3>Lines</h3>
     ${linesTable(o.lines)}
+    ${o.status === "ordered" || (o.amendments || []).length ? amendSection(o) : ""}
     <h3>Substitutes</h3>
     <p class="small muted">Alternatives from Valio Aimo's own assortment that keep the mandate's hard rules
       (allergens, claims, category, unit). Ranked best (no compromises), better (minor) and good (a real trade-off).</p>
@@ -526,6 +629,8 @@ async function openOrder(id) {
     <div id="order-audit" class="list"><div class="empty">Loading…</div></div>
     ${o.status === "pending_approval" ? `<div class="actionbar decide" data-order="${esc(o.id)}">
       <input data-note type="text" placeholder="Note for the agent and the log (optional)" aria-label="Note">
+      ${rememberBox(o)}
+      ${editBox(o)}
       <div class="actionbar-buttons">
         <button class="btn no" data-act="reject">Reject</button>
         <button class="btn yes" data-act="approve">Approve ${eur(o.total_ex_vat)}</button>
@@ -533,6 +638,7 @@ async function openOrder(id) {
   `);
   const box = $("#sheet-body [data-order]");
   if (box) { tickDeadlines(); wireDecision(box, () => openOrder(id)); }
+  wireAmendments(o);
   $("#sheet-body").querySelectorAll("[data-subs]").forEach((b) => b.addEventListener("click", () => findSubstitutes(b, o)));
   const { events } = await api("/audit?subject=" + encodeURIComponent(o.id) + "&limit=50");
   const q = await api("/audit?subject=" + encodeURIComponent(o.quote_id) + "&limit=50").catch(() => ({ events: [] }));
