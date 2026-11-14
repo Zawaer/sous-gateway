@@ -11,6 +11,8 @@
   <script src="i18n.js"></script>
   <style>
     body { max-width: 560px; margin: 0 auto; }
+    /* style.css draws tier icons with an icon font this page doesn't load (no CDN): use tokens.css's glyph */
+    .tier-ask::before { content: "\2016"; font: 700 .95em/1 var(--sans); font-variation-settings: normal; }
     .top-in { padding: 4px var(--space); justify-content: space-between; }
     main { padding: var(--space); padding-bottom: 0; }
     h1 { font: 500 2.2rem/1.1 var(--serif); margin: 8px 0 6px; }
@@ -157,18 +159,39 @@ function statusText(o) {
 }
 
 function actions(has) {
-  if (!has) return `
+  // Passkey first whenever one is set up or the mandate requires it; the approver code is the fallback,
+  // hidden when the mandate requires a passkey (the gateway refuses code approval there: passkey_required).
+  const requirePk = keys.approval_method === "passkey";
+  const amount = eur(order.total_ex_vat);
+  const name = `<label for="name">${esc(t("approve.your_name"))}</label>
+      <input id="name" type="text" autocomplete="name" required value="${esc(ls.get("vk-approver"))}">`;
+  const code = `<label for="code">${esc(SANDBOX ? t("approve.code_label_sbx", { sbx: SANDBOX }) : t("approve.code_label"))}</label>
+      <input id="code" type="password" autocomplete="off" value="${esc(ls.get(CODE_KEY))}">
+      <p class="hint">${esc(t(SANDBOX ? "approve.code_hint_sbx" : "approve.code_hint"))}</p>`;
+  if (has) return `<div class="actionbar actionbar-buttons">
+      <button id="no" class="btn no" type="button">${esc(t("approve.reject"))}</button>
+      <button id="yes" class="btn yes" type="button">${esc(t("approve.approve_btn", { amount }))}</button></div>
+    ${requirePk ? `<p class="hint">${esc(t("approve.only_passkey"))}</p>` : `
+    <details id="codebox"><summary>${esc(t("approve.code_instead"))}</summary>
+      ${name}${code}
+      <p><button id="yescode" class="btn no tap" type="button">${esc(t("approve.approve_code_btn", { amount }))}</button></p></details>`}`;
+  if (requirePk) return `
     <form id="regf">
-      <p>${esc(t("approve.no_passkey", { buyer: order.buyer }))}</p>
-      <label for="name">${esc(t("approve.your_name"))}</label>
-      <input id="name" type="text" autocomplete="name" required value="${esc(ls.get("vk-approver"))}">
+      <p>${esc(t("approve.no_passkey_required", { buyer: order.buyer }))}</p>
+      ${name}
       <p class="hint">${esc(t(SANDBOX ? "approve.name_hint_sbx" : "approve.name_hint"))}</p>
       <div class="actionbar actionbar-buttons"><button id="nocode" class="btn no" type="button">${esc(t("approve.reject"))}</button>
         <button class="btn yes" type="submit">${esc(t("approve.setup"))}</button></div>
     </form>`;
-  return `<div class="actionbar actionbar-buttons">
-      <button id="no" class="btn no" type="button">${esc(t("approve.reject"))}</button>
-      <button id="yes" class="btn yes" type="button">${esc(t("approve.approve_btn", { amount: eur(order.total_ex_vat) }))}</button></div>`;
+  return `
+    <form id="codef2">
+      ${name}${code}
+      <div class="actionbar actionbar-buttons"><button id="nocode" class="btn no" type="button">${esc(t("approve.reject"))}</button>
+        <button id="yescode" class="btn yes" type="submit">${esc(t("approve.approve_plain", { amount }))}</button></div>
+    </form>
+    <details id="regbox"><summary>${esc(t("approve.setup_instead"))}</summary>
+      <p>${esc(t("approve.setup_instead_text"))}</p>
+      <p><button id="regbtn" class="btn no tap" type="button">${esc(t("approve.setup"))}</button></p></details>`;
 }
 
 function countdown(at) {
@@ -188,6 +211,10 @@ function wire(has) {
   const reg = $("#regf");
   if (reg) reg.onsubmit = (e) => { e.preventDefault(); register($("#name").value.trim(), reg.querySelector("button")); };
   if ($("#nocode")) $("#nocode").onclick = () => rejectWithCode($("#nocode"));
+  const cf = $("#codef2");
+  if (cf) cf.onsubmit = (e) => { e.preventDefault(); approveWithCode($("#yescode")); };
+  else if ($("#yescode")) $("#yescode").onclick = () => approveWithCode($("#yescode"));
+  if ($("#regbtn")) $("#regbtn").onclick = () => register($("#name").value.trim(), $("#regbtn"));
   if ($("#yes")) $("#yes").onclick = () => decide("approve", $("#yes"));
   if ($("#no")) $("#no").onclick = () => decide("reject", $("#no"));
 }
@@ -216,8 +243,31 @@ async function register(name, btn) {
   }
 }
 
+function useCodeField() {
+  const f = $("#code");
+  if (f && f.value.trim()) ls.set(CODE_KEY, f.value.trim());
+}
+
+async function approveWithCode(btn) {
+  const by = ($("#name").value || "").trim();
+  if (!by) return say(esc(t("approve.name_first_approve")), "err");
+  ls.set("vk-approver", by);
+  useCodeField();
+  btn.disabled = true;
+  try {
+    order = await api(`/orders/${encodeURIComponent(ORDER)}/approve`, { method: "POST", body: JSON.stringify({ by }) });
+    render();
+    say(`${esc(statusText(order))}<br><span class="rule-id">${esc((order.approval || {}).authority || "")}</span>`,
+        order.status === "ordered" ? "ok" : "err");
+  } catch (e) {
+    btn.disabled = false;
+    say(esc(e.status === 401 ? t("approve.code_not_accepted") : e.message), "err");
+  }
+}
+
 async function rejectWithCode(btn) {
   const by = ($("#name").value || "").trim();
+  useCodeField();
   if (!by) return say(esc(t("approve.name_first_reject")), "err");
   if (!confirm(t("approve.confirm_reject", { id: order.id, amount: eur(order.total_ex_vat) }))) return;
   btn.disabled = true;

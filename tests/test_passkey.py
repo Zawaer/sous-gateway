@@ -311,8 +311,13 @@ def test_offline_script_verifies_saved_event(client, tmp_path):
     assert r.returncode == 1 and "FAIL order_id" in r.stdout
 
 
-def test_approval_url_points_to_passkey_page_when_mandate_requires_it():
+def test_approval_url_is_the_approval_page_for_every_held_order():
     o, op = held("M"), held("MP")
     assert op["approval_url"] == f"/ui/approve.html?order={op['id']}"
-    assert op["order_url"] != op["approval_url"]
-    assert o["approval_url"] == o["order_url"]  # code-approvable mandates keep the seller inbox link
+    assert o["approval_url"] == f"/ui/approve.html?order={o['id']}"
+    assert o["order_url"] == f"/ui/#/orders/{o['id']}"  # order_url unchanged
+
+
+def test_approval_page_offers_code_unless_passkey_required():
+    page = (config.ROOT / "web" / "approve.html").read_text()
+    assert 'requirePk = keys.approval_method === "passkey"' in page and "approveWithCode" in page

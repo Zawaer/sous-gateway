@@ -378,12 +378,10 @@ def order_url(order_id: str, sandbox_id: str | None = None) -> str:
 
 
 def approval_url(order_id: str, mandate) -> str:
-    """Where the human decides a held order: the passkey page (web/approve.html) when the mandate requires a
-    passkey, else the order in the seller UI (approver code)."""
+    """Where the human decides a held order: the one-order approval page (web/approve.html), which offers a
+    passkey and, unless the mandate requires a passkey, the approver code."""
     sid = getattr(mandate, "sandbox", None)
-    if getattr(mandate, "approval_method", "any") == "passkey":
-        return f"{config.PUBLIC_BASE_URL}/ui/approve.html?order={order_id}" + (f"&sandbox={sid}" if sid else "")
-    return order_url(order_id, sid)
+    return f"{config.PUBLIC_BASE_URL}/ui/approve.html?order={order_id}" + (f"&sandbox={sid}" if sid else "")
 
 
 def request_quote(req: QuoteRequest, agent_token: str | None = None, approver: bool = False) -> dict:

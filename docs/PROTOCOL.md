@@ -949,7 +949,13 @@ The approver code proves someone knew a shared secret. A passkey approval proves
 
 **RP ID and origin.** `SOUS_PASSKEY_RP_ID` and `SOUS_PASSKEY_ORIGINS` (comma-separated), else the host of `SOUS_PUBLIC_BASE_URL` and that origin, else the request's own host (development). WebAuthn needs HTTPS (or `localhost`); the sslip.io deployments qualify. A passkey works only on the RP ID it was enrolled on.
 
-**Page.** `/ui/approve.html?order=PO-…&sandbox=SBX-…`: the amount, the rules that held the order, the approve-by countdown and the lines, then "Approve €… with passkey" and "Reject"; with no passkey yet, "Set up a passkey" (needs the code once). It reads the approver code from the same browser storage as the seller UI. For a mandate with `approval_method: passkey`, a held order's `approval_url` (and so the `order.ask` notification link) is this page, `<PUBLIC_BASE_URL>/ui/approve.html?order=PO-…[&sandbox=SBX-…]`; other mandates keep the seller-UI link; `order_url` is unchanged.
+**Page.** `/ui/approve.html?order=PO-…&sandbox=SBX-…` is every held order's `approval_url` (and so the `order.ask` notification link); `order_url` still opens the order in the seller UI. It shows the amount, the rules that held the order, the approve-by countdown and the lines, then the decision:
+
+- a passkey is set up: "Approve €… with passkey" (primary) and "Reject" (signed with the passkey); unless the mandate requires a passkey, "Approve with the approver code instead" underneath (name + code, secondary);
+- no passkey, mandate requires one: "Set up a passkey" (needs the code once) and "Reject" with the code;
+- no passkey, code allowed: name + approver code with "Approve €…" and "Reject", and "Set up a passkey instead" underneath.
+
+It keeps the approver code in the same browser storage as the seller UI.
 
 **Limits.** Enrolment is gated by the shared code, so a code holder can enrol a passkey under any name; production would enrol through the buyer's login (OIDC) and let existing passkeys approve new ones. No passkey revocation endpoint yet. Synced passkeys (iCloud, Google) report sign count 0, so replay protection rests on the one-time challenge. The `note` is not part of the signed binding.
 
