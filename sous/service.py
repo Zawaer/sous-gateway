@@ -436,7 +436,9 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
     # Sizing a line to the stock (and splitting by it) shows the exact stock in the quantity, so under the buckets
     # policy only a caller acting under a mandate (authorized by request_quote) or an approver gets it; anonymous
     # mandate-less quotes keep the requested quantity, flagged short, and carry no options (docs/PROTOCOL.md 5.2).
-    sized = mandate is not None or exposure.exact(approver)
+    # Mandate-less quotes are readable by id by anyone, so under approver_exact they are never sized to stock
+    # either (the split quantity would reveal stock to later readers); only the global `exact` mode sizes them.
+    sized = mandate is not None or exposure.mode() == "exact"
     before = dict(aimo.stats)
     lines: list[dict] = []
     considered: list[dict] = []

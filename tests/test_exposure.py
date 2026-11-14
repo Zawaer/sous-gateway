@@ -212,14 +212,16 @@ def test_anonymous_quote_is_not_sized_to_stock(monkeypatch):
     assert big["quantity"] == 99999 and big["stock_level"] == "short"
 
 
-def test_mandate_or_approver_or_exact_still_sized(monkeypatch):
+def test_mandate_or_exact_mode_sized_but_not_mandate_less_approver_quotes(monkeypatch):
     AVAIL["C"] = ("2026-11-16", 40, None)
     sizes = lambda q: {l["product_id"]: l["quantity"] for l in q["quote"]["lines"]}  # noqa: E731
     monkeypatch.setattr(config, "STOCK_EXPOSURE", "buckets")
     assert sizes(ask(["A", "C"])) == {"C": 40, "A": 60}  # under a mandate
     monkeypatch.setattr(config, "STOCK_EXPOSURE", "approver_exact")
     assert sizes(ask(["A", "C"], mandate=None)) == {"C": 100}
-    assert sizes(ask(["A", "C"], mandate=None, approver=True)) == {"C": 40, "A": 60}
+    # approver's mandate-less quote is readable by id by anyone later, so it isn't sized either (exact numbers only
+    # in the unsigned approver_view sidecar)
+    assert sizes(ask(["A", "C"], mandate=None, approver=True)) == {"C": 100}
     monkeypatch.setattr(config, "STOCK_EXPOSURE", "exact")
     assert sizes(ask(["A", "C"], mandate=None)) == {"C": 40, "A": 60}  # exact mode: today's behaviour
 
