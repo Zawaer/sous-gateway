@@ -387,7 +387,21 @@ function renderQuote(quote) {
     amount: need.amount, unit: need.unit, note: need.query, product_ids: productIds, substitute_for: need.substituteFor,
   }));
   renderCoverage(content, quote, draft, editQuotedItem);
-  appendList(content, 'Mandate findings', preview.findings.map((finding) => finding.message));
+  if (preview.findings.length) {
+    const findings = element('ul');
+    for (const finding of preview.findings) {
+      const row = element('li', finding.message);
+      if (finding.rule_url && /^[a-z][a-z0-9_.-]*$/.test(finding.rule ?? '')) {
+        const link = element('a', `Rule: ${finding.rule}`);
+        link.href = `${state.quoteContext.gateway.base}/rules/${encodeURIComponent(finding.rule)}`;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        row.append(' · ', link);
+      }
+      findings.append(row);
+    }
+    content.append(element('h3', 'Mandate findings'), findings);
+  }
   appendList(content, 'Other products considered', quote.alternatives_considered.map((option) => `${option.name} · ${option.why_not.join(' ')}`));
   $('submit-order').textContent = preview.outcome === 'ask' ? 'Send for approval' : 'Submit order';
   $('quote-panel').hidden = false;
