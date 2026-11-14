@@ -194,3 +194,19 @@ def test_shared_budget_refusal_is_a_wait_not_a_stale_copy(monkeypatch, server):
     with pytest.raises(aimo.SharedBudgetLimit) as e:
         aimo.availability(["1"], DAY)
     assert e.value.rate_limited and e.value.retry_after >= 1
+
+
+def test_local_budget_refusal_does_not_serve_other_deployments_old_copies(monkeypatch, server):
+    deployment(server, "staging")
+    use(monkeypatch, Api())
+    aimo.availability(["1"], DAY)
+    r = fakeredis.FakeRedis(server=server, decode_responses=True)
+    key = f"sous:valio:offer:availability:{DAY.isoformat()}:1"
+    d = json.loads(r.get(key))
+    d["t"] -= aimo.AVAILABILITY_TTL + 30
+    r.set(key, json.dumps(d), keepttl=True)
+    deployment(server, "prod")
+    monkeypatch.setattr(aimo.config, "AIMO_CALLS_PER_MIN", 1)
+    aimo.prices(["9"], DAY)  # this process's own cap is now used up
+    with pytest.raises(aimo.BudgetLimit):
+        aimo.availability(["1"], DAY)

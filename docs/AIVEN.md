@@ -30,12 +30,12 @@ All keys start with `sous:valio:`.
    `INCR budget:<minute>`, `EXPIRE`, `GET budget:<minute-1>`. Usage is the sliding-window estimate
    `prev × (1 − elapsed fraction of this minute) + cur`. Over the limit: `DECR` and refuse with a
    `Retry-After`; the agent gets the usual retryable `valio_unavailable` (503). This refusal is a short wait, not an outage, so it is never answered
-   with a stale copy (that would turn a routine order into `DATA_STALE` → ask); the per-process cap and
-   real Valio failures still fall back to last-known copies. A per-role counter
+   with a stale copy (that would turn a routine order into `DATA_STALE` → ask); the per-process cap still falls
+   back to this process's own last-known copies (as before Valkey), real Valio failures to any deployment's. A per-role counter
    `budget:<minute>:<role>` is kept for visibility.
 2. **Prod first.** `SOUS_DEPLOYMENT_ROLE` = `prod`, `staging`, `ci`, `demo` or `dev`. The cap compares
    *everybody's* usage with the role's share: prod may use 100 % of
-   `SOUS_VALIO_GLOBAL_CALLS_PER_MIN` (default 50), every other role stops at 50 %. So however busy CI
+   `SOUS_VALIO_GLOBAL_CALLS_PER_MIN` (default 60, the old per-process default), every other role stops at 50 %. So however busy CI
    and staging are, at least half of every minute is left for prod during judging.
 3. **Shared circuit breaker.** When any deployment gets a 429 it sets `circuit_until` (epoch, `PX` =
    Retry-After or 10 s, never shortening an existing pause). Every deployment checks it before calling
@@ -67,7 +67,7 @@ Valkey is an optimisation for a shared limit, never a dependency of a quote:
 |---|---|---|
 | `SOUS_VALKEY_URL` | (empty) | The Aiven service URI, `rediss://default:<password>@<service>.aivencloud.com:<port>` |
 | `SOUS_DEPLOYMENT_ROLE` | `dev` | `prod` on the prod server, `staging`, `ci` in CI, `demo` for demo scripts |
-| `SOUS_VALIO_GLOBAL_CALLS_PER_MIN` | `50` | Shared budget per minute, all deployments together |
+| `SOUS_VALIO_GLOBAL_CALLS_PER_MIN` | `60` | Shared budget per minute, all deployments together |
 | `SOUS_VALIO_ROLE_SHARE` | (empty) | Override the 0.5 share of non-prod roles |
 
 1. Create an Aiven for Valkey service (any plan; ours is in Europe, near Valio Aimo's API) and copy
@@ -80,8 +80,8 @@ Valkey is an optimisation for a shared limit, never a dependency of a quote:
    `uv run python -m scripts.valio_budget`:
 
 ```json
-{"backend": "valkey", "ok": true, "role": "prod", "used_this_minute": 12.4, "limit": 50,
- "role_limit": 50, "by_role": {"ci": 7, "prod": 5}, "denied": 0, "shared_cache_hits": 31, "configured": true}
+{"backend": "valkey", "ok": true, "role": "prod", "used_this_minute": 12.4, "limit": 60,
+ "role_limit": 60, "by_role": {"ci": 7, "prod": 5}, "denied": 0, "shared_cache_hits": 31, "configured": true}
 ```
 
 ## Tests

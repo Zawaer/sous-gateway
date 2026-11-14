@@ -63,6 +63,11 @@ class AimoError(RuntimeError):
         self.rate_limited = rate_limited
 
 
+class BudgetLimit(AimoError):
+    """This process's own per-minute cap (config.AIMO_CALLS_PER_MIN). Falls back to this process's own
+    last-known copies only, as before Valkey (not to older copies other deployments left in Valkey)."""
+
+
 class SharedBudgetLimit(AimoError):
     """This deployment's share of the budget every deployment shares in Valkey is used up for this minute.
     A short self-imposed wait, not a Valio outage: never served from a stale copy (a copy another deployment
@@ -110,7 +115,7 @@ def _take_budget() -> None:
                                    "for this minute; retry shortly.",
                                    retry_after=max(1, int(60 - (now - _sandbox_calls[0])) + 1), rate_limited=True)
         if len(_calls) >= config.AIMO_CALLS_PER_MIN:
-            raise AimoError("The gateway's budget of live Valio Aimo calls for this minute is used up; retry shortly.",
+            raise BudgetLimit("The gateway's budget of live Valio Aimo calls for this minute is used up; retry shortly.",
                             retry_after=max(1, int(60 - (now - _calls[0])) + 1), rate_limited=True)
         _calls.append(now)
         if m is not None:
@@ -288,8 +293,8 @@ def _stale(kind: str, day: str, chunk: list[str], max_age: int, err: AimoError) 
 
 
 def _from_shared(kind: str, day: str, missing: list[str], ttl: int, out: dict[str, dict]) -> list[str]:
-    """L2: copies another deployment (or this one) put in Valkey. Fresh ones go to `out`; every copy newer
-    than ours goes to L1, so it can also serve as the last-known copy if the live call fails."""
+    """L2: copies another deployment (or this one) put in Valkey. Fresh ones go to `out` and to L1. Older
+    copies are only used when Valio Aimo itself fails (_shared_stale)."""
     found = shared.get_offers(kind, day, missing)
     if not found:
         return missing
@@ -297,15 +302,27 @@ def _from_shared(kind: str, day: str, missing: list[str], ttl: int, out: dict[st
     hits = 0
     with _lock:
         for pid, (t, item) in found.items():
+            if now - t >= ttl:
+                continue
             mine = _cache.get((kind, day, pid))
             if mine is None or mine[0] < t:
                 _cache[(kind, day, pid)] = (t, item)
-            if now - t < ttl:
-                out[pid] = item
-                hits += 1
+            out[pid] = item
+            hits += 1
         stats["cache_hits"] += hits
     shared.count_hits(hits)
     return [pid for pid in missing if pid not in out]
+
+
+def _shared_stale(kind: str, day: str, chunk: list[str]) -> None:
+    """Valio Aimo failed (429, 5xx, unreachable, circuit open): adopt last-known copies from Valkey that are
+    newer than ours, so _stale can serve a copy another deployment fetched."""
+    found = shared.get_offers(kind, day, chunk)
+    with _lock:
+        for pid, (t, item) in found.items():
+            mine = _cache.get((kind, day, pid))
+            if mine is None or mine[0] < t:
+                _cache[(kind, day, pid)] = (t, item)
 
 
 def _post(kind: str, requested: date, ids: list[str], ttl: int, stale_max: int) -> dict[str, dict]:
@@ -331,6 +348,8 @@ def _post(kind: str, requested: date, ids: list[str], ttl: int, stale_max: int) 
         except AimoError as e:
             if isinstance(e, (SandboxLimit, SharedBudgetLimit)):
                 raise
+            if not isinstance(e, BudgetLimit):
+                _shared_stale(kind, day, chunk)
             stale = _stale(kind, day, chunk, stale_max, e)
             if not stale:
                 raise

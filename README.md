@@ -190,7 +190,7 @@ Read from the environment, or from `.env` in development. Never commit `.env`. T
 | `SOUS_AIMO_CALLS_PER_MIN` | `60` | Per-process cap on live Valio Aimo API calls per minute. |
 | `SOUS_VALKEY_URL` | (empty) | Aiven for Valkey (`rediss://...`): one Valio call budget, circuit breaker and offer cache shared by every deployment ([docs/AIVEN.md](docs/AIVEN.md)). Empty = per-process only. |
 | `SOUS_DEPLOYMENT_ROLE` | `dev` | `prod`, `staging`, `ci`, `demo` or `dev`. Only `prod` may use the whole shared budget; the others stop at half of it. |
-| `SOUS_VALIO_GLOBAL_CALLS_PER_MIN` | `50` | Shared Valio Aimo calls per minute across all deployments (sliding window in Valkey). |
+| `SOUS_VALIO_GLOBAL_CALLS_PER_MIN` | `60` | Shared Valio Aimo calls per minute across all deployments (sliding window in Valkey). |
 | `MARIADB_PASSWORD` | (empty) | Used by `compose.yaml` for the MariaDB service and to build `SOUS_DB_URL`. |
 | `SOUS_TRUST_CF_HEADER` | (empty) | `1` to take the client IP from `CF-Connecting-IP` (only behind Cloudflare). |
 | `SOUS_NTFY_TOPIC` | (empty) | ntfy topic for push notifications to the buyer's phone. Optional `SOUS_NTFY_SERVER` (default `https://ntfy.sh`) and `SOUS_NTFY_TOKEN`. |

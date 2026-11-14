@@ -37,7 +37,8 @@ ROLE_SHARE = {"prod": 1.0, "staging": 0.5, "demo": 0.5, "ci": 0.5, "dev": 0.5}
 
 URL = config.env("VALKEY_URL", "") or ""
 ROLE = (config.env("DEPLOYMENT_ROLE", "dev") or "dev").strip().lower()
-GLOBAL_CALLS_PER_MIN = int(config.env("VALIO_GLOBAL_CALLS_PER_MIN", "50"))
+# 60 = the old per-process default (AIMO_CALLS_PER_MIN): prod alone never gets less than before Valkey.
+GLOBAL_CALLS_PER_MIN = int(config.env("VALIO_GLOBAL_CALLS_PER_MIN", "60"))
 _share_override = config.env("VALIO_ROLE_SHARE", "")
 
 _lock = threading.Lock()
