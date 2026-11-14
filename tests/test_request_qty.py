@@ -206,6 +206,17 @@ def test_different_products_cant_add_up_to_one_item():
     assert fired(quote_items("milk 25 l and cream 25 l", ("MILK", 50, "L")))
 
 
+@pytest.mark.parametrize("words", [
+    "milk 25 l and milk 25 l by Monday", "25 l milk and 25 l milk by Monday",  # rene-codex-qa 19:18Z, both orders
+    "milk 25 l and milk 25 l for Tuesday", "maitoa 25 l ja maitoa 25 l maanantaiksi",
+    "25 litraa maitoa ja 25 litraa maitoa keskiviikoksi", "milk 25 l and milk 25 l on Friday, thanks",
+    "maitoa 25 l ja maitoa 25 l huomiseksi", "maitoa 25 l ja maitoa 25 l ensi viikolla",
+])
+def test_a_day_or_preposition_is_never_the_product(words):
+    """A normal order of one product in two mentions, delivered by a date, must not get a false ask."""
+    assert not fired(quote_items(words, ("MILK", 50, "L")))
+
+
 @pytest.mark.parametrize("text,products", [
     ("25 l milk and 25 l cream by Monday", ["milk", "cream"]), ("25 l + 25 l milk", [None, "milk"]),
     ("milk 25 l and cream 25 l", ["milk", "cream"]), ("Order 40 l of milk", ["milk"]),

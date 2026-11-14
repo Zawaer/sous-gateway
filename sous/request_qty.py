@@ -110,17 +110,33 @@ _STOP = {"of", "the", "a", "an", "some", "more", "extra", "lisää", "order", "t
          "us", "me", "i", "you", "can", "voitko", "could", "and", "ja", "plus", "sekä", "or", "tai"}
 
 
+# words that end a quantity's product: prepositions, dates, days and delivery words ("25 l by Monday"). After one
+# of these the product is read from before the quantity instead.
+_BOUNDARY = {"by", "for", "on", "until", "till", "before", "after", "at", "to", "next", "this", "in", "from",
+             "delivery", "deliver", "delivered", "today", "tomorrow", "week", "weekend", "asap", "thanks", "thank",
+             "mennessä", "huomiseksi", "huomenna", "tänään", "viikolla", "ensi", "tällä", "toimitus", "toimitukseen",
+             "toimitettuna", "toimitettavaksi", "kiitos", "pian", "heti", "aamuksi", "aamulla", "illaksi"}
+_DAY = re.compile(r"(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)s?"
+                  r"|(?:maanantai|tiistai|keskiviiko|torstai|perjantai|lauantai|sunnuntai)\w*"
+                  r"|mon|tue|wed|thu|fri|sat|sun|ma|ti|ke|to|pe|la|su")
+
+
+def _not_product(tok: str) -> bool:
+    return tok in _BOUNDARY or bool(_DAY.fullmatch(tok))
+
+
 def _product(before: str, after: str) -> str | None:
     """The product a quantity names: the first word after it ("25 l milk"), else the word right before it
-    ("milk 25 l and cream 25 l"); None when it names none ("25 l + 25 l milk": it shares the next one's)."""
+    ("milk 25 l and milk 25 l by Monday"); None when it names none ("25 l + 25 l milk": it shares the next one's).
+    A preposition, day or delivery word is never a product ("by", "Monday", "maanantaiksi", "mennessä")."""
     if not _SEP.match(after):
         for tok in re.findall(r"[^\W_]+", after.lower())[:4]:
-            if tok.isdigit():
+            if tok.isdigit() or _not_product(tok):
                 break
             if tok not in _STOP:
                 return tok
     toks = [t for t in re.findall(r"[^\W_]+", re.split(r"[+&,;/]", before)[-1].lower()) if not t.isdigit()]
-    return toks[-1] if toks and toks[-1] not in _STOP else None
+    return toks[-1] if toks and toks[-1] not in _STOP and not _not_product(toks[-1]) else None
 
 
 def _one_product(mentions: list[tuple[float, str | None]]) -> bool:
