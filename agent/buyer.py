@@ -34,12 +34,16 @@ from .llm import ChatClient, LLMError, config_from_env
 
 BUYER_TOOLS = ("search_products", "get_product", "get_mandate", "suggest_substitutes", "request_quote",
                "place_order", "get_order")
-BOUND = ("agent_id", "mandate_id", "idempotency_key", "agent_token", "rationale")  # set by the runtime, hidden from the model
+BOUND = ("agent_id", "mandate_id", "idempotency_key", "agent_token", "rationale",
+         "buyer_request")  # set by the runtime, hidden from the model
 # Tools that take the agent's bearer credential (sous/mcp_server.py); MCPGateway adds it, so it never reaches the model
 # or a transcript.
 TOKEN_TOOLS = frozenset({"request_quote", "place_order", "renew_standing_order", "suggest_substitutes",
                          "get_suggestions"})
 RATIONALE_TOOLS = frozenset({"request_quote", "place_order", "renew_standing_order"})
+# The buyer's own message goes to the gateway verbatim (buyer_request): it reads the quantities itself and asks a
+# person when the quote has none of them, so a misread "1 539 litraa" can't shrink an order (sous/request_qty.py).
+REQUEST_TOOLS = frozenset({"request_quote", "place_order"})
 MAX_RESULT_CHARS = 24000
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
@@ -363,6 +367,7 @@ class BuyerAgent:
         earlier = [x for x in (earlier or []) if x.get("question") and x.get("answer")]
         words = " ".join([request, *(x["answer"] for x in earlier)])
         self._rationale = " ".join(words.split())[:500]  # the buyer's own words, recorded by the gateway
+        self._buyer_request = "\n".join([request, *(x["answer"] for x in earlier)])[:2000]  # verbatim, unparsed
         messages = [{"role": "system", "content": self.system_prompt()}, {"role": "user", "content": self.user_message(request)}]
         for x in earlier:
             messages += [{"role": "assistant", "content": x["question"]}, {"role": "user", "content": x["answer"]}]
@@ -447,6 +452,8 @@ class BuyerAgent:
             full["mandate_id"] = self.cfg.mandate_id
         if name in RATIONALE_TOOLS and "rationale" in props:
             full["rationale"] = getattr(self, "_rationale", None)
+        if name in REQUEST_TOOLS and "buyer_request" in props and getattr(self, "_buyer_request", None):
+            full["buyer_request"] = self._buyer_request
         if name == "place_order":
             full["idempotency_key"] = f"{self.cfg.agent_id}:{shown.get('quote_id')}"
         t0 = time.perf_counter()

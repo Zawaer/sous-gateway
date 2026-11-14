@@ -356,6 +356,12 @@ def _build() -> list[dict]:
            f"The planned packs exceed a need in L or KG by more than {config.PACK_OVERSIZE_PCT:g}% (12 kg -> one "
            f"20 kg bag, +67%) and no plan with less surplus costs at most {config.PACK_OVERSIZE_PRICE_PCT:g}% more: "
            "the order goes through and the buyer is told.", None),
+        _r("quantity.request_mismatch", "finding", ["ask"], "gateway",
+           "The buyer's own words (buyer_request on request_quote / place_order) state a quantity that no item or "
+           "line of the quote is near (2 % below to the pack-oversize margin above, per unit family L / kg / packs): "
+           "the agent may have misread the buyer (\"1 539 litraa\" read as 539 L), so a person checks. Read "
+           "deterministically (sous/request_qty.py); an ambiguous number (\"1,539 l\") is only listed, never fired.",
+           None),
     ]
     R += [_r(f"availability.{c.lower()}", "finding", ["block"], "valio", t) for c, t in _VALIO_BLOCKING.items()]
     R += [_r(f"availability.{c.lower()}", "finding", ["block"], "gateway", t) for c, t in _GATEWAY_BLOCKING.items()]

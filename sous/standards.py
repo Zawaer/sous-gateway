@@ -737,6 +737,10 @@ class QuoteLineDoc(_Open):
 class MandatePreviewDoc(_Open):
     outcome: Literal["silent", "notify", "ask", "block"]
     findings: list[Finding]
+    request_quantities: list[dict] | None = Field(
+        None, description="Quantities read from buyer_request (sous/request_qty.py): {text, family L|KG|PACK, "
+                          "values, ambiguous, status matched|pack_size|ambiguous|mismatch}; mismatch is finding "
+                          "quantity.request_mismatch (ask)")
 
 
 class QuoteDoc(_Open):
@@ -760,6 +764,8 @@ class QuoteDoc(_Open):
     alternatives_considered: list[dict]
     valio_api_calls: dict[str, int]
     rationale: str | None = None
+    buyer_request: str | None = Field(None, description="The buyer's own words as the agent passed them, read for "
+                                                       "quantities (rule quantity.request_mismatch)")
     mandate_preview: MandatePreviewDoc | None = None
 
 

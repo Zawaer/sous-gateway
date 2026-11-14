@@ -570,6 +570,7 @@ class OrderRequest(BaseModel):
     @classmethod
     def _risks(cls, v: list[str] | None) -> list[str] | None:
         return S.controls.check_risks(v)
+    buyer_request: str | None = Field(None, max_length=S.RQ.MAX_CHARS, description=S.RQ.DOC)
 
 
 @app.post("/orders", tags=["ordering"])
@@ -579,7 +580,8 @@ def place_order(req: OrderRequest, token: str | None = Depends(agent_token)):
     If the mandate requires agent authentication, send `Authorization: Bearer <agent token>`
     (401 agent_auth_required without it, 403 agent_auth_invalid with a wrong one)."""
     return S.place_order(req.agent_id, req.mandate_id, req.quote_id, req.idempotency_key, agent_token=token,
-                         rationale=req.rationale, declared_risks=req.declared_risks)
+                         rationale=req.rationale, declared_risks=req.declared_risks,
+                         buyer_request=req.buyer_request)
 
 
 @app.get("/orders", tags=["ordering"])

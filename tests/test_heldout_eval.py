@@ -230,7 +230,10 @@ def test_end_to_end_one_case_through_the_real_runner(tmp_path, monkeypatch):
     assert H.run(a, "fake", cfg, Scripted(), tmp_path) == 0
     doc = _json.loads((tmp_path / "results.scripted.json").read_text())
     r = doc["runs"][0]
-    assert r["placed_order"] and r["final_status"] == "ordered" and not r["false_auto_approval"], r["stop_reason"]
+    # the scripted agent drops the buyer's "5 kg voita": the gateway reads the buyer's words (buyer_request) and
+    # holds the milk-only order for a person (quantity.request_mismatch, sous/request_qty.py)
+    assert r["placed_order"] and r["final_status"] == "pending_approval" and not r["false_auto_approval"], \
+        r["stop_reason"]
     milk_item = r["content"]["items"][0]
     assert milk_item["kind"] and milk_item["amount"] == {"LKG": 10.0}
     assert not r["matched_no_correction"]  # no butter, and the date is not tomorrow
