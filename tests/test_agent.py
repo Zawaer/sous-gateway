@@ -329,3 +329,16 @@ def test_mcp_gateway_adds_the_agent_token_below_the_model(monkeypatch):
         run = B.BuyerAgent(ScriptedLLM(happy_turns()), authed, cfg()).run("milk")
         assert run.orders[0]["status"] == "ordered"
         assert token not in json.dumps(run.transcript()) and token not in json.dumps(run.summary())
+
+
+def test_eval_cases_do_not_share_stock_reservations(monkeypatch):
+    """Each eval case gets its own reservation key space: shared Valkey hashes outlast a case (TTL)."""
+    from scripts.llm_eval import isolate_reservations
+    from sous import reservations
+
+    monkeypatch.setattr(reservations, "_key", reservations._key)  # restored after the test
+    isolate_reservations("H04")
+    a = reservations._key("464119", "2026-11-16")
+    isolate_reservations("H04")
+    b = reservations._key("464119", "2026-11-16")
+    assert a != b and ":H04:" in a and a.endswith("resv:464119:2026-11-16")
