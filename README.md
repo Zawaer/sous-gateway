@@ -1,17 +1,52 @@
 # Sous
 
-**AI purchasing agents carry a signed mandate from their human, and Valio Aimo's gateway enforces it.**
-
-Sous is a gateway that lets any buyer's AI agent shop at Valio Aimo, the Finnish food-service wholesaler, over MCP or OpenAPI. The agent searches the catalog, gets a signed quote with live price and availability, and orders. Each agent holds a mandate from its human: spend limits, allergen rules, what may be substituted. A deterministic rules engine checks every order against it and puts it in one of four tiers: **silent** (ordered), **notify** (ordered, human gets an FYI), **ask** (held for a human) or **block** (refused, with the rule that fired). The LLM never decides. Every step goes into a hash-chained audit log that the buyer and Valio Aimo both read.
+Sous is a seller-side trust gateway for Valio Aimo, the Finnish food-service wholesaler: outside AI purchasing agents search the catalog over MCP or REST, get quotes signed by the gateway with live Valio price and availability, and order under a mandate their buyer set (spend limits, allergens, substitutes). Plain code, not the LLM, puts every order in one of four tiers (auto, auto + FYI, needs approval, refused), and every step goes into a hash-chained audit log that the buyer and Valio Aimo both read.
 
 Built at Junction 2026 for Valio Aimo's challenge "Trusted Trade Agents".
 
-**Live:** production https://135-181-8-209.sslip.io (Verda CPU instance in Finland), staging https://staging.135-181-63-134.sslip.io. Both serve `/docs`, `/mcp/`, `/ui/` and `/buyer/`; human actions need the approver code. Production runs an older commit than `main` (no AP2 exports, `/rules`, read scopes or demo clock yet); [docs/STATUS.md](docs/STATUS.md#deployed-now) lists what is live where.
+## Judge path in 5 minutes
 
-- [docs/PROTOCOL.md](docs/PROTOCOL.md): the trust protocol (mandate, quote, tiers and rules, orders, standing orders, suggestions, notifications, audit log, offline verification).
+The demo server is production, `https://135-181-8-209.sslip.io`, set as `SOUS` below. It is redeployed from `main` until the Sun 15.11 08:00 Helsinki freeze. If `curl $SOUS/rules` returns 404, it is still on the older build (no `/rules`, AP2 exports, read scopes or demo clock): use staging, `https://staging.135-181-63-134.sslip.io`, which runs current `main` and is the fallback. [docs/STATUS.md](docs/STATUS.md#deployed-now) says what runs where. Needs `curl` and `jq`.
+
+1. **Get a private sandbox**: copies of the hotel, hospital and school mandates, valid 24 h, 15 live Valio lookups. The two tokens in the response are shown once.
+   ```bash
+   export SOUS=https://135-181-8-209.sslip.io
+   curl -s -X POST $SOUS/sandbox | tee sandbox.json | jq '{sandbox, mandates: [.mandates[] | {mandate_id, rules}]}'
+   ```
+2. **Run the quickstart**: the response's `quickstart.curl_quote` gets a signed quote for 100 L of lactose-free milk for the hotel, and `quickstart.curl_order` orders it.
+   ```bash
+   Q=$(jq -r .quickstart.curl_quote sandbox.json | sh | jq -r .quote.id)
+   jq -r .quickstart.curl_order sandbox.json | sed "s/<quote.id>/$Q/" | sh | jq 'if .error then . else {id, status, tier: .decision.outcome, rules: [.decision.findings[].rule]} end'
+   ```
+   Within the hotel's limits it is `ordered`, tier `silent` (auto), rule `mandate.ok`. Every finding carries a `rule_url`.
+3. **Approve a held order as the human**: open the seller inbox for your sandbox, paste `approver_token` when it asks for the approver code, and approve or reject. Each held order lists the rules that fired. The token works only on your sandbox's orders. If the inbox is empty, the hospital prompt in step 5 makes a held order.
+   ```bash
+   jq -r .quickstart.seller_ui sandbox.json     # $SOUS/ui/?sandbox=SBX-....#/inbox
+   ```
+4. **Check the rules and the audit chain**:
+   ```bash
+   curl -s $SOUS/rules | jq '.tiers, .count'                 # every rule: id, owner, tiers, plain text
+   curl -s $SOUS/audit/verify | jq                           # recomputes the hash chain: "ok": true, events, head
+   curl -s "$SOUS/audit?sandbox=$(jq -r .sandbox.id sandbox.json)&limit=5" \
+     -H "Authorization: Bearer $(jq -r .agent_token sandbox.json)" | jq '.events[] | {seq, event, hash, prev_hash}'
+   ```
+5. **Connect an MCP client** to `$SOUS/mcp/` with the agent token, then paste one of the four `prompts`: hotel milk (ordered with an FYI), hospital substitute (held for a human), past the cut-off (refused, `availability.cutoff_passed`), school over budget (refused, `spend.hard_limit`).
+   ```bash
+   jq -r .quickstart.claude_code sandbox.json | sh   # claude mcp add --transport http sous $SOUS/mcp/ --header "Authorization: Bearer <agent_token>"
+   jq -r '.prompts[] | .title, .prompt, ""' sandbox.json
+   ```
+
+Evaluation, as [docs/STATUS.md](docs/STATUS.md#evaluation) states it: scripted cases (no LLM, live Valio prices) 59/59 in a local run (`evals/results.json` at 285f126), 43/43 unsafe actions blocked or escalated; the first 45 also 45/45 in CI (run 43530484114). LLM agent: Gemini 4 Hydrogen 39/40 (CI 43530717095), 0 mandate violations auto-ordered.
+
+## Where to read more
+
+- [docs/pitch/try-it.md](docs/pitch/try-it.md): the sandbox walk-through as a one-page handout.
+- [docs/STATUS.md](docs/STATUS.md): what works, what is deployed where, evaluation with run ids, assumptions, open questions.
+- [docs/PROTOCOL.md](docs/PROTOCOL.md): the full protocol. Start with [6. Tiers and rules](docs/PROTOCOL.md#6-tiers-and-rules), [12. Audit log](docs/PROTOCOL.md#12-audit-log) and [18. Judge sandbox](docs/PROTOCOL.md#18-judge-sandbox).
 - [docs/DECISIONS.md](docs/DECISIONS.md): technical choices and the path to production.
-- [docs/STATUS.md](docs/STATUS.md): what works now, evaluation, assumptions, open questions.
-- [docs/CI.md](docs/CI.md), [docs/LLM_EVAL.md](docs/LLM_EVAL.md), [docs/VERDA.md](docs/VERDA.md), [docs/demo-runbook.md](docs/demo-runbook.md).
+- [docs/STANDARDS.md](docs/STANDARDS.md): mapping to AP2, ACP, A2A, MCP server cards, schema.org, W3C VC 2.0, JOSE.
+- [docs/LLM_EVAL.md](docs/LLM_EVAL.md), [docs/CI.md](docs/CI.md), [docs/VERDA.md](docs/VERDA.md), [docs/GEMINI.md](docs/GEMINI.md), [docs/NEMOTRON.md](docs/NEMOTRON.md), [docs/AIVEN.md](docs/AIVEN.md), [docs/demo-runbook.md](docs/demo-runbook.md).
+- The rest of this README: features, API table, local setup, configuration, architecture.
 
 ## What it does
 
@@ -31,10 +66,10 @@ Built at Junction 2026 for Valio Aimo's challenge "Trusted Trade Agents".
 
 ## Try it yourself
 
-Get a private sandbox on the live gateway (copies of the hotel, hospital and school mandates, valid 24 h, kept out of the curated demo data):
+The demo server (`$SOUS`, see [Judge path](#judge-path-in-5-minutes); production is a Verda CPU instance in Finland) and staging both serve `/docs`, `/mcp/`, `/ui/` and `/buyer/`; human actions need the approver code. Get a private sandbox there (copies of the hotel, hospital and school mandates, valid 24 h, kept out of the curated demo data):
 
 ```bash
-curl -s -X POST https://135-181-8-209.sslip.io/sandbox | jq
+curl -s -X POST $SOUS/sandbox | jq
 ```
 
 The response has your sandbox id (e.g. `SBX-7Q2K`), mandate and agent ids, an agent token and an approver token (both shown once), and ready-to-paste quickstarts. Then:
@@ -88,7 +123,7 @@ Connect Claude Code as the buyer agent over MCP:
 claude mcp add --transport http sous http://localhost:8000/mcp/
 ```
 
-Then ask it, for example: *"You are aurora-purchasing-agent with mandate M-HOTEL-AURORA. Buy 1,000 litres of lactose-free milk for delivery on Monday."* Against the deployed gateway, use `https://135-181-8-209.sslip.io/mcp/` instead.
+Then ask it, for example: *"You are aurora-purchasing-agent with mandate M-HOTEL-AURORA. Buy 1,000 litres of lactose-free milk for delivery on Monday."* Against the demo server, use `$SOUS/mcp/` instead.
 
 Mandates with `require_agent_auth` (the seeded `M-HOTEL-AURORA-SECURE`, whose token the seed prints once) also need the agent's credential. Pass it as a header:
 

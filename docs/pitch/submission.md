@@ -8,7 +8,7 @@ AI purchasing agents carry a signed mandate from their human, and Valio Aimo's g
 
 ## Description (markdown, ≤5000 chars)
 
-**Sous** is an open front door that lets any AI purchasing agent find products, get a binding quote and place orders with Valio Aimo, inside limits its human set. Live at https://135-181-8-209.sslip.io.
+**Sous** is an open front door that lets any AI purchasing agent find products, get a binding quote and place orders with Valio Aimo, inside limits its human set. Live at https://135-181-8-209.sslip.io; a judge path in 5 minutes is at the top of the README.
 
 ### The problem
 We asked a general shopping agent for "1,000 litres of lactose-free milk by Monday". It researched for 13 minutes and concluded it would have to phone wholesalers on Saturday. Agents will buy from wholesalers anyway. If Valio Aimo doesn't define how they do it safely and openly, someone else's platform will.
@@ -39,7 +39,7 @@ MCP and OpenAPI expose the same operations. A browser reference buyer verifies s
 Scripted buyer requests (no LLM, live Valio prices, cases we wrote): 59/59 in a local run, incl. partial-availability options and attack cases (order slicing, an agent approving itself, prompt injection, unusual quantity); 43/43 unsafe actions blocked or escalated. The first 45 also pass in CI on CRACI (run 43530484114). Search first-result accuracy 56 % → 100 % on 39 fi/sv/en queries we wrote while tuning.
 
 ### Built like production
-CI on CRACI: tests with MariaDB, Docker build, CycloneDX SBOM, grype gate, and a smoke test under deny-by-default egress (a gateway holding a supplier key must not talk to anything else). Deployed on a Verda CPU instance in Finland (production runs an older commit than `main`; see docs/STATUS.md).
+CI on CRACI: tests with MariaDB, Docker build, CycloneDX SBOM, grype gate, and a smoke test under deny-by-default egress (a gateway holding a supplier key must not talk to anything else). Deployed on a Verda CPU instance in Finland, redeployed from `main` until the Sunday freeze; docs/STATUS.md lists the live commit.
 
 ### What's next
 Agent keys bound to the mandate (mTLS, DPoP or VC-bound keys) and buyer login via OIDC; Valio Aimo's real order API with per-customer prices; buyer-signed VC mandates by default (opt-in today) and signed AP2 mandates (today: unsigned AP2 v0.2 views); key rotation through JWKS.

@@ -2,10 +2,13 @@
 
 Sous is Valio Aimo's front door for AI purchasing agents. Your agent shops; a signed mandate from "your" human decides what it may do alone. You get a private sandbox, so you can't break the demo, and nothing you do is a real delivery.
 
+The demo server is `https://135-181-8-209.sslip.io` (production). If `/rules` returns 404 there, it is still on an older build: use staging, `https://staging.135-181-63-134.sslip.io`, which runs current `main`.
+
 ## 1. Get a sandbox
 
 ```bash
-curl -s -X POST https://135-181-8-209.sslip.io/sandbox | jq
+export SOUS=https://135-181-8-209.sslip.io
+curl -s -X POST $SOUS/sandbox | tee sandbox.json | jq
 ```
 
 You get (keep this output, the tokens are shown once):
@@ -24,7 +27,7 @@ You get (keep this output, the tokens are shown once):
 With Claude Code, paste `quickstart.claude_code`:
 
 ```bash
-claude mcp add --transport http sous https://135-181-8-209.sslip.io/mcp/ --header "Authorization: Bearer <agent_token>"
+claude mcp add --transport http sous $SOUS/mcp/ --header "Authorization: Bearer <agent_token>"
 ```
 
 Any MCP client works the same way; or use plain REST with `quickstart.curl_quote` and `curl_order`.
