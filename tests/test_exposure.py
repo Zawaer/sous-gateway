@@ -144,3 +144,44 @@ def test_substitutes_and_suggestions_are_redacted(monkeypatch):
     monkeypatch.setattr(suggest, "_suggestions", lambda *a: {"suggestions": [{"offer": offer("S")}]})
     assert suggest.suggestions("M-T", "agent", MON)["suggestions"][0]["offer"]["available_amount"] is None
     assert suggest.suggestions("M-T", "agent", MON, reader=APPROVER)["suggestions"][0]["offer"]["available_amount"] == 70
+
+
+def test_anonymous_quote_is_not_sized_to_stock(monkeypatch):
+    """Security review (Codex 01a1d86a): a mandate-less quote needs no token, so sizing it to stock would leak the
+    exact amount through quantity / covers / line total. It keeps the requested quantity, flagged short."""
+    monkeypatch.setattr(config, "STOCK_EXPOSURE", "buckets")
+    AVAIL["C"] = ("2026-11-16", 40, None)  # cheapest, only 40 of the 100 L
+    AVAIL["A"] = ("2026-11-18", None, None)  # would trigger options under a mandate
+    r = ask(["A", "C"], mandate=None)
+    q = r["quote"]
+    assert [(l["product_id"], l["quantity"], l["covers"]["amount"]) for l in q["lines"]] == [("C", 100, 100)]
+    line = q["lines"][0]
+    assert line["stock_level"] == "short" and line["available_amount"] is None
+    assert {"PARTIAL_STOCK", "STOCK_SIZING_WITHHELD"} <= {i["code"] for i in line["issues"]}
+    assert q["uncovered"] == [] and "options" not in q
+    assert "40" not in json.dumps([line["quantity"], line["covers"], line["line_total_ex_vat"], q["uncovered"]])
+    assert signing.verify(r["jws"], "sous-quote+jws") == q
+    big = ask(["C"], amount=99999, mandate=None)["quote"]["lines"][0]
+    assert big["quantity"] == 99999 and big["stock_level"] == "short"
+
+
+def test_mandate_or_approver_or_exact_still_sized(monkeypatch):
+    AVAIL["C"] = ("2026-11-16", 40, None)
+    sizes = lambda q: {l["product_id"]: l["quantity"] for l in q["quote"]["lines"]}  # noqa: E731
+    monkeypatch.setattr(config, "STOCK_EXPOSURE", "buckets")
+    assert sizes(ask(["A", "C"])) == {"C": 40, "A": 60}  # under a mandate
+    monkeypatch.setattr(config, "STOCK_EXPOSURE", "approver_exact")
+    assert sizes(ask(["A", "C"], mandate=None)) == {"C": 100}
+    assert sizes(ask(["A", "C"], mandate=None, approver=True)) == {"C": 40, "A": 60}
+    monkeypatch.setattr(config, "STOCK_EXPOSURE", "exact")
+    assert sizes(ask(["A", "C"], mandate=None)) == {"C": 40, "A": 60}  # exact mode: today's behaviour
+
+
+def test_rest_anonymous_quote_not_sized(monkeypatch):
+    from sous.api import app
+    monkeypatch.setattr(config, "STOCK_EXPOSURE", "buckets")
+    AVAIL["C"] = ("2026-11-16", 40, None)
+    body = {"agent_id": "anyone", "delivery_date": DAY,
+            "items": [{"product_ids": ["A", "C"], "amount": 100, "unit": "L"}]}
+    lines = TestClient(app).post("/quotes", json=body).json()["quote"]["lines"]
+    assert [(l["product_id"], l["quantity"], l["stock_level"]) for l in lines] == [("C", 100, "short")]

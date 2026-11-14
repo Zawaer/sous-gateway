@@ -297,9 +297,16 @@ def rank_key(o: dict):
     return (not o["orderable"], per_unit, -(o["delivery_reliability"] or 0.95))
 
 
-def plan(need: float, need_unit: str | None, candidates: list[dict]) -> tuple[list[dict], float]:
+STOCK_SIZING_WITHHELD = ("Stock is short for this quantity. The exact amount that can be supplied (and a split "
+                         "across products) is shown only to an authenticated agent quoting under a mandate.")
+
+
+def plan(need: float, need_unit: str | None, candidates: list[dict], sized: bool = True) -> tuple[list[dict], float]:
     """Fill a need from ranked orderable offers, splitting across products when stock runs short.
 
+    sized=False (a mandate-less quote under the buckets stock policy, sous/exposure.py): the cheapest orderable
+    offer takes the whole need, never capped at its stock, so the line quantity can't reveal the exact stock;
+    a short line keeps PARTIAL_STOCK and gets STOCK_SIZING_WITHHELD.
     Returns (lines, uncovered amount in need_unit).
     """
     remaining = need
@@ -312,7 +319,7 @@ def plan(need: float, need_unit: str | None, candidates: list[dict]) -> tuple[li
             continue
         lot = o.get("allowed_lot_size")
         want = round_to_lot(remaining / content, o["sales_unit"], lot)
-        if o["available_amount"] is not None:
+        if sized and o["available_amount"] is not None:
             want = min(want, _floor_to_lot(o["available_amount"], o["sales_unit"], lot))
         if want <= 0:
             continue
@@ -321,7 +328,13 @@ def plan(need: float, need_unit: str | None, candidates: list[dict]) -> tuple[li
         line["line_total_ex_vat"] = round(o["unit_price_ex_vat"] * want, 2)
         line["line_total_inc_vat"] = round(o["unit_price_inc_vat"] * want, 2)
         line["covers"] = {"amount": round(want * content, 2), "unit": need_unit}
-        line["issues"] = [i for i in o["issues"] if i["code"] != "PARTIAL_STOCK"]
+        if sized:
+            line["issues"] = [i for i in o["issues"] if i["code"] != "PARTIAL_STOCK"]
+        else:
+            line["stock_level"] = exposure.level(o["logistic_model"], o["available_amount"], want,
+                                                 o["available_date"] is not None)
+            if line["stock_level"] in ("short", "none"):
+                line["issues"] = o["issues"] + [asdict(Issue("STOCK_SIZING_WITHHELD", WARNING, STOCK_SIZING_WITHHELD))]
         lines.append(line)
         remaining -= want * content
     return lines, max(0.0, round(remaining, 3))

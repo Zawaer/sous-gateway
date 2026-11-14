@@ -11,13 +11,15 @@ SOUS_STOCK_EXPOSURE (sous/config.py) sets the policy:
 Levels compare the stock with what the buyer asked for, in the product's sales units:
   ample    stock >= 3 x the request, or >= AMPLE_ABSOLUTE units, or Valio reports no practical limit
   limited  covers the request, but not 3 x
-  short    doesn't cover the request (the quote then splits, and the line quantity shows what can be had)
+  short    doesn't cover the request (under a mandate the quote splits, and the line quantity shows what can be had)
   none     nothing available (out of stock)
   unknown  shipped from the supplier's warehouse (Terminal), or no availability data
 
 The decision engine (quote.plan, options, the mandate) always works from the exact numbers; `view()` is
 applied once, to what leaves the gateway (quote bodies before they are signed, substitutes, suggestions).
 The quantities a buyer orders are never hidden: a split line's quantity is what can be supplied.
+Only under a mandate (or for the approver, or in exact mode): a mandate-less quote needs no credential, so it is
+not sized to stock at all (quote.plan(sized=False), service._request_quote; docs/PROTOCOL.md 5.2).
 """
 
 from __future__ import annotations

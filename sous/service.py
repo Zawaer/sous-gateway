@@ -421,6 +421,10 @@ def _apply_option(req: QuoteRequest) -> tuple[QuoteRequest, set[int]]:
 
 def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), approver: bool = False) -> dict:
     mandate = _mandate(req.mandate_id) if req.mandate_id else None
+    # Sizing a line to the stock (and splitting by it) shows the exact stock in the quantity, so under the buckets
+    # policy only a caller acting under a mandate (authorized by request_quote) or an approver gets it; anonymous
+    # mandate-less quotes keep the requested quantity, flagged short, and carry no options (docs/PROTOCOL.md 5.2).
+    sized = mandate is not None or exposure.exact(approver)
     before = dict(aimo.stats)
     lines: list[dict] = []
     considered: list[dict] = []
@@ -440,7 +444,7 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
         # never into a line a human could approve for stock that doesn't exist. Only the type asked for is
         # chosen silently (coffee milk is not milk).
         pool, off_type, mismatch = _type_pool(offers, item.product_type)
-        chosen, uncovered = Q.plan(item.amount, unit, pool)
+        chosen, uncovered = Q.plan(item.amount, unit, pool, sized)
         if not chosen and (blocked := [o for o in offers if not o["orderable"]]):
             # Nothing orderable for this need: keep the products that can't be ordered as (unorderable) lines,
             # so the mandate engine checks them and the refusal names the real reasons (allergen, undeliverable,
@@ -464,7 +468,7 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
                        if o["product_id"] not in picked][:6]
         if uncovered > 0:
             gaps.append({"item": item.model_dump(), "item_index": item_index, "uncovered": uncovered, "unit": item.unit})
-        if item_index not in skip_options and OPT.trouble(chosen, uncovered, req.delivery_date):
+        if sized and item_index not in skip_options and OPT.trouble(chosen, uncovered, req.delivery_date):
             troubled.append((item_index, item, [o for o in offers if o["product_id"] not in off_type], chosen))
 
     # Lines that can't be ordered are shown for their reasons but never bought, so they cost nothing.
