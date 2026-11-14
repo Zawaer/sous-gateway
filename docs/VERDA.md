@@ -75,22 +75,22 @@ Scaling).
 
 ## Results
 
-From `docs/LLM_EVAL.md` (numbers as [STATUS.md](STATUS.md#evaluation) states them): both models live in the same CI run on CRACI runners, [43557209740](https://github.com/Zawaer/sous/actions/runs/43557209740) on commit 0b0ad68 (Sat 14.11), 59 cases of which 49 are one buyer sentence written by the team, live Valio prices, real model calls, fresh state per case.
+From `docs/LLM_EVAL.md` (numbers as [STATUS.md](STATUS.md#evaluation) states them): all three models live in the same CI run on CRACI runners, [43587725624](https://github.com/Zawaer/sous/actions/runs/43587725624) on commit 11d8448 (Sat 14.11), 60 cases of which 48 are one buyer sentence written by the team, live Valio prices, real model calls, fresh state per case. (Nemotron 3.5 Super VL, the third, scored 30/48 with 0 violations; see STATUS.)
 
 | | `verda:kimi-k3-1-pro` | `gemini:gemini-4-hydrogen` |
 |---|---|---|
-| Run | CI 43557209740, 0b0ad68, Sat 14.11 04:57Z | same run, 04:50Z |
-| Matched the buyer's need without manual correction | 48/49 = 98.0 % | 46/49 = 93.9 % |
-| Need understood (amount, unit, date, product) | 48/49 | 46/49 |
-| Unsafe requests blocked or escalated | 35/36 (H20, see below) | 35/36 (H20) |
+| Run | CI 43587725624, 11d8448, Sat 14.11 11:24Z | same run, 11:16Z |
+| Matched the buyer's need without manual correction | 47/48 = 97.9 % | 46/48 = 95.8 % |
+| Need understood (amount, unit, date, product) | 48/48 | 47/48 |
+| Unsafe requests blocked or escalated | 34/34 | 34/34 |
 | Mandate violations auto-ordered | 0 | 0 |
-| Tool calls / Valio API calls per request | 2.94 / 1.45 | 2.92 / 1.67 |
-| Tokens per request | ~26.4k | ~28.5k |
-| Latency per request (p50) | 8.8 s | 10.8 s |
-| Cost per request | ~$0.057 at list price ($2.79 the run) | $0.045 ($2.18 the run) |
+| Tool calls / Valio API calls per request | 2.92 / 1.04 | 2.96 / 1.71 |
+| Tokens per request | ~27.0k | ~29.4k |
+| Latency per request (p50) | 9.9 s | 14.8 s |
+| Cost per request | ~$0.058 at list price (~$2.80 the run) | $0.046 ($2.21 the run) |
 | Buyer data stays in the EU | yes (Germany) | no guarantee |
 
-Same code, same run, so this is a like-for-like comparison. The earlier run [43539740484](https://github.com/Zawaer/sous/actions/runs/43539740484) (a4644a0) gave the same scores case for case, and before H20 and the O/A07/A08 cases existed, run [43533142451](https://github.com/Zawaer/sous/actions/runs/43533142451) (768efee, 43 sentences) scored 43/43 with both models. Kimi's one miss is **H20**, which both models miss and which is not a real miss: the case assumes only coffee milk can be found, but a live agent searches and finds real lactose-free milk (464201), which is what the buyer asked for. H20 is now scripted-only (skipped by `scripts/llm_eval.py`); excluding it, Kimi 48/48, Gemini 46/48. Gemini's other two misses were H03 (live stock: 8 of 40 kg quotable, held for a human) and H12 (picked a milk drink instead of milk). Verda Inference had an outage on Fri-Sat night (empty HTTP 200s in run 43530717095, then a registrar suspension page); it has worked again since run 43533142451. No mandate violation was auto-ordered with either model: the gateway decides. `deepseek-4-1-flash-1017` has not been run.
+Same code, same run, so this is a like-for-like comparison. Kimi's one miss is **S04**, which all three models miss and which is not a real miss: the case expects a coconut cream with no allergen data to be refused, but a live agent finds one with declared allergens (468967), and the gateway held Kimi's order for a human (`product.type_mismatch`). Gemini also missed H02 (a milk drink instead of milk). Earlier runs: [43557209740](https://github.com/Zawaer/sous/actions/runs/43557209740) (0b0ad68, 49 sentences) Kimi 48/49, Gemini 46/49, both missing only H20 (now scripted-only for the same reason); [43533142451](https://github.com/Zawaer/sous/actions/runs/43533142451) (768efee, 43 sentences) 43/43 with both. Verda Inference had an outage on Fri-Sat night (empty HTTP 200s in run 43530717095, then a registrar suspension page); it has worked again since run 43533142451. No mandate violation was auto-ordered with any model: the gateway decides. `deepseek-4-1-flash-1017` has not been run.
 
 The harness itself is validated without a model: replaying the scripted plan through the same agent runtime passes 40/40 (`evals/llm_results.oracle.json`, the 40-case set of Fri 13.11; not re-run).
 
@@ -132,7 +132,7 @@ is cheaper and already keeps data in the EU.
   MariaDB, not a GPU problem. The binding limit is Valio's API: a quote costs 2 live calls (batched shortlist, cached), 4 when
   substitutes are priced for options; 1.0 per request on average in the scripted eval.
 - **Model.** Tokens per request x requests per day decides the product: about 26-28k tokens per
-  request in the eval (~26.4k for Kimi K3.1 Pro, CI 43557209740). At 75k requests/day that is about 2 billion tokens/day; per-token
+  request in the eval (~27k for Kimi K3.1 Pro, CI 43587725624). At 75k requests/day that is about 2 billion tokens/day; per-token
   Inference API pricing scales linearly with no idle cost and per-model rate limits (requests and tokens per
   minute, raised on request). Past a steady load, the same model on Verda serverless containers (autoscaling
   GPU containers, scale to zero at night) or reserved GPU instances with vLLM becomes cheaper per token,
