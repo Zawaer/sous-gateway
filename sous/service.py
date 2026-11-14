@@ -19,7 +19,7 @@ from . import use_sensitivity as USE
 from . import controls
 from . import use_fit as FIT
 from . import request_qty as RQ
-from . import account, agent_auth, aimo, allergen_ai, autonomy, catalog, clearance, clock, config, remembered, credentials, deadline, erp, exposure, fi, carbon, holds, notify, offers as OFFERS, options as OPT, origin, purpose as purposes, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
+from . import account, agent_auth, aimo, allergen_ai, autonomy, catalog, clearance, clock, config, remembered, credentials, deadline, erp, exposure, fi, carbon, holds, notify, offers as OFFERS, options as OPT, policy_stamp, origin, purpose as purposes, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
 from .mandate import Mandate, evaluate, product_refusals, readable_name
 
 
@@ -1018,7 +1018,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
                   | ({"offer_id": l["offer_id"]} if l.get("offer_id") else {})  # bought on a Valio offer
                   for l in q["lines"]],
         "decision": {"outcome": outcome, "findings": [f.model_dump() for f in findings], "by": "mandate-engine",
-                     "at": now.isoformat(timespec="milliseconds")},
+                     "at": now.isoformat(timespec="milliseconds"), "policy": policy_stamp.stamp(mandate.id)},
         "approval": None,
         "order_url": order_url(oid, getattr(mandate, "sandbox", None)),
         "buyer_url": buyer_url(oid, getattr(mandate, "sandbox", None)),
@@ -1327,6 +1327,8 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
                      "result_reason": reason, "clock": clock.info(now)}
     if reason_fi:  # unsigned Finnish twin of approval.result_reason (sous/fi.py)
         o["explanations_fi"] = {**(o.get("explanations_fi") or {}), "result_reason": reason_fi}
+    if approve:  # the rules were re-run at approval: which policy did it
+        o["approval"]["policy"] = policy_stamp.stamp(mandate.id)
     if recheck_record:
         o["approval"]["recheck"] = recheck_record
     if evidence:

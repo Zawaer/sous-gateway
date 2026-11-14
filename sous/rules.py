@@ -581,7 +581,10 @@ def document(lang: str | None = None) -> dict:
     if lang == "fi":
         return {"lang": "fi", "owners": fi.OWNERS, "tiers": fi.TIERS, "kinds": fi.KINDS, "count": len(rules),
                 "rules": rules}
-    return {"owners": OWNERS, "tiers": {
+    from .policy_stamp import rules_fingerprint
+    sha, _ = rules_fingerprint()
+    return {"sha256": sha, "sha256_note": "the rules_sha256 every decision's policy stamp carries (sous/policy_stamp.py)",
+            "owners": OWNERS, "tiers": {
                 "silent": "ordered, logged", "notify": "ordered, the buyer gets an FYI",
                 "ask": "held until a human approves (pending_approval)", "block": "refused"},
             "kinds": {"finding": "joins the order decision; the highest tier among findings wins",
