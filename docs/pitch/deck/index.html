@@ -272,19 +272,20 @@ table.t tr:last-child td { border-bottom: 1px solid var(--rule); }
   <div class="foot"><span>Badges: fill weight + icon, not colour alone (docs/UI_PRINCIPLES.md). Rule register: 52 rules on staging (docs/CONFORMANCE.md).</span><span>4 / 12</span></div>
 </section>
 
-<!-- 5 · Human in the loop -->
+<!-- 5 · The customer stays in control -->
 <section class="slide">
-  <div class="kicker">Request → lookup → order → approval</div>
+  <div class="kicker">The customer stays in control · autonomy is earned</div>
   <div style="display:grid;grid-template-columns:1fr 430px;gap:70px;flex:1;min-height:0">
     <div>
-      <h1 style="margin-bottom:30px">A held order reaches a human before the cut-off, not after</h1>
-      <ul class="rules" style="font-size:30px">
-        <li><b>approve_by</b> = Valio's earliest order cut-off among the lines − 15 min. The phone shows it as a clock time.</li>
-        <li>Past it: the order becomes <span class="mono">expired_cutoff</span>, the buyer is told the lost and the next delivery date; a late approval gets <span class="mono">409 approval_deadline_passed</span>.</li>
-        <li>An approval is refused if the mandate was revoked meanwhile, or the product was put on hold.</li>
-        <li>Agents can't approve: <span class="mono">403 agent_cannot_approve</span>, audited. MCP has no approve tool.</li>
+      <h1 style="margin-bottom:24px;font-size:68px">The buyer approves. The agent earns more freedom, the buyer grants it.</h1>
+      <ul class="rules" style="font-size:26px">
+        <li><b>Only the buyer approves</b>, before <b>approve_by</b> = earliest cut-off − 15 min. Agents get <span class="mono">403 agent_cannot_approve</span>, audited; Valio staff see held orders read-only.</li>
+        <li><b>No agent becomes its own approver.</b> Passkeys are enrolled only with the buyer's own credential, never by whoever opens a link first; a passkey signs this order at this total.</li>
+        <li><b>Earned autonomy.</b> ≥ 5 unchanged approvals over ≥ 2 weeks for one rule and product type: Sous proposes ask → notify with the evidence; the buyer accepts it as a re-signed mandate; a rejection proposes the revert. Never allergens or spend limits.</li>
+        <li><b>Buyer controls.</b> Four-eyes (the requester can't approve), a cap on a substitute's price premium, and doubts the agent declares always reach a human.</li>
+        <li><b>Needs change.</b> A ward goes nut-free: standing, held and upcoming orders and remembered approvals are re-checked.</li>
       </ul>
-      <p class="src" style="margin-top:24px">Right: a production hospital order on a phone, held because €560 &gt; the €400 the agent may spend alone; approved by a human. The mandate shown is read AS OF the decision. sous/deadline.py, PROTOCOL 7.1, tests/test_deadline.py.</p>
+      <p class="src" style="margin-top:18px">Right: a production hospital order on a phone, held because €560 &gt; the €400 the agent may spend alone; approved by a human. PROTOCOL 7.1 (deadline), 7.2 (earned autonomy), 7.3 (controls), 8.1 (needs changed), 26 (passkeys).</p>
     </div>
     <div style="height:800px;overflow:hidden;border-radius:28px;border:10px solid #111;background:#f8f8f3;margin-top:-20px">
       <img src="img/phone-approval.png" alt="Approval of a hospital order on a phone" style="width:100%;display:block">

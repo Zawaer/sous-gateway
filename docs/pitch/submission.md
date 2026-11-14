@@ -1,9 +1,11 @@
-<!-- Description below: 4,983 characters (limit 5,000), counted with Python len() on the text between the
+<!-- Description below: 4,861 characters (limit 5,000), counted with Python len() on the text between the
      Description and Challenge headings, trimmed. Recount after any edit:
      python3 -c "s=open('docs/pitch/submission.md').read();print(len(s.split(chr(10)+'## Description'+chr(10))[1].split(chr(10)+'## Challenge'+chr(10))[0].strip()))"
-     Numbers: scripted, LLM and drafting from CI run 43587725624 (11d8448), red team from docs/REDTEAM.md (51b139d), see docs/STATUS.md; Nemotron photo reading
-     from CI run 43530170621 (docs/NEMOTRON.md); conformance 17/17 on staging (docs/CONFORMANCE.md); 47/47 from
-     docs/EVAL_INTEGRITY.md; rush from docs/ROBUSTNESS.md. Prod was at a431ff6 on 14.11 14:11Z, staging at ea4cd19. -->
+     Story order follows Valio's criteria: end to end 30, need match 20, autonomy + controls 20, exceptions 15, openness 15.
+     Numbers: scripted and LLM (Kimi 47/48, Gemini 46/48) and drafting 23/23 from CI run 43587725624 (11d8448); held-out
+     from CI 43620135327 (docs/LLM_EVAL.md#held-out, evals/heldout/); red team Qwen + Gemma + slicing re-run from
+     docs/REDTEAM.md; 32-vCPU run 43611589764 (docs/CRACI.md); Nemotron 32 reads CI 43530170621, Verda 8 reads run 6
+     (docs/NEMOTRON.md); earned autonomy thresholds PROTOCOL 7.2; conformance 17/17 (docs/CONFORMANCE.md). Checked Sat 14.11 ~18:10Z. -->
 
 # Junction submission
 
@@ -11,28 +13,26 @@
 Sous
 
 ## Punchline
-AI purchasing agents carry a signed mandate from their human, and Valio Aimo's gateway enforces it.
+AI purchasing agents order from Valio Aimo under their customer's signed mandate: the customer stays in control, and autonomy is earned.
 
 ## Description
-**Sous is Valio Aimo's front door for AI purchasing agents.** A hotel's, hospital's or school's agent connects over MCP or OpenAPI, searches the catalog, gets a signed quote with live price and availability, and orders, inside limits its human set in a signed mandate (*valtakirja*). Plain code puts every order in one of four tiers: auto, auto + FYI, needs approval, refused. No language model ever approves an order or relaxes a rule; the one classifier we use (Gemini Decisions, on products with no allergen declaration) can only add a refusal. Live: https://135-181-8-209.sslip.io (a judge path in 5 minutes is at the top of the README).
+**Sous is Valio Aimo's front door for AI purchasing agents, built so the customer stays in control and autonomy is earned.** A hotel's, hospital's or school's agent connects over MCP or OpenAPI, searches the catalog, gets a signed quote with live price and availability, and orders inside a mandate (*valtakirja*) its human set. Plain code puts every order in one of four tiers: auto, auto + FYI, needs approval, refused. No language model approves an order or relaxes a rule. Live in Finland: https://135-181-8-209.sslip.io (a 5-minute judge path tops the README).
 
-**The problem.** We asked a general shopping agent for "1,000 litres of lactose-free milk by Monday". After 13 minutes it told us to phone a wholesaler on Saturday. Agents will buy from wholesalers anyway; if Valio Aimo doesn't define how they do it safely and openly, someone else's platform will.
+**The problem.** We asked a general shopping agent for "1,000 litres of lactose-free milk by Monday". After 13 minutes it told us to phone a wholesaler. Agents will buy from wholesalers anyway; the question is whose rules they follow.
 
-**Who uses it.** Valio Aimo runs the gateway. The buyer's agent does the routine work; a head of catering approves held orders on a phone; Valio Aimo staff read the same audit trail.
+**End to end: request → lookup → order → approval.** Search covers 17,546 products (fi/sv/en) on a local index, no API calls. A quote costs at most 2 batched Valio calls (0.47 per request on average in CI) and carries pack and lot sizes, VAT, cut-offs and stock as buckets. A held order reaches the buyer's phone with an approve-by time: the earliest cut-off minus 15 minutes. Claude Code over MCP and claude.ai through our OAuth connector each ordered 1,000 L of lactose-free milk with 2 Valio calls. Scripted cases: 60/60, 43/43 unsafe actions blocked or escalated.
 
-**Request → lookup → order → approval, live.** Search covers 17,546 products (fi/sv/en) on a local index with no API calls, ranked by product type (lactose-free milk before coffee milk). A quote costs at most 2 batched Valio calls (2 more when substitutes are priced). It carries pack and lot sizes, VAT, cut-offs, and stock as buckets (ample/limited/short), never exact numbers. A held order carries an approve-by time, Valio's earliest cut-off minus 15 minutes, never past the mandate's expiry. Notifications: push, in-app feed, signed webhook. In real runs, Claude Code over MCP and claude.ai through our OAuth connector each ordered 1,000 L of lactose-free milk with 2 Valio calls; above the hotel's FYI threshold, the manager was told.
+**Matching what the buyer asked.** Search ranks by product type (lactose-free milk before coffee milk), and the gateway checks the chosen product fits its use: skimmed milk for a dessert or coffee cream for whipping is held, with a fitting product from the same search. On our own 48 sentences, Kimi K3.1 Pro matched 47/48 and Gemini 4 Hydrogen 46/48. On 15 blind held-out requests (3 runs each) safety held, 0 false auto-approvals and 9/9 unsafe stopped by the gateway, but matching was weak, 3/36 runs where an order was due: the agent took one item per request and read "for 40" as 40 packs. We publish that; fixes for baskets, portions and menus are in progress, and a second frozen set of 20 waits for the re-run.
 
-**Exceptions.** When an item can't be covered as asked, the signed quote lists options (part now + rest later, all later, the next date after a passed cut-off, a substitute), each with a mandate preview. Substitutes keep the product type (sour milk is not milk) and the allergen rules. 30 % of food products declare no allergens; for a mandate with allergen rules, unknown means a human decides. Valio Aimo can put a product on hold or recall it with one call, and standing orders that drift (milk +18 % against the 4-week median) ask before renewing.
+**Autonomy and controls: the customer decides.** Held orders are decided by the buyer, never by Valio staff. Agents can't approve (403, audited) and can't enrol an approver device: passkeys are enrolled only with the buyer's own credential, never by whoever opens a link first. A passkey approval signs this order at this total, including any "remember this" choice. Autonomy is earned: after 5 or more unchanged approvals over 2+ weeks for one rule and product type, Sous proposes ask → notify with the evidence; the buyer accepts it as a re-signed mandate, and a later rejection proposes taking it back. Allergens and spend limits are never delegated. Optional controls: four-eyes (the requester can't approve), a cap on a substitute's price premium over the product it replaces, and doubts the agent declares always reach a human. Every rule has an id and plain meaning at `/rules`, in English and Finnish; a hash-chained log plus MariaDB system versioning shows what the mandate said when each order was decided.
 
-**Controls.** Every rule has an id, tier and plain meaning at `/rules`, in English and Finnish. Agents can't approve (403, audited). Mandates, quotes and receipts are Ed25519 JWS; orders use only the signed payloads, one per quote, bound to the agent. A hash-chained log plus MariaDB system versioning shows what the mandate said when each order was decided. Reads are scoped: another buyer's order answers 404.
+**Exceptions.** When an item can't be covered as asked, the signed quote lists options (part now + rest later, a later date, a substitute), each with a mandate preview. Substitutes keep product type and allergen rules and are judged by use: another brand of whipping cream for a dessert asks, coffee cream for coffee doesn't. When needs change mid-contract (a ward goes nut-free), standing, held and upcoming orders and remembered approvals are re-checked. Unknown allergens mean a human decides; drifting standing orders ask; short picks become signed amendments.
 
-**Measured (our own cases, live Valio prices, CI run 43587725624 on CRACI).** Scripted buyer requests: 60/60, 43/43 unsafe actions blocked or escalated. Attacks: 20 parallel orders on one quote give 1 order and 19 rejections; self-approval, prompt injection and an unusual quantity are held or refused; 60 agents rushing 400 units of one product are never over-allocated. LLM buyer agents on 48 sentences: Kimi K3.1 Pro on Verda Inference 47/48, Gemini 4 Hydrogen 46/48, Nemotron 3.5 Super VL 30/48, 0 mandate violations auto-ordered by any. A 17-check black-box conformance kit passes 17/17 on staging; 47/47 planted violations are caught by our own checks. Red team on a Verda GPU (self-hosted Qwen3-30B-A3B, 2,000 generated requests): 976/997 unsafe held or refused; it found 3 order-slicing misses (split window off in the demo mandates), fix in progress. Judges can run seven attacks at `/ui/break.html`.
+**Open and measured.** MCP with typed output, OpenAPI, Ed25519 JWS checkable offline, Peppol BIS Ordering 3.0 validated in CI, AP2/A2A/schema.org exports, a 17-check conformance kit (17/17 on staging). 20 parallel orders on one quote: 1 order. Red team on Verda GPUs: Qwen3-30B-A3B, 976/997 unsafe held of 2,000; Gemma 4 26B, 289/301 of 600; the order-slicing gaps they found are fixed (re-run: 0 gateway violations). On CRACI's 32 vCPUs all 4,000 red-team requests run in 15.4 s, 2,036/2,036 unsafe held. Every number names its CI run in docs/STATUS.md.
 
-**AI where it helps, never deciding.** Gemini drafts a mandate from plain language and a validator checks every field (23/23 on our cases, CI run 43587725624); nothing that loosens a mandate survives. Nemotron 3.5 Super VL reads a photo of an order list into a basket, with 0 silent errors over 32 page reads (CI run 43530170621); unreadable lines go to a human.
+**AI where it helps, never deciding.** Gemini drafts mandates (23/23 checked); its Decisions API reads undeclared allergens and can only add a refusal. Nemotron 3.5 Super VL, also on Verda's Nemotron endpoint, reads an order photo into a basket: 0 silent errors over 32 page reads on NVIDIA's API and 8 on Verda with reasoning on.
 
-**Open and run like production.** MCP tools return typed structured output; Peppol BIS Ordering 3.0 documents pass the official XSD and schematron in CI; AP2 v0.2 claim sets (unsigned views), A2A and MCP cards, schema.org exports. CI on CRACI: tests with MariaDB, SBOM and grype gate, deny-by-default egress per job. Production and staging run on Verda CPU instances in Finland. Aiven for Valkey shares one Valio call budget across production, staging and CI.
-
-**Honest limits.** Identity is demo-grade: one shared approver code for humans, bearer tokens for agents. There is no real order API, so "ordered" means accepted and signed by Sous, at list prices; the ERP hand-off is a stub, labelled simulated. All eval cases were written by us, not held out. Next: buyer login (OIDC), agent keys bound to the mandate, Valio Aimo's order API with contract prices, key rotation.
+**Honest limits.** Enrolling an approver still needs a shared code; agents hold bearer tokens. No real order API: "ordered" means signed by Sous at list prices, ERP hand-off labelled simulated. Next: buyer login (OIDC), agent keys bound to the mandate, Valio Aimo's order API with contract prices.
 
 ## Challenge
 - **Valio Aimo: Trusted Trade Agents** (main)
@@ -42,12 +42,12 @@ AI purchasing agents carry a signed mandate from their human, and Valio Aimo's g
 ## Technologies
 - Python, FastAPI, Pydantic, uv; JavaScript (seller UI, reference buyer)
 - Model Context Protocol (structured tool output), OpenAPI, JSON Schema
-- Ed25519, JWS, JWKS; W3C Verifiable Credentials (opt-in buyer-signed mandates); AP2, A2A, schema.org exports
+- Ed25519, JWS, JWKS; WebAuthn passkeys (approval bound to the order and total); W3C Verifiable Credentials (opt-in buyer-signed mandates); AP2, A2A, schema.org exports; Peppol BIS Ordering 3.0 (UBL 2.1)
 - MariaDB (system-versioned tables), SQLite FTS5
 - Aiven for Valkey (shared Valio API budget and cache)
-- Verda: CPU instances in Finland, Verda Inference (Kimi K3.1 Pro), a GPU instance with vLLM (self-hosted Qwen3-30B-A3B, red team)
-- Google Gemini API (buyer agent, mandate drafting, menu planning, Decisions API); NVIDIA Nemotron 3.5 Super VL (photo reading)
-- GitHub Actions on CRACI runners; syft (CycloneDX SBOM), grype
+- Verda: CPU instances in Finland, Verda Inference (Kimi K3.1 Pro), the Nemotron endpoint hosted with NVIDIA, GPU instances with vLLM (self-hosted Qwen3-30B-A3B and Gemma 4 26B-A4B, red team)
+- Google Gemini API (buyer agent, mandate drafting, menu planning, Decisions API); Gemma 4 open models (buyer agent, red team); NVIDIA Nemotron 3.5 Super VL (photo reading)
+- GitHub Actions on CRACI runners (incl. a 32-vCPU red-team job); syft (CycloneDX SBOM), grype on the image and on CRACI's own job SBOMs
 - Docker Compose, Caddy, ntfy
 - Claude Code and OpenAI Codex (development, reviews, and as buyer agents)
 

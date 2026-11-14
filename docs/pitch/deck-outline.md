@@ -11,8 +11,10 @@ per slide, numbers with sources in the footer. Numbers must match `docs/STATUS.m
    stock buckets, options) → mandate engine (plain code, `/rules`) → orders (holds, recalls) → audit. Phone and
    shared record below.
 4. **Four tiers.** Real production orders for Auto / Auto + FYI / Needs approval / Refused; the mandate screenshot.
-5. **Human in the loop.** approve_by = earliest cut-off − 15 min; `expired_cutoff`, `approval_deadline_passed`;
-   agents can't approve. Phone screenshot.
+5. **The customer stays in control; autonomy is earned.** Only the buyer approves (approve_by = earliest cut-off − 15 min,
+   agents 403); passkeys enrolled only with the buyer's credential; earned autonomy (≥ 5 unchanged approvals over ≥ 2 weeks
+   → proposal ask → notify, revert on rejection); four-eyes, substitute premium cap, agent-declared doubt; needs changed.
+   Phone screenshot.
 6. **Exceptions.** Response options (on_time … next_date … substitute); Terminal cut-off; 30 % of food products
    without allergen data; product type; holds and recalls.
 7. **Beyond one order.** Standing-order drift (milk +18 %, cost +€135 / +16 %) and Valio suggests inside the mandate.

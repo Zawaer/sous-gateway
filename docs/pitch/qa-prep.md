@@ -8,7 +8,7 @@ Answer in two or three sentences, then stop. If you don't know, say so and say w
 Because an LLM can be talked into anything and can't be audited. A prompt injection in a product description shouldn't be able to raise a spend limit. The model turns language into a structured request and explains results. Limits, allergens, cut-offs and the tier are plain code that gives the same answer every time, with a reason a human can read.
 
 **2. What if the agent lies about who it is?**
-Today the agent sends an `agent_id` and a `mandate_id`; the gateway checks they match the signed mandate, and quotes and standing orders are bound to that agent, so a stranger can't invent authority or reuse someone else's quote. Approvals need a separate approver code. That is still hackathon-grade identity (see question 15). In production the agent proves a key bound to the mandate, so a stolen mandate ID is useless without the key.
+Today the agent sends an `agent_id` and a `mandate_id`; the gateway checks they match the signed mandate, and quotes and standing orders are bound to that agent, so a stranger can't invent authority or reuse someone else's quote. Approvals need a separate approver code or a passkey bound to the order (question 22). The approver code is still hackathon-grade identity (see question 15). In production the agent proves a key bound to the mandate, so a stolen mandate ID is useless without the key.
 
 **3. How does this scale to 700 suppliers and 25,000 products?**
 Search runs on static catalog data in a local index (17,546 products in about 10 s to build), so it costs no backend calls. Live price and availability are fetched only for a shortlist: 2 batched calls per quote, up to 4 when substitutes are priced for the options (1.0 on average with the cache in our eval), against roughly 36 to poll the whole catalog. Supplier differences show up as data (Stock vs Terminal, reliability, cut-offs), not as code per supplier.
@@ -50,10 +50,44 @@ Because a good sales rep does it today, and the buyer's rules still apply. Every
 Today: the `agent_id` plus a mandate signed by the gateway and issued to exactly that `agent_id`; quotes, orders and standing orders are bound to it. Opt-in bearer credentials for agents exist (per mandate, or for every mandate with `SOUS_REQUIRE_AGENT_AUTH=1`, which staging has on). In production the agent proves possession of a key: mTLS, DPoP-bound tokens, or a key named in the mandate as a Verifiable Credential. A leaked mandate id then buys nothing.
 
 **16. Does it depend on one LLM?**
-No. The gateway decides without any model. Our buyer agent works with any OpenAI-compatible model (tested: Gemini, Kimi on Verda Inference, NVIDIA Nemotron, and Qwen3-30B-A3B self-hosted with vLLM on a Verda GPU in the red team), and Claude Code works over MCP as it is. We score each model on the same 48 one-sentence cases, all three live in one CI run (43587725624, 11d8448): Kimi K3.1 Pro on Verda Inference (EU) matched the buyer without correction in 47/48, Gemini 4 Hydrogen in 46/48, Nemotron 3.5 Super VL in 30/48, with 0 mandate violations auto-ordered by any of them. The miss all three share (S04) is a case whose premise, a coconut cream with no allergen data, holds only for the scripted plan: live, they found one with declared allergens. The cases are ours, not a held-out set. The runtime, not the model, fills in agent id, mandate and idempotency key.
+No. The gateway decides without any model. Our buyer agent works with any OpenAI-compatible model (tested: Gemini, Kimi on Verda Inference, NVIDIA Nemotron, and Qwen3-30B-A3B self-hosted with vLLM on a Verda GPU in the red team), and Claude Code works over MCP as it is. We score each model on the same 48 one-sentence cases, all three live in one CI run (43587725624, 11d8448): Kimi K3.1 Pro on Verda Inference (EU) matched the buyer without correction in 47/48, Gemini 4 Hydrogen in 46/48, Nemotron 3.5 Super VL in 30/48, with 0 mandate violations auto-ordered by any of them. The miss all three share (S04) is a case whose premise, a coconut cream with no allergen data, holds only for the scripted plan: live, they found one with declared allergens. These cases are ours; for the blind held-out set and its weak matching number, see question 18. The runtime, not the model, fills in agent id, mandate and idempotency key.
 
 **17. Standing orders: why not just repeat last week's order?**
 Because "same as usual" is where creep hides. Each renewal is quoted live and compared with the median of the last 4 ordered weeks. Quantity up more than 15 % (or 3 rises in a row), cost or price per litre up more than 10 %, a switched product or a new supply risk: the renewal waits for a human. In the demo, milk is +18 % and the bill +€135 (+16 %), so it asks.
+
+---
+
+**Earned autonomy, buyer controls and the held-out number**
+
+**18. Your held-out matching is 3 out of 36. Isn't that bad?**
+Yes, and we publish it. 15 requests were written blind from the brief before their author read our code, frozen, and run 3 times each (CI 43620135327): matching the need without correction was 3/36 where an order was due, because the agent took one item per request and read "for 40" as 40 packs. Safety held: 0 false auto-approvals and 9/9 unsafe requests stopped, all by the gateway, since the agent placed every one. That is the point of the design: a weak agent costs the buyer a correction, not a wrong delivery outside the rules. Fixes (baskets, portions, menus to the recipe planner, Finnish relative dates) are in progress, and a second frozen set of 20 waits for one honest re-run.
+
+**19. Then why are your other numbers 46/48 and 47/48?**
+Those are our own sentences, written while we built the agent, mostly one item with an explicit amount. They show the gateway and the model work together; the held-out set shows what the brief's harder requests (menus, headcounts, several items) do. We report both, with run ids, in docs/STATUS.md.
+
+**20. What if the agent gets the need wrong but stays under the limit?**
+The gateway can't know a kitchen meant 40 portions, so a wrong reading under the limit can go through; the held-out run showed exactly that (16 of 36 should-order runs auto-ordered with the wrong content). What the gateway does check is new since then: the chosen product must fit its stated use (skimmed milk for a dessert, coffee cream for whipping are held with a fitting product from the same search), and an agent that is unsure can declare its doubt, which always sends the order to a human. A buyer who wants a check on every order keeps the auto tier low; autonomy only widens when the buyer accepts it.
+
+**21. How does earned autonomy work, and can it go wrong?**
+Per mandate, per rule and product type, Sous counts the held orders the buyer approved unchanged. After 5 or more over at least 2 weeks, with none edited or rejected, it proposes moving that one scope from ask to notify, with the evidence in English and Finnish. Nothing changes until the buyer accepts it as a re-signed mandate, and a later rejection or edit proposes taking it back. Allergens, spend limits, refusals and purpose holds are never proposed (PROTOCOL 7.2).
+
+**22. Can an agent approve its own order through the passkey flow?**
+No. Agents get 403 on approval, and they can't enrol an approver device either: enrolment needs the buyer's own credential, so a link the agent has seen can't make the agent's browser the approver ("no trust on first use"). A passkey approval signs this order at this total, and any "remember this" choice is part of what is signed, so it can't be added afterwards (409). With four-eyes on, the person who requested the order can't approve it.
+
+**23. What does "remember this" do? Isn't that a back door?**
+It covers only soft, repetitive holds (the usual substitute, a first-time product, a unit reading, a type mismatch) for one product under one mandate, recorded only from a human approval, signed, capped, expiring and revocable; next time that hold becomes an FYI ("previously approved by X"), not silence. It never covers allergens, spend limits or anything that refuses. Caps count every line of the product, and a remembered decision applies only under the mandate it was signed for. If the buyer's needs tighten (a ward goes nut-free), unsafe remembered approvals are revoked.
+
+**24. What if a substitute is much more expensive?**
+A mandate can cap a substitute's price premium per litre, kilo or piece over the product it replaces; above it, or when the original price is unknown, the order asks a human and says why (rule `substitution.premium`).
+
+**25. Whipping cream is whipping cream. Why judge substitutes by use?**
+Two creams with the same fat % can whip differently (stabilisers), so another brand can spoil a dessert, while in coffee the brand barely matters. Items carry a use or purpose; a substitute the use doesn't accept asks a person even when the mandate lets substitutes through, and remembered substitutions don't cross uses.
+
+**26. What happens when a customer's needs change mid-contract?**
+A mandate update that tightens allergens or diet re-checks every standing order, held and upcoming order, remembered decision and allergen clearance: conflicts are held with `needs.changed`, unsafe remembered approvals are revoked, a compliant substitute is proposed, and the buyer gets one summary in Finnish or English. Loosening expands nothing by itself.
+
+**27. Is Nemotron on Verda as good as NVIDIA's API?**
+With reasoning on, yes on our pages: 0 silent errors and 100 % correct in 8 page reads, 5.5 s per page (NVIDIA's free tier with reasoning on took 20.7 s). With reasoning off it was faster (1.2 s) but made 6 silent errors in 32 reads, so reasoning stays on there. Eight reads is a small sample (docs/NEMOTRON.md).
 
 ---
 
@@ -78,7 +112,7 @@ Because "same as usual" is where creep hides. Each renewal is quoted live and co
 - Conformance kit (`scripts/conformance.py`, 17 black-box checks over HTTP): 17/17 on staging at 7685e81 (14.11 10:34Z, docs/CONFORMANCE.md), again 17/17 on staging 06a858f (agent board 11:37Z). Check-the-checker: 47/47 planted violations caught, 12/12 controls quiet (docs/EVAL_INTEGRITY.md).
 - Monday rush (docs/ROBUSTNESS.md): 60 agents on 400 ST of one product, 400/400 allocated first-come, 397/400 pro-rata, 0 over-allocated in every run.
 - Spend so far: $38.26 known (docs/COSTS.md).
-- Red team on a Verda GPU (docs/REDTEAM.md, 51b139d): 4,000 generated fi/en requests in 13 categories; oracle 2,036/2,036 unsafe held; self-hosted Qwen3-30B-A3B (vLLM), 2,000 requests: 976/997 unsafe held or refused, 0 allergen / limit / other-mandate violations, 3 gateway-side order-slicing misses (demo mandates had the split window off; fix in progress). Gemma 4 did not run (vLLM 0.33 broken on that GPU); retry pending.
+- Red team on a Verda GPU (docs/REDTEAM.md, 51b139d): 4,000 generated fi/en requests in 13 categories; oracle 2,036/2,036 unsafe held; self-hosted Qwen3-30B-A3B (vLLM), 2,000 requests: 976/997 unsafe held or refused, 0 allergen / limit / other-mandate violations, 3 gateway-side order-slicing misses (demo mandates had the split window off; fixed with a 60-minute split window, c71bdde). Gemma 4 26B-A4B on a Verda A100, 600 requests: 289/301 unsafe held, 2 slicing misses; re-run on 100 slicing requests after the fix: 0 gateway violations. On CRACI's 32 vCPUs (run 43611589764) all 4,000 scripted red-team requests ran in 15.4 s, 2,036/2,036 unsafe held.
 - Recipe planner, 7 menus (CI 43595658113, after the R05 crash fix 108d582): recipe table 7/7, Gemini 5/7, Kimi 5/7; all misses are quantities outside our 35 % bar, 0 allergen-rule violations.
 - Search type-aware ranking (6e547ce): precision@3 90.5 % → 99.3 %, top-1 89.8 % → 100 % on our own 49 tuning queries (a regression test, not held out).
 - claude.ai connector (`/connect/mcp`, OAuth): Toivo ordered 1,000 L of lactose-free milk from the real claude.ai on staging (PO-356567FC, €1,560 ex VAT, notify).
@@ -90,3 +124,6 @@ Because "same as usual" is where creep hides. Each renewal is quoted live and co
 - Standing-order demo: milk +18 % vs 4-week median, cost +€135 (+16 %) → ask before renewing.
 - Live: production, the judge URL, https://135-181-8-209.sslip.io (Verda, Finland; at a431ff6 on 14.11 14:11Z); staging https://staging.135-181-63-134.sslip.io (ea4cd19, near current `main`, the fallback). What is on which: docs/STATUS.md#deployed-now.
 - CI on CRACI: SBOM + grype gate; deny-by-default egress per job, with a signed egress proof per run (PASS in 43587725624; docs/CRACI.md).
+- Held-out (CI 43620135327, Gemini 4 Hydrogen + Sous agent, 15 blind cases x 3): 0 false auto-approvals, should-hold 9/9 (all by the gateway; no-gateway floor 9), matched 12/45 overall, should-order 3/36, menus cookable 0/9, 12 wrong dates. evals/heldout/findings.yaml. Second frozen set: evals/heldout2 (20 cases, d58069a), not yet run.
+- Earned autonomy: ≥5 unchanged approvals over ≥2 ISO weeks, 0 edited, 0 rejected → proposal ask → notify (PROTOCOL 7.2, sous/ramp.py).
+- CRACI vulnerability management (run 43611583279): CRACI's job SBOMs, 201 packages, 0 findings; image 0 Critical, 61 High (2 fixable); gate on fixable Criticals (docs/CRACI.md).
