@@ -456,3 +456,8 @@ details[open] > summary .chev { transform: rotate(180deg); }
   .mrow-main > .muted { max-width: 100%; }
   .mrow-more { padding-left: 4px; }
 }
+@media (min-width: 861px) { .mstats.four { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+div.mstat:hover { background: none; }
+.bar { flex: 1; height: 6px; background: var(--pill); border-radius: 3px; overflow: hidden; align-self: center; min-width: 40px; }
+.bar i { display: block; height: 100%; background: var(--ask); border-radius: 3px; }
+@media (max-width: 860px) { .mstats.four .mstat:last-child { grid-column: auto; } .mstats.four .mstat:nth-last-child(-n+2) { border-bottom: 0; } }

@@ -1176,6 +1176,87 @@ const RULE_GROUP = {
   need: "Partial cover", mandate: "Mandate validity", order: "Empty order", standing: "Standing-order drift",
 };
 
+// Insights: a summary for Valio Aimo. Which of the stops are Valio's to fix (missing product data,
+// stock, cut-offs, units) and which are buyers' own rules working as intended. Computed from /orders.
+const VALIO_ISSUE = {
+  "allergen.unknown": { icon: "help", label: "Missing allergen data", fix: "Add the allergen declaration to the product data" },
+  "unit.interpreted": { icon: "straighten", label: "Unclear sales unit", fix: "Define the pack and piece units for the product" },
+  "availability.out_of_stock": { icon: "inventory_2", label: "Out of stock", fix: "Restock or offer a substitute" },
+  "availability.undeliverable": { icon: "local_shipping", label: "Not deliverable on any date", fix: "Fix the delivery schedule or delist" },
+  "availability.cutoff_passed": { icon: "schedule", label: "Ordered after the cut-off", fix: "Stop reporting delivery dates whose cut-off has passed" },
+  "supply.terminal": { icon: "warehouse", label: "Supplier stock unknown", fix: "Share the supplier warehouse's stock" },
+  "price.changed": { icon: "sell", label: "Price changed after the quote", fix: "Keep prices stable for the quote's lifetime" },
+};
+views.insights = {
+  key: "",
+  async load() {
+    const orders = noQA((await api("/orders")).orders, isQAOrder);
+    const key = orders.length + "|" + orders[0]?.updated_at;
+    if (key === this.key && view.dataset.view === "insights") return;
+    this.key = key;
+    view.dataset.view = "insights";
+
+    const stops = (o) => (o.decision?.findings || []).filter((f) => f.outcome === "ask" || f.outcome === "block");
+    const lineOf = (o, pid) => (o.lines || []).find((l) => l.product_id === pid);
+    const held = orders.filter((o) => stops(o).length);
+    const valioOrders = held.filter((o) => stops(o).some((f) => VALIO_ISSUE[f.rule]));
+    const lost = orders.filter((o) => ["refused", "rejected", "expired"].includes(o.status));
+    const lostValio = lost.filter((o) => stops(o).some((f) => VALIO_ISSUE[f.rule]));
+    const sum = (os) => os.reduce((s, o) => s + (o.total_ex_vat || (o.lines || []).reduce((t, l) => t + (l.line_total_ex_vat || 0), 0)), 0);
+
+    // per issue: orders and products; per product: issues, orders, value at stake
+    const issues = {}, products = {};
+    for (const o of held) for (const f of stops(o)) {
+      const v = VALIO_ISSUE[f.rule];
+      const key = v ? f.rule : "buyer";
+      const it = issues[key] ||= { orders: new Set(), products: new Set(), example: f.message };
+      it.orders.add(o.id);
+      if (f.product_id) it.products.add(f.product_id);
+      if (v && f.product_id) {
+        const l = lineOf(o, f.product_id);
+        const p = products[f.product_id] ||= { name: l?.name || f.product_id, rules: new Set(), orders: new Set(), buyers: new Set(), value: 0 };
+        if (!p.orders.has(o.id)) p.value += l?.line_total_ex_vat || 0;
+        p.rules.add(f.rule); p.orders.add(o.id); p.buyers.add(bn(o.buyer));
+      }
+    }
+    const buyerRules = {};
+    for (const o of held) for (const r of new Set(stops(o).filter((f) => !VALIO_ISSUE[f.rule]).map((f) => f.rule))) buyerRules[r] = (buyerRules[r] || 0) + 1;
+    const ranked = Object.entries(issues).filter(([k]) => k !== "buyer").sort((a, b) => b[1].orders.size - a[1].orders.size);
+    const top = Math.max(1, ...ranked.map(([, v]) => v.orders.size));
+    const prods = Object.entries(products).sort((a, b) => b[1].orders.size - a[1].orders.size || b[1].value - a[1].value);
+    const stat = (icon, cls, value, label) => `<div class="mstat ${cls}">${ic(icon)}<b>${value}</b><span>${label}</span></div>`;
+
+    view.innerHTML = `<div class="head"><h2>Insights</h2><span class="muted">for Valio Aimo · from ${orders.length} agent orders</span></div>
+      <div class="mstats four">
+        ${stat("pan_tool", held.length ? "st-ask" : "", held.length, "orders held or refused")}
+        ${stat("build", valioOrders.length ? "st-ask" : "", valioOrders.length, "of them Valio can fix")}
+        ${stat("remove_shopping_cart", lostValio.length ? "st-block" : "", eur(sum(lostValio)), `lost to Valio-side issues (${lostValio.length} orders)`)}
+        ${stat("inventory", "", prods.length, "products to fix")}
+      </div>
+      <section class="msec"><h3>Most common issues</h3>
+        ${ranked.length ? `<div class="mlist">${ranked.map(([rule, v]) => { const d = VALIO_ISSUE[rule]; return `
+          <details class="mrow"><summary>${ic(d.icon, "st-ask")}
+            <span class="mrow-main"><b>${esc(d.label)}</b><span class="bar"><i style="width:${Math.round(100 * v.orders.size / top)}%"></i></span></span>
+            <span class="mrow-amt">${v.orders.size} order${v.orders.size > 1 ? "s" : ""}</span>${ic("expand_more", "chev")}</summary>
+            <div class="mrow-more"><p><b>Fix:</b> ${esc(d.fix)}.</p><p class="small muted">e.g. ${msg(v.example)}</p>
+              <span class="small muted mono">${esc(rule)} · ${v.products.size} product${v.products.size === 1 ? "" : "s"}</span></div></details>`; }).join("")}</div>`
+          : `<p class="empty">${ic("done_all")} No Valio-side issues</p>`}</section>
+      <section class="msec"><h3>Products to fix</h3>
+        ${prods.length ? `<div class="mlist">${prods.slice(0, 12).map(([pid, p]) => `
+          <details class="mrow"><summary>${ic([...p.rules].map((r) => VALIO_ISSUE[r].icon)[0], "st-ask")}
+            <span class="mrow-main"><b>${esc(pname(p.name))}</b><span class="muted">${[...p.rules].map((r) => esc(VALIO_ISSUE[r].label)).join(" · ")}</span></span>
+            <span class="mrow-amt">${p.orders.size}×</span>${ic("expand_more", "chev")}</summary>
+            <div class="mrow-more"><ul class="why">${[...p.rules].map((r) => `<li>${esc(VALIO_ISSUE[r].fix)}</li>`).join("")}</ul>
+              <span class="small muted">${p.orders.size} order${p.orders.size > 1 ? "s" : ""} · ${eur(p.value)} at stake · ${esc([...p.buyers].join(", "))}</span>
+              <a class="small mono" href="/products/${esc(pid)}">${esc(pid)}</a></div></details>`).join("")}</div>
+          ${prods.length > 12 ? `<p class="small muted">+ ${prods.length - 12} more</p>` : ""}`
+          : `<p class="empty">${ic("done_all")} Nothing to fix</p>`}</section>
+      <details class="mtrust"><summary>${ic("gavel")} Stopped by buyers' own rules (working as intended) ${ic("expand_more", "chev")}</summary>
+        <div class="rules small" style="grid-template-columns:1fr">${Object.entries(buyerRules).sort((a, b) => b[1] - a[1]).map(([r, n]) =>
+          `<div><span class="muted mono">${esc(r)}</span><span>${n}</span></div>`).join("") || `<div><span class="muted">none</span></div>`}</div></details>`;
+  },
+};
+
 views.stats = {
   key: "",
   async load() {
