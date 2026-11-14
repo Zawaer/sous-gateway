@@ -80,7 +80,7 @@ The response has your sandbox id (e.g. `SBX-7Q2K`), mandate and agent ids, an ag
 2. Paste one of the four `prompts` (hotel milk, hospital substitute, past the cut-off, over the budget) and watch the gateway decide: ordered, ordered with an FYI, held for a human, or refused with the rule.
 3. Open `quickstart.seller_ui` (`/ui/?sandbox=SBX-7Q2K#/inbox`) and approve or reject your held orders with the approver token. It works only on your sandbox's orders.
 
-Each sandbox has 15 live Valio Aimo lookups (cached offers are free); `GET /sandbox/<id>` shows what's left. One-page handout: [docs/pitch/try-it.md](docs/pitch/try-it.md); details in [PROTOCOL.md section 18](docs/PROTOCOL.md#18-judge-sandbox).
+Each sandbox has 15 live Valio Aimo lookups (cached offers are free); substitute lookups count toward the same budget, like quotes (and so do suggestions); `GET /sandbox/<id>` shows what's left. One-page handout: [docs/pitch/try-it.md](docs/pitch/try-it.md); details in [PROTOCOL.md section 18](docs/PROTOCOL.md#18-judge-sandbox).
 
 ## API and MCP at a glance
 
