@@ -90,7 +90,8 @@ def _seal(secret: str, agent_token: str) -> dict:
     """The agent token encrypted under a key only the holder of `secret` (code / access / refresh token) has."""
     nonce = os.urandom(12)
     key = hashlib.sha256(b"sous-oauth-seal:" + secret.encode()).digest()
-    return {"nonce": _b64(nonce), "sealed": _b64(AESGCM(key).encrypt(nonce, agent_token.encode(), None))}
+    return {"nonce": _b64(nonce), "sealed": _b64(AESGCM(key).encrypt(nonce, agent_token.encode(), None)),
+            "agent_sha256": _sha(agent_token)}  # the same hash agent_credential stores: lets a close revoke grants
 
 
 def _open(secret: str, d: dict) -> str | None:
@@ -137,9 +138,45 @@ def resource(b: str) -> str:
     return b + CONNECT_PATH
 
 
+def _mandate_live(mid: str) -> bool:
+    """The mandate exists, is not revoked, and if it belongs to a judge sandbox, that sandbox is still active
+    (sandbox close keeps the credential rows, so the credential alone doesn't say this)."""
+    m = store.get_mandate(mid)
+    if not m or m.get("revoked"):
+        return False
+    if sid := sandbox.owner(mid):
+        row = sandbox._row(sid)
+        return bool(row) and sandbox._state(row) == "active"
+    return True
+
+
 def _agent_token_live(token: str | None) -> bool:
-    """A current agent credential (not rotated, revoked, or of an expired sandbox)."""
-    return bool(token and token.startswith(agent_auth.PREFIX) and agent_auth.identify(token))
+    """A current agent credential (not rotated or revoked) for at least one live mandate (not revoked, not of an
+    expired or deleted sandbox)."""
+    if not (token and token.startswith(agent_auth.PREFIX)):
+        return False
+    who = agent_auth.identify(token)
+    return bool(who) and any(_mandate_live(mid) for mid in who["mandate_ids"])
+
+
+def revoke_for_mandates(mandate_ids, by: str) -> int:
+    """Delete every OAuth code/access/refresh grant made with the agent credential of these mandates (called when a
+    sandbox closes). Grants carry the SHA-256 of their agent token; returns how many were deleted."""
+    _ensure()
+    hashes = set()
+    for mid in mandate_ids:
+        if row := agent_auth._row(mid):
+            hashes.add(row["token_sha256"])
+    if not hashes:
+        return 0
+    n = 0
+    for r in store._exec("SELECT key_sha256, data FROM oauth_grant")[0]:
+        if json.loads(r["data"]).get("agent_sha256") in hashes:
+            n += store._exec("DELETE FROM oauth_grant WHERE key_sha256 = ?", (r["key_sha256"],))[1]
+    if n:
+        store.audit("oauth.revoked", by, "system", sorted(mandate_ids)[0], None,
+                    {"mandate_ids": sorted(mandate_ids), "grants": n})
+    return n
 
 
 # --- discovery -------------------------------------------------------------------

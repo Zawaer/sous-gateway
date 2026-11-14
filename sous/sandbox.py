@@ -172,6 +172,8 @@ def _close(row: dict, status: str, by: str, actor_type: str) -> None:
                 S.revoke_mandate(mid, by)
         except S.GatewayError:
             pass
+    from . import oauth  # connector grants (claude.ai / ChatGPT) end with the sandbox, not 30 days later
+    oauth.revoke_for_mandates(list(row["data"]["mandates"].values()), by)
     store.audit(f"sandbox.{status}", by, actor_type, row["id"], None,
                 {"sandbox": row["id"], "mandates": list(row["data"]["mandates"].values()),
                  "quotes_used": row["quotes_used"]})

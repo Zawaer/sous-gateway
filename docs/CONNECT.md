@@ -106,7 +106,7 @@ It can't, whatever it is told:
 - **see other buyers.** The token reads only its own mandates, quotes and orders.
 
 You stay in control: when the buyer rotates or revokes the agent credential (`POST /mandates/{id}/agent-credential`,
-approver only) every OAuth grant made with it stops working at once; a sandbox's grants end when the sandbox
+approver only) every OAuth grant made with it stops working at once; a sandbox's grants end (401, refresh refused) when the sandbox is deleted or
 expires (24 h). Removing the connector in the assistant drops its tokens on that side.
 
 ## 4. How the OAuth part works (for reviewers)

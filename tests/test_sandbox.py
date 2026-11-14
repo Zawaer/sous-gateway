@@ -534,3 +534,68 @@ def test_sqlite_migration_drops_the_global_idempotency_unique(tmp_path, monkeypa
     with pytest.raises(sqlite3.IntegrityError):
         store._exec("INSERT INTO purchase_order VALUES ('PO-3','Q-3','M','a1','ordered',1.0,'{}','k','t','t')")
     assert [r["id"] for r in store._exec("SELECT id FROM purchase_order ORDER BY id")[0]] == ["PO-1", "PO-2"]
+
+
+# --- OAuth connector grants end with the sandbox (sous/oauth.py) ----------------------------------
+
+def _connector(c, s):
+    """claude.ai-style grant for the sandbox: DCR, authorize with the pasted agent token, PKCE code exchange."""
+    from tests.test_oauth import CALLBACK, authorize, code_from, pkce, register, token
+    client = register(c)
+    verifier, challenge = pkce()
+    code = code_from(authorize(c, client, s["agent_token"], challenge=challenge))
+    t = token(c, client, grant_type="authorization_code", code=code, redirect_uri=CALLBACK, code_verifier=verifier)
+    assert t.status_code == 200, t.text
+    return client, t.json()
+
+
+def _get_mandate(c, access, mandate_id):
+    h = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json",
+         "Authorization": f"Bearer {access}"}
+    r = c.post("/connect/mcp", headers=h, json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}})
+    if r.status_code != 200:
+        return r.status_code, None
+    h["Mcp-Session-Id"] = r.headers["mcp-session-id"]
+    c.post("/connect/mcp", headers=h, json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+    r = c.post("/connect/mcp", headers=h, json={"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+        "name": "get_mandate", "arguments": {"mandate_id": mandate_id}}})
+    data = [ln[5:].strip() for ln in r.text.splitlines() if ln.startswith("data:")]
+    return r.status_code, json.loads(data[-1])["result"]
+
+
+@pytest.fixture
+def live(monkeypatch):
+    """TestClient with the app's lifespan (the MCP session manager) running."""
+    monkeypatch.setattr(catalog, "_db", lambda: None)
+    monkeypatch.setattr(api.mcp.session_manager, "_has_started", False)
+    monkeypatch.setattr(config, "PUBLIC_BASE_URL", "http://testserver")  # the OAuth resource tests/test_oauth uses
+    with TestClient(api.app) as client:
+        yield client
+
+
+@pytest.mark.parametrize("how", ["expired", "expired_unswept", "deleted"])
+def test_connector_grants_end_with_the_sandbox(live, monkeypatch, how):
+    from tests.test_oauth import authorize, pkce, token
+    seed_curated()
+    s = new(live)
+    sid, hotel = s["sandbox"]["id"], s["mandates"][0]["mandate_id"]
+    client, t = _connector(live, s)
+    status, res = _get_mandate(live, t["access_token"], hotel)
+    assert status == 200 and not res.get("isError") and res["structuredContent"]["mandate"]["id"] == hotel
+    if how == "deleted":
+        r = live.delete(f"/sandbox/{sid}", params={"by": "Rene"}, headers={"X-Approver-Code": CODE})
+        assert r.status_code == 200
+    else:
+        later = time.time() + 25 * 3600  # sandbox clock only: the OAuth tokens themselves are still fresh
+        monkeypatch.setattr(sandbox, "_clock", lambda: later)
+        if how == "expired":
+            sandbox.sweep(force=True)
+    assert _get_mandate(live, t["access_token"], hotel)[0] == 401
+    r = token(live, client, grant_type="refresh_token", refresh_token=t["refresh_token"])
+    assert r.status_code == 400 and r.json()["error"] == "invalid_grant"
+    if how != "expired_unswept":  # closing the sandbox deleted its grants outright
+        assert store._exec("SELECT COUNT(*) AS n FROM oauth_grant")[0][0]["n"] == 0
+        assert any(e["event"] == "oauth.revoked" for e in store.audit_events(limit=500))
+    r = authorize(live, client, s["agent_token"], challenge=pkce()[1])  # and no new grant for it
+    assert r.status_code == 200 and "not valid" in r.text
