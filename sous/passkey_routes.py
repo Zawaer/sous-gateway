@@ -16,7 +16,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from . import access, agent_auth, config, passkey, sandbox, service as S, store
+from . import access, agent_auth, config, oauth, passkey, sandbox, service as S, store
 from .passkey_verify import check_order, verify_evidence
 from .remembered import RememberIn
 
@@ -46,12 +46,18 @@ class CredentialIn(BaseModel):
         "Approve only: findings to remember, as in POST /orders/{id}/approve (sous/remembered.py)"))
 
 
-def _enrol_authority(code: str | None, body: RegisterOptionsIn) -> tuple[str, str, str, str | None]:
+_AGENT_PREFIXES = (agent_auth.PREFIX, oauth.ACCESS_PREFIX, oauth.REFRESH_PREFIX)
+
+
+def _enrol_authority(code: str | None, body: RegisterOptionsIn, *presented: str | None
+                     ) -> tuple[str, str, str, str | None]:
     """(authority, scope_type, scope, sandbox_id) for enrolling a passkey, or raise. Global approver code: any
-    scope; a sandbox's approver token: only its own mandates and buyers; no code configured: open (development)."""
+    scope; a sandbox's approver token: only its own mandates and buyers; no code configured: open (development).
+    Never the order id, its approval_url or an agent credential: an agent credential in either header (`presented`)
+    is refused even in open mode, so an agent can't become its own approver device, not even for the first passkey."""
     if bool(body.mandate_id) == bool(body.buyer):
         raise S.GatewayError("invalid_argument", "Give exactly one of mandate_id or buyer.", 400)
-    if code and code.startswith(agent_auth.PREFIX):
+    if any(t and t.startswith(_AGENT_PREFIXES) for t in (code, *presented)):
         raise S.GatewayError("agent_cannot_approve", "Agents can't enrol approvers: an agent credential was "
                              "presented.", 403)
     if body.mandate_id:
@@ -85,7 +91,8 @@ def register_options(body: RegisterOptionsIn, request: Request, x_approver_code:
     sandbox's approver token for its own mandates. Returns WebAuthn creation options (`publicKey`) for
     navigator.credentials.create(); finish with POST /approvers/register/verify within 5 minutes."""
     code = x_approver_code or agent_auth.bearer(authorization)
-    authority, scope_type, scope, sid = _enrol_authority(code, body)
+    authority, scope_type, scope, sid = _enrol_authority(code, body, x_approver_code,
+                                                         agent_auth.bearer(authorization))
     rp_id, _ = passkey.rp(_base(request))
     return passkey.register_options(body.name, scope_type, scope, sid, authority, rp_id)
 

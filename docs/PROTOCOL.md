@@ -1036,6 +1036,9 @@ The approver code proves someone knew a shared secret. A passkey approval proves
 
 It keeps the approver code in the same browser storage as the seller UI.
 
+**Who can enrol (no trust on first use).** The order id, the `approval_url` the agent passes on, and the agent's credentials (`vka_` token, OAuth `vko_`/`vkr_`, in either header, even with no approver code configured) never enrol a passkey: opening the link first makes no one an approver device, the first passkey on a mandate included. Enrolment needs the buyer's credential (approver code or the sandbox's `sbxa_` token), which no order, tool result or URL contains; agents can fetch a challenge but have no registered key to answer it (`tests/test_passkey.py::test_agent_cannot_enrol_its_own_approver_or_approve_even_the_first_passkey`).
+The guarantee is about credentials, not people: a human who holds both the agent token and the approver code (e.g. a sandbox's creator, or a chef running their own assistant) can approve their own agent's order. That is the intended human-in-the-loop, and `approval.by`/`authority` record who did; Sous does not enforce a second person.
+
 **Limits.** Enrolment is gated by the shared code, so a code holder can enrol a passkey under any name; production would enrol through the buyer's login (OIDC) and let existing passkeys approve new ones. No passkey revocation endpoint yet. Synced passkeys (iCloud, Google) report sign count 0, so replay protection rests on the one-time challenge. The `note` is not part of the signed binding.
 
 ## 27. Autonomy levels and Valio's cap (`sous/autonomy.py`)

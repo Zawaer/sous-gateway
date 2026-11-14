@@ -315,6 +315,63 @@ def test_enrolment_needs_a_human_credential(client, monkeypatch):
     assert client.post("/approvers/register/verify", json={"credential": cred}).status_code == 409
 
 
+def test_agent_cannot_enrol_its_own_approver_or_approve_even_the_first_passkey(client, monkeypatch):
+    """Trust on first use: a passkey-only mandate with no passkey yet. Everything the agent has (its token, the order
+    id, the approval_url from its tool result, a software authenticator of its own) must not make it the approver
+    device. Enrolment needs the buyer's credential (approver code / sandbox approver token), never just the link."""
+    from sous import agent_auth
+    monkeypatch.setattr(config, "APPROVER_CODE", "s3cret")
+    tok = agent_auth.mint(S._mandate("MP"), "test")["token"]
+    o = held("MP")
+    assert "/ui/approve.html?order=" + o["id"] in o["approval_url"] and "s3cret" not in o["approval_url"]
+    seen = client.get(f"/orders/{o['id']}", headers={"Authorization": f"Bearer {tok}"})
+    assert seen.status_code == 200 and "s3cret" not in seen.text  # the agent reads its order, never the code
+    body, mallory = {"name": "Mallory", "mandate_id": seen.json()["mandate_id"]}, Authenticator()
+    tries = [({}, 401),                                                         # the approval link alone
+             ({"Authorization": f"Bearer {tok}"}, 403),                         # agent token as bearer
+             ({"X-Approver-Code": tok}, 403),                                   # agent token as the code
+             ({"X-Approver-Code": "guess", "Authorization": f"Bearer {tok}"}, 403),
+             ({"Authorization": "Bearer vko_oauth-access"}, 403)]               # the agent's OAuth token
+    for h, status in tries:
+        r = client.post("/approvers/register/options", json=body, headers=h)
+        assert r.status_code == status, (h, r.text)
+        assert status == 401 or r.json()["error"] == "agent_cannot_approve"
+    for scope in ({"buyer": S._mandate("MP").buyer}, {"mandate_id": "M"}):
+        assert client.post("/approvers/register/options", json={"name": "Mallory", **scope},
+                           headers={"Authorization": f"Bearer {tok}"}).status_code == 403
+    # a self-made registration with a challenge the gateway never issued is refused too
+    fake = mallory.create({"publicKey": {"challenge": b64u(secrets.token_bytes(32)), "rp": {"id": RP_ID}}})
+    assert client.post("/approvers/register/verify", json={"credential": fake}).status_code >= 400
+    assert passkey.credentials_for(S.get_order(o["id"])) == []
+    # and nothing approves the order: no passkey to answer with, agent credential refused on the code path
+    assert client.post(f"/orders/{o['id']}/approve/options", json={}, headers={"Authorization": f"Bearer {tok}"}
+                       ).json()["error"] == "passkey_not_registered"
+    r = client.post(f"/orders/{o['id']}/approve", json={"by": "agent"}, headers={"Authorization": f"Bearer {tok}"})
+    assert r.status_code == 403
+    assert S.get_order(o["id"])["status"] == "pending_approval"
+    # the buyer, with the code, enrols the first passkey from the same link and approves
+    buyer = Authenticator()
+    enrol(client, buyer, name="Chef Anna", mandate_id="MP", headers={"X-Approver-Code": "s3cret"})
+
+    def challenge():  # the agent may fetch a challenge (read access), not answer it
+        return client.post(f"/orders/{o['id']}/approve/options", json={},
+                           headers={"Authorization": f"Bearer {tok}"}).json()
+    r = client.post(f"/orders/{o['id']}/approve/passkey", json={"credential": mallory.get(challenge())})
+    assert r.status_code >= 400  # the agent's own key still isn't an approver
+    r = client.post(f"/orders/{o['id']}/approve/passkey", json={"credential": buyer.get(challenge())})
+    assert r.json()["status"] == "ordered"
+
+
+def test_agent_credential_refused_for_enrolment_even_in_open_mode(client):
+    """No approver code configured (development): enrolment is open, but an agent credential in either header is
+    still refused, as on approve/reject."""
+    from sous import agent_auth
+    tok = agent_auth.mint(S._mandate("MP"), "test")["token"]
+    r = client.post("/approvers/register/options", json={"name": "Mallory", "mandate_id": "MP"},
+                    headers={"X-Approver-Code": "anything", "Authorization": f"Bearer {tok}"})
+    assert r.status_code == 403 and r.json()["error"] == "agent_cannot_approve"
+
+
 def test_challenge_bound_to_order_contents():
     """The binding hashes the signed quote JWS and the lines: a stored order whose lines changed no longer
     matches the challenge."""
