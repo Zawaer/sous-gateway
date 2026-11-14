@@ -25,6 +25,19 @@ from . import autonomy, catalog, config, fi, holds, origin as origins, pause, pu
 Tier = Literal["silent", "notify", "ask", "block"]
 
 
+class Delegation(BaseModel):
+    """One scope the buyer delegated after a clean approval record (earned autonomy, sous/ramp.py): findings of
+    `rule` on products of `scope` notify instead of ask. Added only by accepting a Sous proposal (or by the buyer
+    signing it themselves); never on block-tier, allergen or hard-limit rules (ramp.RAMPABLE)."""
+    rule: str = Field(description="The ask-tier rule delegated, e.g. price.changed (one of sous/ramp.py RAMPABLE)")
+    scope: str = Field(description="'type:<product type key>' (e.g. type:kuohukerma) or 'product:<product id>'")
+    label: str = Field("", description="What the scope is, in words (whipping cream)")
+    tier: Literal["notify"] = "notify"
+    since: str = Field(description="When it was delegated (ISO time); the track record after it can withdraw it")
+    proposal_id: str | None = None
+    evidence: str | None = Field(None, description="The record it was earned on, as shown to the buyer")
+
+
 class Mandate(BaseModel):
     id: str
     buyer: str = Field(description="Organisation the agent buys for")
@@ -101,6 +114,10 @@ class Mandate(BaseModel):
         "any", description="How a held order may be approved: 'any' (approver code, sandbox approver token or a "
         "passkey) or 'passkey' (only a registered approver's passkey, bound to the exact order; rejecting still "
         "works with the code)")
+    delegated: list[Delegation] = Field(
+        default_factory=list, description="Earned autonomy (sous/ramp.py): scopes where the buyer approved enough "
+        "held orders unchanged that they accepted Sous's proposal to notify instead of ask. Never allergens, block "
+        "tiers or hard limits; withdrawn by a revert proposal")
     sandbox: str | None = Field(None, description="Judge sandbox id (e.g. SBX-7Q2K) for a visitor's copy; see sous/sandbox.py")
 
     @field_validator("max_comparison_price_eur", "comparison_price_caps")
@@ -528,6 +545,9 @@ def evaluate(
     if remembered:
         from .remembered import soften
         f[:] = soften(f, lines, remembered, now)
+    if mandate.delegated:  # earned autonomy (sous/ramp.py): a delegated scope's ask becomes its earned.* notify
+        from .ramp import relax
+        f[:] = relax(f, mandate)
     outcome: Tier = max((x.outcome for x in f), key=_RANK.__getitem__, default="silent")
     if outcome in ("silent", "notify"):
         add("mandate.ok", outcome, f"Within mandate {mandate.id}: €{total:,.2f} ex VAT, all checks passed.",

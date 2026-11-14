@@ -497,6 +497,43 @@ Orders held before deadlines existed have no `approve_by`. The sweep (which also
 each such `pending_approval` order the deadline it would have got when it was held (same rule, including the
 mandate/sandbox end, as of its `created_at`), re-sign its receipt and audit `order.approve_by_backfilled` once; it then expires like any other.
 
+### 7.2 Earned autonomy: delegating more as the record shows (`sous/ramp.py`)
+
+The buyer stays in control and autonomy is earned. A new customer reviews almost every held order; per mandate and
+per **scope** (rule × product type read from the name, e.g. `price.changed` × `type:kuohukerma` = whipping cream;
+`product:<id>` when the type can't be read) Sous keeps the track record of held orders: approved unchanged, edited
+(approve with changes) or rejected, with dates. An order held for several reasons counts for each rampable scope it was
+held for; a rejection counts against all of them.
+
+**Threshold** (constants in `sous/ramp.py`, counted since the scope's record last restarted, at most 365 days back):
+≥ `MIN_APPROVALS` = 5 approved unchanged, over ≥ `MIN_WEEKS` = 2 distinct ISO weeks, 0 edited, 0 rejected. Then Sous
+**proposes** lowering that scope from ask to notify, with the evidence in English and Finnish ("You approved 6 of 6
+held orders with a price change on whipping cream unchanged since 02.11., over 3 weeks; none were edited or
+rejected."). It never changes a mandate by itself.
+
+**Rampable** (ask → notify only): `substitution`, `price.changed`, `price.comparison_changed`, `quantity.unusual`,
+`supply.reliability`, `delivery.later_date`. **Never proposed**: any block-tier finding, `allergen.*`, `spend.*`
+(hard, auto-approve, daily, weekly and split-order limits), `price.comparison_cap` (max price), category / claims /
+origin rules, Valio's holds and availability, mandate validity, autonomy caps and pauses, and the per-product
+findings that approve-and-remember covers (`product.first_time`, `unit.interpreted`, `product.type_mismatch`), and use-aware
+substitution (`purpose.*`): a delegated substitution scope never silences a recipe or allergy purpose hold.
+
+**Accept** (`POST /mandates/{id}/autonomy/{proposal_id}/accept {by}`, approver code) is a normal mandate update: the
+gateway re-signs the mandate (`sous-mandate+jws`, new version, audit `mandate.updated`) with the scope added to
+`delegated: [{rule, scope, label, tier: notify, since, proposal_id, evidence}]`. From then on that scope's ask is its
+`earned.*` notify twin (`earned.price_changed`, ...; in `GET /rules`), and the buyer is told. A buyer-signed mandate is
+not rewritten: `409 mandate_buyer_signed` with the amended `delegated`, for the buyer to re-sign. **Decline** (`.../decline
+{by, note?}`) changes nothing and restarts the scope's record.
+
+**Trust can be withdrawn**: one held order carrying a delegated scope's `earned.*` finding that the buyer rejects or
+edits makes Sous propose a **revert** (notify → ask), accepted or declined the same way.
+
+`GET /mandates/{id}/autonomy` (read-scoped like the mandate) returns `{policy, track_record[], delegated[],
+proposals[{id, kind: relax|revert, rule, scope, label, from_tier, to_tier, evidence, evidence_fi, orders, record?}]}`.
+Audit events: `ramp.proposed` (once per proposal, when first shown), `ramp.accepted`, `ramp.declined`. MCP
+`my_mandates` carries `earned_autonomy {delegated, open_proposals}`; the buyer dashboard (`/ui/buyer.html`, Your rules)
+shows a "Delegate more? / Delegoidaanko lisää?" section per mandate.
+
 ## 8. Standing orders and drift detection
 
 Source: `sous/standing.py`. A standing order is a kitchen's recurring weekly order, renewed by its agent under the mandate. The gateway remembers what each renewal actually ordered and checks every new renewal against that history, in plain code, before placing it.

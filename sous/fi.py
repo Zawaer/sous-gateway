@@ -277,6 +277,30 @@ RULES = {
     "remembered.type_mismatch": "Sama toisenlainen tuote (kauramaito maidon tilalla), jonka ostajan hyväksyjä on "
                                 "hyväksynyt ja pyytänyt muistamaan: ilmoitus hyväksynnän sijaan, samoin rajoin kuin "
                                 "remembered.unit_interpreted.",
+    "earned.substitution": "Korvaava tuote pyydetyn tilalla tuotetyypille, jonka ostaja on delegoinut (ansaittu autonomia, "
+                 "sous/ramp.py): kun riittävän moni pidätetty tilaus hyväksyttiin muuttamatta, ostaja hyväksyi "
+                 "Sousin ehdotuksen, joten siitä tulee ilmoitus hyväksynnän sijaan. Myöhempi hylkäys tai muutos "
+                 "saa Sousin ehdottamaan sen perumista.",
+    "earned.price_changed": "Yksikköhinnan muutos yli max_price_change_pct-rajan tuotetyypille, jonka ostaja on delegoinut (ansaittu autonomia, "
+                 "sous/ramp.py): kun riittävän moni pidätetty tilaus hyväksyttiin muuttamatta, ostaja hyväksyi "
+                 "Sousin ehdotuksen, joten siitä tulee ilmoitus hyväksynnän sijaan. Myöhempi hylkäys tai muutos "
+                 "saa Sousin ehdottamaan sen perumista.",
+    "earned.price_comparison_changed": "Samanlaisen tuotteen kalliimpi litra- tai kilohinta tuotetyypille, jonka ostaja on delegoinut (ansaittu autonomia, "
+                 "sous/ramp.py): kun riittävän moni pidätetty tilaus hyväksyttiin muuttamatta, ostaja hyväksyi "
+                 "Sousin ehdotuksen, joten siitä tulee ilmoitus hyväksynnän sijaan. Myöhempi hylkäys tai muutos "
+                 "saa Sousin ehdottamaan sen perumista.",
+    "earned.quantity_unusual": "Tavallisesta poikkeava määrä tuotetyypille, jonka ostaja on delegoinut (ansaittu autonomia, "
+                 "sous/ramp.py): kun riittävän moni pidätetty tilaus hyväksyttiin muuttamatta, ostaja hyväksyi "
+                 "Sousin ehdotuksen, joten siitä tulee ilmoitus hyväksynnän sijaan. Myöhempi hylkäys tai muutos "
+                 "saa Sousin ehdottamaan sen perumista.",
+    "earned.supply_reliability": "Tuote alle min_delivery_reliability-tason tuotetyypille, jonka ostaja on delegoinut (ansaittu autonomia, "
+                 "sous/ramp.py): kun riittävän moni pidätetty tilaus hyväksyttiin muuttamatta, ostaja hyväksyi "
+                 "Sousin ehdotuksen, joten siitä tulee ilmoitus hyväksynnän sijaan. Myöhempi hylkäys tai muutos "
+                 "saa Sousin ehdottamaan sen perumista.",
+    "earned.delivery_later_date": "Myöhempi toimituspäivä tuotetyypille, jonka ostaja on delegoinut (ansaittu autonomia, "
+                 "sous/ramp.py): kun riittävän moni pidätetty tilaus hyväksyttiin muuttamatta, ostaja hyväksyi "
+                 "Sousin ehdotuksen, joten siitä tulee ilmoitus hyväksynnän sijaan. Myöhempi hylkäys tai muutos "
+                 "saa Sousin ehdottamaan sen perumista.",
     "substitution": "Rivillä on korvaava tuote pyydetyn tilalla; valtakirja määrää, kuinka paljon ihminen saa siihen sanoa.",
     "purpose.exact": "Korvaava tuote tuotteelle, jota ostaja käyttää niin, että vain juuri se tuote käy (esim. "
                      "allergiaresepti): estetään, eikä Valio Aimo ehdota sille vaihtoehtoa. Asetetaan valtakirjassa "

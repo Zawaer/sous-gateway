@@ -273,6 +273,10 @@ class MyMandateOut(_Open):
     rules: str = Field(description="The mandate's active rules in one line (rules.mandate_summary)")
     remembered: list[dict[str, Any]] = Field(default_factory=list, description=(
         "Active remembered decisions (rule, product_id, by, expires_at): these findings notify instead of ask"))
+    earned_autonomy: dict[str, Any] = Field(default_factory=dict, description=(
+        "Earned autonomy (sous/ramp.py): {delegated: [{rule, scope, label, since}] scopes the buyer delegated after a "
+        "clean approval record (they notify instead of ask, rule earned.*), open_proposals: how many proposals to "
+        "delegate more (or take back) wait for the buyer at GET /mandates/{id}/autonomy}"))
 
 
 class MyMandatesOut(_Open):
@@ -713,11 +717,23 @@ def my_mandates(agent_token: str | None = None, ctx: Context | None = None) -> d
                     "valid_until": str(m["valid_until"]) if m.get("valid_until") else None, "require_agent_auth": bool(m.get("require_agent_auth")),
                     "rules": "; ".join(r["text"] for r in rules.mandate_summary(mandate)),
                     "remembered": [{k: r.get(k) for k in ("id", "rule", "product_id", "original_product_id", "name",
-                                                          "by", "expires_at")} for r in remembered.list_for(mid)]})
+                                                          "by", "expires_at")} for r in remembered.list_for(mid)],
+                    "earned_autonomy": _earned(mandate)})
     note = ("Pick the mandate whose buyer the user means; pass its mandate_id. Read the full rules with get_mandate."
             if out else "No credential: connect with 'Authorization: Bearer <agent token>' (or sign in to the "
                         "connector with it). Ask the user; don't guess a mandate_id.")
     return {"mandates": out, "note": note}
+
+
+def _earned(mandate) -> dict:
+    """Earned autonomy (sous/ramp.py) in short: what the buyer delegated, and how many proposals wait for them."""
+    from . import ramp
+    try:
+        open_ = len(ramp.proposals(mandate))
+    except Exception:  # a read never fails on the ramp
+        open_ = None
+    return {"delegated": [{k: d.model_dump()[k] for k in ("rule", "scope", "label", "since")} for d in mandate.delegated],
+            "open_proposals": open_}
 
 
 @_tool(MandateOut, title="Optional: Read the mandate", annotations=READ_LOCAL)

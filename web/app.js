@@ -1011,6 +1011,7 @@ views.mandates = {
       } catch (e) { toast("Failed: " + e.message, 6000); }
     }));
     view.querySelectorAll("[data-suggest]").forEach((b) => b.addEventListener("click", () => showSuggestions(b)));
+    if (SIDE === "buyer") mandates.filter((m) => !m.revoked).forEach((m) => loadRamp(m.id, () => { this.key = ""; this.load(); }));
     view.querySelectorAll("[data-sig]").forEach((b) => b.addEventListener("click", async () => {
       const id = b.dataset.sig;
       const [{ jws }, rep] = await Promise.all([api("/mandates/" + encodeURIComponent(id)),
@@ -1116,7 +1117,44 @@ function mandateCard(m) {
       ${m.revoked ? "" : `<button class="btn plain" data-revoke="${esc(m.id)}" style="color:var(--block)">Revoke</button>`}
     </div>
     <div class="sugs-out"></div>
+    ${SIDE === "buyer" && !m.revoked ? `<div class="ramp-out" data-ramp="${esc(m.id)}"></div>` : ""}
   </article>`;
+}
+
+// Earned autonomy (sous/ramp.py), buyer side only: Sous proposes delegating a scope (ask -> notify) after a clean
+// approval record, or taking it back after a rejection/edit. Nothing changes until the buyer's human accepts.
+// Shown in English and Finnish: the gateway sends both.
+async function loadRamp(id, reload) {
+  const box = view.querySelector(`.ramp-out[data-ramp="${CSS.escape(id)}"]`);
+  if (!box) return;
+  let r;
+  try { r = await api(`/mandates/${encodeURIComponent(id)}/autonomy`); } catch { return; }
+  const props = r.proposals || [], del = r.delegated || [];
+  if (!props.length && !del.length) return;
+  const pol = r.policy || {};
+  box.innerHTML = `<h3>Delegate more? <span class="muted small">· Delegoidaanko lisää?</span></h3>
+    <p class="small muted">Sous proposes only after ${esc(pol.min_approvals_unchanged)} held orders of a kind were approved
+      unchanged over ${esc(pol.min_distinct_weeks)}+ weeks with none edited or rejected; never allergens, block rules or
+      hard limits. · Sous ehdottaa vasta, kun ${esc(pol.min_approvals_unchanged)} samanlaista pidätettyä tilausta on
+      hyväksytty muuttamatta vähintään ${esc(pol.min_distinct_weeks)} eri viikolla; ei koskaan allergeeneja, estoja tai ehdottomia rajoja.</p>
+    ${props.map((p) => `<div class="sub" data-prop="${esc(p.id)}">
+      <div class="row" style="align-items:center"><span class="mono small">${p.kind === "revert" ? "Take back · Peru" : "Delegate · Delegoi"}</span>
+        <span>${tier(p.from_tier)} → ${tier(p.to_tier)}</span></div>
+      <div class="small">${esc(p.evidence)}</div>
+      <div class="small muted" lang="fi">${esc(p.evidence_fi)}</div>
+      <div class="actions"><button class="btn" data-ramp-do="accept">Accept · Hyväksy</button>
+        <button class="btn plain" data-ramp-do="decline">Decline · Hylkää</button></div></div>`).join("")}
+    ${del.length ? `<p class="small">Delegated · Delegoitu: ${del.map((d) => `${esc(d.label || d.scope)} (${esc(d.rule)}, ${dateOnly(d.since)})`).join(", ")}</p>` : ""}`;
+  box.querySelectorAll("[data-ramp-do]").forEach((b) => b.addEventListener("click", async () => {
+    const pid = b.closest("[data-prop]").dataset.prop, act = b.dataset.rampDo;
+    const by = approver() || (prompt("Your name, for the audit log:") || "").trim();
+    if (!by) return;
+    try {
+      await api(`/mandates/${encodeURIComponent(id)}/autonomy/${encodeURIComponent(pid)}/${act}`, { method: "POST", body: { by } });
+      toast(act === "accept" ? "Mandate updated and re-signed." : "Declined; nothing changed.");
+      reload();
+    } catch (e) { toast("Failed: " + e.message, 6000); }
+  }));
 }
 
 // Standing orders: recurring weekly orders renewed by the buyer's agent, with drift detection.

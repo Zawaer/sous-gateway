@@ -733,6 +733,41 @@ def revoke_remembered(mandate_id: str, remembered_id: str, by: str = Query("appr
     return RM.summary(r)
 
 
+from . import ramp as RAMP  # noqa: E402  earned autonomy (sous/ramp.py)
+
+
+class RampDecision(BaseModel):
+    by: str = Field(min_length=1, max_length=100)
+    note: str | None = Field(None, max_length=500)
+
+
+@app.get("/mandates/{mandate_id}/autonomy", tags=["approvals"], dependencies=[Depends(_read_mandate)])
+def earned_autonomy(mandate_id: str):
+    """Earned autonomy (sous/ramp.py): the approval track record per scope (rule x product type: held orders
+    approved unchanged / edited / rejected, since when, over how many weeks), what the buyer has delegated, and
+    Sous's open proposals: relax (ask -> notify) once a scope passes the documented threshold, revert (back to ask)
+    after a rejection or edit of a delegated scope. Proposals only: nothing changes until a human accepts.
+    Read-scoped like GET /mandates/{id}; a proposal shown for the first time is audited (ramp.proposed)."""
+    return RAMP.status(S._mandate(mandate_id))
+
+
+@app.post("/mandates/{mandate_id}/autonomy/{proposal_id}/accept", tags=["approvals"])
+def accept_autonomy(mandate_id: str, proposal_id: str, d: RampDecision,
+                    authority: str = Depends(require_global_approver)):
+    """Human-only. Accept a proposal: the mandate is re-signed with the scope delegated (relax) or taken back
+    (revert), as a new version (GET /mandates/{id}/history; audit mandate.updated + ramp.accepted). 409
+    proposal_not_open if it is no longer open; 409 mandate_buyer_signed for a buyer-signed mandate (the buyer
+    re-signs it with the change)."""
+    return RAMP.accept(mandate_id, proposal_id, d.by, "global approver code")
+
+
+@app.post("/mandates/{mandate_id}/autonomy/{proposal_id}/decline", tags=["approvals"])
+def decline_autonomy(mandate_id: str, proposal_id: str, d: RampDecision,
+                     authority: str = Depends(require_global_approver)):
+    """Human-only. Decline a proposal: nothing changes, audit ramp.declined, and the scope's record starts over."""
+    return RAMP.decline(mandate_id, proposal_id, d.by, d.note, "global approver code")
+
+
 @app.post("/orders/{order_id}/reject", tags=["approvals"])
 def reject(order_id: str, d: Decision, authority: str = Depends(require_approver)):
     return S.decide(order_id, d.by, False, d.note, authority=authority)

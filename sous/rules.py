@@ -211,6 +211,37 @@ def _build() -> list[dict]:
            "A substitute for a product the buyer uses in a recipe (whipping cream may not whip the same): the buyer "
            "decides, whatever the substitutions tier says. Coffee cream, by contrast, can be marked allowed.",
            "product_purposes"),
+        # --- earned autonomy (sous/ramp.py): scopes the buyer delegated after a clean approval record
+        _r("earned.substitution", "finding", ["notify"], "buyer",
+           "A substitute for the asked product on a product type the buyer delegated (earned autonomy, sous/ramp.py): "
+           "after enough held orders of it were approved unchanged, the buyer accepted Sous's proposal, so "
+           "it notifies instead of asking. A rejection or edit later makes Sous propose taking it back.",
+           "delegated"),
+        _r("earned.price_changed", "finding", ["notify"], "buyer",
+           "A unit price change beyond max_price_change_pct on a product type the buyer delegated (earned autonomy, sous/ramp.py): "
+           "after enough held orders of it were approved unchanged, the buyer accepted Sous's proposal, so "
+           "it notifies instead of asking. A rejection or edit later makes Sous propose taking it back.",
+           "delegated"),
+        _r("earned.price_comparison_changed", "finding", ["notify"], "buyer",
+           "A pricier product of the same kind per L or kg on a product type the buyer delegated (earned autonomy, sous/ramp.py): "
+           "after enough held orders of it were approved unchanged, the buyer accepted Sous's proposal, so "
+           "it notifies instead of asking. A rejection or edit later makes Sous propose taking it back.",
+           "delegated"),
+        _r("earned.quantity_unusual", "finding", ["notify"], "buyer",
+           "An unusual quantity on a product type the buyer delegated (earned autonomy, sous/ramp.py): "
+           "after enough held orders of it were approved unchanged, the buyer accepted Sous's proposal, so "
+           "it notifies instead of asking. A rejection or edit later makes Sous propose taking it back.",
+           "delegated"),
+        _r("earned.supply_reliability", "finding", ["notify"], "buyer",
+           "A product below min_delivery_reliability on a product type the buyer delegated (earned autonomy, sous/ramp.py): "
+           "after enough held orders of it were approved unchanged, the buyer accepted Sous's proposal, so "
+           "it notifies instead of asking. A rejection or edit later makes Sous propose taking it back.",
+           "delegated"),
+        _r("earned.delivery_later_date", "finding", ["notify"], "buyer",
+           "A later delivery date on a product type the buyer delegated (earned autonomy, sous/ramp.py): "
+           "after enough held orders of it were approved unchanged, the buyer accepted Sous's proposal, so "
+           "it notifies instead of asking. A rejection or edit later makes Sous propose taking it back.",
+           "delegated"),
         _r("substitution", "finding", _field_tiers("substitutions"), "buyer",
            "A line replaces the product the buyer asked for; the mandate says how much say the human gets.",
            "substitutions"),
