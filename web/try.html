@@ -92,6 +92,33 @@
       padding: 4px 10px; border-radius: 999px; border: 1px solid var(--rule); background: var(--paper); }
     .n-sous span.sub { visibility: hidden; }
 
+    /* the brief's flow, run for real: request -> lookup -> order -> approval */
+    .eyebrow { font: .7rem var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-60); margin: 0 0 14px; }
+    .eyebrow b { color: var(--aimo); font-weight: 400; }
+    .ask { font: 400 1.15rem/1.35 var(--serif); font-style: italic; color: var(--ink-80); max-width: 27rem; margin: 0 auto; }
+    .pipe { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 28px auto 0; padding: 0; list-style: none; max-width: 600px; text-align: left; }
+    .pipe li { position: relative; border: 1.5px solid var(--rule); border-radius: var(--radius); padding: 12px; min-height: 104px; opacity: .45;
+      transition: opacity .4s, border-color .4s, transform .4s, background .4s; }
+    .pipe li.on { opacity: 1; border-color: var(--ink); transform: translateY(-2px); }
+    .pipe li.ok { opacity: 1; background: var(--panel); border-color: transparent; }
+    .pipe li.on .num { animation: think 1s ease-in-out infinite; }
+    .pipe .num { width: 22px; height: 22px; border-radius: 50%; background: var(--aimo); color: var(--paper); display: grid; place-items: center; font: 500 .72rem/1 var(--mono); }
+    .pipe li.ok .num::before { content: "\2713"; font-family: var(--sans); font-weight: 700; }
+    .pipe li.ok .num span { display: none; }
+    .pipe b { display: block; font-weight: 600; font-size: .9rem; margin: 8px 0 2px; }
+    .pipe .v { font-size: .8rem; color: var(--ink-60); line-height: 1.35; }
+    .pipe li.ok .v { color: var(--ink-80); }
+    .pipe li:not(:last-child)::after { content: ""; position: absolute; right: -8px; top: 22px; width: 8px; border-top: 1.5px solid var(--rule); }
+    .built { margin: 28px 0 0; padding: 0; list-style: none; text-align: left; }
+    .built li { display: grid; grid-template-columns: 28px 1fr; gap: 4px 12px; padding: 14px 0; border-top: 1px solid var(--rule); animation: enter .5s both; }
+    .built li:nth-child(2) { animation-delay: .08s; } .built li:nth-child(3) { animation-delay: .16s; } .built li:nth-child(4) { animation-delay: .24s; }
+    .built .num { width: 26px; height: 26px; border-radius: 50%; background: var(--aimo); color: var(--paper); display: grid; place-items: center; font: 700 .8rem/1 var(--sans); }
+    .built b { font-weight: 600; }
+    .built .v { grid-column: 2; color: var(--ink-60); font-size: .92rem; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .musts { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; margin: 26px 0 0; padding: 0; list-style: none; font-size: .82rem; color: var(--ink-60); }
+    .musts li { display: flex; align-items: center; gap: 6px; padding: 5px 12px 5px 6px; border-radius: 999px; border: 1px solid var(--rule); }
+    .musts i { width: 18px; height: 18px; border-radius: 50%; background: var(--aimo); color: var(--paper); display: grid; place-items: center; font: 500 .66rem/1 var(--mono); font-style: normal; }
+
     /* the result of a stage */
     .result { margin: 26px auto 0; max-width: 27rem; animation: enter .45s cubic-bezier(.2, .7, .2, 1) both; }
     .big { font: 400 clamp(2.4rem, 9vw, 3.4rem)/1 var(--serif); letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin: 12px 0 8px; }
@@ -159,7 +186,8 @@
 
     @media (max-width: 600px) {
       .stepper span.l { display: none; } .stepper .on span.l { display: inline; }
-      .recap { grid-template-columns: 1fr 1fr; } .tiles { grid-template-columns: 1fr; }
+      .tiles { grid-template-columns: 1fr; } .pipe { grid-template-columns: 1fr 1fr; } .pipe li { min-height: 0; }
+      .pipe li:not(:last-child)::after { display: none; }
       main { justify-content: flex-start; padding-top: 20px; }
       .node .dot { width: 52px; height: 52px; } .n-sous .dot { width: 60px; height: 60px; }
     }
@@ -239,7 +267,7 @@ function countUp(el, to) {
   requestAnimationFrame(tick);
 }
 
-const STEPS = ["Agent buys", "You approve", "Refused", "Proof"];
+const STEPS = ["Lookup and order", "Human signs off", "Refused", "Proof"];
 function stepper() {
   const el = $("#stepper");
   el.hidden = !state || !state.at;
@@ -274,6 +302,7 @@ function intro() {
     <div class="acts"><button class="btn solid" id="go" type="button">Start ${ms("arrow_forward")}</button></div>
     <p class="status" id="st" role="status"></p>
     <button class="quiet" id="go-claude" type="button">or connect your own Claude</button>
+    <ul class="musts" aria-label="What you will see"><li><i>1</i>Lookup</li><li><i>2</i>Request and order</li><li><i>3</i>Permissions and approval</li></ul>
     <p class="foot">A private sandbox for 24 hours · live Valio Aimo prices · nothing is delivered</p>`);
   // The three outcomes, played in a loop: through, held, bounced.
   const order = ["auto", "hold", "back"]; let i = 0;
@@ -308,20 +337,35 @@ async function start(at, claude) {
   }
 }
 
-// --- 1: the agent buys alone ------------------------------------------------------------------------------------------
+// --- 1: lookup, request and order (the brief's example, through the brief's flow) --------------------------------------
+const pipe = () => `<ol class="pipe" id="pipe" aria-label="Request, lookup, order, approval">
+  ${[["Request", "What the buyer needs"], ["Lookup", "Products, price, stock"], ["Order", "A fixed price"], ["Approval", "Agent or human"]]
+    .map(([t, v], i) => `<li data-p="${i + 1}"><span class="num"><span>${i + 1}</span></span><b>${t}</b><div class="v">${v}</div></li>`).join("")}</ol>`;
+function stage(n, text, state = "ok") {
+  const li = $(`#pipe [data-p="${n}"]`); if (!li) return;
+  li.classList.remove("on", "ok"); li.classList.add(state);
+  if (text != null) li.querySelector(".v").innerHTML = text;
+}
+const LITRES = 1000;
+
 function step1() {
   mount(`
-    <div class="kicker">${tier("silent")}</div>
+    <p class="eyebrow"><b>Must build 1 + 2</b> · Lookup, request and order</p>
     <h1>The agent buys alone.</h1>
-    <p class="line">Hotel Aurora lets its agent spend up to <b>€2,500</b> an order without asking.</p>
-    ${flow("mandate: up to €2,500")}
+    <p class="ask">“I need 1,000 litres of lactose-free milk by Monday.”</p>
+    ${pipe()}
     <div id="out"></div>
-    <div class="acts" id="acts"><button class="btn solid" id="run" type="button">Order 100 L of milk</button></div>
+    <div class="acts" id="acts"><button class="btn solid" id="run" type="button">Run the hotel's request</button></div>
     <p class="status" id="st" role="status"></p>`);
   const d = state.done[1];
-  if (d?.id) call("/orders/" + encodeURIComponent(d.id)).then((o) => out1(o, false)).catch(() => {});
-  else if (d?.skipped) $("#acts").innerHTML = `<button class="btn" id="run" type="button">Try again</button>${next(2, "Next")}`, $("#acts [data-next]").addEventListener("click", () => go(2));
+  if (d?.id) Promise.all([call("/orders/" + encodeURIComponent(d.id)), d.quote ? call("/quotes/" + encodeURIComponent(d.quote)).catch(() => null) : null])
+    .then(([o, qr]) => { if (state.at === 1) out1(o, qr?.quote, false); }).catch(() => {});
+  else if (d?.skipped) again1();
   $("#run")?.addEventListener("click", run1);
+}
+function again1() {
+  $("#acts").innerHTML = `<button class="btn" id="run" type="button">Try again</button>${next(2, "Next")}`;
+  $("#run").addEventListener("click", run1); $("#acts [data-next]").addEventListener("click", () => go(2));
 }
 
 async function run1() {
@@ -329,40 +373,57 @@ async function run1() {
   $("#run").disabled = true; $("#out").innerHTML = "";
   try {
     if (!state.quote_body) throw new Error("this sandbox has no ready-made request");
-    setFlow("go"); st.textContent = "Asking Valio Aimo for today's price and stock…";
-    const [qr] = await Promise.all([call("/quotes", { method: "POST", body: state.quote_body }), sleep(1000)]);
-    if (!qr.quote?.id) throw new Error(qr.message || "no quote came back");
-    st.textContent = "Checking the order against the mandate…";
-    const o = await call("/orders", { method: "POST", body: { agent_id: state.quote_body.agent_id, mandate_id: state.quote_body.mandate_id,
-      quote_id: qr.quote.id, idempotency_key: `${state.id.toLowerCase()}-${qr.quote.id}` } });
-    state.done[1] = { id: o.id, total: o.total_ex_vat, outcome: o.decision?.outcome }; save();
+    const body = { ...state.quote_body, items: state.quote_body.items.map((it) => ({ ...it, amount: LITRES })) };
+    stage(1, `${LITRES.toLocaleString("en-GB")} L lactose-free milk, ${esc(day(body.delivery_date))}`);
+    stage(2, "Asking Valio Aimo…", "on");
+    const [qr] = await Promise.all([call("/quotes", { method: "POST", body }), sleep(1100)]);
+    const qt = qr.quote;
+    if (!qt?.id) throw new Error(qr.message || "no quote came back");
+    lookup(qt);
+    stage(3, "Signing the price…", "on"); await sleep(700);
+    stage(3, `<b style="display:inline;font-weight:600">${esc(eur(qt.total_ex_vat))}</b> fixed, signed by Sous`);
+    stage(4, "Checking the mandate…", "on");
+    const [o] = await Promise.all([call("/orders", { method: "POST", body: { agent_id: body.agent_id, mandate_id: body.mandate_id,
+      quote_id: qt.id, idempotency_key: `${state.id.toLowerCase()}-${qt.id}` } }), sleep(700)]);
+    state.done[1] = { id: o.id, quote: qt.id, total: o.total_ex_vat, outcome: o.decision?.outcome, status: o.status, checked: checked(qt) }; save();
     st.textContent = "";
-    out1(o, true);
+    out1(o, qt, true);
   } catch (e) {
-    setFlow("idle"); st.textContent = "";
+    st.textContent = "";
+    document.querySelectorAll("#pipe li.on").forEach((li) => li.classList.remove("on"));
     state.done[1] ||= { skipped: true }; save();
     $("#out").innerHTML = `<div class="result err"><p><b>The live order did not go through.</b> ${esc(sentence(e.message))}</p>
       <p class="muted" style="margin-top:6px">This step needs Valio Aimo's live price service. The next ones do not.</p></div>`;
-    $("#acts").innerHTML = `<button class="btn" id="run" type="button">Try again</button>${next(2, "Next")}`;
-    $("#run").addEventListener("click", run1); $("#acts [data-next]").addEventListener("click", () => go(2));
-    stepper();
+    again1(); stepper();
   }
 }
 
-function out1(o, animate) {
+const checked = (qt) => (qt.lines || []).length + (qt.alternatives_considered || []).length;
+function lookup(qt) {
+  const l = (qt.lines || [])[0] || {}, cp = l.comparison_price;
+  stage(2, `${checked(qt)} products checked · ${cp ? esc(eur(cp.ex_vat)) + "/" + esc(cp.per) : esc(eur(l.unit_price_ex_vat))}${l.stock || l.orderable ? " · in stock" : ""}`);
+}
+
+function out1(o, qt, animate) {
   const d = o.decision || {}, fs = d.findings || [], l = (o.lines || [])[0];
-  setFlow(o.status === "ordered" ? "auto" : o.status === "pending_approval" ? "hold" : "back");
-  const verdict = o.status === "ordered" ? (d.outcome === "notify" ? "Ordered. The hotel got an FYI." : "Ordered. Nobody had to approve.")
+  stage(1, `${LITRES.toLocaleString("en-GB")} L lactose-free milk, ${esc(day(o.requested_delivery_date || o.delivery_date))}`);
+  if (qt) lookup(qt); else stage(2, "Live price and stock");
+  stage(3, `<b style="display:inline;font-weight:600">${esc(eur(o.total_ex_vat))}</b> fixed, signed by Sous`);
+  stage(4, o.status === "ordered" ? "The agent decided alone" : o.status === "pending_approval" ? "A human signs off" : "Refused by the mandate");
+  const verdict = o.status === "ordered" ? (d.outcome === "notify" ? "Ordered. The hotel's limit is €2,500, so nobody had to approve; above €1,000 it gets an FYI." : "Ordered. The hotel's limit is €2,500, so nobody had to approve.")
     : o.status === "pending_approval" ? "Held for a human." : "Refused by the mandate.";
-  $("#out").innerHTML = `<div class="result"><div class="big" id="big">${esc(eur(o.total_ex_vat))}</div>
-    <p><b>${esc(verdict)}</b></p></div>
+  const calls = qt?.valio_api_calls, alts = qt?.alternatives_considered || [];
+  $("#out").innerHTML = `<div class="result">${tier(d.outcome)}<div class="big" id="big">${esc(eur(o.total_ex_vat))}</div>
+    <p>${esc(verdict)}</p></div>
     <details class="more"><summary>Details</summary><div class="in"><dl>
-      <dt>Product</dt><dd>${l ? esc(pname(l.name)) : ""}</dd><dt>Delivery</dt><dd>${esc(day(o.delivery_date))}</dd>
-      <dt>Price</dt><dd>live from Valio Aimo, ex VAT</dd><dt>Decided by</dt><dd>mandate rules in plain code, no AI</dd>
+      <dt>Chosen</dt><dd>${l ? esc(pname(l.name)) + " × " + esc(l.quantity) : ""}</dd>
+      ${alts.length ? `<dt>Ruled out</dt><dd>${alts.map((a) => `${esc(pname(a.name))}: ${esc((a.why_not || [])[0] || "not the best fit")}`).join("<br>")}</dd>` : ""}
+      ${calls ? `<dt>Valio Aimo</dt><dd>${calls.price_calls + calls.availability_calls} live call${calls.price_calls + calls.availability_calls === 1 ? "" : "s"}, ${calls.cache_hits} from cache. The catalog search is local.</dd>` : ""}
+      <dt>Decided by</dt><dd>mandate rules in plain code, no AI</dd>
       <dt>Rules</dt><dd class="mono">${fs.map((f) => esc(f.rule)).join(", ")}</dd>
       <dt>Order</dt><dd><a class="mono" href="${trace(o.id)}" target="_blank" rel="noopener">${esc(o.id)}</a></dd></dl></div></details>`;
   if (animate) countUp($("#big"), o.total_ex_vat);
-  $("#acts").innerHTML = next(2, "Next: one that needs you");
+  $("#acts").innerHTML = next(2, "Next: one that needs a human");
   $("#acts [data-next]").addEventListener("click", () => go(2));
   stepper();
 }
@@ -370,6 +431,7 @@ function out1(o, animate) {
 // --- 2: the human decides ---------------------------------------------------------------------------------------------
 async function step2() {
   mount(`
+    <p class="eyebrow"><b>Must build 3</b> · Permissions and approval</p>
     <div class="kicker">${tier("ask")}</div>
     <h1>This one waits for you.</h1>
     <p class="line">The hotel's weekly milk order crept up <b>18%</b>. The mandate stops the agent and asks a human.</p>
@@ -431,9 +493,10 @@ async function decide(what) {
 // --- 3: refused -------------------------------------------------------------------------------------------------------
 function step3() {
   mount(`
+    <p class="eyebrow"><b>Must build 3</b> · Permissions and approval</p>
     <div class="kicker">${tier("block")}</div>
     <h1>This one is refused.</h1>
-    <p class="line">A school's agent tries to spend <b>€1,560</b>. The school's hard limit is <b>€1,500</b>.</p>
+    <p class="line">The same <b>€1,560</b> of milk, now for a school. Its mandate never allows more than <b>€1,500</b>.</p>
     ${flow("mandate: never above €1,500")}
     <div id="out"></div>
     <div class="acts" id="acts"><button class="btn solid" id="run" type="button">Let the agent try</button></div>
@@ -473,9 +536,9 @@ function out3(d, animate) {
 // --- 4: the proof -----------------------------------------------------------------------------------------------------
 function step4() {
   mount(`
-    <div class="kicker"><span class="tag">Proof</span></div>
+    <p class="eyebrow"><b>Trust</b> · A record of what the agent did and why</p>
     <h1>And nobody can rewrite it.</h1>
-    <p class="line">Every step went into one log that both the buyer and Valio Aimo read. Each entry is chained to the one before.</p>
+    <p class="line">The buyer and Valio Aimo read the <b>same log</b>. Each entry is chained to the one before, so neither side can change the story later.</p>
     <div class="chain" id="chain" aria-hidden="true">${Array.from({ length: 7 }, (_, i) => (i ? "<u></u>" : "") + "<i></i>").join("")}</div>
     <div id="out"></div>
     <div class="acts" id="acts"><button class="btn solid" id="run" type="button">Verify the log</button></div>
@@ -511,16 +574,15 @@ let timer = null;
 function done() {
   const d = state.done, all = [1, 2, 3, 4].every((i) => d[i] && !d[i].skipped);
   const mins = state.finished && state.started ? Math.max(1, Math.round((state.finished - state.started) / 60000)) : null;
-  const cell = (badge, big) => `<div>${badge}<b>${esc(big)}</b></div>`;
   mount(`
     ${all ? `<h1>That is Sous.</h1>
-      <p class="line">Three orders, three outcomes, one log${mins ? `, in about ${mins} min` : ""}.</p>
-      <div class="recap">
-        ${cell(tier("silent"), eur(d[1].total ?? 0))}
-        ${cell(`<span class="tag">${d[2].status === "ordered" ? "Approved" : "Rejected"}</span>`, eur(d[2].total ?? 0))}
-        ${cell(tier("block"), eur(d[3].total ?? 0))}
-        ${cell(`<span class="tag">Log intact</span>`, Number(d[4].events).toLocaleString("en-GB"))}
-      </div>`
+      <p class="line">The brief's three must-builds, run for real${mins ? ` in about ${mins} min` : ""}.</p>
+      <ol class="built">
+        <li><span class="num">1</span><b>Lookup</b><span class="v">${d[1].checked ? d[1].checked + " products checked, with " : ""}live price and stock from Valio Aimo</span></li>
+        <li><span class="num">2</span><b>Request and order</b><span class="v">1,000 L of milk committed at ${esc(eur(d[1].total ?? 0))}, a fixed and signed price</span></li>
+        <li><span class="num">3</span><b>Permissions and approval</b><span class="v">${tier(d[1].outcome || "silent")} agent alone <span class="tag">${d[2].status === "ordered" ? "Approved" : "Rejected"}</span> by you ${tier("block")} by the mandate</span></li>
+        <li><span class="num">\u2713</span><b>Trust on both sides</b><span class="v">One log of ${Number(d[4].events).toLocaleString("en-GB")} entries, intact, read by buyer and Valio Aimo alike</span></li>
+      </ol>`
     : `<h1>Your sandbox is ready.</h1><p class="line">Explore freely, or take the four-step tour first.</p>
        <div class="acts"><button class="btn solid" type="button" data-next="${[1, 2, 3, 4].find((i) => !d[i]) || 1}">Take the tour ${ms("arrow_forward")}</button></div>`}
     <h2>${all ? "Keep going" : "Explore"}</h2>
