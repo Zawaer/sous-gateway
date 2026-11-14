@@ -1303,8 +1303,19 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
     holds.invalidate()  # under _order_lock, like holds.create: _approval_blocker sees every hold made so far
     status = "ordered" if approve else "rejected"
     reason = reason_fi = note  # the human's own note stays in their words
+    recheck_record = None
     if approve and (blocked := _approval_blocker(o, mandate, now)):
         status, reason, reason_fi = blocked
+    elif approve:  # live price + stock for exactly these lines (sous/recheck.py); Valio down -> stays pending
+        from . import recheck
+        row = store.get_quote(o["quote_id"]) or {}
+        q = signing.verify(row.get("_jws") or "", "sous-quote+jws") or {}
+        try:
+            blocked, recheck_record = recheck.check(o, q, mandate, now)
+        except aimo.AimoError as e:
+            raise valio_error(e)
+        if blocked:
+            status, reason, reason_fi = blocked
     if status == "ordered" and (short := RES.confirm(o, now, RES.pool_of(mandate))):  # tentative -> firm
         status, reason = "refused", " ".join(RES.message(s) for s in short)
         reason_fi = " ".join(fi.allocation(s) for s in short)
@@ -1316,6 +1327,8 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
                      "result_reason": reason, "clock": clock.info(now)}
     if reason_fi:  # unsigned Finnish twin of approval.result_reason (sous/fi.py)
         o["explanations_fi"] = {**(o.get("explanations_fi") or {}), "result_reason": reason_fi}
+    if recheck_record:
+        o["approval"]["recheck"] = recheck_record
     if evidence:
         o["approval"]["passkey"] = {k: evidence[k] for k in ("credential_id", "challenge", "rp_id", "user_verified")}
     o["updated_at"] = now.isoformat(timespec="milliseconds")
@@ -1331,7 +1344,8 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
         erp.write(outbox)
     store.audit("order.approved" if approve else "order.rejected_by_human", approver, "human", order_id,
                 o["buyer"], {"order_id": order_id, "note": note, "resulting_status": status, "reason": reason,
-                 "authority": authority, **({"passkey": evidence} if evidence else {})})
+                 "authority": authority, **({"passkey": evidence} if evidence else {}),
+                 **({"recheck": recheck_record} if recheck_record else {})})
     return o, mandate
 
 

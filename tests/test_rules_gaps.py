@@ -35,7 +35,7 @@ def fake_offers(product_ids, requested, need=None, need_unit=None):
     pr = {"catalogPrice": {"value": e, "valueWithTax": round(e * 1.135, 2), "validTo": None}, "comparisonPrice": {"value": e},
           "comparisonUnit": "L", "tax": {"taxRate": 13.5}, "error": False}
     av = {"logisticModel": "Stock", "closingTime": "2026-11-25T17:00:00+0200", "salesBlock": False,
-          "scheduleLines": [{"salesBlock": False, "availableAmount": 99999, "availableDate": "2026-11-26",
+          "scheduleLines": [{"salesBlock": False, "availableAmount": PRICE.get("stock", 99999), "availableDate": "2026-11-26",
                              "salesUnit": "ST"}]}
     return [Q.build_offer(PRODUCTS[p], pr, av, requested, need, need_unit, clock["now"]) for p in product_ids], clock["now"]
 
@@ -477,3 +477,67 @@ def test_lost_demand_over_rest_hides_buyers_without_the_code(monkeypatch):
     assert public["causes"]["buyer"]["orders"] == 1 and "by_buyer" not in public and "Hotel" not in str(public)
     full = c.get("/stats/lost-demand?all_time=true", headers={"x-approver-code": "secret"}).json()
     assert full["by_buyer"][0]["buyer"] == "Hotel"
+
+
+
+# --- live re-check at approval (sous/recheck.py) ------------------------------------------------------------
+
+def _held(monkeypatch):
+    monkeypatch.setenv("SOUS_APPROVAL_RECHECK", "1")
+    monkeypatch.setattr(Q, "prefetch", lambda *a, **k: None)
+    issue(auto_approve_limit_eur=50)
+    o = order(60)  # €60: held for a human
+    assert o["status"] == "pending_approval"
+    clock["now"] += timedelta(hours=2)
+    return o
+
+
+def test_approval_rechecks_live_and_orders_when_nothing_moved(monkeypatch):
+    o = _held(monkeypatch)
+    PRICE["eur"] = 1.10  # +10 %: inside the default 20 %
+    a = S.decide(o["id"], "chef", True)
+    assert a["status"] == "ordered"
+    rc = a["approval"]["recheck"]
+    assert rc["lines"][0]["quoted_ex_vat"] == 1.0 and rc["lines"][0]["now_ex_vat"] == 1.1
+    assert rc["lines"][0]["change_pct"] == 10.0 and rc["lines"][0]["orderable"] and "result" not in rc
+    assert signing.verify(a["receipt_jws"], "sous-order+jws")["approval"]["recheck"] == rc  # signed into the receipt
+
+
+def test_price_jump_since_the_quote_expires_the_order_instead_of_ordering(monkeypatch):
+    o = _held(monkeypatch)
+    PRICE["eur"] = 1.30
+    a = S.decide(o["id"], "chef", True)
+    assert a["status"] == "expired" and a["approval"]["recheck"]["result"] == "expired"
+    assert "€1.00 when quoted, €1.30 now (+30%" in a["approval"]["result_reason"]
+    assert "new quote" in a["approval"]["result_reason"]
+
+
+def test_stock_gone_since_the_quote_expires_the_order(monkeypatch):
+    o = _held(monkeypatch)
+    PRICE["stock"] = 0
+    a = S.decide(o["id"], "chef", True)
+    assert a["status"] == "expired" and not a["approval"]["recheck"]["lines"][0]["orderable"]
+
+
+def test_valio_down_at_approval_leaves_the_order_pending(monkeypatch):
+    from sous import aimo
+    o = _held(monkeypatch)
+    def down(*a, **k):
+        raise aimo.AimoError("Valio Aimo did not answer")
+    monkeypatch.setattr(Q, "offers", down)
+    with pytest.raises(S.GatewayError) as e:
+        S.decide(o["id"], "chef", True)
+    assert e.value.code == "valio_unavailable" and S.get_order(o["id"])["status"] == "pending_approval"
+
+
+def test_mandate_price_limit_applies_and_seeded_quotes_are_not_compared(monkeypatch):
+    from sous import recheck
+    monkeypatch.setenv("SOUS_APPROVAL_RECHECK", "1")
+    monkeypatch.setattr(Q, "prefetch", lambda *a, **k: None)
+    issue(auto_approve_limit_eur=50, max_price_change_pct=5)
+    o = order(60)
+    clock["now"] += timedelta(hours=1)
+    PRICE["eur"] = 1.08  # +8 % > the mandate's 5 %
+    assert S.decide(o["id"], "chef", True)["status"] == "expired"
+    blocker, rec = recheck.check({"lines": []}, {"seeded": {"sandbox": "SBX-1"}}, None, NOW)
+    assert blocker is None and "seeded" in rec["skipped"]
