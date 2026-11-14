@@ -75,28 +75,31 @@ the chef costs a wrong quantity on a quote a human can read, never an order the 
 
 ## Results
 
-Recipe eval: one CI run (`llm-eval` job, run 43524836008, 14.11.2026 ~01:30 Helsinki, live Valio prices). Not re-run since. Full tables: [`evals/recipe_results.md`](../evals/recipe_results.md) and [LLM_EVAL.md](LLM_EVAL.md).
+Recipe eval: CI run [43595658113](https://github.com/Zawaer/sous/actions/runs/43595658113) (`recipe_only` dispatch on da3e797, after the R05 crash fix 108d582; 14.11.2026, live Valio prices). It replaces the earlier runs (43524836008; 43587725624, where R05 crashed with a TypeError in `request_quote` for every provider). Full tables: [`evals/recipe_results.md`](../evals/recipe_results.md) and [LLM_EVAL.md](LLM_EVAL.md).
 
 **Menu -> one order (recipe eval, 7 cases):**
 
 | | Gemini 4 Hydrogen | Kimi K3.1 Pro (Verda, EU) | Recipe table (no model) |
 |---|---|---|---|
+| **Cases passed** | **5/7** (R04, R05 missed) | **5/7** (R02, R04 missed) | **7/7** |
 | Schema-valid plan on the first answer (structured output) | 7/7 | 7/7 | – |
 | Dishes understood (incl. two-dish menus, Finnish requests) | 8/8 | 8/8 | 8/8 |
 | Portions / delivery day / stock on hand understood | 7/7 / 7/7 / 4/4 | 7/7 / 7/7 / 4/4 | 7/7 / 7/7 / 4/4 |
 | Main ingredients in the plan | 22/23 | 23/23 | 23/23 |
-| Main quantities within 20 % of the reference recipe | 13/23 | 9/23 | 23/23 |
-| Within 35 % (the pass bar) | 4/7 cases | 4/7 cases | 7/7 |
+| Main quantities within 20 % of the reference recipe | 16/23 | 12/23 | 23/23 |
+| Every main quantity within 35 % (the pass bar) | 5/7 cases | 5/7 cases | 7/7 |
 | One signed basket quote; mandate allergen rules held on every line | 7/7; 7/7 | 7/7; 7/7 | 7/7; 7/7 |
 | Tier as expected | 7/7 | 7/7 | 7/7 |
-| Model calls / tokens per menu | 1 / ~2,000 | 1 / ~1,900 | 0 |
-| Seconds per menu (model + search + quote) | 10.1 | 10.6 | 1.2 |
-| Model cost per menu | ~$0.006 | – | $0 |
+| Model calls / tokens per menu | 1 / ~2,000 | 1 / ~2,000 | 0 |
+| Seconds per menu (model + search + quote, live Valio, CI runner) | 20.3 | 22.4 | 19.9 |
+| Model cost per menu (list price) | ~$0.007 | ~$0.011 | $0 |
 
 Gemini read every request (English and Finnish, one or two dishes, weekday names, "plenty of", "meillä on 5 kg
 sipulia") into a valid plan on its first answer, and no quote broke a mandate's allergen rule. Where it differs
 from the reference recipe it is a cook's judgment, not a misreading: 50 g of lasagne sheets per portion instead of
-40 g, 250 g of raw bone-in ham for joulukinkku instead of 150 g cooked, a vegetable soup without swede. Those
+40 g, a vegetable soup without swede and with 50 % more potato (R04), 25 g of potato per portion of rosolli instead
+of 40 g (R05, -38 %, just past the 35 % bar). Kimi's two misses are the same kind (R02: 250 g of ham per portion
+instead of 150 g; R04: half the reference carrot). Those
 differences are visible in the ingredient table before anything is ordered, and the quote's total and tier move
 with them. The curated table is exact by construction (it *is* the reference), which is why it is the offline
 fallback and not the default: it knows six dishes, Gemini knows the menu.
