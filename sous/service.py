@@ -521,7 +521,10 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
         body["mandate_preview"] = {"outcome": outcome, "findings": [f.model_dump() for f in findings]}
     # The stock policy (sous/exposure.py) applies before signing: the JWS, the stored quote and the response are the
     # same view. Everything above (plan, options, mandate preview) used the exact numbers; nothing after needs them.
-    body = exposure.view(body, approver)
+    # The signed view is never the approver's: others read stored quotes later, so under approver_exact the
+    # approver's exact numbers go only into an unsigned sidecar of this one response (docs/PROTOCOL.md 5.2).
+    sidecar = exposure.approver_sidecar(body, approver)
+    body = exposure.signed_view(body)
     jws = signing.sign(body, "sous-quote+jws")
     store.put_quote(body, jws)
     store.audit("quote.issued", req.agent_id, "agent", qid, mandate.buyer if mandate else None,
@@ -529,7 +532,7 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
                     {"product_id": l["product_id"], "quantity": l["quantity"], "issues": [i["code"] for i in l["issues"]]}
                     for l in lines], "uncovered": gaps, "preview": body.get("mandate_preview", {}).get("outcome"),
                  "valio_api_calls": body["valio_api_calls"], "rationale": body.get("rationale")})
-    return {"quote": body, "jws": jws}
+    return {"quote": body, "jws": jws, **({"approver_view": sidecar} if sidecar else {})}
 
 
 def _type_pool(offers: list[dict], hint: str | None) -> tuple[list[dict], dict[str, str], dict[str, str]]:

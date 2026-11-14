@@ -98,8 +98,10 @@ def test_approver_exact(monkeypatch):
     monkeypatch.setattr(config, "STOCK_EXPOSURE", "approver_exact")
     AVAIL["C"] = ("2026-11-16", 40, None)
     agent = {l["product_id"]: l["available_amount"] for l in ask(["A", "C"])["quote"]["lines"]}
-    seller = {l["product_id"]: l["available_amount"] for l in ask(["A", "C"], approver=True)["quote"]["lines"]}
+    r = ask(["A", "C"], approver=True)
+    seller = {l["product_id"]: l["available_amount"] for l in r["approver_view"]["lines"]}
     assert agent["C"] is None and seller["C"] == 40
+    assert all(l["available_amount"] is None for l in r["quote"]["lines"])  # the signed quote stays bucketed
 
 
 def test_rest_approver_code_decides(monkeypatch):
@@ -112,8 +114,53 @@ def test_rest_approver_code_decides(monkeypatch):
     c = TestClient(app)
     amounts = lambda r: {l["product_id"]: l["available_amount"] for l in r.json()["quote"]["lines"]}  # noqa: E731
     assert amounts(c.post("/quotes", json=body))["C"] is None
-    assert amounts(c.post("/quotes", json=body, headers={"X-Approver-Code": "wrong"}))["C"] is None
-    assert amounts(c.post("/quotes", json=body, headers={"X-Approver-Code": "s3cret-test"}))["C"] == 40
+    wrong = c.post("/quotes", json=body, headers={"X-Approver-Code": "wrong"}).json()
+    assert {l["product_id"]: l["available_amount"] for l in wrong["quote"]["lines"]}["C"] is None
+    assert "approver_view" not in wrong
+    r = c.post("/quotes", json=body, headers={"X-Approver-Code": "s3cret-test"})
+    assert amounts(r)["C"] is None
+    assert {l["product_id"]: l["available_amount"] for l in r.json()["approver_view"]["lines"]}["C"] == 40
+
+
+def test_approver_exact_quote_is_stored_bucketed_for_later_readers(monkeypatch):
+    """QA (rene-codex-qa 04:06Z/05:25Z): under approver_exact a quote made with the approver code was signed and
+    stored with the exact amount, so the mandate's agent (or anyone, for a demo_public mandate) could GET it.
+    Now the signed, stored quote is always the bucketed view; the approver gets the exact numbers only in an
+    unsigned `approver_view` sidecar of the creating response."""
+    from sous.api import app
+    from sous.mandate import Mandate
+    monkeypatch.setattr(config, "STOCK_EXPOSURE", "approver_exact")
+    monkeypatch.setattr(config, "APPROVER_CODE", "s3cret-test")
+    AVAIL["C"] = ("2026-11-16", 500, None)  # 500 in stock, 100 asked: fully covered, the quantity reveals nothing
+    tok = S.issue_mandate(Mandate(id="M-PRIV", buyer="Private Bistro", agent_id="agent", issued_by="chef",
+                                  auto_approve_limit_eur=500, require_agent_auth=True))["agent_credential"]["token"]
+    S.issue_mandate(Mandate(id="M-DEMO", buyer="Demo Hotel", agent_id="agent", issued_by="chef",
+                            auto_approve_limit_eur=500, demo_public=True))
+    c = TestClient(app)
+    agent, appr = {"Authorization": f"Bearer {tok}"}, {"X-Approver-Code": "s3cret-test"}
+    for mid, creator, reader in (("M-PRIV", {**agent, **appr}, agent), ("M-DEMO", appr, {})):
+        body = {"agent_id": "agent", "mandate_id": mid, "delivery_date": DAY,
+                "items": [{"product_ids": ["C"], "amount": 100, "unit": "L"}]}
+        r = c.post("/quotes", json=body, headers=creator)
+        assert r.status_code == 200, r.text
+        made = r.json()
+        [line] = made["quote"]["lines"]
+        assert line["quantity"] == 100 and line["available_amount"] is None and line["stock_level"] == "ample"
+        signed = signing.verify(made["jws"], "sous-quote+jws")
+        assert signed == made["quote"] and "approver_view" not in signed  # the JWS is the bucketed view
+        side = made["approver_view"]
+        assert side["signed"] is False and side["lines"] == [{"line": 0, "product_id": "C", "available_amount": 500}]
+        qid = made["quote"]["id"]
+        for h in (reader, appr):  # later readers: agent token / anonymous on demo_public, and the approver
+            g = c.get(f"/quotes/{qid}", headers=h)
+            assert g.status_code == 200, (mid, h, g.text)
+            got = g.json()
+            assert "approver_view" not in got and got["quote"]["lines"][0]["available_amount"] is None
+            assert "500" not in json.dumps(got["quote"]["lines"])
+            assert signing.verify(got["jws"], "sous-quote+jws") == got["quote"] == made["quote"]
+    r = c.post("/quotes", headers=agent, json={"agent_id": "agent", "mandate_id": "M-PRIV", "delivery_date": DAY,
+                                               "items": [{"product_ids": ["C"], "amount": 100, "unit": "L"}]})
+    assert r.status_code == 200 and "approver_view" not in r.json()  # no code, no sidecar
 
 
 def test_mcp_quote_is_redacted(monkeypatch):

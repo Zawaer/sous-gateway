@@ -6,7 +6,8 @@ SOUS_STOCK_EXPOSURE (sous/config.py) sets the policy:
   buckets         (default) agents see `stock_level` only: ample | limited | short | none | unknown;
                   `available_amount` is null and stock numbers are taken out of issue messages
   exact           today's behaviour: `available_amount` and "Only N in stock" messages as Valio reports them
-  approver_exact  buckets, except for callers with the global approver code (X-Approver-Code), who see exact
+  approver_exact  buckets, except for callers with the global approver code (X-Approver-Code), who see exact;
+                  a quote is still signed and stored bucketed (approver_sidecar holds their exact numbers)
 
 Levels compare the stock with what the buyer asked for, in the product's sales units:
   ample    stock >= 3 x the request, or >= AMPLE_ABSOLUTE units, or Valio reports no practical limit
@@ -88,3 +89,24 @@ def view(obj, approver: bool = False):
     """What a caller may see of `obj` (a quote body, substitutes or suggestions response): unchanged when the
     caller sees exact stock, otherwise a copy without stock amounts. Never mutates `obj`."""
     return obj if exact(approver) else _redact(obj)
+
+
+APPROVER_VIEW_NOTE = ("Exact stock for the approver who made this request only: unsigned, not stored, not part of "
+                      "the quote or its JWS (docs/PROTOCOL.md 5.2).")
+
+
+def signed_view(obj):
+    """What a quote is signed and stored as: the view of a caller *without* the approver code. A stored quote is
+    read later by others (the mandate's agent, anyone for a demo_public mandate), so under approver_exact the
+    approver's exact numbers never go into it; approver_sidecar() carries them instead."""
+    return view(obj, approver=False)
+
+
+def approver_sidecar(obj: dict, approver: bool) -> dict | None:
+    """Under approver_exact, for an approver caller: the exact `available_amount` of each quote line, returned
+    beside the signed quote in that one response (never signed or stored). None otherwise."""
+    if mode() != "approver_exact" or not approver:
+        return None
+    return {"signed": False, "note": APPROVER_VIEW_NOTE, "lines": [
+        {"line": i, "product_id": l.get("product_id"), "available_amount": l.get("available_amount")}
+        for i, l in enumerate(obj.get("lines") or [])]}
