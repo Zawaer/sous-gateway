@@ -352,3 +352,28 @@ test('exports signed verification material without buyer credentials and refuses
   exportedQuote = { ...quote, total_ex_vat: quote.total_ex_vat + 1 };
   await assert.rejects(client.proofBundle(order, quote), /exported signed quote/);
 });
+
+test('accepts omitted or null optional purpose fields while binding explicit per-item constraints', async () => {
+  const entries = [{ need, productIds: ['sku'] }];
+  let signedItems;
+  const client = new Gateway('https://example.test', async (url, init) => {
+    if (url.endsWith('jwks.json')) return Response.json(jwks);
+    const requested = JSON.parse(init.body).items;
+    const payload = { ...quote, lines: quote.lines.map(line => ({ ...line, item_index: 0 })),
+      items: signedItems ?? requested.map(item =>
+      ({ ...item, purpose: null, substitution: null, use: null })) };
+    return Response.json({ quote: payload, jws: token(payload, 'quote') });
+  });
+  await client.quoteBasket(need.deliveryDate, mandate, entries);
+  const explicit = { ...need, purpose: 'whipping cream for dessert', substitution: 'exact', use: 'whipping' };
+  signedItems = undefined;
+  await assert.rejects(client.quoteBasket(need.deliveryDate, mandate,
+    [{ need: explicit, productIds: ['sku'] }]), /signed quote does not match/);
+  signedItems = [{ product_ids: ['sku'], amount: need.amount, unit: need.unit,
+    substitute_for: null, note: need.query, product_type: need.query,
+    purpose: explicit.purpose, substitution: 'exact', use: 'whipping' }];
+  await client.quoteBasket(need.deliveryDate, mandate, [{ need: explicit, productIds: ['sku'] }]);
+  signedItems[0].substitution = 'allowed';
+  await assert.rejects(client.quoteBasket(need.deliveryDate, mandate,
+    [{ need: explicit, productIds: ['sku'] }]), /signed quote does not match/);
+});

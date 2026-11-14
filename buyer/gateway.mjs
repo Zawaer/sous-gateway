@@ -102,6 +102,9 @@ export class Gateway {
         product_ids: productIds, amount: need.amount, unit: need.unit,
         substitute_for: need.substituteFor || null, note: need.query,
         ...(need.query && !need.substituteFor ? { product_type: need.query } : {}),
+        ...(need.purpose ? { purpose: need.purpose } : {}),
+        ...(need.substitution ? { substitution: need.substitution } : {}),
+        ...(need.use ? { use: need.use } : {}),
       };
     });
     const allIds = items.flatMap((item) => item.product_ids);
@@ -112,8 +115,8 @@ export class Gateway {
     if (!quote.id || !Number.isFinite(Date.parse(quote.expires_at)) || quote.agent_id !== mandate.agent_id || quote.mandate_id !== mandate.id ||
         quote.requested_delivery_date !== deliveryDate || !tiers.has(quote.mandate_preview?.outcome) ||
         (quote.items ? !equalJson(
-          quote.items.map((item) => ({ product_type: null, ...item })),
-          items.map((item) => ({ product_type: null, ...item })),
+          quote.items.map((item) => ({ product_type: null, purpose: null, substitution: null, use: null, ...item })),
+          items.map((item) => ({ product_type: null, purpose: null, substitution: null, use: null, ...item })),
         ) : entries.length > 1)) {
       throw new Error('The signed quote does not match this buyer, delivery date, or product shortlist.');
     }
