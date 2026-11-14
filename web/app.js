@@ -1366,8 +1366,8 @@ views.insights = {
 // Valio's lost demand (GET /stats/lost-demand): what agents wanted and didn't get, and why.
 function lostDemandCard(L, bar) {
   const C = L.causes || {};
-  const rows = [["supply", "Valio couldn't supply", "bar-block"], ["too_late", "Approved too late", ""],
-                ["declined", "Buyer's human said no", ""], ["buyer", "Buyer's own rules refused", ""]];
+  const rows = [["supply", "Valio couldn't supply", "b-block"], ["too_late", "Approved too late", "b-ask"],
+                ["declined", "Buyer's human said no", "b-notify"], ["buyer", "Buyer's own rules refused", "b-ask"]];
   const max = Math.max(...rows.map(([k]) => C[k]?.value_ex_vat || 0), 1);
   const unit = (u) => (u === "SALES_UNIT" ? "packs" : u);
   const unc = (L.uncovered || []).slice(0, 6);
@@ -1388,7 +1388,7 @@ function lostDemandCard(L, bar) {
       : `<div class="muted small">Every quoted need was covered.</div>`}
     <h4 style="margin:14px 0 4px">Why products were passed over</h4>
     ${po.length ? po.map((p) => bar(esc(p.what), p.lines, poMax, String(p.lines),
-        p.top_products.map((t) => t.name || t.product_id).join(", "))).join("")
+        p.top_products.map((t) => t.name || t.product_id).join(", "), "b-block")).join("")
       : `<div class="muted small">No candidate was passed over.</div>`}
   </div>`;
 }
