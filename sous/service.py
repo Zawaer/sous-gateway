@@ -331,6 +331,16 @@ def verify_mandate(mandate_id: str) -> dict:
 
 # --- search -----------------------------------------------------------------
 
+def credential_buyer(agent_id: str, mandate_ids: set[str]) -> str | None:
+    """The buyer to file an agent's catalog search under: the buyer of the mandate, among those the caller's own
+    credential covers, that is issued to this agent_id. None for an anonymous or unauthenticated search, so a
+    search is never filed under a buyer the caller can't prove it acts for."""
+    for mid in sorted(mandate_ids or ()):
+        if (m := store.get_mandate(mid)) and m.get("agent_id") == agent_id:
+            return m.get("buyer")
+    return None
+
+
 def search(agent_id: str, query: str, *, claims=None, avoid_allergens=None, labels=None,
            temperature=None, category=None, limit: int = 15, buyer: str | None = None,
            food_only: bool | None = None, origins: list[str] | None = None) -> dict:

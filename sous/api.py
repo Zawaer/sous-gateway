@@ -478,6 +478,7 @@ def search_products(
     agent_id: str = "anonymous-agent",
     food_only: bool | None = None,
     origin: list[str] = Query(default=[]),
+    authorization: str | None = Header(default=None, include_in_schema=False),
 ):
     """Search the static catalog (fi/sv/en with synonyms). No live price or stock: request a quote for that.
 
@@ -490,7 +491,8 @@ def search_products(
         raise S.GatewayError("invalid_request", str(e), 422)
     return S.search(agent_id, q, claims=claims or None, avoid_allergens=avoid_allergens or None,
                     labels=labels or None, temperature=temperature, category=category, limit=limit,
-                    food_only=food_only, origins=origins)
+                    food_only=food_only, origins=origins,
+                    buyer=S.credential_buyer(agent_id, access.credential_mandates(agent_auth.bearer(authorization))))
 
 
 @app.get("/products/{product_id}", tags=["catalog"])

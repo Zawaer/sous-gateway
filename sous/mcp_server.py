@@ -495,6 +495,7 @@ def search_products(
     agent_id: str = "anonymous-agent",
     food_only: bool | None = None,
     origin: list[str] | None = None,
+    ctx: Context | None = None,
 ) -> dict:
     """Search Valio Aimo's catalog (17.5k products) by name, brand or ingredient in Finnish, Swedish or English.
 
@@ -517,7 +518,8 @@ def search_products(
     except ValueError as e:
         raise S.GatewayError("invalid_request", str(e), 422)
     return S.search(agent_id, query, claims=claims, avoid_allergens=avoid_allergens, labels=labels,
-                    temperature=temperature, limit=limit, food_only=food_only, origins=origins)
+                    temperature=temperature, limit=limit, food_only=food_only, origins=origins,
+                    buyer=S.credential_buyer(agent_id, _own_mandates(ctx, None)))
 
 
 @_tool(ProductOut, title="Optional: Product details", annotations=READ_LOCAL)

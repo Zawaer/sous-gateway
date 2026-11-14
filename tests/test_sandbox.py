@@ -620,3 +620,20 @@ def test_connector_grants_end_with_the_sandbox(live, monkeypatch, how):
         assert any(e["event"] == "oauth.revoked" for e in store.audit_events(limit=500))
     r = authorize(live, client, s["agent_token"], challenge=pkce()[1])  # and no new grant for it
     assert r.status_code == 200 and "not valid" in r.text
+
+
+def test_agent_catalog_search_is_filed_under_its_sandbox_buyer(c):
+    """An authenticated agent's search shows in its sandbox audit (the order's 'How it happened' links it);
+    an unauthenticated search naming the same agent_id is not filed under that buyer."""
+    sbx = new(c)
+    sid, hotel = sbx["sandbox"]["id"], next(x for x in sbx["mandates"] if x["scenario"] == "hotel")
+    tok = {"Authorization": f"Bearer {sbx['agent_token']}"}
+    assert c.get("/products", params={"q": "oat drink", "agent_id": hotel["agent_id"]}, headers=tok).status_code == 200
+    assert c.get("/products", params={"q": "forged", "agent_id": hotel["agent_id"]}).status_code == 200
+    events = c.get("/audit", params={"limit": 1000, "sandbox": sid}, headers=tok).json()["events"]
+    searches = [e for e in events if e["event"] == "catalog.search"]
+    assert [e["data"]["query"] for e in searches] == ["oat drink"]
+    assert searches[0]["actor"] == hotel["agent_id"] and sid in searches[0]["buyer"]
+    # MCP search_products files it the same way when the Bearer covers the agent's mandate
+    assert S.credential_buyer(hotel["agent_id"], {hotel["mandate_id"]}) == searches[0]["buyer"]
+    assert S.credential_buyer("someone-else", {hotel["mandate_id"]}) is None
