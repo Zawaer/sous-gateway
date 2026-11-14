@@ -507,7 +507,7 @@ async function renderOrder(current, order) {
         ? ` · ${time(signed.approval.at)} Helsinki time` : '';
       content.append(element('p', `${action} ${signed.approval.by}${decisionTime}`));
       const { note, result_reason: resultReason } = signed.approval;
-      if (note) content.append(element('p', `Seller note: ${note}`));
+      if (note) content.append(element('p', `Approver note: ${note}`));
       if (resultReason && resultReason !== note) content.append(element('p', resultReason));
     }
     const message = signed.status === order.status ? 'Receipt signature verified' :

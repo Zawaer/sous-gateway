@@ -1,6 +1,6 @@
 # Sous reference buyer
 
-The reference buyer runs in a browser and speaks to a Sous gateway over its documented REST API. It needs a running gateway with catalog data and an issued mandate. The browser needs HTTPS or localhost and Web Crypto support for Ed25519. The buyer needs no model API key, build step, browser extensions, or seller credentials.
+The reference buyer runs in a browser and speaks to a Sous gateway over its documented REST API. It needs a running gateway with catalog data and an issued mandate. The browser needs HTTPS or localhost and Web Crypto support for Ed25519. The buyer needs no model API key, build step, browser extensions, or approver credentials.
 
 If the gateway requires agent authentication, enter your buyer agent token under **Product filters and gateway** after choosing the gateway and mandate. The token stays in the current page. For a private order link, enter the token and choose **Open linked order**.
 
@@ -14,7 +14,7 @@ With the gateway on port 8431, open [the local reference buyer](http://localhost
 
 The optional English input fills fields for a single need in the form `quantity unit product by date`. It supports weekdays, today/tomorrow and ISO dates. The editable form also accepts other catalog languages and explicit product constraints. General-purpose agents can connect directly to the gateway's MCP endpoint for more flexible natural-language input.
 
-The browser verifies mandate and quote JWS payloads against the gateway's JWKS. Use a trusted gateway URL to establish whose public keys you are using. The browser shows the signed quote and submits only after the buyer clicks the order or approval button. The gateway computes the authoritative order outcome. Submissions use one idempotency key per quote and can be retried after an uncertain response while the page is open. Current gateways issue a new signed receipt when a seller approves or rejects an order. The buyer checks that the signed status and seller decision match what the gateway reports. If an older gateway still returns the original pending receipt, the buyer labels it as the original receipt and identifies the current status as reported by the gateway.
+The browser verifies mandate and quote JWS payloads against the gateway's JWKS. Use a trusted gateway URL to establish whose public keys you are using. The browser shows the signed quote and submits only after the buyer clicks the order or approval button. The gateway computes the authoritative order outcome. Submissions use one idempotency key per quote and can be retried after an uncertain response while the page is open. Current gateways issue a new signed receipt when an authorised human approves or rejects an order. The buyer checks that the signed status and approval decision match what the gateway reports. If an older gateway still returns the original pending receipt, the buyer labels it as the original receipt and identifies the current status as reported by the gateway.
 
 After a submission, the buyer URL keeps the order ID in the `order` query parameter. Reopen that URL to check the status and verify the receipt against the original signed quote. **Refresh status** checks the same order again.
 
@@ -32,6 +32,6 @@ The verifier checks signatures, document types, quote binding and amendment hash
 
 For a multi-item request, select candidates for each product and click **Add to basket**. The basket shares one mandate and delivery date. **Get signed basket quote** shows requested and quoted quantities per item. Use **Find alternatives** on a shortage row to replace that basket item and request a fresh quote. On an existing order, the same action looks up alternatives for the missing quantity.
 
-Pending orders refresh automatically while the tab is visible. **View audit trail** opens the seller audit log filtered to the order ID.
+Pending orders refresh automatically while the tab is visible. **View audit trail** opens the audit log filtered to the order ID.
 
 Run the isolated tests with `node --test buyer/buyer.test.mjs` on Node 22 or newer.
