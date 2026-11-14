@@ -26,16 +26,16 @@ These were handed to the owners on the board (issue #1).
 
 | # | Screenshot (before) | Finding | Owner, status |
 |---|---|---|---|
-| S1 | `before/stg-order-ask-phonetall.png` | On a phone, Approve sits about 1,480 px down, and the reason appears three times | rene-claude-seller, doing |
-| S2 | `tier-badges-colourblind.png` | Tier colours collapse to olive for colour-blind viewers | rene-claude-seller, adopting tokens.css |
-| S3 | `before/stg-mandates-desk.png`, `before/stg-stats-desk.png` | Four names for each tier (Alone/Auto, Ask/Ask human/Needs approval, Refuse/Blocked/Refused) | rene-claude-seller |
-| S4 | `before/stg-inbox-phone.png` | "(sandbox SBX-YMTQ)" appears after every buyer name, about 30 times | rene-claude-seller |
-| S5 | `before/prod-ui-landing-desk.png` | Prod `/ui/` opens on "Nothing waiting" and an "anonymous-agent" feed | rene-claude-seller |
-| S6 | `before/stg-audit-desk.png` (#218) | "€1,560.00" and "1 560,00 €" appear in the same line | rene-claude-seller |
-| S7 | `before/stg-audit-desk.png`, `before/stg-inbox-desk.png` | Raw `sandbox.created`, the unit `ST` and ALL-CAPS catalog names | rene-claude-seller |
-| S8 | `before/stg-inbox-phone.png` | The badge floats mid-card, and the countdown in mono amber reads like an error | rene-claude-seller |
-| S9 | `before/stg-inbox-phone.png` | The phone nav wraps into 2 rows of 7 tabs | rene-claude-seller |
-| S10 | `before/stg-orders-desk.png` | Order rows say "1 line" instead of what was ordered | rene-claude-seller |
+| S1 | `before/stg-order-ask-phonetall.png` | On a phone, Approve sits about 1,480 px down, and the reason appears three times | rene-claude-seller, **done** |
+| S2 | `tier-badges-colourblind.png` | Tier colours collapse to olive for colour-blind viewers | rene-claude-seller, **done** |
+| S3 | `before/stg-mandates-desk.png`, `before/stg-stats-desk.png` | Four names for each tier (Alone/Auto, Ask/Ask human/Needs approval, Refuse/Blocked/Refused) | rene-claude-seller, **done** (197f5c8, 5934344) |
+| S4 | `before/stg-inbox-phone.png` | "(sandbox SBX-YMTQ)" appears after every buyer name, about 30 times | rene-claude-seller, **done** (197f5c8, 5934344) |
+| S5 | `before/prod-ui-landing-desk.png` | Prod `/ui/` opens on "Nothing waiting" and an "anonymous-agent" feed | rene-claude-seller, **done** (197f5c8, 5934344) |
+| S6 | `before/stg-audit-desk.png` (#218) | "€1,560.00" and "1 560,00 €" appear in the same line | rene-claude-seller, **done** (197f5c8, 5934344) |
+| S7 | `before/stg-audit-desk.png`, `before/stg-inbox-desk.png` | Raw `sandbox.created`, the unit `ST` and ALL-CAPS catalog names | rene-claude-seller, **done** (197f5c8, 5934344) |
+| S8 | `before/stg-inbox-phone.png` | The badge floats mid-card, and the countdown in mono amber reads like an error | rene-claude-seller, **done** (197f5c8, 5934344) |
+| S9 | `before/stg-inbox-phone.png` | The phone nav wraps into 2 rows of 7 tabs | rene-claude-seller, **done** (197f5c8, 5934344) |
+| S10 | `before/stg-orders-desk.png` | Order rows say "1 line" instead of what was ordered | rene-claude-seller, **done** (197f5c8, 5934344) |
 | B1 | `before/stg-buyer-desk.png` | `/buyer/` falls back to DejaVu with an 80 px title, so it looks like another product | **done** (1552a15) |
 | B3 | n/a | The buyer showed tiers as long sentences with no badge | **done** (1552a15) |
 
@@ -46,3 +46,15 @@ These were handed to the owners on the board (issue #1).
 | `sign-mandate.html` | `before/stg-sign-desk.png`, `before/stg-sign-phone.png` | `after/sign-desk.png`, `after/sign-phone-fold.png`, `after/sign-desk-error.png`, `after/sign-phone-result.png` | Rewritten for a kitchen manager, in five steps:<br>1. The intro is plain language. P-256, did:key and vc+jwt moved into a fold.<br>2. There are three euro limits, with a **live ladder** that shows which tier each amount range gets.<br>3. The new FYI threshold, substitute and "no allergen data" choices map to mandate fields that already existed.<br>4. Allergens are 44 px chips. Errors appear inline, in plain words, next to the field.<br>5. On phones the Sign button sits in a sticky bar. The result is a checklist. |
 | `/buyer/` | `before/stg-buyer-desk.png`, `before/stg-buyer-phone.png` | `after/buyer-desk.png`, `after/buyer-desk-quote.png`, `after/buyer-phone-order.png` | Shared fonts, the Sous header, 44 px controls, and tier badges on the quote and order |
 | `agent.html` | `before/agent-before-desk-order.png`, `before/agent-before-phone.png` | `after/agent-after-desk-order.png`, `after/agent-after-phone-order.png` | Web fonts now load. Raw `notify` / `ordered` / `tier notify` became labelled badges. The order result no longer repeats findings that are already on screen. The log summary moved into a fold. **The phone page no longer overflows**: it was 474 px wide on a 390 px screen. |
+
+## Seller UI after S1–S10 (local, fake upstream)
+
+`after/seller-order-ask-phone-fold.png` shows a held order on a 390 px phone. Everything needed to decide is above the fold:
+- the amount and the yellow "Needs approval" badge;
+- the reason;
+- "Decide by Sun 15.11. 15:00";
+- a sticky "Approve 85,20 €" button.
+
+Also captured: `after/seller-orders-desk.png` (rows show what was ordered, plus the tier badge), `after/seller-inbox-phone.png` (one scrolling nav row), `after/seller-today-desk.png` (Today is the default page) and `after/seller-mandates-desk.png`.
+
+One gap remains. The engine's reason sentences still contain catalog names in ALL CAPS ("BRAVO CHEF 400G CHOPPED TOMATOES has no allergen data"), although the order rows now use sentence case.
