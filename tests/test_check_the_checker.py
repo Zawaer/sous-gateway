@@ -8,6 +8,11 @@ from scripts import check_the_checker as T
 
 @pytest.fixture(scope="module")
 def rows():
+    # The product cards are Valio Aimo catalog data, kept out of the public copy (docs/PUBLISHING.md). Rebuild them
+    # with your own key: scripts.fetch_data, then `uv run python -m scripts.check_the_checker --refresh-products`.
+    if not T.PRODUCTS.exists():
+        pytest.skip("needs evals/checker_products.json (Valio catalog data, not in the public repo; rebuild with "
+                    "scripts.check_the_checker --refresh-products)")
     return T.run_all()
 
 

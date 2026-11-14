@@ -1,0 +1,15 @@
+# gitleaks config for this repo (scripts/publish_public.sh scans the public copy's whole history with it).
+# Default rules, minus three false-positive shapes found in our history: public did:key identifiers (mandate VC
+# issuers in docs and tests), keyword arguments / empty env placeholders, and snake_case field names.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "not secrets: KEY= placeholders, kwarg=CONST, snake_case identifiers"
+regexTarget = "secret"
+regexes = ['''^[A-Za-z_]+=[A-Z]*$''', '''^[a-z]+(_[a-z0-9]+)+$''']
+
+[[allowlists]]
+description = "public did:key identifiers (they are public keys)"
+regexTarget = "line"
+regexes = ['''did:key:z[1-9A-HJ-NP-Za-km-z]{40,}''']

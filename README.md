@@ -311,4 +311,4 @@ docs/             PROTOCOL, DECISIONS, STATUS, CI, LLM_EVAL, VERDA, demo runbook
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Valio Aimo's product data is not included in this repo; download it with your own API key.
+MIT, see [LICENSE](LICENSE). Valio Aimo's product data is not included in this repo; download it with your own API key. Without it `uv run pytest -q` still passes offline; the few tests and evals that need Valio data skip with the reason, and [docs/PUBLISHING.md](docs/PUBLISHING.md#valio-data) lists the commands that rebuild each file.

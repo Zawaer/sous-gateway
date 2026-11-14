@@ -236,10 +236,12 @@ jobs:
       - run: |
           gunzip -c sous-image.tar.gz | docker load
           gunzip -c mariadb-image.tar.gz | docker load
-      - name: Start MariaDB + gateway with compose.yaml (fixture catalog, no Valio key)
+      - name: Start MariaDB + gateway with compose.yaml (fixture or synthetic catalog, no Valio key)
         run: |
           printf 'MARIADB_PASSWORD=%s\n' "$(openssl rand -hex 16)" > .env
-          cp -r tests/fixtures/catalog "$RUNNER_TEMP/data"
+          # 20 real Valio products in the private repo; the public copy has no Valio data, so it uses a made-up one.
+          if [ -f tests/fixtures/catalog/products.json ]; then cp -r tests/fixtures/catalog "$RUNNER_TEMP/data"
+          else python3 tests/fixtures/make_synthetic_catalog.py "$RUNNER_TEMP/data"; fi
           echo "SMOKE_DATA_DIR=$RUNNER_TEMP/data" >> "$GITHUB_ENV"
           SMOKE_DATA_DIR="$RUNNER_TEMP/data" docker compose -f compose.yaml -f tests/fixtures/compose.smoke.yaml up -d --no-build --wait-timeout 120 --wait mariadb
           SMOKE_DATA_DIR="$RUNNER_TEMP/data" docker compose -f compose.yaml -f tests/fixtures/compose.smoke.yaml up -d --no-build valtakirja
