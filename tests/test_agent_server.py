@@ -307,16 +307,20 @@ def _order_last_quote(messages):
     return _tool("place_order", {"quote_id": qid})(messages)
 
 
-def test_ask_runs_the_buyer_agent_with_the_gateway_tools(c, sbx):
+@pytest.mark.parametrize("agent", [None, "generic"])  # None: the default, the Sous agent
+def test_ask_runs_the_buyer_agent_with_the_gateway_tools(c, sbx, agent):
     LLMS["gemini"] = FakeLLM("gemini", "gemini-4-hydrogen", [
         _tool("search_products", {"query": "milk lactose free"}),
         _tool("request_quote", {"delivery_date": "2026-11-16",
                                 "items": [{"product_ids": ["MILK"], "amount": 100, "unit": "L"}]}),
         _order_last_quote, "Ordered 100 L of lactose-free milk for Monday."])
-    r = c.post("/ask", headers=sbx["headers"], json={"text": "100 litres of lactose-free milk by Monday",
-                                                      "mandate_id": sbx["mandate_id"], "agent_id": sbx["agent_id"]})
+    body = {"text": "100 litres of lactose-free milk by Monday", "mandate_id": sbx["mandate_id"],
+            "agent_id": sbx["agent_id"], **({"agent": agent} if agent else {})}
+    r = c.post("/ask", headers=sbx["headers"], json=body)
     assert r.status_code == 200, r.text
     d = r.json()
+    assert d["agent"] == ("generic" if agent else "sous-agent")
+    assert (d["agent_notes"] is None) == bool(agent) and d["declared_risks"] == []
     assert d["by"] == "Gemini 4 Hydrogen" and d["model"]["calls"] == 4
     assert [s["tool"] for s in d["transcript"]] == ["search_products", "request_quote", "place_order"]
     assert not any(s["is_error"] for s in d["transcript"]), d["transcript"]
@@ -334,7 +338,7 @@ def test_ask_follow_up_answers_the_agents_question_in_place(c, sbx):
 
     LLMS["gemini"] = FakeLLM("gemini", "gemini-4-hydrogen", ["Which fat level do you want for the dessert?"])
     body = {"text": "40 L lactose-free milk for a dessert", "mandate_id": sbx["mandate_id"],
-            "agent_id": sbx["agent_id"], "allow_order": False}
+            "agent_id": sbx["agent_id"], "allow_order": False, "agent": "generic"}
     d = c.post("/ask", headers=sbx["headers"], json=body).json()
     assert d["needs_reply"] is True and d["quote"] is None and d["follow_up"] == []
     LLMS["gemini"] = FakeLLM("gemini", "gemini-4-hydrogen", [quote_after_reply, "Quoted 40 L for the dessert."])
@@ -345,6 +349,68 @@ def test_ask_follow_up_answers_the_agents_question_in_place(c, sbx):
     assert seen[0] == [("user", body["text"]), ("assistant", d["answer"]), ("user", "Full-fat, please")]
     assert d2["needs_reply"] is False and d2["quote"]["lines"][0]["product_id"] == "MILK"
     assert d2["follow_up"] == turn and d2["request"] == body["text"]
+
+
+def test_ask_sous_agent_declares_an_assumed_amount_and_the_gateway_holds_it(c, sbx):
+    """'for 40 people' with no amount: the Sous agent assumes servings (PORTIONS), declares it on the quote, and
+    the gateway holds the order for a human; the buyer's own words reach the gateway (buyer_request)."""
+    LLMS["gemini"] = FakeLLM("gemini", "gemini-4-hydrogen", [
+        _tool("request_quote", {"delivery_date": "2026-11-17",
+                                "items": [{"product_ids": ["MILK"], "amount": 40, "unit": "SALES_UNIT", "note": "#1"}]}),
+        _order_last_quote, "Quoted 1.2 L of milk for coffee for 40 people; waiting for your approval."])
+    text = "Lactose-free milk for coffee for 40 people on Monday"
+    r = c.post("/ask", headers=sbx["headers"], json={"text": text, "mandate_id": sbx["mandate_id"],
+                                                      "agent_id": sbx["agent_id"]})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["agent"] == "sous-agent"
+    rq = d["transcript"][0]["args"]
+    assert rq["delivery_date"] == "2026-11-16" and rq["items"][0]["amount"] == 1.2 and rq["items"][0]["unit"] == "L"
+    assert "buyer_request" not in rq and any("40 people" in x for x in d["declared_risks"])
+    assert d["agent_notes"]["parsed_need"]["headcount"] == 40
+    assert d["mandate_preview"]["outcome"] == "ask"
+    assert any(f["rule"] == "agent.declared_risk" for f in d["mandate_preview"]["findings"])
+    assert d["order"]["status"] == "pending_approval"
+    assert store.get_quote(d["quote"]["id"])["buyer_request"] == text
+
+
+def test_ask_sous_agent_asks_then_quotes_with_the_follow_up(c, sbx):
+    LLMS["gemini"] = FakeLLM("gemini", "gemini-4-hydrogen", [
+        _tool("request_quote", {"items": [{"product_ids": ["ONION"], "amount": 40, "unit": "SALES_UNIT"}]}),
+        "How many kilos of onions do you need for the 40 people?"])
+    body = {"text": "Onions for 40 people on Monday", "mandate_id": sbx["mandate_id"], "agent_id": sbx["agent_id"],
+            "allow_order": False}
+    d = c.post("/ask", headers=sbx["headers"], json=body).json()
+    assert d["transcript"][0]["result"]["error"] == "need_clarification" and d["quote"] is None
+    assert d["needs_reply"] is True and d["answer"].startswith("How many")
+    LLMS["gemini"] = FakeLLM("gemini", "gemini-4-hydrogen", [
+        _tool("request_quote", {"items": [{"product_ids": ["ONION"], "amount": 8, "unit": "KG", "note": "#1"}]}),
+        "Quoted 8 kg of onions for Monday."])
+    turn = [{"question": d["answer"], "answer": "8 kg"}]
+    d2 = c.post("/ask", headers=sbx["headers"], json={**body, "follow_up": turn}).json()
+    assert d2["needs_reply"] is False and d2["quote"]["lines"][0]["product_id"] == "ONION"
+    assert d2["follow_up"] == turn and d2["order"] is None
+    assert "place_order" not in {s["tool"] for s in d2["transcript"]}
+    assert store.get_quote(d2["quote"]["id"])["buyer_request"].split() == ["Onions", "for", "40", "people", "on", "Monday", "8", "kg"]
+
+
+def _order_planned(messages):
+    qid = next(json.loads(m["content"])["quote_id"] for m in reversed(messages)
+               if m["role"] == "tool" and m["name"] == "plan_menu")
+    return _tool("place_order", {"quote_id": qid})(messages)
+
+
+def test_ask_sous_agent_sends_a_menu_through_the_recipe_planner(c, sbx):
+    LLMS["gemini"] = FakeLLM("gemini", "gemini-4-hydrogen", [
+        _tool("plan_menu", {}), SOUP, _order_planned, "Quoted cream and onions for the soup; waiting for you."])
+    r = c.post("/ask", headers=sbx["headers"], json={"text": "Onion soup for 40 on Monday, order the ingredients",
+                                                      "mandate_id": sbx["mandate_id"], "agent_id": sbx["agent_id"]})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert [s["tool"] for s in d["transcript"]] == ["request_quote", "plan_menu", "place_order"]  # planner quote first
+    assert {l["product_id"] for l in d["quote"]["lines"]} == {"CREAM", "ONION"}
+    assert d["declared_risks"] and d["mandate_preview"]["outcome"] == "ask"
+    assert d["order"]["status"] == "pending_approval" and d["model"]["calls"] == 4
 
 
 def test_ask_needs_a_model_key(c, sbx):

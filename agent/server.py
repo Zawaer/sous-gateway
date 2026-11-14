@@ -6,7 +6,8 @@ by sous/api.py only when SOUS_BUYER_AGENT=1, so judges can watch the models work
 
     POST /agent/plan-menu   menu text  -> Gemini (agent/recipe.py) -> ingredients -> ONE basket quote + preview
     POST /agent/read-photo  photo      -> Nemotron VL (agent/vision.py) -> lines -> ONE basket quote + preview
-    POST /agent/ask         a sentence -> the LLM buyer agent (agent/buyer.py) with the gateway's tools (sandbox only)
+    POST /agent/ask         a sentence -> the Sous buyer agent (agent/sous_agent.py; agent=generic: agent/buyer.py)
+                            with the gateway's tools (sandbox only)
     POST /agent/order       quote_id   -> place_order at the gateway (idempotency key from the quote)
     POST /agent/draft-mandate rules text -> a PROPOSED mandate change (agent/draft.py): diff, open questions,
                                          sources; the human checks it and signs it on web/sign-mandate.html
@@ -485,6 +486,10 @@ class AskIn(BaseModel):
     provider: Literal["auto", "gemini", "verda", "verda-selfhosted"] = Field(
         "auto", description="gemini (Gemini 4 Hydrogen), verda (Kimi K3.1 Pro on Verda Inference), verda-selfhosted "
                             "(our own open-weight model on a Verda GPU) or auto (Gemini if configured, else Verda)")
+    agent: Literal["sous", "generic"] = Field(
+        "sous", description="sous (default): the purpose-built Sous agent (agent/sous_agent.py: parses every item, "
+                            "headcounts as servings, menus via the recipe planner, dates; declares its assumptions "
+                            "to the gateway). generic: the generic reference agent (agent/buyer.py)")
     allow_order: bool = Field(True, description="false: the agent may quote but not call place_order")
     follow_up: list[FollowUp] = Field(
         default_factory=list, max_length=4,
@@ -494,11 +499,15 @@ class AskIn(BaseModel):
 
 @app.post("/ask", tags=["buyer agent"])
 def ask(req: AskIn, request: Request, token: str | None = Depends(_token)):
-    """A buyer's sentence -> the reference buyer agent (agent/buyer.py: an LLM with the gateway's MCP tools)
-    searches, quotes and (unless allow_order=false) orders under the SANDBOX mandate. The mandate engine decides
+    """A buyer's sentence -> the buyer agent (by default the Sous agent, agent/sous_agent.py; agent=generic: the
+    generic agent/buyer.py; both an LLM with the gateway's MCP tools) searches, quotes and (unless
+    allow_order=false) orders under the SANDBOX mandate. The Sous agent reads every item, headcount and date from
+    the sentence first, plans menus with the recipe planner and declares its assumptions (declared_risks) on the
+    quote, so the gateway asks a human about them. The mandate engine decides
     the tier; the response has the tool-call transcript and the result. Sandbox mandates only; the sandbox's
     live-lookup budget applies to its quotes."""
     from .buyer import BUYER_TOOLS, BuyerAgent, BuyerConfig, helsinki_today
+    from .sous_agent import SousAgent
     m = authorize(req.mandate_id, req.agent_id, token, None, "agent.ask", sandbox_only=True)
     order = [p for p in (["gemini", "verda"] if req.provider == "auto" else [req.provider])]
     llm = next((x for x in (make_llm(p) for p in order) if x), None)
@@ -514,8 +523,9 @@ def ask(req: AskIn, request: Request, token: str | None = Depends(_token)):
     tools = BUYER_TOOLS if req.allow_order else tuple(t for t in BUYER_TOOLS if t != "place_order")
     try:
         with gateway(token) as gw:
-            agent = BuyerAgent(meter, gw, BuyerConfig(req.mandate_id, req.agent_id, helsinki_today(), buyer=m.buyer,
-                                                      max_tool_calls=10, max_llm_calls=12, tools=tools))
+            cfg = BuyerConfig(req.mandate_id, req.agent_id, helsinki_today(), buyer=m.buyer, max_tool_calls=10,
+                              max_llm_calls=12, tools=tools)
+            agent = (SousAgent if req.agent == "sous" else BuyerAgent)(meter, gw, cfg)
             run = agent.run(req.text, [f.model_dump() for f in req.follow_up])
         status = "ok" if run.stop_reason == "answered" else run.stop_reason[:16]
     finally:
@@ -530,7 +540,12 @@ def ask(req: AskIn, request: Request, token: str | None = Depends(_token)):
             "transcript": run.transcript(), "answer": run.final_text, "stop_reason": run.stop_reason,
             "quote": _quote_view(q), "mandate_preview": _preview(q),
             "order": _order_view(run.orders[0] if run.orders else None), "orders_placed": summary["orders_placed"],
-            "valio_api_calls": run.valio_api_calls, "tool_calls": run.tool_calls}
+            "valio_api_calls": run.valio_api_calls, "tool_calls": run.tool_calls,
+            "agent": "sous-agent" if req.agent == "sous" else "generic",
+            # the Sous agent's own reading of the sentence and the doubts it declared to the gateway (additive)
+            "declared_risks": (q or {}).get("declared_risks") or (getattr(run, "agent_notes", None) or {}).get(
+                "declared_risks") or [],
+            "agent_notes": getattr(run, "agent_notes", None)}
 
 
 class DraftIn(BaseModel):
@@ -637,7 +652,8 @@ def status():
                  "fallback": "curated recipe table"},
         "ask": {"provider": "gemini" if _preset_env("gemini") else "verda",
                 "display": DISPLAY["gemini-4-hydrogen"] if _preset_env("gemini") else DISPLAY["kimi-k3-1-pro"],
-                "available": bool(_preset_env("gemini") or _preset_env("verda")), "sandbox_only": True},
+                "available": bool(_preset_env("gemini") or _preset_env("verda")), "sandbox_only": True,
+                "agent": "sous-agent", "agents": ["sous", "generic"]},
         "draft": {"provider": "gemini", "display": DISPLAY["gemini-4-hydrogen"],
                   "available": bool(_preset_env("gemini")), "fallback": "offline rule-based drafter"},
         "photo": _photo_status()},
