@@ -15,8 +15,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import account, agent_auth, aimo, allergen_ai, autonomy, catalog, clearance, clock, config, credentials, deadline, erp, exposure, carbon, holds, notify, offers as OFFERS, options as OPT, origin, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
-from .mandate import Mandate, evaluate, product_refusals
+from . import account, agent_auth, aimo, allergen_ai, autonomy, catalog, clearance, clock, config, credentials, deadline, erp, exposure, fi, carbon, holds, notify, offers as OFFERS, options as OPT, origin, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
+from .mandate import Mandate, evaluate, product_refusals, readable_name
 
 
 class GatewayError(Exception):
@@ -561,6 +561,7 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
     if troubled and (opts := _options(body, troubled, req.delivery_date, mandate, now)):
         body["options"] = opts
     body["valio_api_calls"] = {k: aimo.stats[k] - before[k] for k in aimo.stats}
+    findings = []
     if mandate:
         outcome, findings = _evaluate(mandate, req.agent_id, body, now)
         body["mandate_preview"] = {"outcome": outcome, "findings": [f.model_dump() for f in findings]}
@@ -577,7 +578,9 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
                     {"product_id": l["product_id"], "quantity": l["quantity"], "issues": [i["code"] for i in l["issues"]]}
                     for l in lines], "uncovered": gaps, "preview": body.get("mandate_preview", {}).get("outcome"),
                  "valio_api_calls": body["valio_api_calls"], "rationale": body.get("rationale")})
-    return {"quote": body, "jws": jws, **({"approver_view": sidecar} if sidecar else {})}
+    # Finnish twins of the preview's findings and the lines' unit notes (sous/fi.py): unsigned, beside the JWS
+    return {"quote": body, "jws": jws, **({"approver_view": sidecar} if sidecar else {}),
+            "explanations_fi": fi.explanations(findings, body)}
 
 
 def _unit_dead_end(chosen: list[dict], unit: str) -> dict | None:
@@ -845,6 +848,8 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
         "agent_rationale": rationale or q.get("rationale"),
         "created_at": now.isoformat(timespec="milliseconds"), "updated_at": now.isoformat(timespec="milliseconds"),
         "clock": clock.info(now),
+        # unsigned Finnish twins of decision.findings and lines[].unit_note (sous/fi.py); not in the receipt
+        "explanations_fi": fi.explanations(findings, q),
     }
     if status == "pending_approval":  # the human must decide before the cut-off (sous/deadline.py)
         dl = deadline.compute(order["lines"], deadline.delivery_days(order), now)
@@ -856,7 +861,8 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
         short, (outcome, findings) = late, _evaluate(mandate, agent_id, q, now, extra_findings)
         status = order["status"] = "refused"
         order.update(approval_url=None, approve_by=None, approve_by_detail=None, decision={
-            **order["decision"], "outcome": outcome, "findings": [f.model_dump() for f in findings]})
+            **order["decision"], "outcome": outcome, "findings": [f.model_dump() for f in findings]},
+            explanations_fi=fi.explanations(findings, q))
     if short:
         order["allocation"] = {"policy": RES.mode(), "lines": short}
         order["options"] = RES.options(oid, short)
@@ -1012,29 +1018,37 @@ def refuse_agent_approval(order_id: str, token: str, action: Literal["approve", 
                         403)
 
 
-def _approval_blocker(o: dict, mandate: Mandate, now: datetime) -> tuple[str, str] | None:
-    """Why an approval can no longer become an order: (status, reason), or None if it still can."""
+def _approval_blocker(o: dict, mandate: Mandate, now: datetime) -> tuple[str, str, str] | None:
+    """Why an approval can no longer become an order: (status, reason, reason in Finnish), or None if it still
+    can."""
     if mandate.revoked:
-        return "refused", "Mandate was revoked before approval."
+        return "refused", "Mandate was revoked before approval.", "Valtakirja peruttiin ennen hyväksyntää."
     if mandate.valid_until and now > mandate.valid_until:
-        return "refused", f"Mandate {mandate.id} expired on {mandate.valid_until:%d.%m.%Y}, before approval."
+        return ("refused", f"Mandate {mandate.id} expired on {mandate.valid_until:%d.%m.%Y}, before approval.",
+                f"Valtakirja {mandate.id} vanheni {fi.day(mandate.valid_until)}, ennen hyväksyntää.")
     for l in o["lines"]:
         if l.get("order_cutoff") and datetime.fromisoformat(l["order_cutoff"]) <= now:
-            return "expired", f"Approved too late: the order cut-off for {l['name']} ({l['order_cutoff']}) has passed."
+            return ("expired", f"Approved too late: the order cut-off for {l['name']} ({l['order_cutoff']}) has passed.",
+                    f"Hyväksytty liian myöhään: tuotteen {readable_name(l['name'])} tilausaika "
+                    f"({fi.when(l['order_cutoff'])}) on umpeutunut.")
     today = now.astimezone(config.TZ).date()
     for d in sorted(set(deadline.delivery_days(o))):
         if date.fromisoformat(d) < today:
-            return "expired", f"Approved too late: the delivery date {d} has already passed."
+            return ("expired", f"Approved too late: the delivery date {d} has already passed.",
+                    f"Hyväksytty liian myöhään: toimituspäivä {fi.day(d)} on jo mennyt.")
     # The human may have tightened the mandate since the order was held (lower caps, blocked products,
     # allergen rules): re-run the rules on the signed quote against the mandate as it is now.
     row = store.get_quote(o["quote_id"])
     q = signing.verify(row["_jws"], "sous-quote+jws") if row else None
     if not q:
-        return "refused", "The order's signed quote can no longer be verified."
+        return ("refused", "The order's signed quote can no longer be verified.",
+                "Tilauksen allekirjoitettua tarjousta ei voi enää tarkistaa.")
     outcome, findings = _evaluate(mandate, o["agent_id"], q, now)
     if outcome == "block":
         fired = "; ".join(f.message for f in findings if f.outcome == "block")
-        return "refused", f"The mandate as it is now blocks this order: {fired}"
+        fired_fi = "; ".join(fi.finding(f) for f in findings if f.outcome == "block")
+        return ("refused", f"The mandate as it is now blocks this order: {fired}",
+                f"Valtakirja estää nykyisellään tämän tilauksen: {fired_fi}")
     return None
 
 
@@ -1058,17 +1072,20 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
                            "/approve/passkey; page /ui/approve.html). The approver code can still reject it.", 403)
     holds.invalidate()  # under _order_lock, like holds.create: _approval_blocker sees every hold made so far
     status = "ordered" if approve else "rejected"
-    reason = note
+    reason = reason_fi = note  # the human's own note stays in their words
     if approve and (blocked := _approval_blocker(o, mandate, now)):
-        status, reason = blocked
+        status, reason, reason_fi = blocked
     if status == "ordered" and (short := RES.confirm(o, now, RES.pool_of(mandate))):  # tentative -> firm
         status, reason = "refused", " ".join(RES.message(s) for s in short)
+        reason_fi = " ".join(fi.allocation(s) for s in short)
         o["allocation"], o["options"] = {"policy": RES.mode(), "lines": short}, RES.options(o["id"], short)
     elif status != "ordered":
         RES.release(order_id, now)
     o["status"] = status
     o["approval"] = {"by": approver, "authority": authority, "approved": approve, "note": note, "at": now.isoformat(timespec="milliseconds"),
                      "result_reason": reason, "clock": clock.info(now)}
+    if reason_fi:  # unsigned Finnish twin of approval.result_reason (sous/fi.py)
+        o["explanations_fi"] = {**(o.get("explanations_fi") or {}), "result_reason": reason_fi}
     if evidence:
         o["approval"]["passkey"] = {k: evidence[k] for k in ("credential_id", "challenge", "rp_id", "user_verified")}
     o["updated_at"] = now.isoformat(timespec="milliseconds")

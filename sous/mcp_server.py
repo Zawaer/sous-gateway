@@ -659,7 +659,8 @@ def allergens() -> dict:
 
 @mcp.resource("sous://rules", title="Rule register", mime_type="application/json")
 def rules_resource() -> dict:
-    """Every rule the gateway can fire: tiers, owner (buyer mandate / Valio / gateway), text, mandate field.
+    """Every rule the gateway can fire: tiers, owner (buyer mandate / Valio / gateway), text (and text_fi, Finnish),
+    mandate field.
     Decision findings carry rule_url pointing at the same entries (GET /rules/{id})."""
     return rules.document()
 

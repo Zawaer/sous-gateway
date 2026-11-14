@@ -158,7 +158,7 @@ function headline(d) {
 
 function render(d) {
   const rules = (d.rules || []).map((r) =>
-    `<p class="rl"><span class="k">${esc(t("break.k_rule"))}</span><a href="/rules/${encodeURIComponent(r.id)}">${esc(r.id)}</a><br><span>${esc(r.text)}</span></p>`).join("");
+    `<p class="rl"><span class="k">${esc(t("break.k_rule"))}</span><a href="/rules/${encodeURIComponent(r.id)}">${esc(r.id)}</a><br><span>${esc((I18N.lang === "fi" && r.text_fi) || r.text)}</span></p>`).join("");
   const sel = d.orders?.length && SID_RE.test(sandbox) ? "./?sandbox=" + encodeURIComponent(sandbox) : null;
   const orders = (d.orders || []).slice(-3).map((o) =>
     `<a href="${sel}#/orders/${encodeURIComponent(o.id)}">${esc(t("break.order_link", { id: o.id }))}</a>`).join("");

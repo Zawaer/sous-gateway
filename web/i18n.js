@@ -9,7 +9,8 @@
    Script:   I18N.t(key, {var}), I18N.money(n), I18N.num(n), I18N.date(iso), I18N.dateTime(iso), I18N.dayTime(iso),
              I18N.time(iso), I18N.unit(code), I18N.tier(name), I18N.onChange(fn)
    The STRINGS block is strict JSON (tests/test_i18n.py parses it): keep double quotes and no trailing commas.
-   Gateway-provided reason sentences (findings, rule texts) stay in the language the API sends. */
+   Gateway-provided sentences: the API sends English, plus Finnish in unsigned fields (explanations_fi on quote
+   responses and orders, text_fi on rules); pages prefer those when the language is fi. */
 (function () {
   "use strict";
   const STRINGS = /* STRINGS:BEGIN */ {

@@ -119,9 +119,15 @@ async function load() {
 }
 
 function reasons(o) {
-  const f = ((o.decision || {}).findings || []).filter((x) => x.outcome === "ask" || x.outcome === "block");
-  return f.length ? f : ((o.decision || {}).findings || []);
+  // each finding keeps its index: explanations_fi.findings is keyed by it
+  const all = ((o.decision || {}).findings || []).map((x, i) => ({ ...x, i }));
+  const f = all.filter((x) => x.outcome === "ask" || x.outcome === "block");
+  return f.length ? f : all;
 }
+
+// The gateway's own sentence in the page language: Finnish from the unsigned explanations_fi when there is one.
+const fiText = (o) => (I18N.lang === "fi" && o.explanations_fi) || {};
+const findingText = (o, f) => (fiText(o).findings || {})[String(f.i)] || f.message;
 
 function render() {
   view = render;
@@ -135,7 +141,7 @@ function render() {
     <p class="muted small">${esc(o.buyer)} · ${esc(t("approve.order"))} <span class="mono">${esc(o.id)}</span></p>
     <h1>${eur(o.total_ex_vat)} <span class="muted small">${esc(t("common.ex_vat"))}</span></h1>
     ${pending ? `<span class="tier tier-ask">${esc(I18N.tier("ask"))}</span>` : `<p><strong>${esc(statusText(o))}</strong></p>`}
-    ${rs.map((f) => `<p class="reason">${esc(f.message)}<br><span class="rule-id">${esc(f.rule)}</span></p>`).join("")}
+    ${rs.map((f) => `<p class="reason">${esc(findingText(o, f))}<br><span class="rule-id">${esc(f.rule)}</span></p>`).join("")}
     ${pending && o.approve_by ? `<p id="deadline" class="when"></p>` : ""}
     <div id="msg" class="msg" hidden></div>
     ${pending ? actions(has) : ""}
@@ -151,7 +157,8 @@ function render() {
 
 function statusText(o) {
   const a = o.approval || {};
-  const reason = a.result_reason ? " " + a.result_reason : "";  // the gateway's own sentence (English for now)
+  const why = fiText(o).result_reason || a.result_reason;  // the gateway's own sentence, Finnish when available
+  const reason = why ? " " + why : "";
   return { ordered: a.by ? t("approve.st_ordered_by", { by: a.by }) : t("approve.st_ordered"),
            rejected: a.by ? t("approve.st_rejected_by", { by: a.by }) : t("approve.st_rejected"),
            refused: t("approve.st_refused") + reason, expired: t("approve.st_expired") + reason,

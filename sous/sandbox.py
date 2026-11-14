@@ -258,7 +258,7 @@ def create(ip: str, base_url: str = "") -> dict:
         S.issue_mandate(m, False)
         token = agent_auth.mint(m, f"sandbox {sid}", token=token)["token"]
         out_mandates.append({"scenario": name, "mandate_id": m.id, "agent_id": m.agent_id, "buyer": m.buyer,
-                             "rules": _rules(m), "rules_detail": _rules_detail(m)})
+                             "rules": _rules(m), "rules_fi": _rules(m, "text_fi"), "rules_detail": _rules_detail(m)})
     store.audit("sandbox.created", "sandbox", "system", sid, None,
                 {"sandbox": sid, "mandates": list(mandates.values()), "expires_at": _iso(expires),
                  "quotes_limit": config.SANDBOX_QUOTES})
@@ -412,10 +412,10 @@ def hold_reasons(findings: list[dict]) -> list[str]:
     return [f["message"] if _RANK.get(f["outcome"], 0) >= _RANK["ask"] else "also: " + f["message"] for f in fs]
 
 
-def _rules(m: Mandate) -> str:
+def _rules(m: Mandate, key: str = "text") -> str:
     """Every active rule of the mandate in one plain-language line (rules.mandate_summary)."""
     from .rules import mandate_summary
-    return "; ".join(r["text"] for r in mandate_summary(m))
+    return "; ".join(r[key] for r in mandate_summary(m))
 
 
 def _rules_detail(m: Mandate) -> list[dict]:

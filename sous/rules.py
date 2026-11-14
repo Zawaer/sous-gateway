@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import typing
 
-from . import config, deadline, origin as origins, reservations
+from . import config, deadline, fi, origin as origins, reservations
 from .mandate import UNUSUAL_MIN_HISTORY, Mandate
 
 OWNERS = {
@@ -37,7 +37,8 @@ def _field_tiers(field: str) -> list[str]:
 
 
 def _r(id, kind, tiers, owner, text, field=None, *, status=None, condition=None) -> dict:
-    out = {"id": id, "kind": kind, "tiers": tiers, "owner": owner, "text": text, "mandate_field": field}
+    out = {"id": id, "kind": kind, "tiers": tiers, "owner": owner, "text": text, "text_fi": fi.rule_text(id),
+           "mandate_field": field}
     if field:
         fields = field if isinstance(field, list) else [field]
         out["mandate_field_default"] = {f: Mandate.model_fields[f].default for f in fields
@@ -377,8 +378,11 @@ def mandate_summary(m: Mandate) -> list[dict]:
     from . import catalog
     out: list[dict] = []
 
+    seen: dict = {}
+
     def add(rule, text):
-        out.append({"rule": rule, "text": text})
+        n = seen[rule] = seen.get(rule, -1) + 1
+        out.append({"rule": rule, "text": text, "text_fi": fi.summary_text(m, rule, n) or text})
 
     def eur(x):
         return f"€{x:,.2f}".replace(".00", "")
@@ -439,17 +443,25 @@ def mandate_summary(m: Mandate) -> list[dict]:
     return out
 
 
-def register() -> list[dict]:
+def _lang(r: dict, lang: str | None) -> dict:
+    """lang='fi': `text` is Finnish and the English moves to text_en; otherwise unchanged (English, plus text_fi)."""
+    return {**r, "text": r["text_fi"], "text_en": r["text"]} if lang == "fi" and r.get("text_fi") else r
+
+
+def register(lang: str | None = None) -> list[dict]:
     base = config.PUBLIC_BASE_URL
-    return [{**r, "url": f"{base}/rules/{r['id']}"} for r in _build()]
+    return [_lang({**r, "url": f"{base}/rules/{r['id']}"}, lang) for r in _build()]
 
 
-def get(rule_id: str) -> dict | None:
-    return next((r for r in register() if r["id"] == rule_id), None)
+def get(rule_id: str, lang: str | None = None) -> dict | None:
+    return next((r for r in register(lang) if r["id"] == rule_id), None)
 
 
-def document() -> dict:
-    rules = register()
+def document(lang: str | None = None) -> dict:
+    rules = register(lang)
+    if lang == "fi":
+        return {"lang": "fi", "owners": fi.OWNERS, "tiers": fi.TIERS, "kinds": fi.KINDS, "count": len(rules),
+                "rules": rules}
     return {"owners": OWNERS, "tiers": {
                 "silent": "ordered, logged", "notify": "ordered, the buyer gets an FYI",
                 "ask": "held until a human approves (pending_approval)", "block": "refused"},

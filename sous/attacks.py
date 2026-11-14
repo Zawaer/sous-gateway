@@ -434,7 +434,8 @@ def run(sandbox_id: str, name: str, token: str | None) -> dict:
     title, description = CATALOG[name]
     return {
         "attack": name, "title": title, "description": description, **out,
-        "rules": [{"id": r["id"], "url": r["url"], "text": r["text"]} for i in out["rule_ids"] if (r := rules.get(i))],
+        "rules": [{"id": r["id"], "url": r["url"], "text": r["text"], "text_fi": r.get("text_fi")}
+                  for i in out["rule_ids"] if (r := rules.get(i))],
         "audit_event_ids": events, "audit_event_id": ev["seq"],
         "orders": [{"id": o["id"], "status": o["status"], "total_ex_vat": o["total_ex_vat"],
                     "order_url": S.order_url(o["id"], sid)}

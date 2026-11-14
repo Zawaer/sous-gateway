@@ -760,17 +760,27 @@ app.include_router(passkey_router)
 
 # --- rule register ----------------------------------------------------------
 
+def _rules_lang(lang: str | None, accept_language: str | None) -> str | None:
+    """?lang=fi|en wins; else Accept-Language starting with fi."""
+    if lang:
+        return "fi" if lang.lower().startswith("fi") else None
+    return "fi" if (accept_language or "").strip().lower().startswith("fi") else None
+
+
 @app.get("/rules", tags=["rules"])
-def rules_register():
+def rules_register(lang: str | None = Query(None, description="fi: Finnish `text` (English in text_en) and "
+                                            "Finnish owners/tiers/kinds; default English, with text_fi on each rule"),
+                   accept_language: str | None = Header(None)):
     """Every rule the gateway can fire: id, kind (finding or refusal), the tiers it can produce, owner (buyer
-    mandate, Valio, gateway safety), plain-language text and the mandate field that sets it. Each decision
-    finding links here with `rule_url`."""
-    return rules.document()
+    mandate, Valio, gateway safety), plain-language text (and text_fi, Finnish) and the mandate field that sets
+    it. Each decision finding links here with `rule_url`."""
+    return rules.document(_rules_lang(lang, accept_language))
 
 
 @app.get("/rules/{rule_id}", tags=["rules"])
-def rule_detail(rule_id: str):
-    if not (r := rules.get(rule_id)):
+def rule_detail(rule_id: str, lang: str | None = Query(None, description="fi: Finnish `text`, English in text_en"),
+                accept_language: str | None = Header(None)):
+    if not (r := rules.get(rule_id, _rules_lang(lang, accept_language))):
         raise S.GatewayError("rule_not_found", f"No rule {rule_id}; GET /rules lists them all.", 404)
     return r
 

@@ -335,12 +335,26 @@ Warnings `LOT_SIZE`, `CUTOFF_UNKNOWN`, `STOCK_UNKNOWN` and `LOW_RELIABILITY` hav
 | `kind` | `finding`: joins the order decision and sets its tier. `refusal`: stops the call with an error before any decision (`http_status` given). |
 | `tiers` | The tiers it can produce. For buyer-chosen tiers (`substitutions`, `later_delivery`, `unknown_allergens`, `terminal_products`) read from the Mandate field's type. |
 | `owner` | `buyer` (the buyer's mandate sets it), `valio` (Valio Aimo's stock, cut-off, sales block and price facts; no mandate overrides them) or `gateway` (safety rules, the same for every buyer). |
-| `text` | What it does, in plain language. |
+| `text` | What it does, in plain language. `text_fi`: the same in Finnish (6.1.1). |
 | `mandate_field`, `mandate_field_default`, `mandate_field_description` | The Mandate field(s) that configure it, with the default and description from the model; null when nothing configures it. |
 | `condition` | When it is checked, if narrower than every order (e.g. `standing-order renewal`). |
 | `url` | Its own address; the same value as `rule_url` in findings. |
 
 The register is the single source of truth: `tests/test_adopt.py` scans `sous/` for every rule id the engine emits (`add("…")`, `Finding(rule="…")`, blocking issue codes in `quote.py`) and fails if one is missing from the register. Standing-order thresholds in the text come from `sous/standing.py`.
+
+### 6.1.1 Finnish (`sous/fi.py`)
+
+The gateway's own sentences also come in Finnish, written from the same values as the English (never machine-translated), and only in **unsigned** fields: signed quotes, receipts and mandates stay exactly as before, so every signature verifies unchanged. Money and dates are Finnish style (`1 234,50 €`, `15.11.2026 klo 16.45`).
+
+| Where | Field |
+|---|---|
+| `GET /rules`, `GET /rules/{id}`, `sous://rules` | `text_fi` on every rule. `?lang=fi` (or `Accept-Language: fi`) puts Finnish in `text` (English in `text_en`) and Finnish `owners`, `tiers`, `kinds`. |
+| `POST /quotes` response (beside `quote` and `jws`) | `explanations_fi.findings["<i>"]`: Finnish for `quote.mandate_preview.findings[i]`; `explanations_fi.unit_notes["<i>"]`: for `quote.lines[i].unit_note`. |
+| Order (`GET /orders/{id}`, `place_order`) | `explanations_fi.findings["<i>"]` for `decision.findings[i]`, `unit_notes["<i>"]` for `lines[i].unit_note`, `result_reason` for `approval.result_reason` (the human's own note stays as written). Not in the receipt. |
+| Notifications | feed `data.fi` and webhook `title_fi` / `message_fi` beside `title` / `message` (order.notify, ask, block, expired, decided). |
+| Sandbox mandates | `rules_fi`, and `text_fi` on each `rules_detail` entry; attack results: `rules[].text_fi`. |
+
+A finding with no Finnish sentence of its own falls back to the rule's `text_fi` after the product name.
 
 ### 6.2 Attacks the controls are tested against
 

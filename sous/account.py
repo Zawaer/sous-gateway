@@ -29,9 +29,10 @@ from typing import Protocol
 
 from pydantic import BaseModel, Field
 
-from . import config, store
+from . import config, fi, store
 
 WEEKDAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+_WD_FI = dict(zip(WEEKDAYS, ["ma", "ti", "ke", "to", "pe", "la", "su"]))
 REQUIRE_ACCOUNT = config.env("REQUIRE_ACCOUNT", "") in ("1", "true", "yes")
 
 
@@ -197,14 +198,19 @@ def findings(mandate, q: dict, now: datetime) -> list:
         if REQUIRE_ACCOUNT:
             return [Finding(rule="account.unknown", outcome="block",
                             message=f"No Valio Aimo customer account for {mandate.buyer}: set the mandate's "
-                                    "customer_number.")]
+                                    "customer_number.",
+                            message_fi=f"Ostajalle {mandate.buyer} ei löydy Valio Aimon asiakastiliä: aseta "
+                                       "valtakirjaan customer_number.")]
         return []
     out = []
     if a.payment_block:
         out.append(Finding(rule="account.payment_block", outcome="block",
                            message=f"Customer {a.customer_number} has a payment block"
                                    + (f" ({a.payment_block_reason})" if a.payment_block_reason else "")
-                                   + ": Valio Aimo takes no new orders on the account until it is lifted."))
+                                   + ": Valio Aimo takes no new orders on the account until it is lifted.",
+                           message_fi=f"Asiakkaalla {a.customer_number} on maksueste"
+                                      + (f" ({a.payment_block_reason})" if a.payment_block_reason else "")
+                                      + ": Valio Aimo ei ota tilille uusia tilauksia, ennen kuin este poistuu."))
     lines = [l for l in q.get("lines") or [] if l.get("orderable", True)]
     total = round(sum(l.get("line_total_inc_vat") or l.get("line_total_ex_vat") or 0 for l in lines), 2)
     c = credit(a, now.astimezone(config.TZ).date())
@@ -214,7 +220,13 @@ def findings(mandate, q: dict, now: datetime) -> list:
                                    f"credit left on customer {a.customer_number} (limit €{a.credit_limit_eur:,.2f}, "
                                    f"open balance €{a.open_balance_eur:,.2f}, open Sous orders "
                                    f"€{c['sous_open_orders_eur']:,.2f}). A human confirms it; Valio Aimo's credit "
-                                   "control may still hold it."))
+                                   "control may still hold it.",
+                           message_fi=f"Tämä tilaus ({fi.eur(total)} sis. alv) on enemmän kuin asiakkaan "
+                                      f"{a.customer_number} jäljellä oleva luotto {fi.eur(max(c['available_eur'], 0))} "
+                                      f"(luottoraja {fi.eur(a.credit_limit_eur)}, avoin saldo "
+                                      f"{fi.eur(a.open_balance_eur)}, avoimet Sous-tilaukset "
+                                      f"{fi.eur(c['sous_open_orders_eur'])}). Ihminen vahvistaa tilauksen; Valio "
+                                      "Aimon luotonvalvonta voi silti pysäyttää sen."))
     days = sorted({l["delivery_date"] for l in lines if l.get("delivery_date")}) or [q["requested_delivery_date"]]
     for d in days:
         day = date.fromisoformat(d[:10])
@@ -223,11 +235,17 @@ def findings(mandate, q: dict, now: datetime) -> list:
             out.append(Finding(rule="account.delivery_day", outcome="block",
                                message=f"{day:%a %d.%m.%Y} is not a delivery day for customer {a.customer_number} "
                                        f"(delivers {', '.join(a.delivery_days)}"
-                                       + (f", route {a.route.id}" if a.route else "") + ")."))
+                                       + (f", route {a.route.id}" if a.route else "") + ").",
+                               message_fi=f"{fi.weekday_day(day)} ei ole asiakkaan {a.customer_number} "
+                                          f"toimituspäivä (toimituspäivät "
+                                          f"{', '.join(_WD_FI.get(x, x) for x in a.delivery_days)}"
+                                          + (f", reitti {a.route.id}" if a.route else "") + ")."))
         elif a.route and now >= (cut := _route_cutoff(a.route, day)):
             out.append(Finding(rule="account.delivery_day", outcome="block",
                                message=f"Route {a.route.id}'s cut-off for {day:%d.%m.%Y} was "
-                                       f"{cut:%a %d.%m. %H:%M}: it has passed."))
+                                       f"{cut:%a %d.%m. %H:%M}: it has passed.",
+                               message_fi=f"Reitin {a.route.id} tilausaika päivälle {fi.day(day)} oli "
+                                          f"{fi.when(cut)}, ja se on umpeutunut."))
     return out
 
 

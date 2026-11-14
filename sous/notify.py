@@ -178,6 +178,83 @@ def compose(event: str, order: dict, mandate: Mandate) -> dict:
             "message": f"Test notification for {mandate.buyer} (mandate {mandate.id}). Channels work.", "url": url}
 
 
+def _fi_reasons(order: dict, tier: str) -> list[str]:
+    """Finnish twins (order.explanations_fi) of the findings _findings() picks, in the same order."""
+    from . import fi
+    ex = (order.get("explanations_fi") or {}).get("findings") or {}
+    out = []
+    for i, f in enumerate((order.get("decision") or {}).get("findings", [])):
+        if f.get("outcome") == tier and f.get("rule") != "mandate.ok":
+            out.append(ex.get(str(i)) or fi.fallback(f.get("rule") or "", f.get("product_id")))
+    return out
+
+
+def _fi_what(order: dict) -> str:
+    from . import fi
+    lines = order.get("lines") or []
+    if not lines:
+        return "ei mitään"
+    first = lines[0]
+    s = f"{fi.num(float(first.get('quantity') or 0))} × {first.get('name') or first.get('product_id')}"
+    return s if len(lines) == 1 else f"{s} ja {len(lines) - 1} muu{'ta' if len(lines) > 2 else ''} rivi{'ä' if len(lines) > 2 else ''}"
+
+
+def compose_fi(event: str, order: dict, mandate: Mandate) -> dict | None:
+    """Finnish title and message for the order events (None for the others): the same facts as compose(), with the
+    reasons from order.explanations_fi. Never sent instead of the English; carried beside it (title_fi, message_fi)."""
+    from . import fi
+    oid, total = order.get("id"), fi.eur(order.get("total_ex_vat"), whole=True)
+    sent = lambda s: s.strip().rstrip(".")  # noqa: E731
+    if event == "order.notify":
+        fs = _fi_reasons(order, "notify")
+        if any(f["rule"] == "spend.notify" for f in _findings(order, "notify")) and mandate.notify_above_eur is not None:
+            why = f" (yli {fi.eur(mandate.notify_above_eur, whole=True)} ilmoitusrajasi)."
+        elif fs:
+            why = f". Tiedoksi: {sent(fs[0])}."
+        else:
+            why = "."
+        return {"title": f"Tilattu: {oid} ({total})", "message": f"Tilattu {_fi_what(order)}, {total} (alv 0 %){why}"}
+    if event in ("order.ask", "order.block"):
+        tier = "ask" if event == "order.ask" else "block"
+        fs = _fi_reasons(order, tier)
+        more = f" (+{len(fs) - 1} muu{'ta' if len(fs) > 2 else ''} syy{'tä' if len(fs) > 2 else ''})" if len(fs) > 1 else ""
+        if tier == "block":
+            reason = sent(fs[0]) if fs else "Tilaus ei mahdu valtakirjan rajoihin"
+            return {"title": f"Estetty: {oid}", "message":
+                    f"Agenttisi tilaus estettiin, eikä mitään tilattu: {reason}{more}. Tilaus: {_fi_what(order)}. "
+                    "Pyydä agentilta toinen tuote tai päivä, tai muuta valtakirjaa."}
+        reason = sent(fs[0]) if fs else "Tilaus on enemmän kuin agentti saa tehdä itse"
+        cut = order.get("approve_by") or earliest_cutoff(order)
+        lost = (order.get("approve_by_detail") or {}).get("delivery_date") or order.get("delivery_date")
+        by = (f"Hyväksy viimeistään {fi.when(cut)}, tai toimitus {fi.day(lost)} menetetään" if cut and lost
+              else f"Hyväksy viimeistään {fi.when(cut)}" if cut else "Hyväksy tai hylkää se")
+        return {"title": f"Hyväksyntä tarvitaan: {oid} ({total})", "message":
+                f"Hyväksyntä tarvitaan: {reason}{more}. {by}. Tilaus: {_fi_what(order)}, {total} (alv 0 %). "
+                "Jos kukaan ei vastaa, tilaus vanhenee eikä mitään tilata."}
+    if event == "order.expired":
+        x = order.get("expiry") or {}
+        lost, nxt = x.get("lost_delivery_date"), x.get("next_delivery_date")
+        return {"title": f"Vanhentunut: {oid} ei ehtinyt tilausaikaan", "message":
+                f"Kukaan ei hyväksynyt tilausta {oid} viimeistään {fi.when(x.get('approve_by') or order.get('approve_by'))}, "
+                f"Valion tilausaikaa ennen: toimitus {fi.day(lost) if lost else 'pyydettynä päivänä'} menetettiin, "
+                f"eikä mitään tilattu. Tilaus: {_fi_what(order)}, {total} (alv 0 %)."
+                + (f" Seuraava vaihtoehto: pyydä agentilta tarjous päivälle {fi.day(nxt)}." if nxt else "")}
+    if event == "order.decided":
+        a = order.get("approval") or {}
+        who, status, note = a.get("by") or "Ihminen", order.get("status"), a.get("note")
+        st = {"ordered": "tilattu", "rejected": "hylätty", "refused": "estetty", "expired": "vanhentunut"}.get(
+            status, status)
+        if status == "ordered":
+            msg = f"{who} hyväksyi tilauksen {oid}: tilattu {_fi_what(order)}, {total} (alv 0 %)."
+        elif status == "rejected":
+            msg = f"{who} hylkäsi tilauksen {oid}" + (f": {sent(note)}" if note else "") + ". Mitään ei tilattu."
+        else:
+            why = (order.get("explanations_fi") or {}).get("result_reason") or a.get("result_reason") or ""
+            msg = f"{who} hyväksyi tilauksen {oid}, mutta se on {st}: {sent(why)}. Mitään ei tilattu."
+        return {"title": f"{oid} {st}", "message": msg}
+    return None
+
+
 _AMEND_KIND = {"short_pick": "short pick", "delay": "delay", "substitution_at_pick": "substitution",
                "cancel_line": "line cancelled"}
 
@@ -267,7 +344,9 @@ def _ntfy(topic: str, n: dict) -> int:
 
 
 def _deliver(n: dict, chans: dict[str, str], order: dict) -> None:
+    fi_n = (n.get("data") or {}).get("fi") or {}
     payload = {"event": n["event"], "audience": n["audience"], "title": n["title"], "message": n["message"],
+               **({"title_fi": fi_n.get("title"), "message_fi": fi_n.get("message")} if fi_n else {}),
                "url": n.get("url"), "deadline": n.get("deadline"), "ts": n.get("ts"),
                "order": {k: order.get(k) for k in ("id", "buyer", "mandate_id", "agent_id", "status",
                                                     "total_ex_vat", "delivery_date", "order_url", "approval_url")}}
@@ -293,6 +372,11 @@ def send(event: str, order: dict, mandate: Mandate) -> threading.Thread | None:
              **compose(event, order, mandate)}
         chans = channels(mandate, audience)
         n["data"] = {"channels": sorted(chans), "deadline": n.pop("deadline", None), "status": order.get("status")}
+        try:
+            if fi_n := compose_fi(event, order, mandate):  # Finnish beside the English: data.fi {title, message}
+                n["data"]["fi"] = fi_n
+        except Exception:  # noqa: BLE001 - a Finnish text never stops the English notification
+            log.exception("Finnish notification text for %s failed", order.get("id"))
         n = notifications_store.add(n)
         store.audit("notification.sent", "notifier", "system", order.get("id"), n["buyer"],
                     {"channel": "feed", "event": event, "notification_seq": n["seq"]})

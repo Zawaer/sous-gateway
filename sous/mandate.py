@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from . import autonomy, catalog, config, holds, origin as origins, pause
+from . import autonomy, catalog, config, fi, holds, origin as origins, pause
 
 # Four tiers, from least to most human involvement:
 #   silent: routine, the order goes through and is logged
@@ -123,6 +123,9 @@ class Finding(BaseModel):
     message: str
     product_id: str | None = None
     rule_url: str | None = Field(None, description="This rule in the rule register (GET /rules/{rule})")
+    # Finnish twin of `message` (sous/fi.py), built from the same values. Never dumped: signed quotes and receipts
+    # keep exactly the English findings; Finnish goes only into unsigned explanations_fi fields.
+    message_fi: str | None = Field(None, exclude=True)
 
     def model_post_init(self, _ctx) -> None:
         if self.rule_url is None:
@@ -220,43 +223,58 @@ def evaluate(
     the product free of everything the mandate avoids, so allergen.unknown becomes allergen.cleared (notify)."""
     f: list[Finding] = []
 
-    def add(rule, outcome, message, pid=None):
-        f.append(Finding(rule=rule, outcome=outcome, message=message, product_id=pid))
+    def add(rule, outcome, message, pid=None, message_fi=None):
+        f.append(Finding(rule=rule, outcome=outcome, message=message, product_id=pid, message_fi=message_fi))
 
     # Who is asking, and is the mandate still in force?
     if mandate.revoked:
-        add("mandate.revoked", "block", f"Mandate {mandate.id} has been revoked by {mandate.issued_by}.")
+        add("mandate.revoked", "block", f"Mandate {mandate.id} has been revoked by {mandate.issued_by}.",
+            message_fi=f"{mandate.issued_by} on perunut valtakirjan {mandate.id}.")
     if mandate.valid_until and now > mandate.valid_until:
-        add("mandate.expired", "block", f"Mandate {mandate.id} expired on {mandate.valid_until:%d.%m.%Y}.")
+        add("mandate.expired", "block", f"Mandate {mandate.id} expired on {mandate.valid_until:%d.%m.%Y}.",
+            message_fi=f"Valtakirja {mandate.id} vanheni {fi.day(mandate.valid_until)}.")
     if agent_id != mandate.agent_id:
-        add("mandate.agent", "block", f"Agent '{agent_id}' is not the holder of mandate {mandate.id}.")
+        add("mandate.agent", "block", f"Agent '{agent_id}' is not the holder of mandate {mandate.id}.",
+            message_fi=f"Agentti '{agent_id}' ei ole valtakirjan {mandate.id} haltija.")
     if not lines:
-        add("order.empty", "block", "Nothing orderable was found for this request.")
+        add("order.empty", "block", "Nothing orderable was found for this request.",
+            message_fi="Pyyntöön ei löytynyt mitään tilattavaa.")
     # How much the agent may do alone: the mandate's level, capped by Valio Aimo (sous/autonomy.py).
     level, cap = autonomy.effective(mandate.autonomy, mandate.buyer)
     capped = f" Valio Aimo limits this buyer's agents to '{level}': {cap['reason']}" if cap else ""
+    capped_fi = f" Valio Aimo rajaa tämän ostajan agentit tasolle '{level}': {cap['reason']}" if cap else ""
     if level == "advise" and lines:
         add("autonomy.capped" if cap else "autonomy.advise", "ask",
-            f"The agent may advise only: every order waits for a human.{capped}")
+            f"The agent may advise only: every order waits for a human.{capped}",
+            message_fi="Agentti saa vain neuvoa: jokainen tilaus odottaa ihmisen hyväksyntää." + capped_fi)
     # Valio Aimo's kill switch: no agent orders (nor approvals) while ordering is paused for this buyer.
     if paused := pause.active_for(mandate.buyer):
-        add("ordering.paused", "block", pause.message(paused))
+        add("ordering.paused", "block", pause.message(paused), message_fi=fi.pause(paused))
 
     # An unorderable line already blocks the order (availability.*); it never counts towards spend.
     total = round(sum(l.get("line_total_ex_vat") or 0 for l in lines if l.get("orderable", True)), 2)
     if mandate.hard_limit_eur is not None and total > mandate.hard_limit_eur:
         add("spend.hard_limit", "block",
-            f"Order total €{total:,.2f} exceeds the mandate's hard limit of €{mandate.hard_limit_eur:,.2f}.")
+            f"Order total €{total:,.2f} exceeds the mandate's hard limit of €{mandate.hard_limit_eur:,.2f}.",
+            message_fi=f"Tilauksen summa {fi.eur(total)} ylittää valtakirjan ehdottoman ylärajan "
+                       f"{fi.eur(mandate.hard_limit_eur)}.")
     elif total > mandate.auto_approve_limit_eur:
         add("spend.auto_limit", "ask",
-            f"Order total €{total:,.2f} is above the €{mandate.auto_approve_limit_eur:,.2f} the agent may spend alone.")
+            f"Order total €{total:,.2f} is above the €{mandate.auto_approve_limit_eur:,.2f} the agent may spend alone.",
+            message_fi=f"Tilauksen summa {fi.eur(total)} on yli {fi.eur(mandate.auto_approve_limit_eur)}, jonka "
+                       "agentti saa käyttää itse.")
     elif mandate.notify_above_eur is not None and total > mandate.notify_above_eur:
         add("spend.notify", "notify",
-            f"Order total €{total:,.2f} is above €{mandate.notify_above_eur:,.2f}, so the buyer gets an FYI.")
+            f"Order total €{total:,.2f} is above €{mandate.notify_above_eur:,.2f}, so the buyer gets an FYI.",
+            message_fi=f"Tilauksen summa {fi.eur(total)} on yli {fi.eur(mandate.notify_above_eur)}, joten ostaja "
+                       "saa ilmoituksen.")
     if mandate.weekly_limit_eur is not None and _cents(spent_week_eur) + _cents(total) > _cents(mandate.weekly_limit_eur):
         add("spend.weekly_limit", "ask",
             f"With this order, this week's spend would be €{(_cents(spent_week_eur) + _cents(total)) / 100:,.2f}, "
-            f"above the weekly limit of €{mandate.weekly_limit_eur:,.2f}.")
+            f"above the weekly limit of €{mandate.weekly_limit_eur:,.2f}.",
+            message_fi=f"Tämän tilauksen kanssa viikon ostot olisivat "
+                       f"{fi.eur((_cents(spent_week_eur) + _cents(total)) / 100)}, yli viikkorajan "
+                       f"{fi.eur(mandate.weekly_limit_eur)}.")
     # Slicing: orders that each stay under the auto-approve limit but together pass it within a short window.
     auto = _cents(mandate.auto_approve_limit_eur)
     small = [o for o in recent_orders or () if _cents(o.get("total_ex_vat") or 0) <= auto]
@@ -266,11 +284,17 @@ def evaluate(
         add("spend.split_orders", "ask",
             f"This order and {len(small)} more in the last {mandate.split_window_minutes} min add up to "
             f"€{together:,.2f}, above the €{mandate.auto_approve_limit_eur:,.2f} the agent may spend alone: "
-            "small orders in a row are checked together.")
+            "small orders in a row are checked together.",
+            message_fi=f"Tämä tilaus ja {len(small)} muuta viimeisen {mandate.split_window_minutes} minuutin ajalta "
+                       f"ovat yhteensä {fi.eur(together)}, yli {fi.eur(mandate.auto_approve_limit_eur)}, jonka "
+                       "agentti saa käyttää itse: peräkkäiset pienet tilaukset tarkistetaan yhdessä.")
     if mandate.daily_limit_eur is not None and _cents(spent_today_eur) + _cents(total) > _cents(mandate.daily_limit_eur):
         add("spend.daily_limit", "ask",
             f"With this order, today's spend would be €{(_cents(spent_today_eur) + _cents(total)) / 100:,.2f}, "
-            f"above the daily limit of €{mandate.daily_limit_eur:,.2f}.")
+            f"above the daily limit of €{mandate.daily_limit_eur:,.2f}.",
+            message_fi=f"Tämän tilauksen kanssa päivän ostot olisivat "
+                       f"{fi.eur((_cents(spent_today_eur) + _cents(total)) / 100)}, yli päivärajan "
+                       f"{fi.eur(mandate.daily_limit_eur)}.")
     # `uncovered` is either one amount in `need_unit`, or {unit: amount} when items use different units.
     missing: dict[str, float] = {}
     for u, a in (uncovered if isinstance(uncovered, dict) else {need_unit: uncovered}).items():
@@ -280,7 +304,9 @@ def evaluate(
     if missing:
         add("need.partial", "ask",
             "Only part of the need can be covered: "
-            f"{' and '.join(f'{a:g} {u}' for u, a in missing.items())} still missing.")
+            f"{' and '.join(f'{a:g} {u}' for u, a in missing.items())} still missing.",
+            message_fi="Tarpeesta voidaan kattaa vain osa: vielä puuttuu "
+                       f"{' ja '.join(f'{fi.num(a)} {fi.unit(u)}' for u, a in missing.items())}.")
 
     factor = mandate.unusual_quantity_factor
     for key, cur in (quantities or {}).items() if factor else ():
@@ -292,7 +318,11 @@ def evaluate(
         if med > 0 and cur["amount"] > factor * med:
             add("quantity.unusual", "ask",
                 f"{cur['label']}: {cur['amount']:g} {key[1]} is {round(cur['amount'] / med, 1):g}× your usual {med:g} {key[1]} "
-                f"(median of your last {n} orders; the mandate asks above {factor:g}×).", cur.get("product_id"))
+                f"(median of your last {n} orders; the mandate asks above {factor:g}×).", cur.get("product_id"),
+                f"{cur['label']}: {fi.num(cur['amount'])} {fi.unit(key[1])} on "
+                f"{fi.num(round(cur['amount'] / med, 1))}-kertainen tavalliseen {fi.num(med)} {fi.unit(key[1])} "
+                f"verrattuna (viimeisten {n} tilauksesi mediaani; valtakirja vaatii hyväksynnän yli "
+                f"{fi.num(factor)}-kertaisesta).")
 
     subs = substitute_for or {}
     for l in lines:
@@ -303,37 +333,43 @@ def evaluate(
         # Valio's hold on the product: also for a quote issued before the hold (ordering, approving it later)
         held = next((i for i in l.get("issues", []) if i["code"] == "PRODUCT_HELD"), None)
         if held or (hold := holds.active_for(pid)):
-            add("product.held", "block", f"{name}: {held['message'] if held else holds.message(hold)}", pid)
+            add("product.held", "block", f"{name}: {held['message'] if held else holds.message(hold)}", pid,
+                f"{name}: {fi.hold(hold) if not held and hold else fi.rule_text('product.held')}")
+        def issue_fi(issue, l=l, name=name):
+            return f"{name}: {fi.issue(issue['code'], l, requested_date)}"
+
         for issue in l.get("issues", []):
             if issue["code"] == "PRODUCT_HELD":
                 continue
             if issue["severity"] == "blocking":
-                add(f"availability.{issue['code'].lower()}", "block", f"{name}: {issue['message']}", pid)
+                add(f"availability.{issue['code'].lower()}", "block", f"{name}: {issue['message']}", pid, issue_fi(issue))
             elif issue["code"] == "LATER_DATE":
-                add("delivery.later_date", mandate.later_delivery, f"{name}: {issue['message']}", pid)
+                add("delivery.later_date", mandate.later_delivery, f"{name}: {issue['message']}", pid, issue_fi(issue))
             elif issue["code"] == "PARTIAL_STOCK":
-                add("availability.partial_stock", "ask", f"{name}: {issue['message']}", pid)
+                add("availability.partial_stock", "ask", f"{name}: {issue['message']}", pid, issue_fi(issue))
             elif issue["code"] == "PRICE_EXPIRES":
-                add("price.expires", "ask", f"{name}: {issue['message']}", pid)
+                add("price.expires", "ask", f"{name}: {issue['message']}", pid, issue_fi(issue))
             elif issue["code"] == "DATA_STALE":  # never order on last-known data without a human
-                add("availability.data_stale", "ask", f"{name}: {issue['message']}", pid)
+                add("availability.data_stale", "ask", f"{name}: {issue['message']}", pid, issue_fi(issue))
             elif issue["code"] == "UNIT_INTERPRETED":  # '20 ST' of a product without ST read as sales units
-                add("unit.interpreted", "ask", f"{name}: {issue['message']}", pid)
+                add("unit.interpreted", "ask", f"{name}: {issue['message']}", pid, issue_fi(issue))
             elif issue["code"] == "TYPE_MISMATCH":  # not the kind of product asked for (coffee milk for milk)
-                add("product.type_mismatch", "ask", f"{name}: {issue['message']}", pid)
+                add("product.type_mismatch", "ask", f"{name}: {issue['message']}", pid, issue_fi(issue))
             elif issue["code"] == "PACK_OVERSIZE":  # 12 kg needed, one 20 kg bag planned: the buyer is told
-                add("quantity.pack_oversize", "notify", f"{name}: {issue['message']}", pid)
+                add("quantity.pack_oversize", "notify", f"{name}: {issue['message']}", pid, issue_fi(issue))
 
         if level == "reorder" and l.get("orderable", True) and pid not in (ordered_products or set()) \
                 and pid not in mandate.usual_products:
             add("autonomy.capped" if cap else "autonomy.reorder", "ask",
                 f"{name} is not one of the buyer's usual products, and the agent may only reorder those alone."
-                + capped, pid)
+                + capped, pid,
+                f"{name} ei ole ostajan tavallisia tuotteita, ja agentti saa tilata itse vain niitä." + capped_fi)
 
         if (mandate.first_time_products and ordered_products is not None
                 and pid not in ordered_products and pid not in mandate.usual_products):
             add("product.first_time", mandate.first_time_products,
-                f"{name} has never been ordered under this mandate before.", pid)
+                f"{name} has never been ordered under this mandate before.", pid,
+                f"{name}: tätä tuotetta ei ole ennen tilattu tällä valtakirjalla.")
 
         last = (last_prices or {}).get(pid) if mandate.max_price_change_pct else None
         now_price = l.get("unit_price_ex_vat")
@@ -345,7 +381,11 @@ def evaluate(
                 add("price.changed", "ask",
                     f"{name}: €{now_price:,.2f} per {unit} now, {abs(change):.0f}% {'above' if change > 0 else 'below'} "
                     f"the €{was:,.2f} paid on {last['at'][8:10]}.{last['at'][5:7]} (order {last['order_id']}); the "
-                    f"mandate asks above {mandate.max_price_change_pct:g}%.", pid)
+                    f"mandate asks above {mandate.max_price_change_pct:g}%.", pid,
+                    f"{name}: nyt {fi.eur(now_price)}/{fi.unit(unit)}, {fi.pct(round(abs(change)))} "
+                    f"{'kalliimpi' if change > 0 else 'halvempi'} kuin {fi.short_day(last['at'])} maksettu "
+                    f"{fi.eur(was)} (tilaus {last['order_id']}); valtakirja vaatii hyväksynnän, kun muutos on yli "
+                    f"{fi.pct(mandate.max_price_change_pct)}.")
 
         # Price per L / KG against what the buyer last paid for the same kind of product (a pricier brand or pack)
         cp_now = l.get("comparison_price") or {}
@@ -357,68 +397,97 @@ def evaluate(
             add("price.comparison_changed", "ask",
                 f"{name}: €{cp_now['ex_vat']:,.2f}/{per}, {up:.0f}% above the €{prev['ex_vat']:,.2f}/{per} paid for "
                 f"{fam[1].lower()} on {prev['at'][8:10]}.{prev['at'][5:7]} ({readable_name(prev.get('name') or prev['product_id'])}, "
-                f"order {prev['order_id']}); the mandate asks above {mandate.max_price_change_pct:g}%.", pid)
+                f"order {prev['order_id']}); the mandate asks above {mandate.max_price_change_pct:g}%.", pid,
+                f"{name}: {fi.eur(cp_now['ex_vat'])}/{fi.unit(per)}, {fi.pct(round(up))} kalliimpi kuin "
+                f"{fi.short_day(prev['at'])} maksettu {fi.eur(prev['ex_vat'])}/{fi.unit(per)} "
+                f"({readable_name(prev.get('name') or prev['product_id'])}, tilaus {prev['order_id']}); "
+                f"valtakirja vaatii hyväksynnän, kun nousu on yli {fi.pct(mandate.max_price_change_pct)}.")
 
         if mandate.allowed_origins or mandate.avoid_origins:
             oc = origins.check(p.get("country_of_origin"), mandate.allowed_origins, mandate.avoid_origins)
             if oc == "unknown":
                 add("origin.unknown", mandate.origin_unknown,
                     f"{name}: the product master gives no country of origin, so it can't be checked against the "
-                    f"mandate ({origins.label(mandate.allowed_origins) or 'avoiding ' + origins.label(mandate.avoid_origins)}).", pid)
+                    f"mandate ({origins.label(mandate.allowed_origins) or 'avoiding ' + origins.label(mandate.avoid_origins)}).", pid,
+                    f"{name}: tuotetiedoissa ei ole alkuperämaata, joten sitä ei voi tarkistaa valtakirjaa vasten "
+                    f"({'sallitut: ' + fi.origins(mandate.allowed_origins) if mandate.allowed_origins else 'vältettävät: ' + fi.origins(mandate.avoid_origins)}).")
             elif oc in ("avoided", "outside"):
                 where = origins.name(origins.code(p.get("country_of_origin")))
                 rule = (f"avoids {origins.label(mandate.avoid_origins)}" if oc == "avoided"
                         else f"allows only {origins.label(mandate.allowed_origins)}")
                 add("origin.restricted", mandate.origin_violation,
-                    f"{name} comes from {where} (supplier-declared); the mandate {rule}.", pid)
+                    f"{name} comes from {where} (supplier-declared); the mandate {rule}.", pid,
+                    f"{name}: alkuperämaa {fi.country(origins.code(p.get('country_of_origin')))} (toimittajan "
+                    "ilmoittama); valtakirja "
+                    + (f"välttää alkuperämaita {fi.origins(mandate.avoid_origins)}." if oc == "avoided"
+                       else f"sallii vain alkuperämaat {fi.origins(mandate.allowed_origins)}."))
 
         if mandate.allowed_categories is not None and p.get("category") not in mandate.allowed_categories:
             add("product.category", "block",
-                f"{name} is in category {p.get('category')}, which this mandate doesn't allow.", pid)
+                f"{name} is in category {p.get('category')}, which this mandate doesn't allow.", pid,
+                f"{name}: tuoteryhmä {p.get('category')} ei kuulu valtakirjan sallimiin.")
 
         missing = sorted(set(mandate.required_claims) - set(l.get("claims") or []))
         if missing:
-            add("product.claims", "block", f"{name} lacks required claims: {', '.join(missing)}.", pid)
+            add("product.claims", "block", f"{name} lacks required claims: {', '.join(missing)}.", pid,
+                f"{name}: puuttuu vaadittu merkintä: {fi.claims(missing)}.")
 
         if mandate.avoid_allergens:
             st = catalog.allergen_status(p, mandate.avoid_allergens, mandate.allow_may_contain)
             names = ", ".join(catalog.ALLERGENS.get(c, c) for c in st["codes"])
             if st["status"] == "contains":
-                add("allergen.contains", "block", f"{name} contains {names}.", pid)
+                add("allergen.contains", "block", f"{name} contains {names}.", pid,
+                    f"{name} sisältää vältettävää allergeenia: {fi.allergens(st['codes'])}.")
             elif st["status"] == "may_contain":
-                add("allergen.may_contain", "block", f"{name} may contain {names}.", pid)
+                add("allergen.may_contain", "block", f"{name} may contain {names}.", pid,
+                    f"{name} voi sisältää vältettävää allergeenia: {fi.allergens(st['codes'])}.")
             elif st["status"] == "unknown" and (hits := _likely((allergen_ai or {}).get(pid))):
                 said = ", ".join(f"{catalog.ALLERGENS.get(c, c)} ({a['p']:.0%})" for c, a in hits)
                 add("allergen.likely", "block",
                     f"{name} declares no allergens, but from its name and ingredients it very likely contains "
                     f"{said}, by Gemini Decisions ({hits[0][1].get('model', 'gemini-decision-1')}). Refused: an "
-                    "avoided allergen is too likely to approve.", pid)
+                    "avoided allergen is too likely to approve.", pid,
+                    f"{name} ei ilmoita allergeeneja, mutta nimen ja raaka-aineiden perusteella siinä on hyvin "
+                    "todennäköisesti: "
+                    + ", ".join(f"{fi.ALLERGENS.get(c, c)} ({fi.ratio(a['p'])})" for c, a in hits)
+                    + f" (Gemini Decisions, {hits[0][1].get('model', 'gemini-decision-1')}). Estetty: vältettävä "
+                    "allergeeni on liian todennäköinen hyväksyttäväksi.")
             elif st["status"] == "unknown" and (clr := (allergen_clearances or {}).get(pid)) \
                     and mandate.unknown_allergens != "block":
                 from .clearance import message as _cleared
                 avoid = ", ".join(catalog.ALLERGENS.get(c, c) for c in mandate.avoid_allergens)
-                add("allergen.cleared", "notify", _cleared(name, clr, avoid), pid)
+                add("allergen.cleared", "notify", _cleared(name, clr, avoid), pid,
+                    fi.clearance(name, clr, mandate.avoid_allergens))
             elif st["status"] == "unknown":
                 avoid = ", ".join(catalog.ALLERGENS.get(c, c) for c in mandate.avoid_allergens)
                 add("allergen.unknown", mandate.unknown_allergens,
                     f"{name} has no allergen data, so it can't be confirmed free of {avoid}. "
-                    "Unknown is treated as unsafe.", pid)
+                    "Unknown is treated as unsafe.", pid,
+                    f"{name}: allergeenitiedot puuttuvat, joten ei voida varmistaa, ettei siinä ole: "
+                    f"{fi.allergens(mandate.avoid_allergens)}. Tuntematonta ei pidetä turvallisena.")
 
         if pid in subs:
             msg = {"block": "this mandate allows no substitutes", "ask": "substitutes need a human",
                    "notify": "the buyer will be told", "silent": "substitutes are allowed"}[mandate.substitutions]
-            add("substitution", mandate.substitutions, f"{name} replaces {subs[pid]}; {msg}.", pid)
+            msg_fi = {"block": "valtakirja ei salli korvaavia tuotteita",
+                      "ask": "korvaava tuote vaatii hyväksynnän", "notify": "ostajalle kerrotaan",
+                      "silent": "korvaavat tuotteet ovat sallittuja"}[mandate.substitutions]
+            add("substitution", mandate.substitutions, f"{name} replaces {subs[pid]}; {msg}.", pid,
+                f"{name} korvaa tuotteen {subs[pid]}; {msg_fi}.")
 
         if l.get("logistic_model") == "Terminal":
             if mandate.terminal_products != "silent":
                 add("supply.terminal", mandate.terminal_products,
-                    f"{name} ships from the supplier's warehouse, so its stock is unknown.", pid)
+                    f"{name} ships from the supplier's warehouse, so its stock is unknown.", pid,
+                    f"{name} toimitetaan toimittajan varastosta, joten sen saldoa ei tiedetä.")
 
         rel = l.get("delivery_reliability")
         if mandate.min_delivery_reliability is not None and rel is not None and rel < mandate.min_delivery_reliability:
             add("supply.reliability", "ask",
                 f"{name} has been delivered in full only {rel:.0%} of the time "
-                f"(mandate minimum {mandate.min_delivery_reliability:.0%}).", pid)
+                f"(mandate minimum {mandate.min_delivery_reliability:.0%}).", pid,
+                f"{name} on toimitettu täysimääräisenä vain {fi.ratio(rel)} kerroista (valtakirjan vähimmäistaso "
+                f"{fi.ratio(mandate.min_delivery_reliability)}).")
 
         cp = l.get("comparison_price") or {}
         # not `capped`: that is the autonomy-cap suffix above, needed again for the next line (R05 crashed on it)
@@ -426,12 +495,18 @@ def evaluate(
         if cp_cap and _cents(cp["ex_vat"]) > _cents(cp_cap[0]):
             add("price.comparison_cap", "ask",
                 f"{name} costs €{cp['ex_vat']:.2f}/{cp['per']}, above the mandate's €{cp_cap[0]:.2f}/{cp['per']} "
-                f"cap for {cp_cap[1]}.", pid)
+                f"cap for {cp_cap[1]}.", pid,
+                f"{name} maksaa {fi.eur(cp['ex_vat'])}/{fi.unit(cp['per'])}, yli valtakirjan hintakaton "
+                f"{fi.eur(cp_cap[0])}/{fi.unit(cp['per'])} ("
+                + (f"kaikki {fi.unit(cp['per'])}-hintaiset" if cp_cap[1].startswith("everything priced per")
+                   else cp_cap[1].replace("category", "tuoteryhmä")) + ").")
 
     f.extend(extra_findings or [])
     outcome: Tier = max((x.outcome for x in f), key=_RANK.__getitem__, default="silent")
     if outcome in ("silent", "notify"):
-        add("mandate.ok", outcome, f"Within mandate {mandate.id}: €{total:,.2f} ex VAT, all checks passed.")
+        add("mandate.ok", outcome, f"Within mandate {mandate.id}: €{total:,.2f} ex VAT, all checks passed.",
+            message_fi=f"Valtakirjan {mandate.id} rajoissa: {fi.eur(total)} (alv 0 %), kaikki tarkistukset "
+                       "kunnossa.")
     return outcome, f
 
 
@@ -457,7 +532,12 @@ def product_refusals(mandate: Mandate, line: dict, now: datetime) -> list[Findin
             what = ", ".join(f"{catalog.ALLERGENS.get(c, c)} ({c})" for c in st["codes"])
             avoid = ", ".join(f"{catalog.ALLERGENS.get(c, c)} ({c})" for c in mandate.avoid_allergens)
             verb = "contains" if x.rule == "allergen.contains" else "may contain"
+            verb_fi = "sisältää" if x.rule == "allergen.contains" else "voi sisältää"
+            what_fi = ", ".join(f"{fi.ALLERGENS.get(c, c)} ({c})" for c in st["codes"])
+            avoid_fi = ", ".join(f"{fi.ALLERGENS.get(c, c)} ({c})" for c in mandate.avoid_allergens)
             x = x.model_copy(update={"message": f"{readable_name(line['name'])} {verb} {what}; "
-                                                f"{mandate.buyer} avoids {avoid}."})
+                                                f"{mandate.buyer} avoids {avoid}.",
+                                     "message_fi": f"{readable_name(line['name'])} {verb_fi}: {what_fi}; "
+                                                   f"{mandate.buyer} välttää: {avoid_fi}."})
         out.append(x)
     return out
