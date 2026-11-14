@@ -237,7 +237,9 @@ def _size_like(s: dict, stated: list[dict], packs: dict[str, set[float]]) -> boo
     others = [o for o in stated if o is not s]
     if not others:  # "30x125g", "4x1kg" next to an amount are sizes too
         return False
-    v, fam = min(s["values"]), s["family"]
+    # an ambiguous number is a size only when every reading is: "1,000 l cream" next to "40 l milk" may be 1000 L,
+    # so a quote without it asks (its 1.0 L reading alone made it a 'size' and the missing cream went unnoticed)
+    v, fam = max(s["values"]), s["family"]
     return ((bool(packs[fam]) and v <= max(packs[fam]) * (1 + BELOW)) or (fam != "PACK" and v < 1)
             or any(o["family"] == fam and max(o["values"]) >= 2 * v for o in others))
 
@@ -278,6 +280,7 @@ def check(q: dict, text: str | None = None) -> list[dict]:
 
 
 MAX_ASSIGN = 60  # stated x slots above this (or over 6 stated): each quantity is only checked on its own
+MAX_STEPS = 20000  # search steps for one family; beyond it, as above (6 ambiguous amounts on 9 items took ~4 s)
 
 
 def _assign(cands: list[dict], slots: dict, fallback: set[int]) -> set[int]:
@@ -291,6 +294,10 @@ def _assign(cands: list[dict], slots: dict, fallback: set[int]) -> set[int]:
     keys = list(slots)
     tops = {k: max(slots[k]) * (1 + BELOW) + 1e-6 for k in keys}
     best: list = [set()]
+    steps = [0]
+
+    class _TooLong(Exception):
+        pass
 
     def ok(load: dict) -> bool:
         if "ALL" in load and len(load) > 1:
@@ -298,6 +305,9 @@ def _assign(cands: list[dict], slots: dict, fallback: set[int]) -> set[int]:
         return all(_near(sum(v for v, _ in vs), slots[k]) and _one_product(vs) for k, vs in load.items())
 
     def walk(k: int, load: dict, got: set) -> None:
+        steps[0] += 1
+        if steps[0] > MAX_STEPS:
+            raise _TooLong
         if len(got) + len(cands) - k <= len(best[0]):
             return
         if k == len(cands):
@@ -318,7 +328,10 @@ def _assign(cands: list[dict], slots: dict, fallback: set[int]) -> set[int]:
                     return
         walk(k + 1, load, got)
 
-    walk(0, {}, set())
+    try:
+        walk(0, {}, set())
+    except _TooLong:  # a bounded check, never a stalled order (place_order runs it under the order lock)
+        return {id(s) for s in cands} & fallback
     return best[0]
 
 

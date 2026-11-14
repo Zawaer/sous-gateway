@@ -313,3 +313,30 @@ def test_buyer_agent_passes_the_original_message(monkeypatch):
         run = agent.run(GEMMA_L)
     assert run.orders[0]["status"] == "pending_approval"
     assert run.orders[0]["buyer_request"] == R.clean(GEMMA_L)
+
+
+# --- review2: an ambiguous amount left out of the quote; a bounded search ----------------------------------------
+
+@pytest.mark.parametrize("text", ["40 l milk and 1,000 l cream", "1,500 l milk and 2,000 l cream"])
+def test_an_ambiguous_amount_left_out_is_not_a_pack_size(text):
+    # only the milk is quoted: '1,000 l' / '2,000 l' may be 1000 / 2000 L of cream, so a person checks. Its small
+    # reading (1.0 / 2.0 L) alone used to make it a 'pack size', and the missing cream gave no finding.
+    milk = 1500.0 if text.startswith("1,500") else 40.0
+    q = {"items": [{"amount": milk, "unit": "L"}], "lines": [], "buyer_request": text}
+    assert [s["status"] for s in R.check(q)] == ["matched", "mismatch"]
+    assert [f.rule for f in R.findings(q)] == ["quantity.request_mismatch"]
+
+
+def test_a_real_pack_size_next_to_an_amount_is_still_a_size():
+    q = {"items": [{"amount": 87.0, "unit": "KG"}], "lines": [], "buyer_request": "87 kiloa penneä, penne 3kg"}
+    assert [s["status"] for s in R.check(q)] == ["matched", "pack_size"]
+
+
+def test_the_slot_search_is_bounded():
+    import time
+    # six ambiguous amounts on a nine-item quote: the exhaustive search took ~4 s (under the order lock)
+    q = {"items": [{"amount": 1000.0, "unit": "L"} for _ in range(9)], "lines": [],
+         "buyer_request": " ; ".join(f"1,001 l {w}" for w in ("milk", "cream", "juice", "water", "oil", "soup"))}
+    t = time.perf_counter()
+    assert [s["status"] for s in R.check(q)] == ["matched"] * 6
+    assert time.perf_counter() - t < 1.0
