@@ -154,7 +154,7 @@ def test_valkey_mirror_is_shared_between_deployments(tmp_path, monkeypatch):
     shared.configure(url="redis://fake", client=fakeredis.FakeRedis(server=server, decode_responses=True))
     assert order(1, quote(1, 80))["status"] == "ordered"
     fr = fakeredis.FakeRedis(server=server, decode_responses=True)
-    assert len(fr.hgetall(f"{shared.PREFIX}resv:B1:2026-11-16")) == 1
+    assert len(fr.hgetall(f"{shared.PREFIX}resv:{shared.ROLE}:B1:2026-11-16")) == 1
     assert fr.get(f"{shared.PREFIX}resv-obs:B1:2026-11-16")
     # another deployment: its own (empty) database, the same Valkey
     monkeypatch.setattr(config, "STATE_DB", tmp_path / "other.db")

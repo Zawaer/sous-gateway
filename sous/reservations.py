@@ -150,7 +150,9 @@ def _dt(s: str) -> datetime:
 
 
 def _key(pid: str, day: str) -> str:
-    return f"{shared.PREFIX}resv:{pid}:{day}"
+    # per deployment role: prod, staging and CI share one Valkey for the Valio budget, but staging's demo orders
+    # must not take prod's stock; replicas of one deployment (same role) do share their reservations
+    return f"{shared.PREFIX}resv:{shared.ROLE}:{pid}:{day}"
 
 
 def _obs_key(pid: str, day: str) -> str:
