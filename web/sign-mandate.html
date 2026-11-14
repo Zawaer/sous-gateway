@@ -5,11 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#f8f8f3" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#141412" media="(prefers-color-scheme: dark)">
-<title>Sign a mandate · Sous</title>
+<title data-i18n="sign.title">Sign a mandate · Sous</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Fragment+Mono&display=swap">
 <link rel="stylesheet" href="tokens.css">
+<script src="i18n.js"></script>
 <style>
   :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
@@ -21,6 +22,8 @@
   .top-in, main { max-width: 720px; margin: 0 auto; padding-left: 20px; padding-right: 20px; }
   .top-in { display: flex; align-items: center; justify-content: space-between; min-height: 56px; }
   .brand { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; font: 400 1.25rem/1 var(--serif); }
+  .top-right { display: inline-flex; align-items: center; gap: 12px; }
+  @media (max-width: 420px) { .brand small { display: none; } }
   .brand small { font: 400 .85rem/1 var(--sans); color: var(--ink-60); margin-left: 4px; }
   main { padding-top: 28px; padding-bottom: 32px; }
   h1 { font: 400 2.1rem/1.1 var(--serif); letter-spacing: -.01em; margin: 0 0 10px; }
@@ -102,88 +105,88 @@
   <div class="top-in">
     <a class="brand" href="/ui/">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 4h4l5 11 5-11h4l-7.5 16h-3z" fill="currentColor"/></svg>
-      Sous <small>Sign a mandate</small>
+      Sous <small data-i18n="sign.small">Sign a mandate</small>
     </a>
-    <a href="/ui/#/mandates">All mandates</a>
+    <span class="top-right"><a href="/ui/#/mandates" data-i18n="sign.all_mandates">All mandates</a> <span data-i18n-toggle></span></span>
   </div>
 </header>
 
 <main>
-  <h1>Give your purchasing agent a mandate</h1>
-  <p class="lead">A mandate (<i>valtakirja</i>) says what your agent may buy on its own. Valio Aimo's gateway checks every order
+  <h1 data-i18n="sign.h1">Give your purchasing agent a mandate</h1>
+  <p class="lead" data-i18n-html="sign.lead_html">A mandate (<i>valtakirja</i>) says what your agent may buy on its own. Valio Aimo's gateway checks every order
     against it: small orders go straight through, bigger ones wait for you, and anything over your ceiling is refused.</p>
-  <p class="hint">You sign it in this browser with a key that never leaves this device. Nobody else, not even the gateway, can sign in your name.</p>
+  <p class="hint" data-i18n="sign.lead_hint">You sign it in this browser with a key that never leaves this device. Nobody else, not even the gateway, can sign in your name.</p>
 
   <form id="f" novalidate>
     <section class="step" aria-labelledby="h-who">
-      <h2 id="h-who">Who it's for</h2>
+      <h2 id="h-who" data-i18n="sign.h_who">Who it's for</h2>
       <div class="row">
-        <div><label class="f" for="buyer">Organisation</label><input id="buyer" type="text" autocomplete="organization" required></div>
-        <div><label class="f" for="issued_by">Your name and role</label><input id="issued_by" type="text" value="Aino Laine, kitchen manager" autocomplete="name" required></div>
+        <div><label class="f" for="buyer" data-i18n="sign.buyer">Organisation</label><input id="buyer" type="text" autocomplete="organization" required></div>
+        <div><label class="f" for="issued_by" data-i18n="sign.issued_by">Your name and role</label><input id="issued_by" type="text" value="Aino Laine, kitchen manager" data-i18n-attr="value=sign.issued_by_default" autocomplete="name" required></div>
       </div>
     </section>
 
     <section class="step" aria-labelledby="h-money">
-      <h2 id="h-money">Spending limits</h2>
-      <p class="hint">Per order, excluding VAT.</p>
+      <h2 id="h-money" data-i18n="sign.h_money">Spending limits</h2>
+      <p class="hint" data-i18n="sign.per_order">Per order, excluding VAT.</p>
       <div class="row3">
-        <div><label class="f" for="auto">Agent orders alone up to</label><div class="money"><input id="auto" type="number" inputmode="decimal" min="0" step="1" value="150" aria-describedby="e-auto"></div></div>
-        <div><label class="f" for="notify">FYI to me above</label><div class="money"><input id="notify" type="number" inputmode="decimal" min="0" step="1" placeholder="optional" aria-describedby="e-notify"></div></div>
-        <div><label class="f" for="hard">Refuse anything over</label><div class="money"><input id="hard" type="number" inputmode="decimal" min="0" step="1" value="800" aria-describedby="e-hard"></div></div>
+        <div><label class="f" for="auto" data-i18n="sign.auto">Agent orders alone up to</label><div class="money"><input id="auto" type="number" inputmode="decimal" min="0" step="1" value="150" aria-describedby="e-auto"></div></div>
+        <div><label class="f" for="notify" data-i18n="sign.notify">FYI to me above</label><div class="money"><input id="notify" type="number" inputmode="decimal" min="0" step="1" placeholder="optional" data-i18n-attr="placeholder=sign.optional" aria-describedby="e-notify"></div></div>
+        <div><label class="f" for="hard" data-i18n="sign.hard">Refuse anything over</label><div class="money"><input id="hard" type="number" inputmode="decimal" min="0" step="1" value="800" aria-describedby="e-hard"></div></div>
       </div>
       <p id="e-auto" class="err" hidden></p><p id="e-notify" class="err" hidden></p><p id="e-hard" class="err" hidden></p>
-      <ul class="ladder" id="ladder" aria-label="What the agent may do, by order total">
-        <li id="l-silent"><span class="range"></span><span><span class="tier tier-silent">Auto</span> <span class="what">Ordered. No message to you.</span></span></li>
-        <li id="l-notify"><span class="range"></span><span><span class="tier tier-notify">Auto + FYI</span> <span class="what">Ordered, and you get an FYI.</span></span></li>
-        <li id="l-ask"><span class="range"></span><span><span class="tier tier-ask">Needs approval</span> <span class="what">Waits for you to approve or reject.</span></span></li>
-        <li id="l-block"><span class="range"></span><span><span class="tier tier-block">Refused</span> <span class="what">Never ordered, whatever the agent says.</span></span></li>
+      <ul class="ladder" id="ladder" aria-label="What the agent may do, by order total" data-i18n-attr="aria-label=sign.ladder_label">
+        <li id="l-silent"><span class="range"></span><span><span class="tier tier-silent" data-i18n="tier.silent">Auto</span> <span class="what" data-i18n="sign.what_silent">Ordered. No message to you.</span></span></li>
+        <li id="l-notify"><span class="range"></span><span><span class="tier tier-notify" data-i18n="tier.notify">Auto + FYI</span> <span class="what" data-i18n="sign.what_notify">Ordered, and you get an FYI.</span></span></li>
+        <li id="l-ask"><span class="range"></span><span><span class="tier tier-ask" data-i18n="tier.ask">Needs approval</span> <span class="what" data-i18n="sign.what_ask">Waits for you to approve or reject.</span></span></li>
+        <li id="l-block"><span class="range"></span><span><span class="tier tier-block" data-i18n="tier.block">Refused</span> <span class="what" data-i18n="sign.what_block">Never ordered, whatever the agent says.</span></span></li>
       </ul>
     </section>
 
     <section class="step" aria-labelledby="h-food">
-      <h2 id="h-food">Food safety</h2>
-      <p class="hint">Never buy products that contain:</p>
+      <h2 id="h-food" data-i18n="sign.h_food">Food safety</h2>
+      <p class="hint" data-i18n="sign.never_buy">Never buy products that contain:</p>
       <div class="chips" id="allergens">
-        <label class="chip"><input type="checkbox" value="AM" checked> Milk</label>
-        <label class="chip"><input type="checkbox" value="AW"> Gluten</label>
-        <label class="chip"><input type="checkbox" value="AN"> Tree nuts</label>
-        <label class="chip"><input type="checkbox" value="AP"> Peanuts</label>
-        <label class="chip"><input type="checkbox" value="AE"> Egg</label>
-        <label class="chip"><input type="checkbox" value="AF"> Fish</label>
-        <label class="chip"><input type="checkbox" value="AY"> Soy</label>
-        <label class="chip"><input type="checkbox" value="AS"> Sesame</label>
+        <label class="chip"><input type="checkbox" value="AM" checked> <span data-i18n="allergen.AM">Milk</span></label>
+        <label class="chip"><input type="checkbox" value="AW"> <span data-i18n="allergen.AW">Gluten</span></label>
+        <label class="chip"><input type="checkbox" value="AN"> <span data-i18n="allergen.AN">Tree nuts</span></label>
+        <label class="chip"><input type="checkbox" value="AP"> <span data-i18n="allergen.AP">Peanuts</span></label>
+        <label class="chip"><input type="checkbox" value="AE"> <span data-i18n="allergen.AE">Egg</span></label>
+        <label class="chip"><input type="checkbox" value="AF"> <span data-i18n="allergen.AF">Fish</span></label>
+        <label class="chip"><input type="checkbox" value="AY"> <span data-i18n="allergen.AY">Soy</span></label>
+        <label class="chip"><input type="checkbox" value="AS"> <span data-i18n="allergen.AS">Sesame</span></label>
       </div>
       <div class="row">
-        <div><label class="f" for="unknown">If a product has no allergen data</label>
-          <select id="unknown"><option value="ask" selected>Wait for my approval</option><option value="block">Refuse it</option></select></div>
-        <div><label class="f" for="subs">If the agent picks a substitute</label>
-          <select id="subs"><option value="ask" selected>Wait for my approval</option><option value="notify">Order it and tell me</option><option value="silent">Order it</option></select></div>
+        <div><label class="f" for="unknown" data-i18n="sign.unknown">If a product has no allergen data</label>
+          <select id="unknown"><option value="ask" selected data-i18n="sign.opt_wait">Wait for my approval</option><option value="block" data-i18n="sign.opt_refuse">Refuse it</option></select></div>
+        <div><label class="f" for="subs" data-i18n="sign.subs">If the agent picks a substitute</label>
+          <select id="subs"><option value="ask" selected data-i18n="sign.opt_wait">Wait for my approval</option><option value="notify" data-i18n="sign.opt_notify">Order it and tell me</option><option value="silent" data-i18n="sign.opt_order">Order it</option></select></div>
       </div>
-      <p class="hint" style="margin-top:10px">Missing allergen data is never treated as safe. Over half of the catalog has none.</p>
+      <p class="hint" style="margin-top:10px" data-i18n="sign.missing_safe">Missing allergen data is never treated as safe. Over half of the catalog has none.</p>
     </section>
 
     <section class="step" aria-labelledby="h-time">
-      <h2 id="h-time">How long</h2>
-      <div class="row"><div><label class="f" for="days">Valid for (days)</label><input id="days" type="number" inputmode="numeric" min="1" max="366" value="30"></div></div>
+      <h2 id="h-time" data-i18n="sign.h_time">How long</h2>
+      <div class="row"><div><label class="f" for="days" data-i18n="sign.days">Valid for (days)</label><input id="days" type="number" inputmode="numeric" min="1" max="366" value="30"></div></div>
       <details>
-        <summary>Agent and identifiers</summary>
+        <summary data-i18n="sign.ids_summary">Agent and identifiers</summary>
         <div class="box">
           <div class="row">
-            <div><label class="f" for="agent_id">Agent id</label><input id="agent_id" type="text" value="kitchen-agent" required></div>
-            <div><label class="f" for="id">Mandate id</label><input id="id" type="text" required></div>
+            <div><label class="f" for="agent_id" data-i18n="sign.agent_id">Agent id</label><input id="agent_id" type="text" value="kitchen-agent" required></div>
+            <div><label class="f" for="id" data-i18n="sign.mandate_id">Mandate id</label><input id="id" type="text" required></div>
           </div>
-          <label class="check"><input id="auth" type="checkbox"> <span>The agent must log in with its own token<br><span class="note">You'll see the token once, after signing.</span></span></label>
+          <label class="check"><input id="auth" type="checkbox"> <span><span data-i18n="sign.auth">The agent must log in with its own token</span><br><span class="note" data-i18n="sign.auth_note">You'll see the token once, after signing.</span></span></label>
         </div>
       </details>
       <details>
-        <summary>Your signing key and how it works</summary>
+        <summary data-i18n="sign.key_summary">Your signing key and how it works</summary>
         <div class="box">
-          <div class="note">Your identifier</div>
+          <div class="note" data-i18n="sign.your_id">Your identifier</div>
           <div id="did" class="mono">…</div>
-          <p class="note">Your browser made a P-256 key that can't be exported; the gateway only sees the public half, as a
+          <p class="note" data-i18n-html="sign.key_note_html">Your browser made a P-256 key that can't be exported; the gateway only sees the public half, as a
             <span class="mono">did:key</span>. The mandate is a W3C Verifiable Credential (<span class="mono">vc+jwt</span>, ES256).
             The gateway checks your signature, countersigns it (Ed25519) and records it in the audit log.</p>
-          <button id="newkey" class="btn plain" type="button">Make a new key</button>
+          <button id="newkey" class="btn plain" type="button" data-i18n="sign.new_key">Make a new key</button>
         </div>
       </details>
     </section>
@@ -191,7 +194,7 @@
     <p id="e-form" class="err" role="alert" hidden></p>
     <div class="actionbar">
       <span class="summary" id="summary"></span>
-      <button id="sign" class="btn primary" type="submit">Sign mandate</button>
+      <button id="sign" class="btn primary" type="submit" data-i18n="sign.sign">Sign mandate</button>
     </div>
   </form>
 
@@ -200,18 +203,19 @@
     <p id="explain" class="note"></p>
     <ul id="checks" class="checks-out"></ul>
     <div id="token" class="token" hidden></div>
-    <details><summary>The signed credential (vc+jwt)</summary><pre id="vc" class="mono box" style="white-space:pre-wrap"></pre></details>
+    <details><summary data-i18n="sign.vc_summary">The signed credential (vc+jwt)</summary><pre id="vc" class="mono box" style="white-space:pre-wrap"></pre></details>
     <div class="after">
-      <a id="see" class="btn plain" href="/ui/#/mandates">See it in Mandates</a>
-      <button id="revoke" class="btn danger" type="button">Revoke this mandate</button>
+      <a id="see" class="btn plain" href="/ui/#/mandates" data-i18n="sign.see">See it in Mandates</a>
+      <button id="revoke" class="btn danger" type="button" data-i18n="sign.revoke">Revoke this mandate</button>
     </div>
   </section>
 
-  <footer class="foot">Sous · an open gateway for purchasing agents at Valio Aimo · <a href="/ui/">Seller view</a> · <a href="/.well-known/jwks.json">Gateway key</a></footer>
+  <footer class="foot"><span data-i18n="common.tagline">Sous · an open gateway for purchasing agents at Valio Aimo</span> · <a href="/ui/" data-i18n="sign.seller_view">Seller view</a> · <a href="/.well-known/jwks.json" data-i18n="sign.gateway_key">Gateway key</a></footer>
 </main>
 <script>
 "use strict";
 const API = new URLSearchParams(location.search).get("api") || "";
+const t = I18N.t;
 const $ = (id) => document.getElementById(id);
 const enc = new TextEncoder();
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -284,7 +288,7 @@ const isoSec = (d) => {  // local time with offset, seconds precision
 };
 
 
-const fmtEur = (n) => new Intl.NumberFormat("fi-FI", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
+const fmtEur = (n) => I18N.money(n, { maximumFractionDigits: 0 });
 const num = (id) => { const v = $(id).value.trim(); return v === "" ? null : Number(v); };
 
 function setErr(id, msg) {
@@ -298,24 +302,24 @@ function limits() {
   const auto = num("auto"), notify = num("notify"), hard = num("hard");
   let ok = true;
   setErr("auto", null); setErr("notify", null); setErr("hard", null);
-  if (auto === null || !(auto >= 0)) { setErr("auto", "Enter how much the agent may spend alone, e.g. 150."); ok = false; }
-  if (hard === null || !(hard > 0)) { setErr("hard", "Enter the most any order may cost, e.g. 800."); ok = false; }
-  else if (auto !== null && hard < auto) { setErr("hard", `The ceiling (${fmtEur(hard)}) must be at least the agent's own limit (${fmtEur(auto)}).`); ok = false; }
+  if (auto === null || !(auto >= 0)) { setErr("auto", t("sign.e_auto")); ok = false; }
+  if (hard === null || !(hard > 0)) { setErr("hard", t("sign.e_hard")); ok = false; }
+  else if (auto !== null && hard < auto) { setErr("hard", t("sign.e_hard_low", { hard: fmtEur(hard), auto: fmtEur(auto) })); ok = false; }
   if (notify !== null && auto !== null && !(notify >= 0 && notify < auto)) {
-    setErr("notify", `The FYI line must be below ${fmtEur(auto)}, or leave it empty.`); ok = false;
+    setErr("notify", t("sign.e_notify", { auto: fmtEur(auto) })); ok = false;
   }
   const useNotify = ok && notify !== null;
   const rows = {
     silent: ok ? (useNotify ? `0 – ${fmtEur(notify)}` : `0 – ${fmtEur(auto)}`) : "",
     notify: useNotify ? `${fmtEur(notify)} – ${fmtEur(auto)}` : "",
     ask: ok && hard > auto ? `${fmtEur(auto)} – ${fmtEur(hard)}` : "",
-    block: ok ? `over ${fmtEur(hard)}` : "",
+    block: ok ? t("sign.over", { amount: fmtEur(hard) }) : "",
   };
   for (const [k, v] of Object.entries(rows)) {
     const li = $("l-" + k);
     li.hidden = !v; li.querySelector(".range").textContent = v;
   }
-  $("summary").textContent = ok ? `Alone up to ${fmtEur(auto)} · refuse over ${fmtEur(hard)}` : "";
+  $("summary").textContent = ok ? t("sign.summary", { auto: fmtEur(auto), hard: fmtEur(hard) }) : "";
   return ok;
 }
 ["auto", "notify", "hard"].forEach((id) => $(id).addEventListener("input", limits));
@@ -332,7 +336,7 @@ async function showKey() {
 }
 
 $("newkey").onclick = async () => {
-  if (!confirm("Make a new key? Mandates signed with the old key stay valid, but this browser can no longer revoke them.")) return;
+  if (!confirm(t("sign.confirm_new_key"))) return;
   await makeKey();
   $("buyer").value = ""; $("id").value = "";
   await showKey();
@@ -345,14 +349,14 @@ function formError(msg) {
 $("f").onsubmit = async (e) => {
   e.preventDefault();
   formError(null);
-  if (!limits()) { formError("Check the spending limits above."); $("auto").focus(); return; }
+  if (!limits()) { formError(t("sign.check_limits")); $("auto").focus(); return; }
   for (const id of ["buyer", "issued_by", "agent_id", "id"]) {
     if (!$(id).value.trim()) {
       if (id === "agent_id" || id === "id") $(id).closest("details").open = true;
-      formError(`Fill in "${document.querySelector(`label[for=${id}]`).textContent}".`); $(id).focus(); return;
+      formError(t("sign.fill_in", { label: document.querySelector(`label[for=${id}]`).textContent })); $(id).focus(); return;
     }
   }
-  $("sign").disabled = true; $("sign").textContent = "Signing…";
+  $("sign").disabled = true; $("sign").textContent = t("sign.signing");
   try {
     const did = await showKey();
     const now = new Date(); now.setMilliseconds(0);
@@ -384,16 +388,16 @@ $("f").onsubmit = async (e) => {
     const tok = body.agent_credential && body.agent_credential.header;
     $("token").hidden = !tok;
     if (tok) {
-      $("token").replaceChildren(Object.assign(document.createElement("strong"), { textContent: "Your agent's token. Copy it now, it is shown only once." }),
+      $("token").replaceChildren(Object.assign(document.createElement("strong"), { textContent: t("sign.token_once") }),
         Object.assign(document.createElement("div"), { className: "mono", textContent: tok }));
     }
     if (!r.ok) {
-      $("headline").textContent = "The gateway didn't accept this mandate";
-      $("verdict-tag").replaceChildren(Object.assign(document.createElement("span"), { className: "tier tier-block", textContent: "Refused" }));
+      $("headline").textContent = t("sign.not_accepted");
+      $("verdict-tag").replaceChildren(Object.assign(document.createElement("span"), { className: "tier tier-block", textContent: I18N.tier("block") }));
       const plain = {
-        issuer_not_authorised: `"${$("buyer").value.trim()}" already signs its mandates with another key. Use a different organisation name, or ask a Valio Aimo approver to add this key.`,
+        issuer_not_authorised: t("sign.issuer_not_authorised", { buyer: $("buyer").value.trim() }),
       }[body.error];
-      $("explain").textContent = plain ? `${plain} (${body.error})` : `${body.message || "No reason given."} (${body.error || r.status})`;
+      $("explain").textContent = plain ? `${plain} (${body.error})` : `${body.message || t("sign.no_reason")} (${body.error || r.status})`;
       $("checks").replaceChildren();
       $("revoke").hidden = true; $("see").hidden = true;
       $("result").scrollIntoView({ behavior: "smooth" });
@@ -404,9 +408,9 @@ $("f").onsubmit = async (e) => {
     await showVerify();
     $("result").scrollIntoView({ behavior: "smooth" });
   } catch (err) {
-    formError(`Signing failed: ${err.message || err}. Nothing was sent.`);
+    formError(t("sign.failed", { msg: err.message || err }));
   } finally {
-    $("sign").disabled = false; $("sign").textContent = "Sign mandate";
+    $("sign").disabled = false; $("sign").textContent = t("sign.sign");
   }
 };
 
@@ -414,12 +418,10 @@ async function showVerify() {
   const v = await (await fetch(API + `/mandates/${encodeURIComponent(current.id)}/verify`)).json();
   const me = $("did").textContent;
   const valid = v.verdict === "valid";
-  $("headline").textContent = valid ? `Mandate ${v.mandate_id} is in force` : `Mandate ${v.mandate_id}: ${v.verdict}`;
+  $("headline").textContent = valid ? t("sign.in_force", { id: v.mandate_id }) : t("sign.verdict", { id: v.mandate_id, verdict: v.verdict });
   $("verdict-tag").replaceChildren(Object.assign(document.createElement("span"),
-    { className: `tier ${valid ? "tier-silent" : "tier-block"}`, textContent: valid ? "Valid" : (v.revoked ? "Revoked" : "Not valid") }));
-  $("explain").textContent = valid
-    ? "Your agent can order under it now. The gateway checked the five things below; anyone can repeat the check."
-    : "The agent can't order under this mandate.";
+    { className: `tier ${valid ? "tier-silent" : "tier-block"}`, textContent: t(valid ? "sign.valid" : (v.revoked ? "sign.revoked" : "sign.not_valid")) }));
+  $("explain").textContent = t(valid ? "sign.explain_valid" : "sign.explain_invalid");
   const li = (ok, text) => {
     const el = document.createElement("li"); el.className = ok ? "ok" : "bad";
     el.append(Object.assign(document.createElement("span"), { className: "mk", textContent: ok ? "✓" : "✕", ariaHidden: "true" }),
@@ -427,15 +429,16 @@ async function showVerify() {
     return el;
   };
   const bs = v.buyer_signature || {};
-  const vu = v.validity.valid_until ? new Date(v.validity.valid_until).toLocaleString("fi-FI") : "no end";
+  const vu = v.validity.valid_until ? I18N.dateTime(v.validity.valid_until) : t("sign.no_end");
+  const how = (v.issuer_authorised || {}).how || t("sign.not_registered");
   $("checks").replaceChildren(
-    li(bs.ok, `Signed by you${v.issuer.did === me ? "" : " (a different key)"}: your signature checks out (${bs.alg || "?"}).`),
-    li(v.gateway_signature.ok, "Countersigned by the gateway (Ed25519, public key at /.well-known/jwks.json)."),
-    li(v.issuer_authorised && v.issuer_authorised.ok, `Your key may sign for ${bs.ok ? v.issuer_authorised.buyer : "this buyer"} (${(v.issuer_authorised || {}).how || "not registered"}).`),
-    li(v.validity.in_window, `Valid ${new Date(v.validity.valid_from).toLocaleString("fi-FI")} to ${vu}.`),
-    li(!v.revoked, v.revoked ? "Revoked by a statement you signed." : "Not revoked."),
+    li(bs.ok, t(v.issuer.did === me ? "sign.chk_signed" : "sign.chk_signed_other", { alg: bs.alg || "?" })),
+    li(v.gateway_signature.ok, t("sign.chk_gateway")),
+    li(v.issuer_authorised && v.issuer_authorised.ok, bs.ok ? t("sign.chk_issuer", { buyer: v.issuer_authorised.buyer, how }) : t("sign.chk_issuer_unknown", { how })),
+    li(v.validity.in_window, t("sign.chk_valid", { from: I18N.dateTime(v.validity.valid_from), until: vu })),
+    li(!v.revoked, t(v.revoked ? "sign.chk_revoked" : "sign.chk_not_revoked")),
   );
-  const a = Object.assign(document.createElement("a"), { href: API + `/mandates/${encodeURIComponent(v.mandate_id)}/verify`, textContent: "Full verification report (JSON)" });
+  const a = Object.assign(document.createElement("a"), { href: API + `/mandates/${encodeURIComponent(v.mandate_id)}/verify`, textContent: t("sign.full_report") });
   const more = document.createElement("li");
   more.append(document.createElement("span"), a);
   $("checks").append(more);
@@ -444,12 +447,12 @@ async function showVerify() {
 }
 
 $("revoke").onclick = async () => {
-  if (!current || !confirm(`Revoke ${current.id}? Your agent can no longer order under it. This can't be undone.`)) return;
+  if (!current || !confirm(t("sign.confirm_revoke", { id: current.id }))) return;
   const statement = await jws({ type: "SousMandateRevocation", mandate_id: current.id,
     credential_sha256: await sha256hex(current.credential), iat: Math.floor(Date.now() / 1000) }, "sous-revocation+jws");
   const r = await fetch(API + `/mandates/${encodeURIComponent(current.id)}/revoke-credential`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ revocation: statement }) });
-  if (!r.ok) { const b = await r.json().catch(() => ({})); $("explain").textContent = `Not revoked: ${b.message || r.status}`; return; }
+  if (!r.ok) { const b = await r.json().catch(() => ({})); $("explain").textContent = t("sign.not_revoked_err", { msg: b.message || r.status }); return; }
   await showVerify();
 };
 
@@ -457,17 +460,15 @@ $("revoke").onclick = async () => {
 // The link carries #draft=<base64url JSON {v, from, text, fields}>. It is only a starting point: every value is
 // re-checked here, shown in the form, and nothing is sent until you press Sign.
 const DRAFT_EXTRA = {  // fields with no input above: shown in their own box, signed only if left ticked
-  daily_limit_eur: { label: "Daily total before my approval", def: null, ok: (v) => v === null || (typeof v === "number" && v > 0), show: (v) => fmtEur(v) },
-  allow_may_contain: { label: "Accept 'may contain' traces", def: false, ok: (v) => typeof v === "boolean", show: (v) => v ? "yes" : "no" },
-  required_claims: { label: "Every line must carry the claims", def: [], ok: (v) => Array.isArray(v) && v.every((c) => /^[A-Z0-9_]{2,40}$/.test(c)), show: (v) => v.join(", ") },
-  later_delivery: { label: "If delivery is later than asked", def: "ask", ok: (v) => ["notify", "ask", "block"].includes(v), show: (v) => ({ notify: "order it and tell me", ask: "wait for my approval", block: "refuse it" })[v] },
-  unusual_quantity_factor: { label: "Ask when a quantity is over N× usual", def: 3, ok: (v) => v === null || (typeof v === "number" && v > 1 && v <= 100), show: (v) => v === null ? "off" : `${v}×` },
-  allowed_categories: { label: "Only these category codes", def: null, ok: (v) => v === null || (Array.isArray(v) && v.every((c) => /^\d{1,8}$/.test(c))), show: (v) => v.join(", ") },
+  daily_limit_eur: { label: "sign.x_daily", def: null, ok: (v) => v === null || (typeof v === "number" && v > 0), show: (v) => fmtEur(v) },
+  allow_may_contain: { label: "sign.x_may_contain", def: false, ok: (v) => typeof v === "boolean", show: (v) => t(v ? "sign.yes" : "sign.no") },
+  required_claims: { label: "sign.x_claims", def: [], ok: (v) => Array.isArray(v) && v.every((c) => /^[A-Z0-9_]{2,40}$/.test(c)), show: (v) => v.join(", ") },
+  later_delivery: { label: "sign.x_later", def: "ask", ok: (v) => ["notify", "ask", "block"].includes(v), show: (v) => t("sign.v_" + v) },
+  unusual_quantity_factor: { label: "sign.x_unusual", def: 3, ok: (v) => v === null || (typeof v === "number" && v > 1 && v <= 100), show: (v) => v === null ? t("sign.off") : `${I18N.num(v)}×` },
+  allowed_categories: { label: "sign.x_categories", def: null, ok: (v) => v === null || (Array.isArray(v) && v.every((c) => /^\d{1,8}$/.test(c))), show: (v) => v.join(", ") },
 };
-const ALLERGEN_NAMES = { AM: "Milk", ML: "Lactose", AE: "Egg", AF: "Fish", AC: "Crustaceans", UM: "Molluscs", AP: "Peanuts", AN: "Tree nuts",
-  SA: "Almond", SH: "Hazelnut", SW: "Walnut", SC: "Cashew", SP: "Pecan", SR: "Brazil nut", ST: "Pistachio", SM: "Macadamia", NM: "Nuts (other)",
-  AW: "Gluten", UW: "Wheat", NR: "Rye", GB: "Barley", GO: "Oats", GS: "Spelt", GK: "Kamut", AY: "Soy", AS: "Sesame", BM: "Mustard",
-  BC: "Celery", NL: "Lupin", AU: "Sulphites" };
+const ALLERGENS = ["AM", "ML", "AE", "AF", "AC", "UM", "AP", "AN", "SA", "SH", "SW", "SC", "SP", "SR", "ST", "SM", "NM",
+  "AW", "UW", "NR", "GB", "GO", "GS", "GK", "AY", "AS", "BM", "BC", "NL", "AU"];  // names: allergen.<code> in i18n.js
 let draftExtra = {};
 function draftExtras() {
   const out = {};
@@ -481,7 +482,7 @@ function readDraft() {
   try {
     const bin = atob(m[1].replace(/-/g, "+").replace(/_/g, "/"));
     d = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))));
-  } catch { formError("The draft link is damaged; fill the form in by hand."); return; }
+  } catch { formError(t("sign.draft_damaged")); return; }
   const f = (d && d.fields) || {};
   const money = (id, v, required) => {
     if (v === null && !required) $(id).value = "";
@@ -491,47 +492,71 @@ function readDraft() {
   if ("notify_above_eur" in f) money("notify", f.notify_above_eur, false);
   if ("hard_limit_eur" in f) money("hard", f.hard_limit_eur, true);
   if (Array.isArray(f.avoid_allergens)) {
-    const want = new Set(f.avoid_allergens.filter((c) => c in ALLERGEN_NAMES));
+    const want = new Set(f.avoid_allergens.filter((c) => ALLERGENS.includes(c)));
     document.querySelectorAll("#allergens input").forEach((x) => { x.checked = want.has(x.value); want.delete(x.value); });
     for (const c of want) {  // a code without a chip yet (e.g. ML lactose): add one
       const l = Object.assign(document.createElement("label"), { className: "chip" });
-      l.append(Object.assign(document.createElement("input"), { type: "checkbox", value: c, checked: true }), ` ${ALLERGEN_NAMES[c]}`);
+      const name = Object.assign(document.createElement("span"), { textContent: t("allergen." + c) });
+      name.dataset.i18n = "allergen." + c;
+      l.append(Object.assign(document.createElement("input"), { type: "checkbox", value: c, checked: true }), " ", name);
       $("allergens").append(l);
     }
   }
   if (["ask", "block"].includes(f.unknown_allergens)) $("unknown").value = f.unknown_allergens;
   if (["silent", "notify", "ask", "block"].includes(f.substitutions)) {
-    if (!$("subs").querySelector(`option[value=${f.substitutions}]`)) $("subs").append(new Option("Refuse substitutes", f.substitutions));
+    if (!$("subs").querySelector(`option[value=${f.substitutions}]`)) {
+      const o = new Option(t("sign.opt_refuse_subs"), f.substitutions);
+      o.dataset.i18n = "sign.opt_refuse_subs";
+      $("subs").append(o);
+    }
     $("subs").value = f.substitutions;
   }
   if (Number.isInteger(f.valid_days) && f.valid_days >= 1 && f.valid_days <= 366) $("days").value = String(f.valid_days);
-  const rows = [];
   draftExtra = {};
   for (const [k, spec] of Object.entries(DRAFT_EXTRA)) {
     if (!(k in f) || !spec.ok(f[k]) || JSON.stringify(f[k]) === JSON.stringify(spec.def)) continue;
     draftExtra[k] = f[k];
-    const l = Object.assign(document.createElement("label"), { className: "check" });
-    l.append(Object.assign(document.createElement("input"), { type: "checkbox", checked: true }),
-      Object.assign(document.createElement("span"), { textContent: `${spec.label}: ${spec.show(f[k])}` }));
-    l.firstChild.dataset.field = k;
-    rows.push(l);
   }
+  draftText = d.text ? String(d.text).slice(0, 300) : "";
+  draftBox();
+  limits();
+}
+
+let draftText = null;  // null: no draft in the link
+function draftBox() {  // (re)draws the "From your draft" box in the current language, keeping the ticks
+  if (draftText === null) return;
+  const old = $("draft-extra"), was = {};
+  if (old) old.querySelectorAll("input[data-field]").forEach((x) => { was[x.dataset.field] = x.checked; });
+  const rows = Object.keys(draftExtra).map((k) => {
+    const spec = DRAFT_EXTRA[k];
+    const l = Object.assign(document.createElement("label"), { className: "check" });
+    l.append(Object.assign(document.createElement("input"), { type: "checkbox", checked: was[k] ?? true }),
+      Object.assign(document.createElement("span"), { textContent: `${t(spec.label)}: ${spec.show(draftExtra[k])}` }));
+    l.firstChild.dataset.field = k;
+    return l;
+  });
   const box = document.createElement("section");
   box.className = "step"; box.id = "draft-extra";
-  const h = Object.assign(document.createElement("h2"), { textContent: "From your draft" });
+  const h = Object.assign(document.createElement("h2"), { textContent: t("sign.draft_h") });
   const p = Object.assign(document.createElement("p"), { className: "hint",
-    textContent: `Pre-filled from your words${d.text ? `: “${String(d.text).slice(0, 300)}”` : ""}. Check every field above before you sign.` +
-      (rows.length ? " These rules have no field above; untick any you don't want signed:" : "") });
+    textContent: (draftText ? t("sign.draft_from_text", { text: draftText }) : t("sign.draft_from")) + " " + t("sign.draft_check") +
+      (rows.length ? " " + t("sign.draft_untick") : "") });
   box.append(h, p, ...rows);
-  $("f").insertBefore(box, $("f").firstElementChild);
-  limits();
+  if (old) old.replaceWith(box); else $("f").insertBefore(box, $("f").firstElementChild);
 }
 
 readDraft();
 limits();
+I18N.onChange(() => {
+  limits(); draftBox();
+  if (!$("sign").disabled) $("sign").textContent = t("sign.sign");
+  if (!window.isSecureContext || !crypto.subtle) { $("did").textContent = t("sign.https_did"); formError(t("sign.https_form")); }
+  else if ($("e-form").textContent) formError(null);
+  if (current && !$("result").hidden) showVerify();
+});
 if (!window.isSecureContext || !crypto.subtle) {
-  $("did").textContent = "Signing needs https (or localhost).";
-  formError("This page must be opened over https to sign. Nothing can be signed here.");
+  $("did").textContent = t("sign.https_did");
+  formError(t("sign.https_form"));
   $("sign").disabled = true;
 } else {
   showKey().catch((e) => { $("did").textContent = String(e); });
