@@ -40,7 +40,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from sous import agent_auth, config, sandbox, service as S, store
+from sous import agent_auth, config, fi, sandbox, service as S, store
 
 from . import draft as DR, recipe as R, vision as V
 
@@ -388,7 +388,7 @@ def plan_menu(req: PlanMenuIn, request: Request, token: str | None = Depends(_to
         "quote": q and {k: q[k] for k in ("id", "expires_at", "total_ex_vat", "total_inc_vat", "lines")},
         "uncovered": (q or {}).get("uncovered", []),
         "substitutes": d["substitutes"],
-        "mandate_preview": (q or {}).get("mandate_preview"),
+        "mandate_preview": _preview(q),
         "summary": d["summary"], "error": d["error"],
         "valio_api_calls": d["valio_api_calls"], "gateway_calls": len(d["steps"]), "steps": d["steps"],
     }
@@ -466,7 +466,7 @@ def _read_photo(data: bytes, mandate_id: str, agent_id: str, kind_hint: str | No
         "quote": q and {k: q[k] for k in ("id", "expires_at", "total_ex_vat", "total_inc_vat", "lines")},
         "uncovered": (q or {}).get("uncovered", []),
         "substitutes": [ln["substitute"] for ln in d["lines"] if ln.get("substitute")],
-        "mandate_preview": (q or {}).get("mandate_preview"),
+        "mandate_preview": _preview(q),
         "summary": d["summary"], "error": d["error"], "valio_api_calls": d["valio_api_calls"],
     }
 
@@ -514,7 +514,7 @@ def ask(req: AskIn, request: Request, token: str | None = Depends(_token)):
     return {"banner": BANNER, "request": req.text, "mandate_id": req.mandate_id, "agent_id": req.agent_id,
             "by": _display(llm.cfg.model), "model": meter.info(), "allow_order": req.allow_order,
             "transcript": run.transcript(), "answer": run.final_text, "stop_reason": run.stop_reason,
-            "quote": _quote_view(q), "mandate_preview": (q or {}).get("mandate_preview"),
+            "quote": _quote_view(q), "mandate_preview": _preview(q),
             "order": _order_view(run.orders[0] if run.orders else None), "orders_placed": summary["orders_placed"],
             "valio_api_calls": run.valio_api_calls, "tool_calls": run.tool_calls}
 
@@ -579,10 +579,28 @@ def _order_view(o: dict | None) -> dict | None:
     if not o:
         return None
     dec = o.get("decision") or {}
+    ex_fi = (o.get("explanations_fi") or {}).get("findings") or {}  # the order's own Finnish twins, by index
     return {"id": o["id"], "status": o["status"], "tier": dec.get("outcome"),
             "total_ex_vat": o.get("total_ex_vat"), "approval_url": o.get("approval_url"),
-            "findings": [{"rule": f["rule"], "outcome": f["outcome"], "message": f["message"]}
-                         for f in dec.get("findings", [])]}
+            "findings": [{"rule": f["rule"], "outcome": f["outcome"], "message": f["message"],
+                          "message_fi": ex_fi.get(str(i)) or _fi(f)} for i, f in enumerate(dec.get("findings", []))]}
+
+
+def _preview(q: dict | None) -> dict | None:
+    """The quote's mandate preview, each finding with a Finnish twin (message_fi) for the page's Finnish view;
+    the signed quote itself is untouched."""
+    p = (q or {}).get("mandate_preview")
+    if not p:
+        return p
+    return {**p, "findings": [{**f, "message_fi": _fi(f)} for f in p.get("findings", [])]}
+
+
+def _fi(f: dict) -> str:
+    """Finnish for a finding as JSON: its own message_fi, else the rule's Finnish text after the product name."""
+    try:
+        return f.get("message_fi") or fi.fallback(f["rule"], f.get("product_id"))
+    except Exception:  # a Finnish twin is a nicety: never fail the response over it (the page shows English)
+        return None
 
 
 @app.get("/usage", tags=["buyer agent"])

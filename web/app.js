@@ -142,13 +142,14 @@ const when = (iso) => {
   if (!iso) return "–";
   const d = new Date(iso);
   if (isNaN(d)) return esc(iso);
-  return d.toLocaleString("fi-FI", { timeZone: "Europe/Helsinki", day: "numeric", month: "numeric",
-    hour: "2-digit", minute: "2-digit" });
+  const dm = d.toLocaleDateString("fi-FI", { timeZone: "Europe/Helsinki", day: "numeric", month: "numeric" });
+  const hm = d.toLocaleTimeString("fi-FI", { timeZone: "Europe/Helsinki", hour: "2-digit", minute: "2-digit" }).replace(".", ":");
+  return `${dm} ${hm}`;
 };
 const dateOnly = (iso) => {
   if (!iso) return "–";
   const d = new Date(iso.length === 10 ? iso + "T12:00:00" : iso);
-  return isNaN(d) ? esc(iso) : d.toLocaleDateString("fi-FI", { weekday: "short", day: "numeric", month: "numeric" });
+  return isNaN(d) ? esc(iso) : `${d.toLocaleDateString("en-GB", { weekday: "short" })} ${d.toLocaleDateString("fi-FI", { day: "numeric", month: "numeric" })}`;
 };
 
 function untilText(iso) {
@@ -252,7 +253,7 @@ function findingsList(findings, { only, plain } = {}) {
 }
 
 // What the line is for (sous/purpose.py): decides how strictly it may be substituted.
-const PURPOSE_SAYS = { exact: "only this product", ask: "substitute needs the buyer's yes", allowed: "any brand is fine" };
+const PURPOSE_SAYS = { exact: "only this product", ask: "a substitute would need the buyer's yes", allowed: "any brand is fine" };
 function purposeChip(l) {
   if (!l.purpose && !l.substitution) return "";
   return `<div class="small purpose">${ic(l.substitution === "exact" ? "lock" : l.substitution === "ask" ? "help" : "swap_horiz")}
@@ -284,7 +285,10 @@ function decideBy(iso) {
   return `Decide by ${day} ${dm} ${hm} (<span class="deadline" data-until="${esc(iso)}"></span>)`;
 }
 
+// The gateway's approve_by (cut-off minus 15 min, or the mandate/sandbox expiry) is the real deadline: a later
+// approval gets 409 approval_deadline_passed. Fall back to the earliest line cut-off for older orders.
 function earliestCutoff(order) {
+  if (order.approve_by) return order.approve_by;
   const cs = (order.lines || []).map((l) => l.order_cutoff).filter(Boolean).sort();
   return cs[0] || null;
 }
@@ -737,7 +741,7 @@ function flowSteps(o, q, searches, events) {
     `${why ? `<span class="rationale">“${esc(why)}”</span> ` : ""}Needs delivery by ${dateOnly(q?.requested_delivery_date || o.delivery_date)}
      ${search ? ` · searched ${searches.map((s) => `“${esc(s.data.query)}”`).join(", ")}${search.data.claims?.length ? ` with ${esc(search.data.claims.join(", "))}` : ""}${search.data.avoid_allergens?.length ? `, avoiding ${esc(search.data.avoid_allergens.map((c) => allergenNames?.[c] || c).join(", "))}` : ""}
        → ${found.size} products from the static catalog, 0 Valio API calls`
-       : !subs.length && q ? ` · named ${(q.lines || []).map((l) => `<span class="mono">${esc(l.product_id)}</span>`).join(", ")} directly, no catalog search` : ""}
+       : !subs.length && q ? ` · quoted ${(q.lines || []).map((l) => `<span class="mono">${esc(l.product_id)}</span>`).join(", ")} (no catalog search by this agent on record)` : ""}
      ${subs.length ? ` · asked to replace ${subs.map((l) => `<span class="mono">${esc(l.substitute_for)}</span>`).join(", ")} with a substitute` : ""}`);
 
   const lookup = step(2, "Lookup", q?.issued_at, ["system", "Sous gateway"],
@@ -905,6 +909,12 @@ const EVENT_LABEL = {
   "order.rejected": "Order attempt rejected",
   "order.approved": "Approved by a human",
   "order.rejected_by_human": "Rejected by a human",
+  "order.erp_simulated": "Handed to the order system (simulated)",
+  "order.erp_sent": "Sent to Valio Aimo's order system",
+  "order.erp_confirmed": "Confirmed by Valio Aimo's order system",
+  "order.erp_failed": "Order system hand-off failed (will retry)",
+  "order.erp_gave_up": "Order system hand-off gave up",
+  "order.erp_reconciled": "Order system hand-off reconciled",
   "substitutes.suggested": "Substitutes suggested",
   "notification.sent": "Notification sent",
   "notification.failed": "Notification failed",
@@ -1737,7 +1747,7 @@ async function renderSandboxBanner() {
     el.classList.toggle("off", !live);
     el.innerHTML = `<b>Sandbox ${esc(s.id)}</b> <span class="state${live ? "" : " off"}">${esc(s.status)}</span>
       <span>Only this sandbox's mandates, orders and audit events are shown · ${esc(s.quotes_left)} of ${esc(s.quotes_limit)}
-      live lookups left · expires ${when(s.expires_at)} · ${esc(s.orders?.total ?? 0)} order(s)</span>
+      live lookups left · expires ${when(s.expires_at)} · ${esc(s.orders?.total ?? 0)} ${(s.orders?.total ?? 0) === 1 ? "order" : "orders"}</span>
       <a href="${location.pathname}${location.hash}">Leave sandbox</a>`;
   } catch (e) {
     el.classList.add("off");

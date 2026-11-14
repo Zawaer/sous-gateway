@@ -341,12 +341,16 @@ function quoteTable(q, uncovered) {
     `<tr><td><b>${esc(t("agent.total"))}</b> <span class="rule">${esc(t("agent.quote_expires", { id: q.id, time: q.expires_at ? I18N.time(q.expires_at) : "" }))}</span></td><td></td>` +
     `<td class="num"><b>${eur(q.total_ex_vat)}</b></td></tr></table>${unc}`;
 }
+// The gateway's reason in the page language (message_fi is its unsigned Finnish twin), the deciding finding first.
+const msgOf = (x) => (I18N.lang === "fi" && x.message_fi) || x.message;
+const WEIGHT = { block: 0, ask: 1, notify: 2, silent: 3 };
+const byWeight = (f) => [...f].sort((a, b) => (WEIGHT[a.outcome] ?? 4) - (WEIGHT[b.outcome] ?? 4));
 function preview(p) {
   lastPreview = p && p.outcome;
   if (!p) return `<div class="muted">${esc(t("agent.no_preview"))}</div>`;
-  const f = (p.findings || []).filter((x) => x.outcome !== "silent" || x.rule === "mandate.ok");
+  const f = byWeight((p.findings || []).filter((x) => x.outcome !== "silent" || x.rule === "mandate.ok"));
   return `<div>${tier(p.outcome)} <span class="muted small">${esc(t("agent.would_decide"))}</span></div>` +
-    `<ul class="findings">${f.map((x) => `<li>${tier(x.outcome)}<div>${esc(x.message)}<div class="rule">${esc(x.rule)}</div></div></li>`).join("")}</ul>`;
+    `<ul class="findings">${f.map((x) => `<li>${tier(x.outcome)}<div>${esc(msgOf(x))}<div class="rule">${esc(x.rule)}</div></div></li>`).join("")}</ul>`;
 }
 function orderBlock(d, n) {
   if (!d.quote) return "";
@@ -370,11 +374,11 @@ function wireOrder() {
 let lastPreview = null;
 function orderResult(o, afterPreview) {
   // After the mandate-check step the findings are already on screen: repeat them only if the decision changed.
-  const f = afterPreview ? [] : (o.findings || []).filter((x) => x.outcome !== "silent");
-  const human = o.status === "pending_approval" ? `<div class="small" style="margin-top:8px">${t("agent.waiting_html", { href: `./?sandbox=${encodeURIComponent(state.id)}#/inbox` })}</div>` : "";
+  const f = afterPreview ? [] : byWeight((o.findings || []).filter((x) => x.outcome !== "silent"));
+  const human = o.status === "pending_approval" ? `<div class="small" style="margin-top:8px">${t("agent.waiting_html", { href: `buyer.html?sandbox=${encodeURIComponent(state.id)}#/inbox` })}</div>` : "";
   return `<div style="margin-top:12px"><div class="big">${esc(o.id)} ${tier(o.status)}</div>` +
-    `<div class="muted small">${eur(o.total_ex_vat)} ${esc(t("common.ex_vat"))} · ${esc(t("agent.mandate_outcome"))} ${tier(o.tier)} · <a href="./?sandbox=${encodeURIComponent((state && state.id) || "")}#/orders/${encodeURIComponent(o.id)}">${esc(t("agent.open_seller"))}</a></div>` +
-    (f.length ? `<ul class="findings">${f.map((x) => `<li>${tier(x.outcome)}<div>${esc(x.message)}<div class="rule">${esc(x.rule)}</div></div></li>`).join("")}</ul>` : "") + human + `</div>`;
+    `<div class="muted small">${eur(o.total_ex_vat)} ${esc(t("common.ex_vat"))} · ${esc(t("agent.mandate_outcome"))} ${tier(o.tier)} · <a href="buyer.html?sandbox=${encodeURIComponent((state && state.id) || "")}#/orders/${encodeURIComponent(o.id)}">${esc(t("agent.open_seller"))}</a></div>` +
+    (f.length ? `<ul class="findings">${f.map((x) => `<li>${tier(x.outcome)}<div>${esc(msgOf(x))}<div class="rule">${esc(x.rule)}</div></div></li>`).join("")}</ul>` : "") + human + `</div>`;
 }
 
 function renderMenu(d) {
