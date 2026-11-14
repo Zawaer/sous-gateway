@@ -435,7 +435,9 @@ async function renderOrder(current, order) {
     }
     if (signed.approval) {
       const action = signed.approval.approved ? 'Approved by' : 'Rejected by';
-      content.append(element('p', `${action} ${signed.approval.by}`));
+      const decisionTime = Number.isFinite(Date.parse(signed.approval.at))
+        ? ` · ${time(signed.approval.at)} Helsinki time` : '';
+      content.append(element('p', `${action} ${signed.approval.by}${decisionTime}`));
       const { note, result_reason: resultReason } = signed.approval;
       if (note) content.append(element('p', `Seller note: ${note}`));
       if (resultReason && resultReason !== note) content.append(element('p', resultReason));
