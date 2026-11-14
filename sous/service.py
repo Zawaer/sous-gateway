@@ -373,8 +373,9 @@ def request_quote(req: QuoteRequest, agent_token: str | None = None, approver: b
     """`approver`: the caller proved the global approver code (exact stock under SOUS_STOCK_EXPOSURE=approver_exact)."""
     m = authorize_agent(req.mandate_id, req.agent_id, agent_token, "request_quote") if req.mandate_id else None
     skip: set[int] = set()
+    fetch_on: dict[int, date] = {}
     if req.option_id:
-        req, skip = _apply_option(req)
+        req, skip, fetch_on = _apply_option(req)
     if not req.items or req.delivery_date is None:
         raise GatewayError("invalid_request", "Give delivery_date and at least one item, or an option_id.", 422)
     if sum(len(i.product_ids) for i in req.items) > config.MAX_CANDIDATES_PER_QUOTE:
@@ -382,13 +383,15 @@ def request_quote(req: QuoteRequest, agent_token: str | None = None, approver: b
                            f"At most {config.MAX_CANDIDATES_PER_QUOTE} candidate products per quote; narrow the search first.")
     try:
         with sandbox.metered(m):
-            return _request_quote(req, skip, approver)
+            return _request_quote(req, skip, approver, fetch_on)
     except aimo.AimoError as e:
         raise valio_error(e)
 
 
-def _apply_option(req: QuoteRequest) -> tuple[QuoteRequest, set[int]]:
-    """The request with the chosen option's lines in place of its item, from the previous quote's signed payload."""
+def _apply_option(req: QuoteRequest) -> tuple[QuoteRequest, set[int], dict[int, date]]:
+    """The request with the chosen option's lines in place of its item, from the previous quote's signed payload.
+    A `next_date` option's items are priced for the option's own date (the requested date's cut-off has passed);
+    the third value maps those items to that date."""
     qid = req.option_id.rpartition(".")[0]
     row = store.get_quote(qid) if qid else None
     if not row:
@@ -404,22 +407,27 @@ def _apply_option(req: QuoteRequest) -> tuple[QuoteRequest, set[int]]:
     opt = next((o for o in q.get("options") or [] if o["id"] == req.option_id), None)
     if not opt:
         raise GatewayError("option_not_found", f"Quote {qid} has no option {req.option_id}.", 404)
-    items, skip = [], set()
+    items, skip, fetch_on = [], set(), {}
     for i, it in enumerate(q["items"]):
         if i != opt["item_index"]:
             items.append(QuoteItem(**it))
             continue
         for l in opt["lines"]:
             skip.add(len(items))
+            if opt["kind"] == "next_date" and l.get("delivery_date"):
+                fetch_on[len(items)] = date.fromisoformat(l["delivery_date"])
             items.append(QuoteItem(product_ids=[l["product_id"]], amount=l["quantity"], unit="SALES_UNIT",
                                    substitute_for=l.get("substitute_for") or it.get("substitute_for"),
                                    note=f"{opt['id']} ({opt['kind']})"))
     return req.model_copy(update={
         "items": items, "delivery_date": date.fromisoformat(q["requested_delivery_date"]),
-        "rationale": req.rationale or q.get("rationale")}), skip
+        "rationale": req.rationale or q.get("rationale")}), skip, fetch_on
 
 
-def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), approver: bool = False) -> dict:
+def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), approver: bool = False,
+                   fetch_on: dict[int, date] | None = None) -> dict:
+    """`fetch_on`: items priced for a later day than requested (a chosen next_date option); their lines carry
+    LATER_DATE against the requested date, so the mandate still sees the later delivery."""
     mandate = _mandate(req.mandate_id) if req.mandate_id else None
     # Sizing a line to the stock (and splitting by it) shows the exact stock in the quantity, so under the buckets
     # policy only a caller acting under a mandate (authorized by request_quote) or an approver gets it; anonymous
@@ -435,7 +443,10 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
         Q.prefetch([pid for i in req.items for pid in i.product_ids], req.delivery_date)
     for item_index, item in enumerate(req.items):
         unit = None if item.unit == "SALES_UNIT" else item.unit
-        offers, now = Q.offers(item.product_ids, req.delivery_date, item.amount, unit)
+        day = (fetch_on or {}).get(item_index, req.delivery_date)
+        offers, now = Q.offers(item.product_ids, day, item.amount, unit)
+        if day > req.delivery_date:
+            OPT.flag_later(offers, req.delivery_date, f"chosen option {req.option_id}")
         if not offers:
             gaps.append({"item": item.model_dump(), "item_index": item_index, "uncovered": item.amount, "unit": item.unit,
                          "reason": "No such product ids."})
@@ -550,10 +561,22 @@ MAX_SUBSTITUTE_LOOKUPS = 3  # items per quote whose options look up substitutes 
 
 def _options(body: dict, troubled: list, requested: date, mandate: Mandate | None, now: datetime) -> list[dict]:
     """Response options for every item that can't be covered as asked (sous/options.py)."""
-    out, lookups = [], 0
+    out, lookups, next_lookups = [], 0, 0
     for item_index, item, offers, chosen in troubled:
         unit = None if item.unit == "SALES_UNIT" else item.unit
-        opts = OPT.build(item_index, item.amount, unit, offers, chosen, requested)
+        nxt = None
+        if (again := OPT.next_date_lookup(offers)) and next_lookups < MAX_SUBSTITUTE_LOOKUPS:
+            next_lookups += 1
+            nxt = []
+            for day in sorted(set(again.values())):
+                try:
+                    nxt += OPT.flag_later(Q.offers([p for p, d in again.items() if d == day], day, item.amount,
+                                                   unit)[0], requested, "the requested date's cut-off has passed")
+                except aimo.BudgetLimit:  # our own per-minute budget: a retryable wait
+                    raise
+                except aimo.AimoError:
+                    pass
+        opts = OPT.build(item_index, item.amount, unit, offers, chosen, requested, next_offers=nxt)
         original = item.substitute_for or item.product_ids[0]
         if not any(o["on_time"] for o in opts) and lookups < MAX_SUBSTITUTE_LOOKUPS and catalog.get(original):
             lookups += 1
@@ -564,7 +587,7 @@ def _options(body: dict, troubled: list, requested: date, mandate: Mandate | Non
             except (aimo.AimoError, KeyError):
                 subs = []
             subs = [s for s in subs if s["product_id"] not in item.product_ids]
-            opts = OPT.build(item_index, item.amount, unit, offers, chosen, requested, subs, original)
+            opts = OPT.build(item_index, item.amount, unit, offers, chosen, requested, subs, original, nxt)
         out += opts
 
     def preview(opt: dict):

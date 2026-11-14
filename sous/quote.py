@@ -183,14 +183,23 @@ def build_offer(
             issues.append(Issue("CUTOFF_UNKNOWN", WARNING,
                                 f"Valio Aimo reported the order cut-off for {available_date} only; the cut-off for "
                                 f"delivery on {requested} isn't known."))
-        if closing and closing <= now:
+        cutoff_passed = bool(closing and closing <= now)
+        if cutoff_passed and available_date > requested:
+            # Name the date the buyer asked for; the reported earliest date is unreachable too (its cut-off).
             issues.append(Issue("CUTOFF_PASSED", BLOCKING,
-                                f"The order cut-off for delivery on {available_date} was "
+                                f"Delivery on {requested} can't be ordered: Valio Aimo's earliest date for it is "
+                                f"{available_date}, and the order cut-off for that date was "
                                 f"{closing.astimezone(config.TZ):%a %d.%m %H:%M}, which has already passed. "
-                                "The quoted date can't be met even though the API still reports it."))
+                                "So the earliest possible date is later still: the quote's next_date option names it when Valio has one."))
+        elif cutoff_passed:
+            issues.append(Issue("CUTOFF_PASSED", BLOCKING,
+                                f"The order cut-off for delivery on {requested} was "
+                                f"{closing.astimezone(config.TZ):%a %d.%m %H:%M}, which has already passed. "
+                                "The requested date can't be met even though the API still reports it."))
         if available_date > requested:
             issues.append(Issue("LATER_DATE", WARNING,
-                                f"Earliest delivery is {available_date}, later than the requested {requested}."))
+                                f"Delivery on {requested} isn't possible; the earliest date Valio Aimo reports is "
+                                f"{available_date}{' (its cut-off has passed too)' if cutoff_passed else ''}."))
         if model == "Terminal":
             issues.append(Issue("STOCK_UNKNOWN", WARNING,
                                 "Shipped from the supplier's warehouse (Terminal): the quantity in stock is unknown."))

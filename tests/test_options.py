@@ -354,3 +354,58 @@ def test_choosing_a_content_sized_substitute_requotes_its_own_packs(monkeypatch)
     q2 = S.request_quote(S.QuoteRequest(agent_id="agent", mandate_id="M-T", option_id=opt["id"]))["quote"]
     assert [(l["product_id"], l["quantity"], l["substitute_for"]) for l in q2["lines"]] == [("T10", 2, "T")]
     assert q2["total_ex_vat"] == opt["total_ex_vat"] == 30.0
+
+
+# --- cut-off passed for a single named product: same-type substitutes and the next deliverable date ---------
+
+SUN = date(2026, 11, 15)
+
+
+def cutoff_passed_on_sunday(monkeypatch, subs=()):
+    """A asked for Sunday: Valio's earliest date is Monday and its cut-off (Fri 12:00) has passed. Asked for
+    Tuesday or later, A comes on Tuesday with a cut-off still ahead."""
+    def fake_fetch(kind, day, chunk):
+        CALLS.append((kind, day))
+        if kind == "price":
+            return [{**price(PRICE[p]), "productId": p} for p in chunk]
+        spec = [("2026-11-17", None, "2026-11-16T12:00:00+0200") if p == "A" and day >= "2026-11-17"
+                else AVAIL[p] for p in chunk]
+        return [{**avail(s), "productId": p} for p, s in zip(chunk, spec)]
+    monkeypatch.setattr(aimo, "_fetch", fake_fetch)
+    AVAIL["A"] = ("2026-11-16", None, "2026-11-13T12:00:00+0200")
+    monkeypatch.setattr(substitutes, "suggest", fake_suggest(list(subs)))
+
+
+def test_cutoff_message_names_the_requested_date_and_the_reported_earliest_separately():
+    AVAIL["A"] = ("2026-11-16", None, "2026-11-13T12:00:00+0200")
+    o = offer("A", requested=SUN)
+    msgs = {i["code"]: i["message"] for i in o["issues"]}
+    assert msgs["CUTOFF_PASSED"].startswith("Delivery on 2026-11-15 can't be ordered")
+    assert "earliest date for it is 2026-11-16" in msgs["CUTOFF_PASSED"]
+    assert "2026-11-16" in msgs["LATER_DATE"] and "cut-off has passed too" in msgs["LATER_DATE"]
+
+
+def test_single_product_past_cutoff_gets_substitute_and_next_date_options(monkeypatch):
+    cutoff_passed_on_sunday(monkeypatch, [("S", "better", "compatible", ["milk drink"])])
+    q = quote(["A"], day=SUN)["quote"]
+    assert q["mandate_preview"]["outcome"] == "block"
+    by_kind = {o["kind"]: o for o in q["options"]}
+    assert kinds(q["options"]) == ["next_date", "substitute"]  # both later than Sunday: same product first
+    nxt = by_kind["next_date"]
+    assert nxt["delivery_dates"] == ["2026-11-17"] and [l["product_id"] for l in nxt["lines"]] == ["A"]
+    assert "earliest date Milk A 1 l can still be ordered for is 2026-11-17" in nxt["tradeoff"]
+    assert nxt["mandate_preview"] == {"outcome": "ask", "rules": ["delivery.later_date"]}
+    # choosing it re-quotes A for Tuesday, still flagged as later than the Sunday asked for
+    q2 = S.request_quote(S.QuoteRequest(agent_id="agent", mandate_id="M-T", option_id=nxt["id"]))["quote"]
+    assert q2["requested_delivery_date"] == "2026-11-15"
+    assert [(l["product_id"], l["delivery_date"], l["orderable"]) for l in q2["lines"]] == [("A", "2026-11-17", True)]
+    assert "LATER_DATE" in {i["code"] for i in q2["lines"][0]["issues"]}
+    assert q2["mandate_preview"]["outcome"] == "ask" and "options" not in q2
+
+
+def test_no_next_date_lookup_when_the_product_is_blocked_for_another_reason(monkeypatch):
+    cutoff_passed_on_sunday(monkeypatch)
+    AVAIL["A"] = None  # undeliverable, not a passed cut-off: nothing to ask again for
+    q = quote(["A"], day=SUN)["quote"]
+    assert "options" not in q
+    assert not any(day >= "2026-11-17" for _, day in CALLS)

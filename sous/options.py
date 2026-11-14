@@ -7,6 +7,8 @@ is a complete alternative with its own lines, totals, delivery dates and a plain
   on_time                 another of the item's candidates covers everything by the requested date
   partial_now_rest_later  what can arrive on the requested date, the rest on a later date (two deliveries)
   all_later               everything from products that arrive later, complete by one later date
+  next_date               the cut-off passed: the same product(s) on the next date Valio can still deliver
+                          (priced again for that date; choosing it re-quotes for that date, flagged as later)
   split_with_substitute   what the original covers on time, the gap from a compatible substitute
   substitute              a substitute (good / better / best from substitutes.py) covers everything
 
@@ -17,8 +19,9 @@ stays in the original's packs (content / one original pack). Option lines are in
 packs, which is what a re-quote with option_id orders (SALES_UNIT).
 
 Ranking: no substitute before substitute; then fully on time > part on time + rest later > later;
-then the substitute tier (best > better > good); then price. Each option carries a mandate preview
-(the tier the whole quote would get with this option in place of the item's lines).
+then the substitute tier (best > better > good); then price. A next_date option ranks with the substitutes
+(after those on time, before later ones): a different product on the day asked can beat the same one later.
+Each option carries a mandate preview (the tier the whole quote would get with this option in place of the item's lines).
 
 Honest about availability: Valio Aimo reports only each product's earliest date and the amount
 available then. Stock on a later date isn't known, so the remainder of a short product is never
@@ -56,6 +59,30 @@ def trouble(lines: list[dict], uncovered: float, requested: date) -> list[str]:
                                     for l in lines if l["orderable"]):
         why.append("later_date")
     return why
+
+
+def next_date_lookup(offers: list[dict]) -> dict[str, date]:
+    """Candidates that can't be ordered only because the cut-off passed, and the day to price them for again:
+    the day after the date whose cut-off passed. Valio reports one earliest date per product and its cut-off;
+    once that cut-off is gone, the next deliverable date is only known by asking for a later day."""
+    out = {}
+    for o in offers:
+        blocking = {i["code"] for i in o["issues"] if i["severity"] == "blocking"}
+        if not o["orderable"] and blocking == {"CUTOFF_PASSED"} and o.get("delivery_date"):
+            out[o["product_id"]] = date.fromordinal(date.fromisoformat(o["delivery_date"]).toordinal() + 1)
+    return out
+
+
+def flag_later(offers: list[dict], requested: date, why: str) -> list[dict]:
+    """Offers priced for a later day than the buyer asked for: add LATER_DATE against the requested date, so the
+    mandate's later-delivery rule still sees it. Returns the offers."""
+    for o in offers:
+        if o["orderable"] and o.get("delivery_date") and o["delivery_date"] > requested.isoformat() and \
+                not any(i["code"] == "LATER_DATE" for i in o["issues"]):
+            o["issues"] = o["issues"] + [{"code": "LATER_DATE", "severity": "warning", "message":
+                                          f"Delivery on {o['delivery_date']}, later than the requested {requested} "
+                                          f"({why})."}]
+    return offers
 
 
 def _late(o: dict, requested: date) -> bool:
@@ -112,9 +139,12 @@ def build(
     requested: date,
     substitutes: list[dict] | None = None,
     original_id: str | None = None,
+    next_offers: list[dict] | None = None,
 ) -> list[dict]:
     """Options for one item, best first. `offers` are the item's own candidates (quote.offers);
-    `substitutes` are substitutes.suggest()['options'] for `original_id` (or None when not looked up).
+    `substitutes` are substitutes.suggest()['options'] for `original_id` (or None when not looked up);
+    `next_offers` are the item's candidates whose cut-off passed, priced again for the day after their
+    earliest date (see next_date_lookup): they make a `next_date` option.
     Each option keeps its full lines under `_lines` (for the mandate preview); `public()` drops them."""
     u = "units" if unit is None else unit
     req = requested.isoformat()
@@ -166,6 +196,17 @@ def build(
             days = (date.fromisoformat(d) - requested).days
             add("all_later", lines, f"All {amount:g} {u} by {d}, {days} day{'s' * (days != 1)} later than asked "
                                     f"({_names(lines)}).")
+            break
+
+    # 3b. the cut-off passed: the same product on the next date Valio can still deliver it
+    nxt = [o for o in next_offers or [] if o["orderable"] and o["quantity"] is not None]
+    for d in sorted({o["delivery_date"] for o in nxt}):
+        lines, left = _fill(amount, unit, [o for o in nxt if o["delivery_date"] <= d])
+        if lines and left <= 0:
+            days = (date.fromisoformat(d) - requested).days
+            add("next_date", lines, f"The order cut-off for {req} has passed; the earliest date {_names(lines)} "
+                                    f"can still be ordered for is {d}, {days} day{'s' * (days != 1)} later than "
+                                    f"asked: all {amount:g} {u} then.")
             break
 
     # 4. substitutes: fill the gap next to the original, or replace it outright. A need in the original's
@@ -223,7 +264,8 @@ def build(
                      "match": (s.get("type") or {}).get("match")},
                     in_packs(got) if per_pack else None, {"amount": got, "unit": s_unit} if per_pack else None)
 
-    out.sort(key=lambda o: (o["substitute"] is not None, o["_timing"], o["kind"] != "split_with_substitute",
+    out.sort(key=lambda o: (o["substitute"] is not None or o["kind"] == "next_date", o["_timing"],
+                            o["kind"] != "split_with_substitute",
                             _TIER_RANK.get((o["substitute"] or {}).get("tier"), 0),
                             _MATCH_RANK.get((o["substitute"] or {}).get("match"), 0),
                             len((o["substitute"] or {}).get("compromises") or []), o["total_ex_vat"]))
