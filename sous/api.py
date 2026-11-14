@@ -644,6 +644,9 @@ def order_history(order_id: str):
     return S.order_history(order_id)
 
 
+from . import remembered as RM  # noqa: E402  approve and remember (sous/remembered.py)
+
+
 class Decision(BaseModel):
     by: str
     note: str | None = None
@@ -652,12 +655,19 @@ class Decision(BaseModel):
         "data (allergen.unknown) are free of what the mandate avoids, and asks the gateway to remember it for this "
         "buyer: the next order of the same product is not held for that again (rule allergen.cleared). Per "
         "mandate and product; voided when the product data changes; expires after 90 days; DELETE /clearances/{id}."))
+    remember: list[RM.RememberIn] = Field(default_factory=list, max_length=20, description=(
+        "Approve only: \"approve and remember\" (sous/remembered.py). Each entry names one ask-tier finding of this "
+        "held order by {rule, product_id}: substitution (product_id = the substitute), product.first_time, "
+        "unit.interpreted or product.type_mismatch; optional days (default 30, max 90), max_quantity and "
+        "max_line_total_eur. Next time the same finding under this mandate is a notify (remembered.*) instead of an "
+        "ask, until it expires, the product data changes, a cap is exceeded or it is revoked "
+        "(DELETE /mandates/{id}/remembered/{rid}). Never softens a block. 422 not_rememberable for any other pick."))
 
 
 @app.post("/orders/{order_id}/approve", tags=["approvals"])
 def approve(order_id: str, d: Decision, authority: str = Depends(require_approver)):
     """`by` is the name the approver gives; the order and audit also record which credential approved."""
-    o = S.decide(order_id, d.by, True, d.note, authority=authority)
+    o = S.decide(order_id, d.by, True, d.note, authority=authority, remember=d.remember or None)
     if d.remember_allergen_clearance and o.get("status") == "ordered":
         from . import clearance
         o = {**o, "allergen_clearances": clearance.record_from_order(o, S._mandate(o["mandate_id"]), d.by,
@@ -692,6 +702,24 @@ def revoke_clearance(clearance_id: str, by: str = Query("approver"), authority: 
     if not c:
         raise HTTPException(404, f"No clearance {clearance_id}.")
     return c
+
+
+@app.get("/mandates/{mandate_id}/remembered", tags=["approvals"], dependencies=[Depends(_read_mandate)])
+def list_remembered(mandate_id: str, include_inactive: bool = False):
+    """Remembered decisions of this mandate ("approve and remember", sous/remembered.py), newest first, each with
+    its JWS (typ sous-remembered+jws). Read-scoped like GET /mandates/{id}."""
+    return {"mandate_id": mandate_id,
+            "remembered": [RM.summary(r) for r in RM.list_for(mandate_id, active_only=not include_inactive)]}
+
+
+@app.delete("/mandates/{mandate_id}/remembered/{remembered_id}", tags=["approvals"])
+def revoke_remembered(mandate_id: str, remembered_id: str, by: str = Query("approver"),
+                      authority: str = Depends(require_global_approver)):
+    """Human-only. Forget a remembered decision: the finding asks a human again from the next quote."""
+    r = RM.revoke(mandate_id, remembered_id, by, "global approver code")
+    if not r:
+        raise HTTPException(404, f"No remembered decision {remembered_id} for mandate {mandate_id}.")
+    return RM.summary(r)
 
 
 @app.post("/orders/{order_id}/reject", tags=["approvals"])

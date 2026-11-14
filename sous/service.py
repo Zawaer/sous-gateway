@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import account, agent_auth, aimo, allergen_ai, autonomy, catalog, clearance, clock, config, credentials, deadline, erp, exposure, fi, carbon, holds, notify, offers as OFFERS, options as OPT, origin, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
+from . import account, agent_auth, aimo, allergen_ai, autonomy, catalog, clearance, clock, config, remembered, credentials, deadline, erp, exposure, fi, carbon, holds, notify, offers as OFFERS, options as OPT, origin, quote as Q, reservations as RES, sandbox, signing, store, substitutes, usual
 from .mandate import Mandate, evaluate, product_refusals, readable_name
 
 
@@ -743,6 +743,7 @@ def _evaluate(mandate: Mandate, agent_id: str, q: dict, now: datetime, extra_fin
                     if mandate.max_price_change_pct else None,
                     allergen_ai=allergen_ai.assess_lines(q["lines"], mandate.avoid_allergens),
                     allergen_clearances=clearance.for_lines(mandate, q["lines"], now),
+                    remembered=remembered.for_lines(mandate, q["lines"], now),
                     **_spend_context(mandate, now))
 
 
@@ -916,16 +917,22 @@ def _receipt(order: dict) -> str:
 
 
 def decide(order_id: str, approver: str, approve: bool, note: str | None = None, authority: str | None = None,
-           evidence: dict | None = None) -> dict:
+           evidence: dict | None = None, remember: list | None = None) -> dict:
     """`approver` is the name the human gives (free text); `authority` is which credential let them decide
     ("global approver code", "sandbox approver SBX-...", "passkey <name> (credential …last8)"), recorded alongside
     so the audit shows authority. `evidence`: a verified passkey assertion (sous/passkey.py), stored in the audit
-    event; mandates with approval_method "passkey" can only be approved with one."""
+    event; mandates with approval_method "passkey" can only be approved with one. `remember`: findings to
+    remember (sous/remembered.py RememberIn), approve only; recorded once the order is ordered."""
     expire_if_overdue(store.get_order(order_id))
     with _order_lock:
+        if remember and approve and (held := store.get_order(order_id)):
+            remembered.check(held, remember)  # before anything is decided: a bad pick changes nothing
         o, mandate = _decide(order_id, approver, approve, note, authority, evidence)
+        # "approve and remember" (sous/remembered.py): only a human approval that became an order
+        saved = remembered.record(o, mandate, remember, approver, authority) if remember and approve else []
     notify.send("order.decided", o, mandate)  # FYI to the agent side
-    return erp.submit(o) if o["status"] == "ordered" else o
+    out = erp.submit(o) if o["status"] == "ordered" else o
+    return {**out, "remembered": [remembered.summary(r) for r in saved]} if saved else out
 
 
 def _approval_limits(mandate: Mandate | None) -> list:

@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from . import access, agent_auth, config, passkey, sandbox, service as S, store
 from .passkey_verify import check_order, verify_evidence
+from .remembered import RememberIn
 
 router = APIRouter(tags=["approvals"])
 
@@ -41,6 +42,8 @@ class CredentialIn(BaseModel):
     credential: dict = Field(description="The PublicKeyCredential as JSON (base64url fields), as the browser "
                              "returned it")
     note: str | None = Field(None, max_length=500)
+    remember: list[RememberIn] = Field(default_factory=list, max_length=20, description=(
+        "Approve only: findings to remember, as in POST /orders/{id}/approve (sous/remembered.py)"))
 
 
 def _enrol_authority(code: str | None, body: RegisterOptionsIn) -> tuple[str, str, str, str | None]:
@@ -132,7 +135,8 @@ def _decide_passkey(order_id: str, approve: bool, body: CredentialIn, request: R
     o = _pending(order_id)
     ev = passkey.verify_approval(o, "approve" if approve else "reject", body.credential,
                                  passkey.rp(_base(request))[1])
-    return S.decide(order_id, ev["approver"], approve, body.note, authority=passkey.authority(ev), evidence=ev)
+    return S.decide(order_id, ev["approver"], approve, body.note, authority=passkey.authority(ev), evidence=ev,
+                    remember=(body.remember or None) if approve else None)
 
 
 @router.post("/orders/{order_id}/approve/passkey")

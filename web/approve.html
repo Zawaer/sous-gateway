@@ -24,6 +24,7 @@
     table.lines td { padding: 8px 0; border-top: 1px solid var(--rule); vertical-align: top; }
     table.lines td.num { text-align: right; white-space: nowrap; padding-left: 12px; }
     label { display: block; font-weight: 500; margin: 14px 0 6px; }
+    label.remember { display: flex; gap: 8px; align-items: center; font-size: .92rem; margin: 6px 0 0; min-height: var(--tap); }
     input[type=text], input[type=password] { width: 100%; min-height: var(--tap); padding: 0 12px; box-sizing: border-box;
       border: 1px solid var(--rule); border-radius: var(--radius); background: var(--paper); }
     .hint { color: var(--ink-60); font-size: .88rem; margin: 6px 0 0; }
@@ -145,7 +146,9 @@ function render() {
     <p class="muted small">${esc(o.buyer)} · ${esc(t("approve.order"))} <span class="mono">${esc(o.id)}</span></p>
     <h1>${eur(o.total_ex_vat)} <span class="muted small">${esc(t("common.ex_vat"))}</span></h1>
     ${pending ? `<span class="tier tier-ask">${esc(I18N.tier("ask"))}</span>` : `<p><strong>${esc(statusText(o))}</strong></p>`}
-    ${rs.map((f) => `<p class="reason">${esc(findingText(o, f))}<br><span class="rule-id">${esc(f.rule)}</span></p>`).join("")}
+    ${rs.map((f) => `<p class="reason">${esc(findingText(o, f))}<br><span class="rule-id">${esc(f.rule)}</span>${pending && rememberable(f) ? `
+      <label class="remember"><input type="checkbox" data-remember-rule="${esc(f.rule)}" data-remember-pid="${esc(f.product_id)}"> ${esc(t("approve.remember"))}</label>` : ""}</p>`).join("")}
+    ${pending && rs.some(rememberable) ? `<p class="hint">${esc(t("approve.remember_hint"))}</p>` : ""}
     ${pending && o.approve_by ? `<p id="deadline" class="when"></p>` : ""}
     <div id="msg" class="msg" hidden></div>
     ${pending ? actions(has) : ""}
@@ -157,6 +160,20 @@ function render() {
       <pre id="binding">${esc(binding || t("approve.binding_placeholder"))}</pre></details>` : ""}`;
   if (pending && o.approve_by) countdown(o.approve_by, (o.approve_by_detail || {}).basis);
   wire(has);
+}
+
+// "Approve and remember" (sous/remembered.py): soft, repetitive holds a human may answer once for 30 days.
+// Never allergens, limits, holds or any block: the gateway refuses other picks (422 not_rememberable).
+const REMEMBERABLE = ["substitution", "product.first_time", "unit.interpreted", "product.type_mismatch"];
+const rememberable = (f) => f.outcome === "ask" && REMEMBERABLE.includes(f.rule) && !!f.product_id;
+const picks = () => [...document.querySelectorAll("input[data-remember-rule]:checked")]
+  .map((c) => ({ rule: c.dataset.rememberRule, product_id: c.dataset.rememberPid }));
+
+function rememberedNote(o) {
+  const r = o.remembered || [];
+  if (!r.length) return "";
+  return " " + esc(t("approve.remembered_done", { until: I18N.date(r[0].expires_at.slice(0, 10)),
+    list: r.map((x) => `${sentence(x.name || x.product_id)} (${x.rule})`).join(", ") }));
 }
 
 function statusText(o) {
@@ -269,10 +286,11 @@ async function approveWithCode(btn) {
   useCodeField();
   btn.disabled = true;
   try {
-    order = await api(`/orders/${encodeURIComponent(ORDER)}/approve`, { method: "POST", body: JSON.stringify({ by }) });
+    const remember = picks();
+    order = await api(`/orders/${encodeURIComponent(ORDER)}/approve`, { method: "POST", body: JSON.stringify({ by, ...(remember.length ? { remember } : {}) }) });
     render();  // shows the outcome once ("Approved by … Ordered."); the message adds only which credential decided
     const via = (order.approval || {}).authority;
-    if (via) say(`<span class="rule-id">${esc(via)}</span>`, order.status === "ordered" ? "ok" : "err");
+    if (via) say(`<span class="rule-id">${esc(via)}</span>${rememberedNote(order)}`, order.status === "ordered" ? "ok" : "err");
   } catch (e) {
     btn.disabled = false;
     say(esc(e.status === 401 ? t("approve.code_not_accepted") : e.message), "err");
@@ -297,6 +315,7 @@ async function rejectWithCode(btn) {
 
 async function decide(action, btn) {
   if (action === "reject" && !confirm(t("approve.confirm_reject", { id: order.id, amount: eur(order.total_ex_vat) }))) return;
+  const remember = action === "approve" ? picks() : [];
   document.querySelectorAll(".actionbar button").forEach((b) => (b.disabled = true));
   try {
     const opts = await api(`/orders/${encodeURIComponent(ORDER)}/approve/options`, { method: "POST", body: JSON.stringify({ action }) });
@@ -308,9 +327,10 @@ async function decide(action, btn) {
     order = await api(`/orders/${encodeURIComponent(ORDER)}/${action}/passkey`, { method: "POST", body: JSON.stringify({ credential: {
       id: a.id, rawId: a2b(a.rawId), type: a.type,
       response: { clientDataJSON: a2b(a.response.clientDataJSON), authenticatorData: a2b(a.response.authenticatorData),
-                  signature: a2b(a.response.signature), userHandle: a.response.userHandle ? a2b(a.response.userHandle) : null } } }) });
+                  signature: a2b(a.response.signature), userHandle: a.response.userHandle ? a2b(a.response.userHandle) : null } },
+      ...(remember.length ? { remember } : {}) }) });
     render();
-    say(`${esc(t("approve.signed_with", { who: (order.approval || {}).authority || t("approve.a_passkey") }))} <a href="${API}/orders/${encodeURIComponent(order.id)}/approval/verify">${esc(t("approve.verify"))}</a>`,
+    say(`${esc(t("approve.signed_with", { who: (order.approval || {}).authority || t("approve.a_passkey") }))} <a href="${API}/orders/${encodeURIComponent(order.id)}/approval/verify">${esc(t("approve.verify"))}</a>${rememberedNote(order)}`,
         order.status === "ordered" || order.status === "rejected" ? "ok" : "err");
   } catch (e) {
     document.querySelectorAll(".actionbar button").forEach((b) => (b.disabled = false));

@@ -207,6 +207,7 @@ def evaluate(
     last_comparison_prices: dict[tuple[str, str], dict] | None = None,
     allergen_ai: dict[str, dict[str, dict]] | None = None,
     allergen_clearances: dict[str, dict] | None = None,
+    remembered: list[dict] | None = None,
 ) -> tuple[Tier, list[Finding]]:
     """`extra_findings` are checks made outside the mandate (e.g. standing-order drift); they count like any rule.
     `quantities` is this order's amount per (product family, unit), `usual_quantities` the same buyer's past
@@ -220,7 +221,10 @@ def evaluate(
     `allergen_ai` is the Gemini Decisions API's {product_id: {code: {p, confidence, model}}} for products that
     declare no allergens (sous/allergen_ai.py): it can turn allergen.unknown into allergen.likely, never into safe.
     `allergen_clearances` is {product_id: clearance} from sous/clearance.py: a human of this buyer already confirmed
-    the product free of everything the mandate avoids, so allergen.unknown becomes allergen.cleared (notify)."""
+    the product free of everything the mandate avoids, so allergen.unknown becomes allergen.cleared (notify).
+    `remembered` are the mandate's remembered decisions from sous/remembered.py: a matching one turns an ask of
+    substitution / product.first_time / unit.interpreted / product.type_mismatch into its remembered.* notify twin;
+    nothing else (and no block) is touched."""
     f: list[Finding] = []
 
     def add(rule, outcome, message, pid=None, message_fi=None):
@@ -502,6 +506,9 @@ def evaluate(
                    else cp_cap[1].replace("category", "tuoteryhmä")) + ").")
 
     f.extend(extra_findings or [])
+    if remembered:
+        from .remembered import soften
+        f[:] = soften(f, lines, remembered, now)
     outcome: Tier = max((x.outcome for x in f), key=_RANK.__getitem__, default="silent")
     if outcome in ("silent", "notify"):
         add("mandate.ok", outcome, f"Within mandate {mandate.id}: €{total:,.2f} ex VAT, all checks passed.",

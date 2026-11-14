@@ -29,7 +29,7 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp_types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import access, agent_auth, catalog, clock, config, exposure, signing, holds, offers, origin as origin_mod, oauth, rules, sandbox, service as S, standing, store
+from . import access, agent_auth, catalog, clock, config, exposure, signing, holds, offers, origin as origin_mod, oauth, remembered, rules, sandbox, service as S, standing, store
 from .mandate import Finding, Mandate
 from .standards import OrderDoc, QuoteDoc
 
@@ -250,6 +250,10 @@ class MandateOut(_Open):
     issuer: dict[str, Any]
     credential: str | None = Field(None, description="vc+jwt credential when the buyer issued one")
     revocation: str | None = None
+    remembered: list[dict[str, Any]] = Field(default_factory=list, description=(
+        "Remembered decisions (approve and remember, sous/remembered.py): findings a human approved earlier that "
+        "now notify instead of ask: {id, rule, product_id, original_product_id?, by, created_at, expires_at, "
+        "max_quantity?, max_line_total_eur?, jws (sous-remembered+jws)}. Tell the buyer when one was used."))
 
 
 class MandateCheckOut(_Open):
@@ -267,6 +271,8 @@ class MyMandateOut(_Open):
     valid_until: str | None = None
     require_agent_auth: bool
     rules: str = Field(description="The mandate's active rules in one line (rules.mandate_summary)")
+    remembered: list[dict[str, Any]] = Field(default_factory=list, description=(
+        "Active remembered decisions (rule, product_id, by, expires_at): these findings notify instead of ask"))
 
 
 class MyMandatesOut(_Open):
@@ -699,7 +705,9 @@ def my_mandates(agent_token: str | None = None, ctx: Context | None = None) -> d
         out.append({"mandate_id": mid, "buyer": m["buyer"], "label": labels.get(sid, {}).get(mid) if sid else None,
                     "agent_id": m["agent_id"], "sandbox": sid, "active": oauth._mandate_live(mid),
                     "valid_until": str(m["valid_until"]) if m.get("valid_until") else None, "require_agent_auth": bool(m.get("require_agent_auth")),
-                    "rules": "; ".join(r["text"] for r in rules.mandate_summary(mandate))})
+                    "rules": "; ".join(r["text"] for r in rules.mandate_summary(mandate)),
+                    "remembered": [{k: r.get(k) for k in ("id", "rule", "product_id", "original_product_id", "name",
+                                                          "by", "expires_at")} for r in remembered.list_for(mid)]})
     note = ("Pick the mandate whose buyer the user means; pass its mandate_id. Read the full rules with get_mandate."
             if out else "No credential: connect with 'Authorization: Bearer <agent token>' (or sign in to the "
                         "connector with it). Ask the user; don't guess a mandate_id.")
@@ -712,7 +720,8 @@ def get_mandate(mandate_id: str, agent_token: str | None = None, ctx: Context | 
     Only your own mandate (send your Authorization: Bearer header or agent_token) or a public demo mandate.
     Returns {mandate (schema /schemas/mandate.json), jws (sous-mandate+jws), issuer, credential?, revocation?}."""
     access.check_mandate(_reader(ctx, agent_token), mandate_id)
-    return S.get_mandate(mandate_id)
+    return {**S.get_mandate(mandate_id),
+            "remembered": [remembered.summary(r) for r in remembered.list_for(mandate_id)]}
 
 
 @_tool(SuggestionsOut, title="Optional: Valio Aimo's suggestions (sponsored)", annotations=READ_LIVE)

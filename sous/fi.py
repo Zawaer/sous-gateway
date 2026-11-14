@@ -261,6 +261,22 @@ RULES = {
                         "Sousia muistamaan sen (sous/clearance.py: yksi valtakirja ja tuote; raukeaa, jos "
                         "tuotetiedot tai vältettävät allergeenit muuttuvat; vanhenee 90 päivässä; voidaan perua). "
                         "Tuote tilataan, ja ostajalle kerrotaan, kenen vahvistusta käytettiin.",
+    "remembered.substitution": "Rivillä on sama korvaava tuote saman alkuperäisen tilalla, jonka ostajan hyväksyjä on "
+                               "aiemmin hyväksynyt ja pyytänyt Sousia muistamaan: ilmoitus hyväksynnän sijaan. Koskee "
+                               "yhtä valtakirjaa ja tuoteparia; raukeaa, jos jommankumman tuotteen tiedot muuttuvat, "
+                               "valinnainen määrä- tai summaraja ylittyy, se vanhenee (oletus 30 päivää, enintään 90) "
+                               "tai se perutaan (DELETE /mandates/…/remembered/…). Jos valtakirja estää "
+                               "korvaavat tuotteet, mitään ei pehmennetä.",
+    "remembered.first_time": "Tuote, jota ei ole ennen tilattu tällä valtakirjalla, mutta jonka ostajan hyväksyjä on jo "
+                             "hyväksynyt ja pyytänyt Sousia muistamaan: ilmoitus hyväksynnän sijaan, samoin rajoin kuin "
+                             "remembered.substitution. Estoa (first_time_products: block) ei koskaan pehmennetä.",
+    "remembered.unit_interpreted": "Sous tulkitsi tarpeen yksikön samalla tavalla (20 ST laatikoina) samalle tuotteelle, "
+                                   "jonka ostajan hyväksyjä on hyväksynyt ja pyytänyt muistamaan: ilmoitus hyväksynnän "
+                                   "sijaan. Eri tulkinta, muuttuneet tuotteen yksiköt, rajan ylittävä määrä tai summa, "
+                                   "vanheneminen tai peruminen palauttavat hyväksynnän.",
+    "remembered.type_mismatch": "Sama toisenlainen tuote (kauramaito maidon tilalla), jonka ostajan hyväksyjä on "
+                                "hyväksynyt ja pyytänyt muistamaan: ilmoitus hyväksynnän sijaan, samoin rajoin kuin "
+                                "remembered.unit_interpreted.",
     "substitution": "Rivillä on korvaava tuote pyydetyn tilalla; valtakirja määrää, kuinka paljon ihminen saa siihen sanoa.",
     "product.held": "Valio Aimo on pysäyttänyt tuotteen (takaisinveto, laatupidätys tai myyntikielto; GET "
                     "/holds): sitä ei voi tarjota tilattavana, tilata eikä hyväksyä, ei edes ennen pysäytystä "
@@ -537,6 +553,11 @@ def allocation(s: dict) -> str:
         return (f"Valion varasto päivälle {d} on jo osin varattu Sousin kautta tehdyille tilauksille: vielä voi "
                 f"tilata vain {left}. Katso tilauksen vaihtoehdot.")
     return f"Valion varasto päivälle {d} on kokonaan varattu Sousin kautta tehdyille tilauksille; mitään ei ole jäljellä."
+
+
+def remembered(r: dict) -> str:
+    return (f"{r['by']} hyväksyi tämän aiemmin {short_day(r['created_at'])} (tilaus {r['order_id']}) ja pyysi "
+            f"muistamaan sen {short_day(r['expires_at'])} asti ({r['id']}; voidaan perua): tilataan kysymättä uudelleen.")
 
 
 def clearance(name: str, c: dict, avoid_codes) -> str:

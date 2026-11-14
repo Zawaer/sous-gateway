@@ -184,6 +184,24 @@ def _build() -> list[dict]:
            "mandate avoids when approving an earlier order and asked the gateway to remember it (sous/clearance.py: "
            "one mandate and product, voided when the product data or the avoided allergens change, expires after "
            "90 days, revocable). Ordered, and the buyer is told whose clearance was used.", "avoid_allergens"),
+        # --- approve and remember (sous/remembered.py): a human's earlier answer to the same soft hold
+        _r("remembered.substitution", "finding", ["notify"], "buyer",
+           "The line is the same substitute for the same original product that a human of this buyer approved "
+           "earlier and asked the gateway to remember: notify instead of ask. Per mandate and product pair, voided "
+           "when either product's data changes, above its optional quantity or amount cap, after it expires (30 "
+           "days by default, at most 90) or when revoked (DELETE /mandates/{id}/remembered/{rid}). A mandate whose "
+           "substitutions is block is never softened.", "substitutions"),
+        _r("remembered.first_time", "finding", ["notify"], "buyer",
+           "A product never ordered under the mandate that a human of this buyer already approved and asked the "
+           "gateway to remember: notify instead of ask, under the same limits as remembered.substitution. "
+           "first_time_products: block is never softened.", "first_time_products"),
+        _r("remembered.unit_interpreted", "finding", ["notify"], "buyer",
+           "The gateway read the need's unit the same way (20 ST as KI) for the same product that a human of this "
+           "buyer approved and asked it to remember: notify instead of ask. A different reading, changed product "
+           "units, a quantity or amount over the cap, expiry or revocation ask again.", None),
+        _r("remembered.type_mismatch", "finding", ["notify"], "buyer",
+           "The same other kind of product (oat drink for milk) that a human of this buyer approved and asked the "
+           "gateway to remember: notify instead of ask, under the same limits as remembered.unit_interpreted.", None),
         _r("substitution", "finding", _field_tiers("substitutions"), "buyer",
            "A line replaces the product the buyer asked for; the mandate says how much say the human gets.",
            "substitutions"),
