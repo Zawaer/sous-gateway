@@ -420,7 +420,12 @@ async function renderOrder(current, order) {
   }
   $('approvals').href = approval;
   $('approvals').hidden = order.status !== 'pending_approval';
-  $('order-audit-link').href = `${gateway.base}/ui/#/audit?${new URLSearchParams({ subject: order.id })}`;
+  const audit = new URL(`${gateway.base}/ui/`);
+  const orderUrl = order.order_url && URL.parse(order.order_url, `${gateway.base}/`);
+  const sandbox = orderUrl?.origin === audit.origin && orderUrl.searchParams.get('sandbox');
+  if (sandbox) audit.searchParams.set('sandbox', sandbox);
+  audit.hash = `/audit?${new URLSearchParams({ subject: order.id })}`;
+  $('order-audit-link').href = audit.href;
   updateControls();
 }
 
