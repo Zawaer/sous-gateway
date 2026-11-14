@@ -1,4 +1,11 @@
 {
+ "generated_at": "2026-11-14T10:59:18+00:00",
+ "provenance": {
+  "origin": "ci",
+  "ci_run_id": "43587725624",
+  "commit": "11d8448",
+  "ci_run_url": "https://github.com/Zawaer/sous/actions/runs/43587725624"
+ },
  "provider": "gemini",
  "passed": 23,
  "cases": 23,
@@ -24,7 +31,7 @@
     ]
    },
    "open_questions": [
-    "Do you also want to avoid peanuts (AP), or only tree nuts (AN)?"
+    "Does 'ei pähkinöitä' also include peanuts (AP)?"
    ],
    "unsupported": [],
    "rejected": [],
@@ -115,7 +122,7 @@
    "parser": "gemini:gemini-4-hydrogen",
    "proposed": {},
    "open_questions": [
-    "What euro amount (excluding VAT) should be set as the limit so that expensive items are not bought?"
+    "What euro amount (excluding VAT) should be the limit for expensive items or orders?"
    ],
    "unsupported": [],
    "rejected": [],
@@ -131,7 +138,7 @@
    "parser": "gemini:gemini-4-hydrogen",
    "proposed": {},
    "open_questions": [
-    "Mikä on eurosumma (alv 0 %), jonka ylittävistä tilauksista haluat että kysyn sinulta?"
+    "Mikä euromäärä lasketaan isoksi tilaukseksi (raja, jonka yli menevät tilaukset vaativat hyväksyntäsi)?"
    ],
    "unsupported": [],
    "rejected": [],
@@ -147,7 +154,7 @@
    "parser": "gemini:gemini-4-hydrogen",
    "proposed": {},
    "open_questions": [
-    "What exact euro amount (excluding VAT) should be set per order, and should orders above this wait for approval or be refused outright?"
+    "What exact euro amount (excluding VAT) should be set as the limit, and should orders above it wait for your approval (auto_approve_limit_eur) or be refused outright (hard_limit_eur)?"
    ],
    "unsupported": [],
    "rejected": [],
@@ -164,7 +171,7 @@
    "proposed": {},
    "open_questions": [],
    "unsupported": [
-    "Preferences like 'organic when possible' are not supported; mandates only express hard rules."
+    "Soft preferences and organic requirements cannot be expressed in the mandate."
    ],
    "rejected": [],
    "notes": []
@@ -180,7 +187,7 @@
    "proposed": {},
    "open_questions": [],
    "unsupported": [
-    "Product origin restrictions are not supported in mandates."
+    "Origin requirements are not supported in mandates."
    ],
    "rejected": [],
    "notes": []
@@ -213,7 +220,7 @@
    "parser": "gemini:gemini-4-hydrogen",
    "proposed": {},
    "open_questions": [
-    "You asked to approve orders above 1000 € but refuse anything over 500 €. Since 500 € is lower than 1000 €, orders above 500 € would be refused before reaching the 1000 € approval limit. Which amounts should be used for the auto-approve limit and the hard refusal limit?"
+    "These limits conflict: if orders over 500 € are refused, orders above 1000 € cannot be sent for approval. Which amount should be the auto-approve limit and which should be the hard limit?"
    ],
    "unsupported": [],
    "rejected": [],
@@ -229,7 +236,7 @@
    "parser": "gemini:gemini-4-hydrogen",
    "proposed": {},
    "open_questions": [
-    "You mentioned two different maximum per-order limits (2000 € and 3000 €). Which one should be used?"
+    "You mentioned both 2000 € and 3000 € as the maximum per order. Which amount should be used?"
    ],
    "unsupported": [],
    "rejected": [],
@@ -266,7 +273,7 @@
    "proposed": {},
    "open_questions": [],
    "unsupported": [
-    "Attempts to override rules / switch checks off; not a valid mandate instruction.",
+    "Attempts to ignore previous rules and override limits",
     "This asks to switch the mandate's checks off wholesale. A mandate only takes explicit rules (euro limits, allergens, tiers), so nothing was changed from these words. For a higher limit, write the euro amount."
    ],
    "rejected": [],
@@ -287,7 +294,7 @@
    },
    "open_questions": [],
    "unsupported": [
-    "Attempt to override instructions",
+    "Attempts to override instructions.",
     "This asks to switch the mandate's checks off wholesale. A mandate only takes explicit rules (euro limits, allergens, tiers), so nothing was changed from these words. For a higher limit, write the euro amount."
    ],
    "rejected": [],
@@ -328,7 +335,7 @@
     "unusual_quantity_factor": 2.0
    },
    "open_questions": [
-    "Should peanuts (AP) also be avoided in addition to tree nuts (AN)?"
+    "Does 'Nut-free' also include peanuts (AP), or only tree nuts (AN)?"
    ],
    "unsupported": [],
    "rejected": [],
@@ -395,10 +402,10 @@
    "parser": "gemini:gemini-4-hydrogen",
    "proposed": {},
    "open_questions": [
-    "Should products containing milk/dairy be refused outright (avoid_allergens: AM)?"
+    "Should dairy/milk products be refused outright, or is this only a preference?"
    ],
    "unsupported": [
-    "Preferences ('prefer', 'when possible') are not supported; mandates only express hard rules."
+    "Preferences ('when possible') are not supported; mandates are hard rules."
    ],
    "rejected": [],
    "notes": []
@@ -419,7 +426,7 @@
     "hard_limit_eur": 800.0
    },
    "open_questions": [
-    "Should peanuts (AP) also be avoided, or only tree nuts (AN)?"
+    "Did you also mean peanuts (AP) when saying 'ei pähkinöitä'?"
    ],
    "unsupported": [],
    "rejected": [],

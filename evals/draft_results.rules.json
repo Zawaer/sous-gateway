@@ -1,7 +1,14 @@
 {
+ "generated_at": "2026-11-14T10:58:04+00:00",
+ "provenance": {
+  "origin": "ci",
+  "ci_run_id": "43587725624",
+  "commit": "11d8448",
+  "ci_run_url": "https://github.com/Zawaer/sous/actions/runs/43587725624"
+ },
  "provider": "rules",
- "passed": 19,
- "cases": 19,
+ "passed": 23,
+ "cases": 23,
  "tokens": {
   "calls": 0,
   "prompt_tokens": 0,
@@ -356,6 +363,78 @@
    "proposed": {
     "hard_limit_eur": 1500.0,
     "substitutions": "block"
+   },
+   "open_questions": [],
+   "unsupported": [],
+   "rejected": [],
+   "notes": []
+  },
+  {
+   "id": "D20",
+   "lang": "en",
+   "trap": null,
+   "text": "Never approve any order above 500 euros.",
+   "pass": true,
+   "fails": [],
+   "parser": "rules",
+   "proposed": {
+    "hard_limit_eur": 500.0
+   },
+   "open_questions": [],
+   "unsupported": [],
+   "rejected": [],
+   "notes": []
+  },
+  {
+   "id": "D21",
+   "lang": "en",
+   "trap": null,
+   "text": "No peanuts, milk is fine.",
+   "pass": true,
+   "fails": [],
+   "parser": "rules",
+   "proposed": {
+    "avoid_allergens": [
+     "AP"
+    ]
+   },
+   "open_questions": [],
+   "unsupported": [],
+   "rejected": [],
+   "notes": []
+  },
+  {
+   "id": "D22",
+   "lang": "en",
+   "trap": "unsupported",
+   "text": "Prefer dairy-free products when possible.",
+   "pass": true,
+   "fails": [],
+   "parser": "rules",
+   "proposed": {},
+   "open_questions": [
+    "You prefer products without milk (AM). A mandate can only refuse: should every product containing milk be refused? If so, write 'no milk'; otherwise tell your agent the preference."
+   ],
+   "unsupported": [
+    "A preference ('dairy-free') can't be a mandate rule: avoiding milk (AM) would refuse every product containing it. Tell your agent to prefer it."
+   ],
+   "rejected": [],
+   "notes": []
+  },
+  {
+   "id": "D23",
+   "lang": "fi",
+   "trap": null,
+   "text": "Ei pähkinöitä eikä kalaa, maito käy. Älä hyväksy yli 800 € tilauksia.",
+   "pass": true,
+   "fails": [],
+   "parser": "rules",
+   "proposed": {
+    "hard_limit_eur": 800.0,
+    "avoid_allergens": [
+     "AN",
+     "AF"
+    ]
    },
    "open_questions": [],
    "unsupported": [],
