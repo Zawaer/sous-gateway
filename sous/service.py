@@ -851,8 +851,8 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
         # unsigned Finnish twins of decision.findings and lines[].unit_note (sous/fi.py); not in the receipt
         "explanations_fi": fi.explanations(findings, q),
     }
-    if status == "pending_approval":  # the human must decide before the cut-off (sous/deadline.py)
-        dl = deadline.compute(order["lines"], deadline.delivery_days(order), now)
+    if status == "pending_approval":  # the human must decide before the cut-off and the mandate's end (deadline.py)
+        dl = deadline.compute(order["lines"], deadline.delivery_days(order), now, _approval_limits(mandate))
         order["approve_by"], order["approve_by_detail"] = (dl["at"], dl) if dl else (None, None)
     if status != "refused" and (late := _mark_allocated(q, RES.reserve(oid, q["lines"], mandate.buyer, now, (
             datetime.fromisoformat(order["approve_by"]) if order.get("approve_by") else None)
@@ -928,6 +928,20 @@ def decide(order_id: str, approver: str, approve: bool, note: str | None = None,
     return erp.submit(o) if o["status"] == "ordered" else o
 
 
+def _approval_limits(mandate: Mandate | None) -> list:
+    """When the mandate stops being able to approve anything: its valid_until (compared with business time, as
+    _approval_blocker does) and, for a sandbox mandate, the sandbox's expiry. Sandbox expiry runs on real time,
+    so under a demo clock it is moved by the demo offset into business time."""
+    if mandate is None:
+        return []
+    sid, sb_at = getattr(mandate, "sandbox", None), None
+    if sid and (row := sandbox._row(sid)):
+        sb_at = datetime.fromtimestamp(row["expires_ts"], config.TZ)
+        if clock.is_demo():
+            sb_at += clock.now() - clock.real_now()
+    return deadline.mandate_limits(mandate.valid_until, mandate.id, sid, sb_at)
+
+
 def expire_if_overdue(o: dict | None, now: datetime | None = None) -> dict | None:
     """A held order past its approve_by becomes expired_cutoff (terminal; nothing is ordered) and the buyer is
     told the next delivery date to ask for. Lazy: run on reads and decisions, and by the periodic sweep."""
@@ -937,12 +951,21 @@ def expire_if_overdue(o: dict | None, now: datetime | None = None) -> dict | Non
     if not o or not deadline.overdue(o, now):
         return o
     lost, nxt = deadline.lost_date(o), deadline.next_date(o)
+    basis = (o.get("approve_by_detail") or {}).get("basis") or "cutoff"
+    if auth := deadline.authority_ends(o):
+        what = "mandate" if auth == "mandate_expires" else "sandbox (and its mandate)"
+        reason = (f"Nobody approved by {o['approve_by']}, when the {what} expired: it can no longer approve this "
+                  "order, so nothing was ordered.")
+        step = ("Start a new sandbox and ask the agent for a new quote." if auth == "sandbox_expires" else
+                "Renew the mandate (or issue a new one), then ask the agent for a new quote.")
+    else:
+        reason = (f"Nobody approved by {o['approve_by']}, the deadline before the order cut-off: "
+                  f"delivery on {lost} is lost and nothing was ordered.")
+        step = f"Ask the agent for a new quote for {nxt} (the next_date option) or another day."
     o = {**o, "status": "expired_cutoff", "approval_url": None, "updated_at": now.isoformat(timespec="milliseconds"),
          "expiry": {"at": now.isoformat(timespec="milliseconds"), "approve_by": o["approve_by"],
-                    "reason": f"Nobody approved by {o['approve_by']}, the deadline before the order cut-off: "
-                              f"delivery on {lost} is lost and nothing was ordered.",
-                    "lost_delivery_date": lost, "next_delivery_date": nxt,
-                    "next_step": f"Ask the agent for a new quote for {nxt} (the next_date option) or another day.",
+                    "cause": deadline.CAUSE.get(basis, basis), "reason": reason,
+                    "lost_delivery_date": lost, "next_delivery_date": nxt, "next_step": step,
                     "clock": clock.info(now)}}
     o["receipt_jws"] = _receipt(o)
     if not store.update_order(o, expected_status="pending_approval"):
@@ -960,7 +983,8 @@ def expire_if_overdue(o: dict | None, now: datetime | None = None) -> dict | Non
 
 def backfill_approve_by(o: dict) -> dict:
     """A pending_approval order held before approve-by deadlines existed has none and would never expire: give it
-    the one it would have got (deadline.compute from its lines' cut-offs or else its delivery day, as of when it
+    the one it would have got (deadline.compute from its lines' cut-offs or else its delivery day, capped by the
+    mandate's valid_until and its sandbox's expiry, as of when it
     was held), re-sign the receipt and audit order.approve_by_backfilled. Idempotent; the sweep then expires it
     normally. Returns the order as stored."""
     with _order_lock:
@@ -968,7 +992,11 @@ def backfill_approve_by(o: dict) -> dict:
         if cur.get("status") != "pending_approval" or cur.get("approve_by"):
             return cur
         held_at = datetime.fromisoformat(cur["created_at"]) if cur.get("created_at") else _now()
-        dl = deadline.compute(cur.get("lines") or [], deadline.delivery_days(cur), held_at)
+        try:
+            limits = _approval_limits(_mandate(cur["mandate_id"])) if cur.get("mandate_id") else []
+        except GatewayError:
+            limits = []
+        dl = deadline.compute(cur.get("lines") or [], deadline.delivery_days(cur), held_at, limits)
         if not dl:
             return cur
         cur = {**cur, "approve_by": dl["at"], "approve_by_detail": dl}
@@ -1058,6 +1086,12 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
     if not o:
         raise GatewayError("order_not_found", f"No order {order_id}.", 404)
     if o["status"] == "expired_cutoff" or deadline.overdue(o, _now()):
+        if auth := deadline.authority_ends(o):
+            raise GatewayError("approval_deadline_passed",
+                               f"Order {order_id} could only be decided until {o.get('approve_by')}, when its "
+                               f"{'sandbox' if auth == 'sandbox_expires' else 'mandate'} expired; it is "
+                               "expired_cutoff and nothing was ordered. A new quote needs a mandate that is still "
+                               "valid.", 409)
         raise GatewayError("approval_deadline_passed",
                            f"Order {order_id} could only be decided until {o.get('approve_by')} (before the order "
                            f"cut-off); it is expired_cutoff and nothing was ordered. Next delivery date to ask for: "

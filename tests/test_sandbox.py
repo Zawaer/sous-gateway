@@ -466,8 +466,11 @@ def test_new_sandbox_is_seeded_with_a_drifted_standing_order_and_a_held_order_wi
     from sous import config as _config, deadline as _deadline
     day = _date.fromisoformat(o["delivery_date"])
     cut = _datetime.combine(day - _td(days=1), _datetime.min.time(), _config.TZ).replace(hour=17)
-    assert o["approve_by_detail"]["basis"] == "cutoff"
-    assert _datetime.fromisoformat(o["approve_by"]) == cut - _td(minutes=_deadline.MARGIN_MIN)
+    # ... unless the sandbox (and its mandates) expire before that: then that is the deadline
+    end = _datetime.fromisoformat(s["sandbox"]["expires_at"])
+    want = min(cut - _td(minutes=_deadline.MARGIN_MIN), end)
+    assert o["approve_by_detail"]["basis"] == ("cutoff" if cut - _td(minutes=_deadline.MARGIN_MIN) <= end else "sandbox_expires")
+    assert _datetime.fromisoformat(o["approve_by"]) == want
     assert all(l["order_cutoff"] == cut.isoformat() for l in o["lines"])
     rules = {f["rule"] for f in o["decision"]["findings"]}
     assert {"standing.quantity_creep", "standing.quantity_trend", "standing.cost_drift"} <= rules, rules

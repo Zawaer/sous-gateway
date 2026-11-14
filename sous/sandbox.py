@@ -317,7 +317,8 @@ def _seed_quote(sid: str, so: dict, items: list[dict], when: date, *, prices: li
     from . import clock, deadline, service as S, signing
     now = S._now()
     # No Valio call, so no closingTime: the reference cut-off standing.py assumes (17:00 Helsinki the day before
-    # delivery), so a held seeded order's approve_by is that cut-off minus the margin, not delivery-day midnight.
+    # delivery), so a held seeded order's approve_by is that cut-off minus the margin, not delivery-day midnight
+    # (or the sandbox's expiry, if that comes first: sous/deadline.py).
     cutoff = deadline.estimate_cutoff(when)["at"]
     lines = []
     for i, (p, it) in enumerate(zip(prices or SEED_PRICES, items)):

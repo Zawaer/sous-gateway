@@ -3,7 +3,10 @@
 Every `pending_approval` order carries `approve_by`, the earlier of
 - the earliest order cut-off among its lines (Valio's closingTime) minus a safety margin
   (SOUS_APPROVE_MARGIN_MIN, default 15 minutes; the margin is dropped if the order was held inside it), and
-- the start of its earliest delivery day (00:00 Helsinki), for lines without a cut-off.
+- the start of its earliest delivery day (00:00 Helsinki), for lines without a cut-off, and
+- the end of what may approve it: the mandate's valid_until (basis `mandate_expires`) and, for a sandbox order, the
+  sandbox's expiry (basis `sandbox_expires`). An approval after either is refused anyway (the approval re-checks
+  the mandate), so the deadline must not promise more time than that.
 
 Once business time (clock.now(), so the demo clock applies) passes approve_by without a decision, the order
 becomes `expired_cutoff` (terminal, nothing ordered) and the buyer is told the next delivery date to ask for
@@ -40,8 +43,11 @@ def delivery_days(order: dict) -> list[str]:
     return days or [d for d in (order.get("delivery_date") or order.get("requested_delivery_date"),) if d]
 
 
-def compute(lines: list[dict], delivery_dates: list[str], now: datetime) -> dict | None:
-    """approve_by for a held order: {at, basis, cutoff, product_id, margin_minutes, delivery_date}, or None."""
+def compute(lines: list[dict], delivery_dates: list[str], now: datetime,
+            limits: list[tuple[datetime, dict]] | None = None) -> dict | None:
+    """approve_by for a held order: {at, basis, cutoff, product_id, margin_minutes, delivery_date}, or None.
+    `limits`: (instant, {basis, ...}) ends of the approval authority (mandate_limits), no margin; on a tie the
+    cut-off wins, so a cut-off-bound order reads exactly as before."""
     cands = []
     margin = timedelta(minutes=MARGIN_MIN)
     for l in lines:
@@ -56,8 +62,38 @@ def compute(lines: list[dict], delivery_dates: list[str], now: datetime) -> dict
                                            "margin_minutes": 0, "delivery_date": days[0]}))
     if not cands:
         return None
+    first_day = days[0] if days else None
+    first_cut = min((c[1]["cutoff"] for c in cands if c[1]["basis"] == "cutoff"), default=None, key=_dt)
+    for at, extra in limits or []:
+        cands.append((at.astimezone(config.TZ), {"cutoff": first_cut, "product_id": None, "margin_minutes": 0,
+                                                 "delivery_date": first_day, **extra}))
     at, basis = min(cands, key=lambda c: c[0])
     return {"at": at.isoformat(timespec="seconds"), **basis}
+
+
+def mandate_limits(valid_until: datetime | None, mandate_id: str | None = None,
+                   sandbox_id: str | None = None, sandbox_expires: datetime | None = None) -> list:
+    """The limits compute() takes: the mandate's valid_until and the sandbox's expiry (already in business time).
+    The sandbox comes first so it names the deadline when both are the same instant (a sandbox mandate's
+    valid_until is its sandbox's expiry)."""
+    out = []
+    if sandbox_expires:
+        out.append((sandbox_expires, {"basis": "sandbox_expires", "sandbox": sandbox_id, "mandate_id": mandate_id}))
+    if valid_until:
+        out.append((valid_until, {"basis": "mandate_expires", "mandate_id": mandate_id}))
+    return out
+
+
+# expiry.cause of an expired_cutoff order, by the basis that set its approve_by
+CAUSE = {"cutoff": "cutoff", "delivery_date": "delivery_date", "mandate_expires": "mandate_expired",
+         "sandbox_expires": "sandbox_expired"}
+AUTHORITY = {"mandate_expires": "the mandate expires then", "sandbox_expires": "the sandbox and its mandate expire then"}
+
+
+def authority_ends(order: dict) -> str | None:
+    """`basis` if the order's approve_by is set by its mandate or sandbox ending, not by Valio's cut-off."""
+    b = (order.get("approve_by_detail") or {}).get("basis")
+    return b if b in AUTHORITY else None
 
 
 def overdue(order: dict, now: datetime) -> bool:

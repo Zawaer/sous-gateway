@@ -465,24 +465,34 @@ Over MCP each error also carries `hint` (what the agent should do next) and `ret
 ### 7.1 Approve-by deadline (`sous/deadline.py`)
 
 A held order is useless if the human approves after Valio's order cut-off, so every `pending_approval` order carries
-`approve_by` (ISO time) and `approve_by_detail {at, basis: cutoff|delivery_date, cutoff, product_id, margin_minutes,
-delivery_date}`: the earliest `order_cutoff` (Valio `closingTime`) among its lines minus `SOUS_APPROVE_MARGIN_MIN`
-(default 15; dropped when the order was held inside the margin), or the start of the delivery day if that is
-earlier or no line has a cut-off. The days are the order lines' own delivery dates: after a signed `next_date`
+`approve_by` (ISO time) and `approve_by_detail {at, basis: cutoff|delivery_date|mandate_expires|sandbox_expires,
+cutoff, product_id, margin_minutes, delivery_date}`: the earliest `order_cutoff` (Valio `closingTime`) among its lines
+minus `SOUS_APPROVE_MARGIN_MIN` (default 15; dropped when the order was held inside the margin), or the start of the
+delivery day if that is earlier or no line has a cut-off, or, if earlier still, the end of what can approve it: the
+mandate's `valid_until` (basis `mandate_expires`, plus `mandate_id`) or, for a sandbox order, the sandbox's expiry
+(basis `sandbox_expires`, plus `sandbox`; a sandbox mandate's `valid_until` is the same instant, and the sandbox
+names it; under a demo clock the real-time sandbox expiry is shifted into business time). No margin applies to
+these, and approval after them would be refused anyway (the approval re-checks the mandate). For those bases
+`cutoff` is still the earliest line cut-off, for reference. On a tie the cut-off wins. The days are the order lines' own delivery dates: after a signed `next_date`
 option is accepted they are later than the quote's `requested_delivery_date`, which then plays no part (in the
 deadline, the lost-delivery explanation or the approval's "delivery date passed" check). It is in the signed receipt, the `order.pending_approval` audit event and the
-`order.ask` notification ("Approve by Sun 15.11 16:45 or delivery on Mon 16.11 is lost"; `data.deadline`).
+`order.ask` notification ("Approve by Sun 15.11 16:45 or delivery on Mon 16.11 is lost"; for a mandate/sandbox basis
+"Decide by Sun 15.11 14:38: the sandbox and its mandate expire then, and approval after that is refused";
+`data.deadline`); the approve page's countdown says the same. It applies alike to orders placed directly, standing-
+order renewals (they are placed the same way) and the backfill below.
 
 When business time (the demo clock applies, section 21) passes `approve_by` with no decision, the order becomes
-**`expired_cutoff`**: `approval_url` cleared, receipt re-signed, `expiry {at, approve_by, reason, lost_delivery_date,
-next_delivery_date, next_step, clock}`, audit event `order.expired_cutoff`, and an `order.expired` notification
+**`expired_cutoff`**: `approval_url` cleared, receipt re-signed, `expiry {at, approve_by, cause, reason,
+lost_delivery_date, next_delivery_date, next_step, clock}` (`cause`: `cutoff`, `delivery_date`, `mandate_expired` or
+`sandbox_expired`; for the last two the reason, next step, `order.expired` notification and the 409 message say the
+mandate or sandbox expired and point at renewing it / a new sandbox rather than a lost delivery), audit event `order.expired_cutoff`, and an `order.expired` notification
 to the buyer naming the lost delivery and the next date to ask for (the day after, as the quote's `next_date`
 option). This happens on reads (`GET /orders`, `GET /orders/{id}`, MCP `get_order`), on any decision and in a
 sweep every minute. Approving or rejecting afterwards is `409 approval_deadline_passed`.
 
 Orders held before deadlines existed have no `approve_by`. The sweep (which also runs at startup) and reads give
-each such `pending_approval` order the deadline it would have got when it was held (same rule, as of its
-`created_at`), re-sign its receipt and audit `order.approve_by_backfilled` once; it then expires like any other.
+each such `pending_approval` order the deadline it would have got when it was held (same rule, including the
+mandate/sandbox end, as of its `created_at`), re-sign its receipt and audit `order.approve_by_backfilled` once; it then expires like any other.
 
 ## 8. Standing orders and drift detection
 

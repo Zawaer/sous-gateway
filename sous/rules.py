@@ -361,7 +361,8 @@ def _build() -> list[dict]:
            "The judge sandbox has expired or was closed.", None, status=410),
         _r("approval_deadline_passed", "refusal", ["block"], "gateway",
            "A held order can be approved only until its approve_by: the earliest order cut-off among its lines "
-           f"minus {deadline.MARGIN_MIN:g} minutes (or the start of the delivery day). After that it is "
+           f"minus {deadline.MARGIN_MIN:g} minutes (or the start of the delivery day), or the mandate's or sandbox's expiry if that comes "
+           "first (approve_by_detail.basis says which). After that it is "
            "expired_cutoff, nothing is ordered, and the buyer is told the next delivery date to ask for.",
            None, status=409),
     ]

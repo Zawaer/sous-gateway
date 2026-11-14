@@ -161,6 +161,23 @@ def _pending():
 def test_approve_after_mandate_expired_is_refused(monkeypatch):
     mandate(auto_approve_limit_eur=100, valid_until=NOW + timedelta(hours=1))
     o = _pending()
+    # its approve_by is the mandate's end (sous/deadline.py), so a later decision misses the deadline
+    assert o["approve_by"] == (NOW + timedelta(hours=1)).isoformat(timespec="seconds")
+    assert o["approve_by_detail"]["basis"] == "mandate_expires"
+    monkeypatch.setattr(S, "_now", lambda: NOW + timedelta(hours=2))
+    with pytest.raises(S.GatewayError) as e:
+        S.decide(o["id"], "chef", True)
+    assert e.value.code == "approval_deadline_passed" and "mandate expired" in str(e.value)
+    assert store.get_order(o["id"])["expiry"]["cause"] == "mandate_expired"
+
+
+def test_approve_after_mandate_expired_is_refused_without_deadline(monkeypatch):
+    """An order held before deadlines knew the mandate's end: the approval's mandate check still refuses it."""
+    mandate(auto_approve_limit_eur=100, valid_until=NOW + timedelta(hours=1))
+    o = _pending()
+    stored = store.get_order(o["id"])
+    stored["approve_by"] = "2099-01-01T00:00:00+02:00"
+    store.put_order(stored)
     monkeypatch.setattr(S, "_now", lambda: NOW + timedelta(hours=2))
     r = S.decide(o["id"], "chef", True)
     assert r["status"] == "refused" and "expired" in r["approval"]["result_reason"]

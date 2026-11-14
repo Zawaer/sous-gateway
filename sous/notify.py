@@ -33,7 +33,7 @@ from datetime import datetime
 
 import httpx
 
-from . import config, notifications_store, store
+from . import config, deadline, notifications_store, store
 from .mandate import Mandate
 
 log = logging.getLogger(__name__)
@@ -129,7 +129,10 @@ def compose(event: str, order: dict, mandate: Mandate) -> dict:
         more = f" (+{len(fs) - 1} more reason{'s' if len(fs) > 2 else ''})" if len(fs) > 1 else ""
         cut = order.get("approve_by") or earliest_cutoff(order)
         lost = (order.get("approve_by_detail") or {}).get("delivery_date") or order.get("delivery_date")
-        by = (f"Approve by {fmt_time(cut)} or delivery on {_day(lost)} is lost" if cut and lost
+        auth = deadline.authority_ends(order)
+        by = (f"Decide by {fmt_time(cut)}: {deadline.AUTHORITY[auth]}, and approval after that is refused"
+              if cut and auth and order.get("approve_by")
+              else f"Approve by {fmt_time(cut)} or delivery on {_day(lost)} is lost" if cut and lost
               else f"Approve by {fmt_time(cut)}" if cut else "Approve or reject it")
         msg = (f"Approval needed: {reason}{more}. {by}. "
                f"Order: {what(order)} for {total} ex VAT. "
@@ -147,7 +150,15 @@ def compose(event: str, order: dict, mandate: Mandate) -> dict:
     if event == "order.expired":
         x = order.get("expiry") or {}
         lost, nxt = x.get("lost_delivery_date"), x.get("next_delivery_date")
-        msg = (f"Nobody approved {oid} by {fmt_time(x.get('approve_by') or order.get('approve_by'))}, the deadline "
+        when = fmt_time(x.get('approve_by') or order.get('approve_by'))
+        if auth := deadline.authority_ends(order):
+            who = "mandate" if auth == "mandate_expires" else "sandbox (and its mandate)"
+            msg = (f"Nobody approved {oid} by {when}, when its {who} expired: nothing was ordered. "
+                   f"Order: {what(order)} for {total} ex VAT. "
+                   + ("Start a new sandbox to try again." if auth == "sandbox_expires" else
+                      "Renew the mandate, then ask your agent for a new quote."))
+            return {"title": f"Expired: {oid} (the {who.split(' ')[0]} expired)", "message": msg, "url": url}
+        msg = (f"Nobody approved {oid} by {when}, the deadline "
                f"before Valio's order cut-off: delivery on {_day(lost)} is lost and nothing was ordered. "
                f"Order: {what(order)} for {total} ex VAT."
                + (f" Next option: ask your agent to quote it for {_day(nxt)}." if nxt else ""))

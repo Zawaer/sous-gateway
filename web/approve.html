@@ -151,7 +151,7 @@ function render() {
     <details><summary>${esc(t("approve.signs_summary"))}</summary>
       <p>${esc(t("approve.signs_text"))} <a href="${API}/orders/${encodeURIComponent(o.id)}/approval/verify">${esc(t("approve.verify_link"))}</a>.</p>
       <pre id="binding">${esc(binding || t("approve.binding_placeholder"))}</pre></details>`;
-  if (pending && o.approve_by) countdown(o.approve_by);
+  if (pending && o.approve_by) countdown(o.approve_by, (o.approve_by_detail || {}).basis);
   wire(has);
 }
 
@@ -201,14 +201,17 @@ function actions(has) {
       <p><button id="regbtn" class="btn no tap" type="button">${esc(t("approve.setup"))}</button></p></details>`;
 }
 
-function countdown(at) {
+function countdown(at, basis) {
+  // approve_by set by the mandate's or sandbox's end, not Valio's cut-off (sous/deadline.py)
+  const key = { mandate_expires: "approve.decide_by_mandate", sandbox_expires: "approve.decide_by_sandbox" }[basis]
+    || "approve.decide_by";
   clearInterval(tick);
   const draw = () => {
     const el = $("#deadline"); if (!el) return clearInterval(tick);
     const ms = new Date(at) - Date.now();
     if (ms <= 0) { el.textContent = t("approve.deadline_passed", { when: when(at) }); el.classList.add("late"); return clearInterval(tick); }
     const h = Math.floor(ms / 3.6e6), m = Math.floor(ms % 3.6e6 / 6e4);
-    el.textContent = t("approve.decide_by", { when: when(at), left: `${h ? h + " h " : ""}${m} min` });
+    el.textContent = t(key, { when: when(at), left: `${h ? h + " h " : ""}${m} min` });
   };
   draw(); tick = setInterval(draw, 30000);
 }
