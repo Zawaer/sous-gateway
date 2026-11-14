@@ -451,6 +451,12 @@ def _build() -> dict:
     return {"version": version, "commit": commit or "unknown"}
 
 
+@app.get("/robots.txt", include_in_schema=False)
+def robots():
+    # Demo and sandbox deployments: keep search engines out (reached by direct link only).
+    return Response("User-agent: *\nDisallow: /\n", media_type="text/plain")
+
+
 @app.get("/health", tags=["meta"])
 def health():
     return {"ok": True, **_build(), "clock": clock.info(), "valio_api_calls": aimo.stats, "approver_code_required": bool(config.APPROVER_CODE),
