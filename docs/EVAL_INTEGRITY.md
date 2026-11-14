@@ -19,7 +19,7 @@ violations and require every one to be flagged.
   signature, an edited or incomplete audit log, exact stock).
 - **Controls** that must NOT be flagged: the untouched records (every recorded case re-scores to the verdict it was
   recorded with), harmless edits (a different allergen-safe product from the same search, changed ids and
-  latencies, an extra informational rule), the untouched chain and signatures, and the reference gateway (15/15).
+  latencies, an extra informational rule), the untouched chain and signatures, and the reference gateway (17/17).
 
 ```bash
 uv run python scripts/check_the_checker.py              # table; exit 1 on any miss or false alarm
@@ -101,7 +101,7 @@ expect different tiers). The replay compares only cases whose set of checks is u
 | G12 | audit row edited and its own hash recomputed | audit verify | seq 19 of 36 | caught | ok=False, broken at seq 20 |
 | G13 | latest audit event deleted (tail truncated) | audit verify (with a saved head) | seq 19 of 36 | caught | ok=False, saved head {'found': False, 'seq': None} |
 | C12 | none: chain checked against the head saved earlier | audit verify (with a saved head) | 36 events | quiet | ok=True, saved head {'found': True, 'seq': 36} |
-| C06 | none: the reference gateway | conformance (all 15) | reference gateway | quiet | 15/15 checks pass |
+| C06 | none: the reference gateway | conformance (all 17) | reference gateway | quiet | 17/17 checks pass |
 | K01 | exact stock exposed in a bucketed quote | conformance (stock_buckets) | gateway with the defect | caught | stock_buckets FAIL: OAT: available_amount=99999; OAT: available_amount=99989.0; OAT: available_amount=99989.0; OAT: available_amount=96864.0 |
 | K02 | gateway places an order over the hard limit | conformance (hard_limit) | gateway with the defect | caught | hard_limit FAIL: 2250 L = 2250.0 EUR vs hard limit 1500.0 EUR -> ordered (no block rule); every rule id is in /rules |
 | K03 | idempotency key returns another agent's order | conformance (cross_agent_key) | gateway with the defect | caught | cross_agent_key FAIL: hospital agent, same key + hotel's quote -> THE HOTEL'S ORDER |

@@ -75,3 +75,16 @@ def test_seeded_hotel_mandates_cap_milk_only():
     hotels = [m for m in MANDATES if m.id.startswith("M-HOTEL-AURORA")]
     assert hotels and all(m.comparison_price_caps == {"milk": 2.5} and not m.max_comparison_price_eur
                           for m in hotels)
+
+
+def test_reorder_finding_after_a_line_without_comparison_cap_does_not_crash():
+    """Recipe eval R05 (school, autonomy 'reorder'): the comparison-cap check reused the name `capped`, the autonomy
+    suffix string, so the next line's 'not one of the buyer's usual products' message did str + None (TypeError)."""
+    m = mandate(autonomy="reorder", max_comparison_price_eur={"KG": 99.0})
+    nameless = {**line("C1", 2.72), "name": None}
+    out, findings = evaluate(m, "a", [line("M1", 2.6), nameless, line("M1", 2.6)],
+                             requested_date=date(2026, 11, 16), now=NOW)
+    reorder = [f for f in findings if f.rule == "autonomy.reorder"]
+    assert [f.product_id for f in reorder] == ["M1", "C1", "M1"]
+    assert reorder[1].message.startswith("C1 is not one of the buyer's usual products")
+    assert out == "ask"

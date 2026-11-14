@@ -173,9 +173,10 @@ def comparison_cap(mandate: Mandate, pid: str, per: str | None) -> tuple[float, 
     return None
 
 
-def readable_name(name: str) -> str:
+def readable_name(name: str | None) -> str:
     """Catalog names are often ALL CAPS ('BRAVO CHEF 400G CHOPPED TOMATOES'); reasons read better in sentence case."""
-    letters = [c for c in name or "" if c.isalpha()]
+    name = "" if name is None else str(name)
+    letters = [c for c in name if c.isalpha()]
     if letters and sum(c.isupper() for c in letters) / len(letters) > 0.8:
         return name[:1].upper() + name[1:].lower()
     return name
@@ -295,7 +296,8 @@ def evaluate(
 
     subs = substitute_for or {}
     for l in lines:
-        pid, name = l["product_id"], readable_name(l["name"])
+        pid = l["product_id"]
+        name = readable_name(l.get("name") or str(pid))  # a missing display name never crashes a quote
         p = catalog.get(pid) or {}
 
         # Valio's hold on the product: also for a quote issued before the hold (ordering, approving it later)
@@ -419,11 +421,12 @@ def evaluate(
                 f"(mandate minimum {mandate.min_delivery_reliability:.0%}).", pid)
 
         cp = l.get("comparison_price") or {}
-        capped = comparison_cap(mandate, pid, cp.get("per")) if cp.get("ex_vat") is not None else None
-        if capped and _cents(cp["ex_vat"]) > _cents(capped[0]):
+        # not `capped`: that is the autonomy-cap suffix above, needed again for the next line (R05 crashed on it)
+        cp_cap = comparison_cap(mandate, pid, cp.get("per")) if cp.get("ex_vat") is not None else None
+        if cp_cap and _cents(cp["ex_vat"]) > _cents(cp_cap[0]):
             add("price.comparison_cap", "ask",
-                f"{name} costs €{cp['ex_vat']:.2f}/{cp['per']}, above the mandate's €{capped[0]:.2f}/{cp['per']} "
-                f"cap for {capped[1]}.", pid)
+                f"{name} costs €{cp['ex_vat']:.2f}/{cp['per']}, above the mandate's €{cp_cap[0]:.2f}/{cp['per']} "
+                f"cap for {cp_cap[1]}.", pid)
 
     f.extend(extra_findings or [])
     outcome: Tier = max((x.outcome for x in f), key=_RANK.__getitem__, default="silent")
