@@ -15,8 +15,10 @@ whether a candidate is recipe-compatible:
   compatible type:  a minor compromise said in plain words ('milk drink instead of
                     milk', 'higher fat: 3.5% vs 1.5%', 'blueberry instead of strawberry')
   different type:   left out (sour milk for milk, spread for butter, strawberry
-                    yogurt for plain); offered as 'good' with a major compromise
-                    only when nothing compatible can be delivered
+                    yogurt for plain), never offered, nor is any candidate with a
+                    negative match score; both are listed in `not_offered` with the
+                    reason, and with nothing acceptable left the answer is
+                    no_safe_substitute: 'no acceptable substitute; ask a human'
 
 Each candidate lists its compromises against the original in plain language; the
 tier follows from them:
@@ -26,8 +28,7 @@ tier follows from them:
           as 'no added sugars' / 'organic' lost, different pack size, compatible type)
   good:   still usable, but with a real trade-off (much dearer, later delivery,
           low reliability, allergen data missing -> the mandate will ask a human,
-          a free-from claim lost (soy-free), type not recognised, different type
-          as a last resort)
+          a free-from claim lost (soy-free), type not recognised)
 
 Options come back best first. A free-from claim that guards an allergen the buyer
 avoids is a hard filter, like the dietary claims.
@@ -45,7 +46,8 @@ from . import catalog, quote as Q
 from .mandate import Mandate
 
 SHORTLIST = 25
-FALLBACK = 5  # different-type candidates priced in the same batch, used only if nothing compatible remains
+NOT_OFFERED = 5  # candidates ruled out (another type, a negative match score) listed with their reasons
+NO_SAFE_SUBSTITUTE = "no acceptable substitute; ask a human"
 _WORD = re.compile(r"[a-zåäö]{3,}")
 _STOP = {"the", "and", "with", "ltd", "free", "laktoositon", "lactose", "uht", "pack", "pcs"}
 
@@ -170,6 +172,7 @@ _TYPES: list[tuple[str, str, str, str, str]] = [
     ("sokeri", "sugar", "sugar", "sokeri", "sugar"),
     ("kastike", "sauce", "sauce", "kastike", "sauce"),
     ("majoneesi", "mayonnaise", "mayonnaise", "majoneesi", "mayonnaise"),
+    ("pesto", "pesto", "pesto", "pesto", "pesto"),
     ("liemi", "stock", "stock", "liemi fondi fond liemijauhe", "stock, bouillon, fond"),
     ("hillo", "jam", "jam", "hillo marmeladi", "jam, marmalade"),
     ("mehu", "juice", "juice", "mehu täysmehu", "juice"),
@@ -587,6 +590,39 @@ def pack(name: str) -> dict | None:
             "measure": measure, "text": f"{count} x {size}" if count > 1 else size}
 
 
+def sales_unit_pack(p: dict, opack: dict | None, content: tuple | None) -> str | None:
+    """What one sales unit of p is, in words: 'KI (6 x 190 g)' for a carton of six 190 g jars, '4 x 1 kg' when the
+    name already describes the whole sales unit. None when it can't be told."""
+    su = p.get("sales_unit") or "SALES_UNIT"
+    if not content:
+        return None
+    if not opack or content[1] != opack["measure"] or opack["total"] <= 0:
+        return f"{su} ({_fmt_amount(content[0], content[1])})"
+    n = content[0] / opack["total"]
+    if abs(n - 1) < 0.05:
+        return opack["text"] if su in ("ST", "KPL", "PCS") else f"{su} ({opack['text']})"
+    if n > 1 and abs(n - round(n)) < 0.05 * n:
+        inner = f"({opack['text']})" if opack["count"] > 1 else opack["text"]
+        return f"{su} ({round(n)} x {inner})"
+    return f"{su} ({_fmt_amount(content[0], content[1])})"
+
+
+def _fmt_amount(v: float, unit: str) -> str:
+    return f"{round(v, 3):g} {unit.lower()}"
+
+
+def _asked(amount: float, unit: str | None, orig: dict, opack: dict | None, content: tuple | None,
+           need: float) -> str:
+    """The need as asked, with the pack structure: '20 x KI (6 x 190 g) = 22.8 kg' (20 sales units of the
+    original, each a carton of six 190 g jars), so a human sees why 20 packs became 22.8 kg."""
+    if unit is not None:
+        return f"{amount:g} {unit}"
+    one = sales_unit_pack(orig, opack, content)
+    if not one:
+        return f"{amount:g} SALES_UNIT"
+    return f"{amount:g} x {one} = {_fmt_amount(need, content[1])}"
+
+
 def _pack_of(p: dict) -> dict | None:
     names = p.get("names") or {}
     return pack(names.get("fi") or names.get("en") or p.get("name") or "")
@@ -669,7 +705,7 @@ def suggest(
 
     # 1. static filter: hard constraints never relaxed
     pool, held_back = [], []
-    excluded = {"allergen": 0, "claims": 0, "measure_or_temperature": 0, "product_type": 0}
+    excluded = {"allergen": 0, "claims": 0, "measure_or_temperature": 0, "product_type": 0, "weak_match": 0}
     category = [(c, product_type(c)) for c in _same_category(orig["category"])]
     # A name that names no type ('Valio Oltermanni') in a category that is nearly all the original's
     # kind (cheese) is very likely that kind too; elsewhere it stays unconfirmed.
@@ -704,18 +740,25 @@ def suggest(
                  "score": _static_score(orig, c, ow, match, len(minor), bool(opack and not pack_note))}
         if match == "different":
             excluded["product_type"] += 1
-            held_back.append(entry)
+            held_back.append((entry, "different product type: " + "; ".join(major)))
+        elif entry["score"] < 0:
+            excluded["weak_match"] += 1
+            held_back.append((entry, f"weak match (score {entry['score']:.2f})"
+                              + (": " + "; ".join(major + minor) if major or minor else "")))
         else:
             pool.append(entry)
     pool.sort(key=lambda e: -e["score"])
-    held_back.sort(key=lambda e: -e["score"])
-    shortlist = pool[:SHORTLIST] + held_back[:FALLBACK]
+    held_back.sort(key=lambda x: -x[0]["score"])
+    shortlist = pool[:SHORTLIST]
+    # what was considered and why it isn't offered, closest first, so a human sees what was ruled out
+    not_offered = [_not_offered(e, why) for e, why in held_back[:NOT_OFFERED]]
 
     # 2. live price and availability for the original + shortlist (two batched calls). A need in packs is
     # turned into what those packs hold (40 x 400 g -> 16 KG), so each option is priced for the same amount
     # (2 x 10 kg or 16 x 1 kg), not for 40 of its own packs.
     need, need_unit = amount, unit
-    if unit is None and (content := Q.content_per_sales_unit(orig, None)):
+    content = Q.content_per_sales_unit(orig, None) if unit is None else None
+    if content:
         need, need_unit = round(amount * content[0], 3), content[1]
     offers, _ = Q.offers([orig["id"]] + [e["p"]["id"] for e in shortlist], delivery_date, need, need_unit)
     by_id = {o["product_id"]: o for o in offers}
@@ -728,17 +771,15 @@ def suggest(
         ref_total = round(ref_cp * need, 2)
 
     # 3. compromises -> tier
-    options = []
+    options, unorderable = [], []
     for e in shortlist:
         c = e["p"]
         o = by_id.get(c["id"])
         if not o or not o["orderable"]:
+            unorderable.append(_not_offered(e, "can't be delivered: " + ("; ".join(
+                i["message"] for i in (o or {}).get("issues", []) if i["severity"] == "blocking") or "no offer")))
             continue
-        minor, major = list(e["type_minor"]), []
-        if e["match"] == "different":
-            major += ["different product type: " + m for m in e["type_major"]]
-        else:
-            major += e["type_major"]
+        minor, major = list(e["type_minor"]), list(e["type_major"])
         cp = (o.get("comparison_price") or {}).get("ex_vat")
         delta = None
         if cp is not None and ref_cp:
@@ -788,9 +829,6 @@ def suggest(
             "allergen_check": allergen,
             "offer": o,
         })
-    # a different type only when nothing recipe-compatible can be delivered
-    if any(x["type"]["match"] != "different" for x in options):
-        options = [x for x in options if x["type"]["match"] != "different"]
     rank = {"best": 0, "better": 1, "good": 2}
     type_rank = {"same": 0, "compatible": 1, "unknown": 2, "different": 3}
     # within a tier, the same kind of product first: milk with more fat beats a milk drink for milk
@@ -812,19 +850,25 @@ def suggest(
                      "comparison_price": ref_price, "pack": opack and opack["text"],
                      "total_ex_vat": ref_total},
         "need": {"amount": need, "unit": need_unit or "SALES_UNIT",
-                 "asked": f"{amount:g} {'x ' + opack['text'] if unit is None and opack else (unit or 'SALES_UNIT')}"},
+                 "asked": _asked(amount, unit, orig, opack, content, need)},
         "constraints": {"required_claims": sorted(required_claims), "avoid_allergens": avoid,
                         "same_category": orig["category"], "measure": measure, "temperature": orig["temperature"],
                         "type": _public_type(otype)},
         "considered": {"in_category": len(pool) + sum(excluded.values()), "excluded": excluded,
                        "priced_live": len(shortlist)},
         "options": picked,
-        "no_safe_substitute": None if picked else (
-            "No product in this category meets every constraint and can be delivered. "
-            "Nothing will be swapped automatically; a human needs to decide."),
+        # never a different kind of product or a negative match score: then nothing, said plainly
+        "no_safe_substitute": None if picked else NO_SAFE_SUBSTITUTE,
+        "not_offered": (not_offered + unorderable)[:NOT_OFFERED] if not picked else not_offered,
         "next_step": "Request a quote with substitute_for set to the original product id; "
                      "the mandate decides whether a human must approve the substitution.",
     }
+
+
+def _not_offered(e: dict, reason: str) -> dict:
+    c = e["p"]
+    return {"product_id": c["id"], "name": c["name"], "type": e["type"]["label"], "match": e["match"],
+            "match_score": round(e["score"], 2), "reason": reason}
 
 
 def _public_type(t: dict) -> dict:

@@ -377,3 +377,15 @@ def test_rest_substitutes_accept_pack_unit_aliases(c, monkeypatch):
         assert r.status_code == 200, (unit, r.text)
     r = c.get("/products/OAT/substitutes", params={"delivery_date": DAY, "amount": 2, "unit": "crate"})
     assert r.status_code == 422
+
+
+def test_rest_substitutes_default_the_delivery_date(c, monkeypatch):
+    """Without delivery_date: the next delivery day (as the sandbox quickstart), said in the answer; given: echoed."""
+    from sous import sandbox
+    _live(c, monkeypatch)
+    r = c.get("/products/OAT/substitutes", params={"amount": 2})
+    assert r.status_code == 200, r.text
+    d = r.json()["delivery_date"]
+    assert d["date"] == sandbox.next_delivery_day().isoformat() and d["defaulted"] is True and d["note"]
+    r = c.get("/products/OAT/substitutes", params={"delivery_date": DAY, "amount": 2})
+    assert r.json()["delivery_date"] == {"date": DAY, "defaulted": False, "note": None}

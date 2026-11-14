@@ -777,7 +777,7 @@ def get_order(order_id: str) -> dict:
 
 # --- substitutes ------------------------------------------------------------
 
-def suggest_substitutes(agent_id: str, product_id: str, delivery_date: date, amount: float,
+def suggest_substitutes(agent_id: str, product_id: str, delivery_date: date | None, amount: float,
                         unit: str = "SALES_UNIT", mandate_id: str | None = None,
                         avoid_allergens: list[str] | None = None, limit: int = 3,
                         agent_token: str | None = None, reader=None) -> dict:
@@ -790,6 +790,8 @@ def suggest_substitutes(agent_id: str, product_id: str, delivery_date: date, amo
     mandate = _mandate(mandate_id) if mandate_id else None
     if not access.skips_agent_check(reader, mandate):
         sandbox.authorize(mandate, agent_id, agent_token, "suggest_substitutes")
+    defaulted = delivery_date is None
+    delivery_date = delivery_date or sandbox.next_delivery_day()
     before = dict(aimo.stats)
     try:
         with sandbox.metered(mandate):
@@ -800,6 +802,8 @@ def suggest_substitutes(agent_id: str, product_id: str, delivery_date: date, amo
     except aimo.AimoError as e:
         raise valio_error(e)
     r["valio_api_calls"] = {k: aimo.stats[k] - before[k] for k in aimo.stats}
+    r["delivery_date"] = {"date": delivery_date.isoformat(), "defaulted": defaulted,
+                          "note": "no delivery_date given: priced for the next delivery day" if defaulted else None}
     r = exposure.view(r, exposure.is_approver(reader))  # stock policy (sous/exposure.py), also for the audit copy
     store.audit("substitutes.suggested", agent_id, "agent", product_id, mandate.buyer if mandate else None,
                 {"product_id": product_id, "constraints": r["constraints"],

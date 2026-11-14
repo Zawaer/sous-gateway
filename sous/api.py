@@ -334,7 +334,7 @@ def allergen_codes():
 @app.get("/products/{product_id}/substitutes", tags=["catalog"])
 def suggest_substitutes(
     product_id: str,
-    delivery_date: date,
+    delivery_date: date | None = Query(None, description="Defaults to the next delivery day (said in the answer)"),
     amount: float = 1,
     unit: Annotated[Q.Unit, Query(description=Q.UNIT_DOC)] = "SALES_UNIT",
     mandate_id: str | None = None,

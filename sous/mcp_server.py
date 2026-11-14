@@ -435,7 +435,7 @@ def request_quote(
 def suggest_substitutes(
     agent_id: str,
     product_id: str,
-    delivery_date: str,
+    delivery_date: str | None,
     amount: float,
     unit: str = "SALES_UNIT",
     mandate_id: str | None = None,
@@ -449,9 +449,11 @@ def suggest_substitutes(
     Same category, measure and temperature class; keeps the original's dietary claims and the mandate's
     allergen rules (never relaxed). Each option lists its compromises in plain language and has a live offer.
     Tell the buyer the compromises, then request_quote for the chosen one with substitute_for=<original id>.
+    Another kind of product is never offered: with nothing acceptable, no_safe_substitute says to ask a human and
+    not_offered lists what was ruled out and why. delivery_date null = the next delivery day.
     With mandate_id it is read-scoped like get_mandate (send your Authorization: Bearer header or agent_token).
     """
-    return S.suggest_substitutes(agent_id, product_id, _date(delivery_date), amount, unit,
+    return S.suggest_substitutes(agent_id, product_id, _date(delivery_date) if delivery_date else None, amount, unit,
                                  mandate_id, avoid_allergens, limit, agent_token=_agent_token(ctx, agent_token),
                                  reader=_reader(ctx, agent_token))
 

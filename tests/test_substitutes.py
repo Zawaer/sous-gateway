@@ -163,13 +163,58 @@ def test_sour_milk_is_not_offered_for_milk(monkeypatch):
     assert r["options"][0]["product_id"] == "3"  # same type ranks first within a tier
 
 
-def test_different_type_only_as_last_resort(monkeypatch):
+def test_different_type_is_never_offered(monkeypatch):
     _setup(monkeypatch, [ORIG, SOUR, DRINK], unorderable={"4"})
     r = S.suggest("1", date(2026, 11, 20), 100, "L")
-    assert [o["product_id"] for o in r["options"]] == ["2"]
-    o = r["options"][0]
-    assert o["tier"] == "good" and o["type"]["match"] == "different"
-    assert "different product type: sour milk instead of milk" in o["compromises"]
+    assert r["options"] == []
+    assert r["no_safe_substitute"] == "no acceptable substitute; ask a human"
+    why = {x["product_id"]: x["reason"] for x in r["not_offered"]}
+    assert why["2"] == "different product type: sour milk instead of milk"
+    assert why["4"].startswith("can't be delivered")
+
+
+# judge audit: Saclá garlic pesto 190 g, sold per carton (KI) of 6 jars. '20 ST' (= 20 sales units) said
+# 'asked: 20 x 190 g' but meant 22.8 kg; and a cucumber relish (score -4.9) was offered as 'good'.
+PESTO = product("30", "Saclà Villi Valkosipuli Pesto 190 g", "Saclá  190g Garlic Pesto", brand="Saclà",
+                category="21917", temperature="ambient", sales_unit="KI", base_unit="ST",
+                units={"KRS": 216.0, "PAL": 1944.0, "KI": 6.0, "ST": 1.0}, claims=["FREE_FROM_GLUTEN"],
+                allergens={"declared": True, "contains": ["AM", "AN", "AP", "SC"], "may_contain": [], "free_from": []})
+RELISH = product("31", "Kurkkusalaatti 1 kg", "Cucumber relish 1 kg", brand="X", category="21917",
+                 temperature="ambient", claims=["FREE_FROM_GLUTEN"],
+                 allergens={"declared": False, "contains": [], "may_contain": [], "free_from": []})
+OTHER = product("32", "Zeta salsa verde 2,8 kg", "Zeta green salsa 2.8 kg", brand="Y", category="21917",
+                temperature="ambient", claims=["FREE_FROM_GLUTEN", "VEGAN"],
+                allergens={"declared": False, "contains": [], "may_contain": [], "free_from": []})
+
+
+def test_carton_of_jars_states_its_pack_structure(monkeypatch):
+    _setup(monkeypatch, [PESTO, RELISH, OTHER])
+    r = S.suggest("30", date(2026, 11, 16), 20, None, avoid_allergens=["AM", "AN", "AP"])
+    assert r["need"]["amount"] == 22.8 and r["need"]["unit"] == "KG"  # 20 cartons x 6 x 190 g
+    assert r["need"]["asked"] == "20 x KI (6 x 190 g) = 22.8 kg"
+
+
+def test_negative_score_or_other_type_gives_no_safe_substitute(monkeypatch):
+    _setup(monkeypatch, [PESTO, RELISH, OTHER])
+    r = S.suggest("30", date(2026, 11, 16), 20, None, avoid_allergens=["AM", "AN", "AP"])
+    assert r["options"] == []
+    assert r["no_safe_substitute"] == "no acceptable substitute; ask a human"
+    why = {x["product_id"]: x for x in r["not_offered"]}
+    assert why["31"]["reason"].startswith("different product type")
+    assert why["32"]["match_score"] < 0 and why["32"]["reason"].startswith("weak match")
+    assert r["considered"]["excluded"]["product_type"] == 1 and r["considered"]["excluded"]["weak_match"] == 1
+
+
+@pytest.mark.parametrize("name,su,units,content,text", [
+    ("Valio maito 1 l", "ST", {"ST": 1.0}, (1.0, "L"), "1 l"),
+    ("Mehu 4x1 l", "KI", {"KI": 4.0, "ST": 1.0}, (4.0, "L"), "KI (4 x 1 l)"),
+    ("Pesto 190 g", "KI", {"KI": 6.0, "ST": 1.0}, (1.14, "KG"), "KI (6 x 190 g)"),
+    ("Jauho 2x1 kg", "KI", {"KI": 6.0, "ST": 1.0}, (6.0, "KG"), "KI (3 x (2 x 1 kg))"),
+    ("Juusto", "KI", {"KI": 6.0, "ST": 1.0}, (3.0, "KG"), "KI (3 kg)"),
+])
+def test_sales_unit_pack(name, su, units, content, text):
+    p = product("x", name, sales_unit=su, units=units)
+    assert S.sales_unit_pack(p, S._pack_of(p), content) == text
 
 
 def test_identical_product_is_best(monkeypatch):

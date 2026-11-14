@@ -49,6 +49,8 @@ The same operations are exposed twice, over one service layer (`sous/service.py`
 | Allergen codes | `GET /allergens` | resource `sous://allergens` |
 | Health | `GET /health` (Valio call counters, shared Valio budget (section 19), storage backend, whether the approver code is required) | |
 
+Substitutes: `delivery_date` is optional (default: the next delivery day; the answer's `delivery_date {date, defaulted, note}` says which was used). A need in packs is the original's sales units and what they hold, stated in `need.asked` (`20 x KI (6 x 190 g) = 22.8 kg`). A different product type or a negative `match_score` is never offered; those are listed in `not_offered[] {product_id, name, type, match, match_score, reason}`, and with no acceptable option `no_safe_substitute` is `"no acceptable substitute; ask a human"` (`null` otherwise).
+
 REST errors, including schema and HTTP errors, are `{"error": "<code>", "message": "<text>"}` with an HTTP status (plus `retry_after` on `valio_unavailable` when known). MCP tools return `{"error", "message", "hint", "retryable"}` as a tool result with `isError: true` instead of raising; `hint` tells the model what to do next (codes in section 7).
 
 ## 3. Signatures
