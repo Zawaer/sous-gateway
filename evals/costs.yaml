@@ -37,6 +37,8 @@ runs:
   - {when: "2026-11-14 13:33", provider: nvidia, model: nemotron-3.5-super-vl-120b-a12b, purpose: "buyer LLM eval, 60 cases / 48 run, 30/48 (CI full dispatch on CRACI, run 43587725624, 11d8448)", tokens_in: 2246619, tokens_out: 29588}
   - {when: "2026-11-14 13:40", provider: gemini, model: gemini-4-hydrogen, purpose: "recipe eval, 7 menus, 5/7 (CI run 43587725624, 11d8448)", tokens_in: 10172, tokens_out: 4304}
   - {when: "2026-11-14 13:40", provider: verda, model: kimi-k3-1-pro, purpose: "recipe eval, 7 menus, 4/7 (CI run 43587725624, 11d8448)", tokens_in: 7784, tokens_out: 5056}
+  - {when: "2026-11-14 14:46", provider: gemini, model: gemini-4-hydrogen, purpose: "recipe eval, 7 menus, 5/7 (CI recipe_only dispatch, run 43595658113, da3e797)", tokens_in: 10172, tokens_out: 4138}
+  - {when: "2026-11-14 14:46", provider: verda, model: kimi-k3-1-pro, purpose: "recipe eval, 7 menus, 5/7 (CI recipe_only dispatch, run 43595658113, da3e797)", tokens_in: 7784, tokens_out: 6106}
   - {when: "2026-11-14 00:10", provider: openai, model: codex, purpose: "read-only security review of the trust core (Codex run 01a1d6fd)", tokens_in: 356000, tokens_out: 2400, note: "approximate, from the Codex run summary"}
   - {when: "2026-11-14 04:50", provider: openai, model: codex, purpose: "read-only security review of overnight trust changes (Codex run 01a1d86a)", tokens_in: 372700, tokens_out: 2334, note: "approximate, from the Codex run summary"}
   - {when: "2026-11-14 12:38", provider: verda, model: gpu-a100-80gb, purpose: "red team: 2 A100 80GB boxes that never booted (same dead IP), deleted by infra", tokens_in: 0, tokens_out: 0, usd: 1.30, note: "from rene-claude-infra's instance records"}

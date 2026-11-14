@@ -1,17 +1,17 @@
 # What Sous spent
 
-_Generated from [evals/costs.yaml](../evals/costs.yaml) by `scripts/costs.py`, prorated to Sat 14.11 16:09 (Helsinki)._ Every paid model or API run and every running service is in the ledger; "unknown" means the price still has to be read from that provider's console.
+_Generated from [evals/costs.yaml](../evals/costs.yaml) by `scripts/costs.py`, prorated to Sat 14.11 16:11 (Helsinki)._ Every paid model or API run and every running service is in the ledger; "unknown" means the price still has to be read from that provider's console.
 
 ## Totals per provider (model usage)
 
 | Provider | Runs | Tokens in / out | Cost |
 |---|---|---|---|
-| gemini | 14 | 8,277,615 / 116,895 | $13.29 |
+| gemini | 15 | 8,287,787 / 121,033 | $13.34 |
 | nvidia | 3 | 5,013,242 / 64,986 | $0.00 |
 | openai | 2 | 728,700 / 4,734 | unknown |
-| verda | 12 | 6,525,543 / 153,749 | $22.68 |
+| verda | 13 | 6,533,327 / 159,855 | $22.76 |
 
-**Known total so far: $38.13** (plus the items marked unknown)
+**Known total so far: $38.26** (plus the items marked unknown)
 
 ## Services (prorated)
 
@@ -53,6 +53,8 @@ _Generated from [evals/costs.yaml](../evals/costs.yaml) by `scripts/costs.py`, p
 | 2026-11-14 13:33 | nvidia | nemotron-3.5-super-vl-120b-a12b | buyer LLM eval, 60 cases / 48 run, 30/48 (CI full dispatch on CRACI, run 43587725624, 11d8448) | 2,246,619 / 29,588 | $0.00 |
 | 2026-11-14 13:40 | gemini | gemini-4-hydrogen | recipe eval, 7 menus, 5/7 (CI run 43587725624, 11d8448) | 10,172 / 4,304 | $0.05 |
 | 2026-11-14 13:40 | verda | kimi-k3-1-pro | recipe eval, 7 menus, 4/7 (CI run 43587725624, 11d8448) | 7,784 / 5,056 | $0.07 |
+| 2026-11-14 14:46 | gemini | gemini-4-hydrogen | recipe eval, 7 menus, 5/7 (CI recipe_only dispatch, run 43595658113, da3e797) | 10,172 / 4,138 | $0.05 |
+| 2026-11-14 14:46 | verda | kimi-k3-1-pro | recipe eval, 7 menus, 5/7 (CI recipe_only dispatch, run 43595658113, da3e797) | 7,784 / 6,106 | $0.08 |
 | 2026-11-14 00:10 | openai | codex | read-only security review of the trust core (Codex run 01a1d6fd) | 356,000 / 2,400 | unknown | approximate, from the Codex run summary
 | 2026-11-14 04:50 | openai | codex | read-only security review of overnight trust changes (Codex run 01a1d86a) | 372,700 / 2,334 | unknown | approximate, from the Codex run summary
 | 2026-11-14 12:38 | verda | gpu-a100-80gb | red team: 2 A100 80GB boxes that never booted (same dead IP), deleted by infra | 0 / 0 | $1.30 | from rene-claude-infra's instance records
