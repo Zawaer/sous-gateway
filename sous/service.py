@@ -616,6 +616,7 @@ def _type_pool(offers: list[dict], hint: str | None) -> tuple[list[dict], dict[s
 
 
 MAX_SUBSTITUTE_LOOKUPS = 3  # items per quote whose options look up substitutes (2 batched Valio calls each)
+NEXT_DATE_ROUNDS = 4  # next_date: how many later days to ask Valio for while each one's cut-off has passed too
 
 
 def _options(body: dict, troubled: list, requested: date, mandate: Mandate | None, now: datetime) -> list[dict]:
@@ -627,14 +628,21 @@ def _options(body: dict, troubled: list, requested: date, mandate: Mandate | Non
         if (again := OPT.next_date_lookup(offers)) and next_lookups < MAX_SUBSTITUTE_LOOKUPS:
             next_lookups += 1
             nxt = []
-            for day in sorted(set(again.values())):
-                try:
-                    nxt += OPT.flag_later(Q.offers([p for p, d in again.items() if d == day], day, item.amount,
-                                                   unit)[0], requested, "the requested date's cut-off has passed")
-                except aimo.BudgetLimit:  # our own per-minute budget: a retryable wait
-                    raise
-                except aimo.AimoError:
-                    pass
+            for _ in range(NEXT_DATE_ROUNDS):  # a later day can have passed its cut-off too: ask again, a bit later
+                got = []
+                for day in sorted(set(again.values())):
+                    try:
+                        got += OPT.flag_later(Q.offers([p for p, d in again.items() if d == day], day, item.amount,
+                                                       unit)[0], requested, "the requested date's cut-off has passed")
+                    except aimo.BudgetLimit:  # our own per-minute budget: a retryable wait
+                        raise
+                    except aimo.AimoError:
+                        pass
+                nxt += [o for o in got if o["orderable"]]
+                again = {p: d for p, d in OPT.next_date_lookup(got).items()
+                         if p not in {o["product_id"] for o in nxt}}
+                if not again:
+                    break
         opts = OPT.build(item_index, item.amount, unit, offers, chosen, requested, next_offers=nxt)
         original = item.substitute_for or item.product_ids[0]
         if not any(o["on_time"] for o in opts) and lookups < MAX_SUBSTITUTE_LOOKUPS and catalog.get(original):

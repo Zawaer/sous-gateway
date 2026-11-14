@@ -5,7 +5,7 @@ from datetime import date, datetime
 
 import pytest
 
-from sous import aimo, catalog, config, quote as Q, service as S, signing, store
+from sous import aimo, catalog, clock, config, quote as Q, service as S, signing, store
 from sous.mandate import Mandate
 
 NOW = datetime(2026, 11, 13, 21, 0, tzinfo=config.TZ)
@@ -63,6 +63,7 @@ def offline(tmp_path, monkeypatch):
     monkeypatch.setattr(aimo, "_fetch", fake_fetch)
     monkeypatch.setattr(aimo, "_cache", {})
     monkeypatch.setattr(S, "_now", lambda: NOW)
+    monkeypatch.setattr(clock, "now", lambda: NOW)  # cut-offs are checked against business time: pin it
     PRODUCTS.clear(), PRICE.clear(), AVAIL.clear()
     S.issue_mandate(Mandate(id="M-GF", buyer="Test school", agent_id="agent", issued_by="chef",
                             auto_approve_limit_eur=500, avoid_allergens=["AW"]))
@@ -191,3 +192,28 @@ def test_small_rounding_is_not_oversize():
     add("BAG", "Sugar 5 kg", 5.0, 1.0, size_from_name=(5.0, "KG"))
     lines = quote(["BAG"], 9)["lines"]  # 10 kg for 9 kg: +11%
     assert not any(i["code"] == "PACK_OVERSIZE" for l in lines for i in l["issues"])
+
+
+# --- 4. a passed cut-off on every candidate still gets a next_date option -------------------------------------------
+
+def test_terminal_products_past_a_cutoff_days_ahead_get_a_next_date_option(monkeypatch):
+    """Judge audit: Terminal products ordered 5 days ahead, cut-off passed for every candidate: options[] was empty
+    because the day after the requested one had passed its cut-off too."""
+    from datetime import timedelta
+    from sous import substitutes
+    monkeypatch.setattr(substitutes, "suggest", lambda *a, **k: {"options": []})
+
+    def terminal(day):  # supplier-shipped: the day asked for, cut-off five days before at 12:00
+        d = date.fromisoformat(day)
+        return stock(day, f"{d - timedelta(days=5)}T12:00:00+0200", "Terminal", 999999)
+
+    def fake_fetch(kind, day, chunk):
+        return [{**(PRICE[p] if kind == "price" else terminal(day)), "productId": p} for p in chunk]
+    monkeypatch.setattr(aimo, "_fetch", fake_fetch)
+    add("T1", "Oil 10 kg", 20.0, 2.0, size_from_name=(10.0, "KG"))
+    add("T2", "Oil B 10 kg", 22.0, 2.2, size_from_name=(10.0, "KG"))
+    q = quote(["T1", "T2"], 20)
+    assert q["mandate_preview"]["outcome"] == "block"
+    nxt = [o for o in q["options"] if o["kind"] == "next_date"]
+    assert nxt and nxt[0]["delivery_dates"] == ["2026-11-19"]  # cut-off Sat 14.11 12:00, still ahead
+    assert nxt[0]["mandate_preview"]["outcome"] != "block"
