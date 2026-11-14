@@ -304,7 +304,10 @@ const HOPS = [
     sum: (c) => {
       const d = c.o.decision || {};
       const shown = (d.findings || []).filter((f) => f.outcome !== "silent" || f.rule === "mandate.ok").slice(0, 3);
-      return `<div style="margin-bottom:6px">${tierBadge(d.outcome)} <span class="small muted">by ${dash(d.by)}, no AI in this step</span></div>`
+      const ai = (d.findings || []).some((f) => f.rule === "allergen.likely");
+      const how = ai ? "plain code; one input from the Gemini Decisions allergen check, which can only add a refusal"
+                     : "plain code, no AI in this step";
+      return `<div style="margin-bottom:6px">${tierBadge(d.outcome)} <span class="small muted">by ${dash(d.by)}, ${how}</span></div>`
         + shown.map(finding).join("") + ((d.findings || []).length > shown.length ? `<div class="small muted">+ ${(d.findings || []).length - shown.length} more</div>` : "");
     },
     det: (c) => {
