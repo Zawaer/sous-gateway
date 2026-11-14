@@ -434,6 +434,15 @@ def test_new_sandbox_is_seeded_with_a_drifted_standing_order_and_a_held_order_wi
     assert c.get(f"/sandbox/{sid}").json()["quotes_used"] == 0
     assert seeded["status"] == "pending_approval" and "No Valio call" in seeded["note"]
     o = store.get_order(seeded["held_order_id"])
+    # approve_by comes from the reference cut-off (17:00 Helsinki the day before delivery) minus the margin, not
+    # from delivery-day midnight (judge audit: 16.11 00:00 although Valio's milk cut-off is 15.11 17:00)
+    from datetime import date as _date, datetime as _datetime, timedelta as _td
+    from sous import config as _config, deadline as _deadline
+    day = _date.fromisoformat(o["delivery_date"])
+    cut = _datetime.combine(day - _td(days=1), _datetime.min.time(), _config.TZ).replace(hour=17)
+    assert o["approve_by_detail"]["basis"] == "cutoff"
+    assert _datetime.fromisoformat(o["approve_by"]) == cut - _td(minutes=_deadline.MARGIN_MIN)
+    assert all(l["order_cutoff"] == cut.isoformat() for l in o["lines"])
     rules = {f["rule"] for f in o["decision"]["findings"]}
     assert {"standing.quantity_creep", "standing.quantity_trend", "standing.cost_drift"} <= rules, rules
     assert o["decision"]["outcome"] == "ask" and "Seeded demo data" in o["agent_rationale"]

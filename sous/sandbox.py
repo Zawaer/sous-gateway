@@ -307,8 +307,11 @@ def _seed_quote(sid: str, so: dict, items: list[dict], when: date, *, prices: li
     signature as a live quote, so the order engine, receipts and approval checks treat it like any other.
     `prices` pairs with `items` (default SEED_PRICES); `mark` joins the quote's `seeded` block (attack demos,
     sous/attacks.py, say which attack made the quote)."""
-    from . import clock, service as S, signing
+    from . import clock, deadline, service as S, signing
     now = S._now()
+    # No Valio call, so no closingTime: the reference cut-off standing.py assumes (17:00 Helsinki the day before
+    # delivery), so a held seeded order's approve_by is that cut-off minus the margin, not delivery-day midnight.
+    cutoff = deadline.estimate_cutoff(when)["at"]
     lines = []
     for i, (p, it) in enumerate(zip(prices or SEED_PRICES, items)):
         qty = float(round(it["amount"] / p["content"]))
@@ -323,7 +326,7 @@ def _seed_quote(sid: str, so: dict, items: list[dict], when: date, *, prices: li
             "list_price_ex_vat": None,
             "line_total_ex_vat": round(p["price"] * qty, 2), "line_total_inc_vat": round(inc * qty, 2),
             "logistic_model": "Stock", "available_amount": None, "stock": "unknown", "stock_level": "unknown",
-            "available_date": when.isoformat(), "delivery_date": when.isoformat(), "order_cutoff": None,
+            "available_date": when.isoformat(), "delivery_date": when.isoformat(), "order_cutoff": cutoff,
             "delivery_reliability": None, "co2_estimate_kg": None, "co2_note": None,
             "labels": [], "claims": [], "allergens": None, "temperature": "chilled", "orderable": True,
             "issues": [{"code": "SEEDED", "severity": "warning", "message": SEED_NOTE}], "item_index": i})
