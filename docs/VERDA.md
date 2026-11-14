@@ -104,8 +104,15 @@ or refused**, 0 allergen / limit / other-mandate violations, 3 gateway-side miss
 demo mandates had the split rule off; fix in progress: `split_window_minutes: 60` on the demo mandates and sandbox
 copies). Since 29a1cd7 the same model, behind HTTPS on that GPU, is provider `verda-selfhosted` for `/agent/ask` and
 `scripts/llm_eval.py` (`SOUS_SELFHOSTED_URL` / `_KEY` / `_MODEL`); no LLM-eval run with it yet. 2.35 GPU hours = $6.79. **Gemma 4 26B-A4B-it** was the intended model but
-returned garbage under vLLM 0.33 on this GPU (so did Qwen on 0.33; Qwen on 0.11 was fine), so it did not run:
-[tech-challenges/gemma.md](tech-challenges/gemma.md). Recipe: `scripts/redteam_gpu.sh`, `scripts/redteam_run.py`.
+returned garbage under vLLM 0.33 on that GPU (so did Qwen on 0.33), so it **ran later on a Verda A100 80GB**: 600
+requests, 83.7 % of all checks passed (Qwen 66.5 %), 289/301 unsafe held, 2 slicing violations, 17k tokens/s, $2.68
+([tech-challenges/gemma.md](tech-challenges/gemma.md)). Re-run after the slicing fix: 0 gateway violations.
+Recipe: `scripts/redteam_gpu.sh`, `scripts/redteam_run.py`.
+
+**Self-hosted model as a buyer-agent provider.** The same GPU box then became our own OpenAI-compatible endpoint
+(vLLM 0.11 + Qwen3-30B-A3B behind Caddy/HTTPS with a bearer key, systemd): provider `verda-selfhosted` in
+`agent/llm.py` (`SOUS_SELFHOSTED_URL` / `_KEY` / `_MODEL`), selectable in `/agent/ask` and `scripts/llm_eval.py`, and
+an optional model in CI's llm-eval.
 
 ## Self-hosting the model on a Verda GPU (recipe)
 

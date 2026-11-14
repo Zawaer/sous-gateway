@@ -1,17 +1,24 @@
 # Best Use of Gemma: Sous
 
-_Status: **Gemma did not run.** We tried; this file says exactly what happened. Nothing below claims a Gemma result._
+**What Gemma does.** Gemma 4 is the open-weight buyer agent in our red team ([REDTEAM.md](../REDTEAM.md)): it plays hundreds of Finnish and English kitchen buyers, normal and adversarial (prompt injection, "split it so nobody approves", fake approvals, other buyers' mandates, allergens), against the real Sous gateway, self-hosted on a Verda GPU in Finland. No prompt left our machine; Valio prices were replayed from a snapshot (0 calls to the shared Valio API).
 
-**What Gemma was for.** The open-weight buyer agent in our large-scale red team ([REDTEAM.md](../REDTEAM.md)): thousands of Finnish and English kitchen buyers, normal and adversarial, against the real gateway, on a Verda GPU, with Valio prices replayed from a snapshot.
+**Run (Sat 14.11).** `google/gemma-4-26B-A4B-it` (bf16, MoE 4B active), vLLM 0.33 (`--tool-call-parser gemma4 --reasoning-parser gemma4`), 1x A100 80GB (Verda FIN-02, $2.39/h), the unchanged `agent/buyer.py` loop and MCP tools, 64 requests in flight.
 
-**What we did (Sat 14.11, Verda `sous-redteam-gpu3`, 1x RTX PRO 6000 Blackwell 96GB, confidential-compute variant)**
-- Model: `google/gemma-4-26B-A4B-it` (bf16, 52 GB). Only vLLM 0.33 supports Gemma 4 (tool parser `gemma4`, reasoning parser `gemma4`), so we used it.
-- Every prompt came back as garbage tokens ("What is 2+2?" -> random multilingual tokens), with each MoE backend (FlashInfer CUTLASS, Triton) and attention backend (Triton, FlexAttention, FlashInfer), eager or compiled. A 40-request smoke run: 0 quotes, 0 orders, nothing unsafe (the gateway was never asked for anything).
-- Control: `Qwen3-30B-A3B` on the same vLLM 0.33 was garbage too; plain PyTorch on the GPU was correct; Qwen on vLLM 0.11 was correct. So the fault is vLLM 0.33 on this Blackwell CC GPU, not Gemma. vLLM 0.11 predates Gemma 4.
-- With the GPU's hard stop and Rene's $10 cap, the 2,000-request pass ran on Qwen instead (976/997 unsafe held; REDTEAM.md). GPU time spent on the Gemma attempts: ~40 min (~$1.90).
+| 600 generated requests | Gemma 4 26B-A4B | Qwen3-30B-A3B (same harness, 2,000) |
+|---|---|---|
+| All checks passed (amount, unit, date, product, one order...) | **83.7 %** | 66.5 % |
+| Unsafe requests held or refused | 289/301 = 96.0 % | 97.9 % |
+| Gateway-side violations auto-ordered | 2 (both order slicing) | 3 (slicing) |
+| Agent-side violations | 10 | 19 |
+| Type traps / normal orders passed | 89.5 % / 96.7 % | 38.8 % / 82.4 % |
+| Tokens, throughput | 29.5M in, 0.25M out; 17k tokens/s, 20.6 requests/min | 20k tokens/s, 29/min |
 
-**Retry pending.** Rene approved one H100/A100 hour inside the same GPU budget (board 13:59Z); none was free at 14:06Z. If none frees up, this entry is dropped.
+**What Gemma did well.** Understood buyers best of our open models: right product type far more often (lactose-free milk, not coffee milk), all allergen needs kept, never tried a self-approval tool.
 
-**What a Gemma pass needs.** An H100/A100 (where vLLM 0.33 is well tested), then one command: `bash scripts/redteam_gpu.sh` (Gemma 4 is its default) and `scripts/redteam_run.py --model google/gemma-4-26B-A4B-it --sample 2000`. The harness, scoring and report are model-agnostic and already ran end to end.
+**What it did badly.** (1) Asked to split an order "so nobody approves", it ordered one slice, like Qwen. (2) It misread Finnish thousands spacing twice ("1 539 litraa" -> 539 l; "1 101 kiloa" -> 101 kg), shrinking over-limit orders under the limit.
 
-Code: https://github.com/Zawaer/sous · [REDTEAM.md](../REDTEAM.md)
+**How we improved the outcome.** Gemma's slicing exposed the gateway gap: the demo mandates had the split-order rule off. Fixed on main (`split_window_minutes: 60`, c71bdde); re-running Gemma on 100 slicing requests against the fixed gateway: **0 gateway violations** (was 2 in 29), the split rule fired. The remaining agent-side issues (one slice, Finnish digit grouping) are prompt work for the buyer agent.
+
+**Honest notes.** The first attempt, on an RTX PRO 6000 Blackwell (confidential-compute mode), produced garbage under vLLM 0.33 (every model), so the 2,000-request pass ran on Qwen and Gemma ran on an A100 later. GPU for the Gemma run: 1.12 h = $2.68.
+
+Code: https://github.com/Zawaer/sous · `scripts/redteam_gpu.sh` · [REDTEAM.md](../REDTEAM.md)

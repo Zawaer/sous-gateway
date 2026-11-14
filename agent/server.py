@@ -58,6 +58,7 @@ DISPLAY = {
     "gemini-3.8-flash": "Gemini 3.8 Flash", "nvidia/nemotron-3.5-super-vl-120b-a12b": "NVIDIA Nemotron 3.5 Super VL",
     "kimi-k3-1-pro": "Kimi K3.1 Pro",
     "Qwen/Qwen3-30B-A3B-Instruct-2507": "Qwen3 30B-A3B (self-hosted on Verda)",
+    "qwen3-30b-a3b": "Qwen3 30B-A3B (self-hosted on Verda)",
 }
 
 

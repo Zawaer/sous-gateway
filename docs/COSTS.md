@@ -1,6 +1,6 @@
 # What Sous spent
 
-_Generated from [evals/costs.yaml](../evals/costs.yaml) by `scripts/costs.py`, prorated to Sat 14.11 16:11 (Helsinki)._ Every paid model or API run and every running service is in the ledger; "unknown" means the price still has to be read from that provider's console.
+_Generated from [evals/costs.yaml](../evals/costs.yaml) by `scripts/costs.py`, prorated to Sat 14.11 17:19 (Helsinki)._ Every paid model or API run and every running service is in the ledger; "unknown" means the price still has to be read from that provider's console.
 
 ## Totals per provider (model usage)
 
@@ -9,18 +9,18 @@ _Generated from [evals/costs.yaml](../evals/costs.yaml) by `scripts/costs.py`, p
 | gemini | 15 | 8,287,787 / 121,033 | $13.34 |
 | nvidia | 3 | 5,013,242 / 64,986 | $0.00 |
 | openai | 2 | 728,700 / 4,734 | unknown |
-| verda | 13 | 6,533,327 / 159,855 | $22.76 |
+| verda | 14 | 6,533,327 / 159,855 | $25.44 |
 
-**Known total so far: $38.26** (plus the items marked unknown)
+**Known total so far: $41.07** (plus the items marked unknown)
 
 ## Services (prorated)
 
 | Provider | What | Since | Running | Cost so far | Note |
 |---|---|---|---|---|---|
-| aiven | Valkey, Developer plan (shared Valio budget) | 2026-11-13 22:30 | 17.7 h | $0.36 | paid from Aiven's $50 trial credits |
-| verda | CPU instance CPU.4V.16G, prod (FIN-01) | 2026-11-13 21:15 | 18.9 h | $0.91 | Verda on-demand price from the instance record |
-| verda | CPU instance CPU.4V.16G, staging (FIN-01) | 2026-11-13 21:40 | 18.5 h | $0.89 | Verda on-demand price from the instance record |
-| craci | CI runners (test, docker, smoke, eval, llm-eval) | 2026-11-13 21:40 | 18.5 h | unknown | paid from CRACI's per-team compute credits; see the CRACI dashboard |
+| aiven | Valkey, Developer plan (shared Valio budget) | 2026-11-13 22:30 | 18.8 h | $0.39 | paid from Aiven's $50 trial credits |
+| verda | CPU instance CPU.4V.16G, prod (FIN-01) | 2026-11-13 21:15 | 20.1 h | $0.96 | Verda on-demand price from the instance record |
+| verda | CPU instance CPU.4V.16G, staging (FIN-01) | 2026-11-13 21:40 | 19.7 h | $0.94 | Verda on-demand price from the instance record |
+| craci | CI runners (test, docker, smoke, eval, llm-eval) | 2026-11-13 21:40 | 19.7 h | unknown | paid from CRACI's per-team compute credits; see the CRACI dashboard |
 
 ## Every model run
 
@@ -59,6 +59,7 @@ _Generated from [evals/costs.yaml](../evals/costs.yaml) by `scripts/costs.py`, p
 | 2026-11-14 04:50 | openai | codex | read-only security review of overnight trust changes (Codex run 01a1d86a) | 372,700 / 2,334 | unknown | approximate, from the Codex run summary
 | 2026-11-14 12:38 | verda | gpu-a100-80gb | red team: 2 A100 80GB boxes that never booted (same dead IP), deleted by infra | 0 / 0 | $1.30 | from rene-claude-infra's instance records
 | 2026-11-14 13:37 | verda | gpu-rtx-pro-6000-96gb | red team: Qwen3-30B-A3B (vLLM) on 1x RTX PRO 6000 96GB, 2,000 requests, 83.0M tokens in / 0.79M out (docs/REDTEAM.md); 2.35 h x $2.89 | 0 / 0 | $6.79 | self-hosted: tokens cost GPU time, not per token; Gemma 4 setup attempts included
+| 2026-11-14 15:20 | verda | gpu-a100-80gb | red team: Gemma 4 26B-A4B-it (vLLM 0.33) on 1x A100 80GB FIN-02, 600 requests + 100 slicing re-run after the fix, 35.6M tokens in / 0.30M out (docs/REDTEAM.md); 1.12 h x $2.39 | 0 / 0 | $2.68 | self-hosted: GPU time, not per token
 
 ## Notes
 

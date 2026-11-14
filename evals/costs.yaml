@@ -43,6 +43,7 @@ runs:
   - {when: "2026-11-14 04:50", provider: openai, model: codex, purpose: "read-only security review of overnight trust changes (Codex run 01a1d86a)", tokens_in: 372700, tokens_out: 2334, note: "approximate, from the Codex run summary"}
   - {when: "2026-11-14 12:38", provider: verda, model: gpu-a100-80gb, purpose: "red team: 2 A100 80GB boxes that never booted (same dead IP), deleted by infra", tokens_in: 0, tokens_out: 0, usd: 1.30, note: "from rene-claude-infra's instance records"}
   - {when: "2026-11-14 13:37", provider: verda, model: gpu-rtx-pro-6000-96gb, purpose: "red team: Qwen3-30B-A3B (vLLM) on 1x RTX PRO 6000 96GB, 2,000 requests, 83.0M tokens in / 0.79M out (docs/REDTEAM.md); 2.35 h x $2.89", tokens_in: 0, tokens_out: 0, usd: 6.79, note: "self-hosted: tokens cost GPU time, not per token; Gemma 4 setup attempts included"}
+  - {when: "2026-11-14 15:20", provider: verda, model: gpu-a100-80gb, purpose: "red team: Gemma 4 26B-A4B-it (vLLM 0.33) on 1x A100 80GB FIN-02, 600 requests + 100 slicing re-run after the fix, 35.6M tokens in / 0.30M out (docs/REDTEAM.md); 1.12 h x $2.39", tokens_in: 0, tokens_out: 0, usd: 2.68, note: "self-hosted: GPU time, not per token"}
 
 services:                      # running infrastructure, prorated
   - {provider: aiven, item: "Valkey, Developer plan (shared Valio budget)", usd_per_month: 15, since: "2026-11-13 22:30", note: "paid from Aiven's $50 trial credits"}

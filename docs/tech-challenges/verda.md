@@ -1,6 +1,6 @@
 # Best Use of Verda
 
-**Ambition.** Sous is Valio Aimo's front door for AI purchasing agents: signed quotes, orders under a mandate signed by the buyer, enforced by plain code. With a Verda GPU we red-teamed it at a scale no API budget allows: **2,000 generated fi/en buyer requests** (injection, slicing, fake approvals, allergens, other buyers' mandates...) through the real agent loop, an open-weight model on one GPU, Valio prices replayed so the shared Valio key saw 0 calls.
+**Ambition.** Sous is Valio Aimo's front door for AI purchasing agents: signed quotes, orders under a mandate signed by the buyer, enforced by plain code. With a Verda GPU we red-teamed it at a scale no API budget allows: **2,000 generated fi/en buyer requests** (injection, slicing, fake approvals, allergens...) through the real agent loop, an open-weight model on one GPU, Valio prices replayed so the shared Valio key saw 0 calls.
 
 **Fit**
 - **GPU instance** (1x RTX PRO 6000 96GB, $2.89/h): vLLM serving `Qwen3-30B-A3B-Instruct-2507`, 83M tokens in 69 min (20k tokens/s). Prompts never left a machine we ran.
@@ -11,9 +11,10 @@
 **Working prototype + process**
 1. Gateway live on the CPU instance ([STATUS](../STATUS.md)).
 2. CI eval, 48 sentences, live Valio: Kimi 47/48, 34/34 unsafe held, 0 violations.
-3. Red team ([REDTEAM.md](../REDTEAM.md)): snapshot from 2 Valio calls -> 4,000 requests (13 categories) -> oracle harness check (2,036/2,036 unsafe held) -> GPU run: **976/997 unsafe held or refused; 0 allergen / limit / other-mandate violations**; 3 gateway-side misses, all order slicing (the demo mandates had the split rule off); fix (`split_window_minutes` on) in progress.
-4. Honest log: no H100 was free; two A100s never booted ($1.30); Gemma 4 gave garbage under vLLM 0.33 on this GPU, so Qwen ran. GPU total $8.09 ([COSTS.md](../COSTS.md)).
+3. Red team ([REDTEAM.md](../REDTEAM.md)): snapshot from 2 Valio calls -> 4,000 requests (13 categories) -> oracle harness check (2,036/2,036 unsafe held) -> GPU run: **976/997 unsafe held or refused; 0 allergen / limit / other-mandate violations**; 3 gateway-side misses, all order slicing (split rule was off on the demo mandates; fixed, c71bdde).
+4. **Gemma 4 26B-A4B** on a Verda A100: 600 requests, 83.7 % all checks (Qwen 66.5 %), 289/301 unsafe held; after the slicing fix 0 gateway violations ([gemma.md](gemma.md)).
+5. Honest log: no H100 was free; two A100s never booted; vLLM 0.33 gave garbage on the Blackwell box. Red-team GPU total $10.77 ([COSTS.md](../COSTS.md)).
 
-**Path to scale.** 20k kitchens is ~50-100k orders/day: a few CPU instances + managed MariaDB. The model is the variable cost (~40k tokens/request). Measured: one GPU at $2.89/h did 29 agent requests/min, i.e. ~$0.0017/request, ~30x cheaper than list-price APIs at steady load; bursty load stays on per-token Inference. Swap is one env var (`LLM_BASE_URL`). Gateway measured ([CAPACITY.md](../CAPACITY.md)): one 4-vCPU process ~23 req/s, ~3 orders/s; Valio's API budget binds first. Every model change is re-run through the same red team; safety does not depend on the model.
+**Path to scale.** 20k kitchens is ~50-100k orders/day: a few CPU instances + managed MariaDB. The model is the variable cost (~40k tokens/request). Measured: one GPU at $2.89/h did 29 agent requests/min (~$0.0017/request, ~30x below list-price APIs at steady load); bursty load stays on per-token Inference. Swap is one env var (`LLM_BASE_URL`). Gateway measured ([CAPACITY.md](../CAPACITY.md)): one 4-vCPU process ~23 req/s, ~3 orders/s; Valio's API budget binds first. Every model change is re-run through the same red team; safety does not depend on the model.
 
 Code: https://github.com/Zawaer/sous · [VERDA.md](../VERDA.md) · [REDTEAM.md](../REDTEAM.md)
