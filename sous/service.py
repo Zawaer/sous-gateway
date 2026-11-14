@@ -682,6 +682,7 @@ def _place_order(agent_id: str, mandate_id: str, quote_id: str, idempotency_key:
                                "You already used this idempotency key for a different order; use a fresh key.", 409)
         return prev, None
     mandate = _mandate(mandate_id)
+    holds.invalidate()  # under _order_lock, like holds.create: evaluate against the holds in the database now
     row = store.get_quote(quote_id)
     if not row:
         raise GatewayError("quote_not_found", f"No quote {quote_id}.", 404)
@@ -871,6 +872,7 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
         raise GatewayError("not_pending", f"Order {order_id} is {o['status']}, not waiting for approval.", 409)
     now = _now()
     mandate = _mandate(o["mandate_id"])
+    holds.invalidate()  # under _order_lock, like holds.create: _approval_blocker sees every hold made so far
     status = "ordered" if approve else "rejected"
     reason = note
     if approve and (blocked := _approval_blocker(o, mandate, now)):

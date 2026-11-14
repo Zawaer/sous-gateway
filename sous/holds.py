@@ -46,7 +46,7 @@ COLS = ["id", "product_id", "kind", "active", "data", "created_at", "updated_at"
 
 _ready_for = None  # the connection the table was last ensured on (tests swap connections)
 _cache: dict = {"conn": None, "at": 0.0, "map": {}}
-CACHE_SECONDS = 2.0  # other worker processes see a new hold within this; this process at once
+CACHE_SECONDS = 2.0  # search/quotes; placing and approving an order always read the database (invalidate())
 
 
 class HoldIn(BaseModel):
@@ -86,7 +86,7 @@ def _put(h: dict) -> None:
     _ensure()
     store._upsert("product_hold", COLS, (h["id"], h["product_id"], h["kind"], int(bool(h["active"])),
                                          json.dumps(h, ensure_ascii=False), h["created_at"], h["updated_at"]))
-    _cache["conn"] = None
+    invalidate()
 
 
 def get(hold_id: str) -> dict | None:
@@ -139,7 +139,24 @@ def card_info(product_id: str) -> dict | None:
 
 # --- create / lift ------------------------------------------------------------
 
+def invalidate() -> None:
+    """Forget the cached hold map, so the next check reads the database (other workers' holds included)."""
+    _cache["conn"] = None
+
+
+def _order_lock():
+    """service._order_lock: a hold is written and its affected orders listed while no order is being placed or
+    approved, so an order either completes before the hold (and is listed as affected) or sees the hold."""
+    from . import service as S
+    return S._order_lock
+
+
 def create(req: HoldIn, name: str | None = None) -> dict:
+    with _order_lock():
+        return _create(req, name)
+
+
+def _create(req: HoldIn, name: str | None) -> dict:
     now = _now().isoformat(timespec="milliseconds")
     until = req.until
     if until is not None and until.tzinfo is None:
@@ -154,6 +171,11 @@ def create(req: HoldIn, name: str | None = None) -> dict:
 
 
 def lift(hold_id: str, by: str = "valio") -> dict | None:
+    with _order_lock():
+        return _lift(hold_id, by)
+
+
+def _lift(hold_id: str, by: str) -> dict | None:
     h = get(hold_id)
     if not h:
         return None

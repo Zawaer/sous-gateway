@@ -142,6 +142,81 @@ def test_recall_lists_recent_orders_but_a_quality_hold_does_not():
     assert msg["title"].startswith("Recall: ") and placed["id"] in msg["message"] and "14 days" in msg["message"]
 
 
+def _paused(monkeypatch, target, name):
+    """Run target() in a thread that stops inside store.<name> (after the order's mandate/hold evaluation) until
+    released. Returns (thread, result dict, paused event, release event)."""
+    import threading
+    real = getattr(store, name)
+    paused, release, out = threading.Event(), threading.Event(), {}
+
+    def slow(*a, **k):
+        if threading.current_thread().name == "order":
+            paused.set()
+            assert release.wait(5)
+        return real(*a, **k)
+    monkeypatch.setattr(store, name, slow)
+
+    def run():
+        try:
+            out["order"] = target()
+        except Exception as e:  # noqa: BLE001
+            out["error"] = e
+    t = threading.Thread(target=run, name="order")
+    t.start()
+    assert paused.wait(5)
+    return t, out, release
+
+
+def _recall_meanwhile(release):
+    """Create a recall while the order is paused; it must wait for the order (the shared _order_lock)."""
+    import threading
+    out = {}
+    t = threading.Thread(target=lambda: out.setdefault("hold", hold("MILK", "recall")), name="hold")
+    t.start()
+    t.join(0.3)
+    assert t.is_alive(), "holds.create must wait for an order being placed or approved"
+    release.set()
+    return t, out
+
+
+def test_recall_while_an_order_is_being_placed_lists_it(monkeypatch):
+    """QA 05:55Z: place_order paused right before store.claim_quote, a recall created meanwhile said it affected
+    no orders and the order then completed as ordered. Now the recall waits and lists the order."""
+    q = quote()
+    t, out, release = _paused(monkeypatch, lambda: S.place_order("a", "M", q["id"]), "claim_quote")
+    th, h = _recall_meanwhile(release)
+    t.join(5), th.join(5)
+    assert "error" not in out and out["order"]["status"] == "ordered"
+    roles = [(r["id"], r["role"]) for g in h["hold"]["affected"] for r in g["orders"]]
+    assert roles == [(out["order"]["id"], "recently_ordered")]
+    assert [e["subject"] for e in events("product.held")] == [out["order"]["id"]]
+    assert ("product.held", out["order"]["id"]) in [(e, n["id"]) for e, n in SENT]
+
+
+def test_recall_while_an_order_is_being_approved_lists_it(monkeypatch):
+    o = S.place_order("a", "M", quote(amount=100)["id"])
+    assert o["status"] == "pending_approval"
+    t, out, release = _paused(monkeypatch, lambda: S.decide(o["id"], "chef", True), "update_order")
+    th, h = _recall_meanwhile(release)
+    t.join(5), th.join(5)
+    assert "error" not in out and out["order"]["status"] == "ordered"
+    roles = [(r["id"], r["role"]) for g in h["hold"]["affected"] for r in g["orders"]]
+    assert roles == [(o["id"], "recently_ordered")]
+
+
+def test_order_evaluated_under_the_lock_sees_a_hold_from_another_worker(monkeypatch):
+    """Another worker's hold is in the database but not in this process's 2 s cache: placing an order reads it."""
+    q = quote()
+    assert holds.active_for("MILK") is None  # cached: no holds
+    h = {"id": "H-OTHER", "product_id": "MILK", "name": "Milk", "kind": "recall", "reason": "elsewhere",
+         "until": None, "active": True, "by": "valio", "created_at": NOW.isoformat(), "updated_at": NOW.isoformat()}
+    store._upsert("product_hold", holds.COLS, (h["id"], "MILK", "recall", 1, __import__("json").dumps(h),
+                                               h["created_at"], h["updated_at"]))
+    holds._cache.update(conn=store._conn, map={})  # what this worker still has cached
+    o = S.place_order("a", "M", q["id"])
+    assert o["status"] == "refused" and "product.held" in [f["rule"] for f in o["decision"]["findings"]]
+
+
 def test_recall_ignores_orders_older_than_14_days(monkeypatch):
     placed = S.place_order("a", "M", quote()["id"])
     monkeypatch.setattr(holds, "_now", lambda: NOW + timedelta(days=holds.RECALL_LOOKBACK_DAYS + 1))
