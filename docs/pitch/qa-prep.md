@@ -11,7 +11,7 @@ Because an LLM can be talked into anything and can't be audited. A prompt inject
 Today the agent sends an `agent_id` and a `mandate_id`; the gateway checks they match the signed mandate, and quotes and standing orders are bound to that agent, so a stranger can't invent authority or reuse someone else's quote. Approvals need a separate approver code. That is still hackathon-grade identity (see question 15). In production the agent proves a key bound to the mandate, so a stolen mandate ID is useless without the key.
 
 **3. How does this scale to 700 suppliers and 25,000 products?**
-Search runs on static catalog data in a local index (17,546 products in about 10 s to build), so it costs no backend calls. Live price and availability are fetched only for a shortlist: at most 2 batched calls per request (0.95 on average with the cache in our eval), against roughly 36 to poll the whole catalog. Supplier differences show up as data (Stock vs Terminal, reliability, cut-offs), not as code per supplier.
+Search runs on static catalog data in a local index (17,546 products in about 10 s to build), so it costs no backend calls. Live price and availability are fetched only for a shortlist: 2 batched calls per quote, up to 4 when substitutes are priced for the options (1.16 on average with the cache in our eval), against roughly 36 to poll the whole catalog. Supplier differences show up as data (Stock vs Terminal, reliability, cut-offs), not as code per supplier.
 
 **4. What about Valio Aimo's confidential data and the marketplace roadmap?**
 Agents never touch internal systems. They see the catalog and their own mandate, quotes and orders, nothing else: every read of mandates, orders, notifications and the audit log needs a credential (the approver code for everything, an agent's bearer token for its own mandate, a sandbox token for that sandbox), and anything else answers 404 as if it didn't exist. Only the curated demo buyers are public, so you can browse the UI without logging in; the audit chain's integrity check is public, its contents aren't. The gateway calls the backend on the agents' behalf, with a global cap on API calls and per-IP rate limits. Nothing about ranking, margins or the roadmap is exposed. In production the approver code becomes the buyer's login, and per-customer prices would only go to that authenticated buyer.
@@ -47,10 +47,10 @@ We already hit it: the shared key returned HTTP 429 during CI. The client honour
 Because a good sales rep does it today, and the buyer's rules still apply. Every suggestion is checked against the buyer's signed mandate first: nothing it would block is shown, and products with unknown allergens are never pushed to a buyer with allergen rules. It's labelled "sponsored by Valio Aimo", it's only an offer (the buyer's agent must quote and order it like anything else), and every batch is in the audit log both sides read.
 
 **15. How do you authenticate agents?**
-Today: the `agent_id` plus a mandate signed by the gateway and issued to exactly that `agent_id`; quotes, orders and standing orders are bound to it. Opt-in bearer credentials for agents are being added. In production the agent proves possession of a key: mTLS, DPoP-bound tokens, or a key named in the mandate as a Verifiable Credential. A leaked mandate id then buys nothing.
+Today: the `agent_id` plus a mandate signed by the gateway and issued to exactly that `agent_id`; quotes, orders and standing orders are bound to it. Opt-in bearer credentials for agents exist (per mandate, or for every mandate with `SOUS_REQUIRE_AGENT_AUTH=1`, which staging has on). In production the agent proves possession of a key: mTLS, DPoP-bound tokens, or a key named in the mandate as a Verifiable Credential. A leaked mandate id then buys nothing.
 
 **16. Does it depend on one LLM?**
-No. The gateway decides without any model. Our buyer agent works with any OpenAI-compatible model (Gemini, open-weight models on Verda Inference in the EU, self-hosted vLLM), and Claude Code works over MCP as it is. We score each model on the same 45 cases: Kimi K3.1 Pro on Verda Inference (EU) matched the buyer without correction in 36/40 cases (90 %), Gemini 4 Hydrogen in 37/40 (92.5 %); both stopped 31/31 unsafe requests (blocked or held for a human) with 0 mandate violations auto-ordered. The runtime, not the model, fills in agent id, mandate and idempotency key.
+No. The gateway decides without any model. Our buyer agent works with any OpenAI-compatible model (tested: Gemini and Kimi on Verda Inference; self-hosted vLLM is documented but not run), and Claude Code works over MCP as it is. We score each model on the same 40 buyer sentences: Gemini 4 Hydrogen matched the buyer without correction in 39/40 cases (CI 43530717095); Kimi K3.1 Pro on Verda Inference (EU) in 36/40 (CI 43511463514; 34/40 in a later run, not re-measured on current code because Verda's API went down); both stopped 31/31 unsafe requests (blocked or held for a human) with 0 mandate violations auto-ordered. The cases are ours, not a held-out set. The runtime, not the model, fills in agent id, mandate and idempotency key.
 
 **17. Standing orders: why not just repeat last week's order?**
 Because "same as usual" is where creep hides. Each renewal is quoted live and compared with the median of the last 4 ordered weeks. Quantity up more than 15 % (or 3 rises in a row), cost or price per litre up more than 10 %, a switched product or a new supply risk: the renewal waits for a human. In the demo, milk is +18 % and the bill +€135 (+16 %), so it asks.
@@ -59,7 +59,7 @@ Because "same as usual" is where creep hides. Each renewal is quoted live and co
 
 ## Backup facts
 - 17,546 products, fi/sv/en. Search: SQLite FTS5 trigram, no API calls.
-- Quote: at most 2 batched Valio API calls (price + availability); 0.95 per request on average with the cache. Signed, expiring.
+- Quote: 2 batched Valio API calls (price + availability), up to 4 with substitute options; 1.16 per request on average with the cache. Signed, expiring.
 - Search first-result accuracy 56 % → 100 % on 39 fi/sv/en queries.
 - ~46 % of products have no allergen declaration: unknown → human.
 - Hotel run: Valio Eila 1 L × 1,000 at €1.40/L, €1,400 ex VAT, notify tier, 2 API calls total.
@@ -67,8 +67,8 @@ Because "same as usual" is where creep hides. Each renewal is quoted live and co
 - Hospital mandate: auto-approve to €400, avoids milk / nuts, unknown allergens → ask, substitutions → ask.
 - Tiers: silent / notify / ask / block. Late approvals expire after the cut-off or delivery date.
 - Signatures: Ed25519 JWS; public keys at `/.well-known/jwks.json`.
-- Eval: 45/45 cases pass; 36/36 unsafe actions blocked or escalated; human-approval rate 26.7 % (silent 12, notify 2, ask 12, block 19).
-- LLM eval per model (40 cases apply): Kimi K3.1 Pro on Verda Inference (EU) 36/40 matched (90 %), need understood 95 %; Gemini 4 Hydrogen 37/40 (92.5 %), 97.5 %; both 31/31 unsafe blocked or escalated, 0 mandate violations auto-ordered; ~3.1 tool calls and 1.62 Valio calls per request; p50 8.4 s (Kimi) / 11.3 s (Gemini); ~22-24k tokens per request. 6 of 7 misses failed safe; the 7th was an in-mandate order for a different milk.
+- Scripted eval (no LLM, live Valio): 45/45 in CI (run 43530484114); 51/51 locally with the option cases; 7/7 attack cases (slicing, self-approval, injection, unusual quantity); 36/36 unsafe actions blocked or escalated; human-approval rate 27.1 % of 48 order decisions.
+- LLM eval per model (40 sentences): Gemini 4 Hydrogen 39/40 matched, 39/40 understood (CI 43530717095, p50 9.8 s, $0.037/request); Kimi K3.1 Pro (Verda, EU) 36/40, 38/40 (CI 43511463514, p50 8.4 s; 34/40 in later run 43524836008; not re-measured on current code). Both 31/31 unsafe blocked or escalated, 0 mandate violations auto-ordered; ~22-24k tokens per request. Of the 5 misses in these runs, 4 failed safe; Kimi's H09 was an in-mandate order for a different milk.
 - Standing-order demo: milk +18 % vs 4-week median, cost +€135 (+16 %) → ask before renewing.
-- Live: production https://135-181-8-209.sslip.io (Verda, Finland); staging https://staging.135-181-63-134.sslip.io.
+- Live: production https://135-181-8-209.sslip.io (Verda, Finland; runs an older commit than main); staging https://staging.135-181-63-134.sslip.io. What is on which: docs/STATUS.md#deployed-now.
 - CI on CRACI: SBOM + grype gate; smoke under deny-by-default egress.

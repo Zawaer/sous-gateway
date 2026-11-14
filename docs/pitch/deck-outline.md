@@ -20,7 +20,7 @@ One idea per slide. Big type, few words. Numbers must match `docs/STATUS.md` and
 - **Visual:** two arrows into Valio Aimo: "someone else's platform" (greyed) vs "Valio Aimo's own front door" (highlighted).
 
 ### 4. How it works
-- Agent → search (17,546 products, no API calls) → signed quote (live price + availability, ≤2 Valio API calls) → mandate check in code → order, held for a human, or refused.
+- Agent → search (17,546 products, no API calls) → signed quote (live price + availability, 2 Valio API calls; up to 4 with substitute options) → mandate check in code → order, held for a human, or refused.
 - Four tiers: **silent** (just do it) · **notify** (do it, tell me) · **ask** (wait for me) · **block** (never).
 - Notify and ask reach the human: in-app feed, phone push (ntfy), signed webhook.
 - **Visual:** left-to-right flow diagram; the four tiers as coloured chips under "mandate check".
@@ -56,27 +56,27 @@ One idea per slide. Big type, few words. Numbers must match `docs/STATUS.md` and
 - **Visual:** a decoded receipt JWS next to the audit chain; one `FOR SYSTEM_TIME AS OF` query.
 
 ### 10. Any model can be the buyer
-- Our LLM buyer agent (`agent/`) speaks the gateway's MCP tools with any OpenAI-compatible model: Gemini, open-weight models on Verda Inference in the EU, self-hosted vLLM. Claude Code and Codex work as they are.
+- Our LLM buyer agent (`agent/`) speaks the gateway's MCP tools with OpenAI-compatible models (tested: Gemini; Kimi on Verda Inference in the EU). Claude Code and Codex work as they are.
 - The runtime binds agent id, mandate and idempotency key; the model only picks search terms, products, amount and date.
-- Per-model eval on the same 45 cases (40 apply): Kimi K3.1 Pro (Verda, EU) 36/40 matched, 38/40 need understood · Gemini 4 Hydrogen 37/40, 39/40 · both 31/31 unsafe blocked or escalated · mandate violations auto-ordered: 0.
+- Per-model eval, 40 buyer sentences: Gemini 4 Hydrogen 39/40 matched (CI 43530717095) · Kimi K3.1 Pro (Verda, EU) 36/40 (CI 43511463514; not re-measured on current code) · both 31/31 unsafe blocked or escalated · mandate violations auto-ordered: 0.
 - **Visual:** a small table, one row per model: correct, unsafe stopped, tool calls, latency, where it runs.
 
 ### 11. Numbers
-- **45/45** scripted buyer requests handled correctly with no manual fixes.
-- **36/36** unsafe actions blocked or escalated · **≤2** Valio API calls per uncached request (0.95 average with the cache) vs ~36 to poll the whole catalog.
-- **17,546** products searchable · search first-result accuracy 56 % → **100 %** on 39 fi/sv/en queries.
-- **Visual:** four big numbers, no chart. Source line: "evals/results.json, run Fri 13.11".
+- **45/45** scripted buyer requests in CI on CRACI (51/51 locally with the option cases; 7/7 attack cases).
+- **36/36** unsafe actions blocked or escalated · **2** Valio API calls per uncached quote, 4 with substitute options (1.16 average with the cache) vs ~36 to poll the whole catalog.
+- **17,546** products searchable · search first-result accuracy 56 % → **100 %** on 39 fi/sv/en queries (ours, written while tuning).
+- **Visual:** four big numbers, no chart. Source line: "Our own cases, live Valio prices. CI run 43530484114; evals/results.json (Sat 14.11)".
 
 ### 12. Built and run like production
 - CI on CRACI: tests with MariaDB, Docker build, CycloneDX SBOM, grype gate on fixable criticals.
 - Smoke test of the real compose stack under deny-by-default egress; eval jobs may reach only PyPI, Valio and the model APIs. A gateway holding a supplier key must not talk to anything else.
 - Live on Verda in Finland: production and staging, MariaDB, Caddy + TLS.
-- **Visual:** the CI job graph with the egress policy per job; the CRACI network trace showing only `junction26.valioaimo.fi`.
+- **Visual:** the CI job graph with the egress policy per job; the CRACI network trace of the eval job (Valio, PyPI, Valkey only).
 
 ### 13. Path to production
-- **Identity:** today `agent_id` + signed mandate (bearer agent credentials being added). Next: buyer login via OIDC; agent keys bound to the mandate (mTLS, DPoP or VC-bound keys).
+- **Identity:** today `agent_id` + signed mandate + opt-in bearer agent credentials; one shared approver code for humans. Next: buyer login via OIDC; agent keys bound to the mandate (mTLS, DPoP or VC-bound keys).
 - **Orders and prices:** call Valio Aimo's real order API; per-customer prices and contracts instead of list prices.
-- **Mandates as standards:** W3C Verifiable Credentials / AP2 mandates, signed by the buyer, so any wallet or agent platform can carry them.
+- **Mandates as standards:** buyer-signed W3C VC mandates are opt-in today and AP2 v0.2 exports are unsigned views; next is making them the default and signing AP2 mandates as SD-JWTs.
 - **Operations:** key rotation via JWKS `kid`, audit chain head anchored outside the gateway, per-agent quotas.
 - **Open:** MCP + OpenAPI + JWS today. MIT-licensed. Any agent works, no lock-in.
 - **Visual:** a three-step roadmap (Pilot with one customer → Real order API + bound agent keys → VC/AP2 mandates), ending with the one-liner.

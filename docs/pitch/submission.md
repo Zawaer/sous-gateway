@@ -15,7 +15,7 @@ We asked a general shopping agent for "1,000 litres of lactose-free milk by Mond
 
 ### What it does
 - **Search** 17,546 products (fi/sv/en) with filters for claims, allergens, labels and temperature. No API calls.
-- **Quote** a shortlist with live price and availability: at most 2 Valio API calls (0.95 on average with the cache). Pack and lot sizes, VAT, cut-offs, stock vs supplier-shipped, reliability, CO₂ estimate, splits when stock is short. Signed, expiring.
+- **Quote** a shortlist with live price and availability: 2 batched Valio API calls, up to 4 when substitutes are priced for the options (1.16 on average with the cache). Pack and lot sizes, VAT, cut-offs, stock vs supplier-shipped, reliability, CO₂ estimate, splits when stock is short. Signed, expiring.
 - **Check the mandate** in deterministic code. Every order lands in one of four tiers: **silent**, **notify** (ordered, human gets an FYI), **ask** (held for a human), **block** (refused, with the rule).
 - **Approve** from a phone: push notification, approval link, reason and cut-off countdown.
 - **Standing orders with drift detection**: a weekly order renews itself, but rising quantities, cost, a switched product or a new supply risk make it ask first. Demo: milk +18 % vs the 4-week median, cost +€135 (+16 %) → ask before renewing.
@@ -33,16 +33,16 @@ Terminal (supplier-shipped) products show an order cut-off that has already pass
 - **Two audit layers.** A hash chain (`/audit/verify`) and MariaDB system versioning: "what did the mandate say when this order was decided?" is one `AS OF` query.
 
 ### Any agent, any model
-MCP and OpenAPI expose the same operations. A browser reference buyer verifies signatures itself. Our LLM buyer agent runs on any OpenAI-compatible model: Gemini, open-weight models on Verda Inference in the EU, or self-hosted vLLM. The runtime binds identity, mandate and idempotency; the model only fills in the request. We score each model on the same cases: Kimi K3.1 Pro on Verda Inference (EU) matched the buyer without correction in 36/40 cases (90 %), Gemini 4 Hydrogen in 37/40 (92.5 %); both stopped 31/31 unsafe requests (blocked or held for a human) with 0 mandate violations auto-ordered. The mandate engine, not the model, keeps every unsafe request out.
+MCP and OpenAPI expose the same operations. A browser reference buyer verifies signatures itself. Our LLM buyer agent runs on OpenAI-compatible models (tested: Gemini, and Kimi on Verda Inference in the EU). The runtime binds identity, mandate and idempotency; the model only fills in the request. We score each model on the same 40 buyer sentences: Gemini 4 Hydrogen matched the buyer without correction in 39/40 cases (CI 43530717095); Kimi K3.1 Pro on Verda Inference (EU) in 36/40 (CI 43511463514; 34/40 in a later run, not re-measured on current code because Verda's API went down); both stopped 31/31 unsafe requests (blocked or held for a human) with 0 mandate violations auto-ordered. The cases are ours, not a held-out set. The mandate engine, not the model, keeps every unsafe request out.
 
 ### Results
-45/45 scripted buyer requests handled correctly with no manual fixes. 36/36 unsafe actions blocked or escalated. ≤2 Valio API calls per uncached request. Search first-result accuracy 56 % → 100 % on 39 fi/sv/en queries.
+Scripted buyer requests (no LLM, live Valio prices, cases we wrote): 45/45 in CI on CRACI (run 43530484114), 51/51 locally with 6 partial-availability cases, 7/7 attack cases (order slicing, an agent approving itself, prompt injection, unusual quantity). 36/36 unsafe actions blocked or escalated. Search first-result accuracy 56 % → 100 % on 39 fi/sv/en queries we wrote while tuning.
 
 ### Built like production
-CI on CRACI: tests with MariaDB, Docker build, CycloneDX SBOM, grype gate, and a smoke test under deny-by-default egress (a gateway holding a supplier key must not talk to anything else). Deployed on a Verda CPU instance in Finland.
+CI on CRACI: tests with MariaDB, Docker build, CycloneDX SBOM, grype gate, and a smoke test under deny-by-default egress (a gateway holding a supplier key must not talk to anything else). Deployed on a Verda CPU instance in Finland (production runs an older commit than `main`; see docs/STATUS.md).
 
 ### What's next
-Agent keys bound to the mandate (mTLS, DPoP or VC-bound keys) and buyer login via OIDC; Valio Aimo's real order API with per-customer prices; mandates as W3C Verifiable Credentials / AP2; key rotation through JWKS.
+Agent keys bound to the mandate (mTLS, DPoP or VC-bound keys) and buyer login via OIDC; Valio Aimo's real order API with per-customer prices; buyer-signed VC mandates by default (opt-in today) and signed AP2 mandates (today: unsigned AP2 v0.2 views); key rotation through JWKS.
 
 ## Technologies used
 - Python, FastAPI, Pydantic, uv
@@ -62,7 +62,9 @@ Agent keys bound to the mandate (mTLS, DPoP or VC-bound keys) and buyer login vi
 - **Best Use of Verda**: the gateway (with MariaDB) runs on a Verda CPU instance in Finland; the buyer agent runs open-weight models on Verda Inference in the EU, scored per model. Write-up: [docs/VERDA.md](../VERDA.md).
 - **Best use of CRACI**: CI runs on CRACI runners: tests with MariaDB, Docker build with SBOM and grype gate, compose smoke under deny-by-default egress, eval jobs whose egress is limited to PyPI, Valio and the model APIs. Write-up: [docs/CI.md](../CI.md).
 - **Best Use of Codex**: Rene's reference buyer (`buyer/`) was built with Codex and acts as an independent agent against the gateway.
-- **Best Use of Gemini API**: Gemini as one of the buyer agent's models, scored on the eval cases.
+- **Best Use of Gemini API**: Gemini reads menus into a structured plan and drives the buyer agent; scored in CI. Write-up: [docs/GEMINI.md](../GEMINI.md).
+- **Best Use of Nemotron**: Nemotron VL reads photos of order lists, menus and delivery notes; eval loop over 5 CI runs. Write-up: [docs/NEMOTRON.md](../NEMOTRON.md).
+- **Best Use of Aiven**: Aiven for Valkey shares one Valio budget across deployments (live in CI; prod not yet). Write-up: [docs/AIVEN.md](../AIVEN.md).
 
 (MariaDB has no tech-challenge prize at this event. System versioning still matters for Valio's auditability criterion, so it stays in the description.)
 
