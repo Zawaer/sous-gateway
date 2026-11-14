@@ -4,6 +4,7 @@ Quotes and orders go through the real service; Valio's price and availability ar
 test_holds.py) with STOCK units of one product.
 """
 
+import time as _time
 from datetime import date, datetime, timedelta
 
 import fakeredis
@@ -16,6 +17,7 @@ from sous.mandate import Mandate
 NOW = datetime(2026, 11, 13, 21, 0, tzinfo=config.TZ)
 MON = date(2026, 11, 16)
 STOCK = {"n": 100}
+REAL_OFFERS = Q.offers
 
 
 def product(pid):
@@ -235,15 +237,87 @@ def test_release_unchanged_needs_a_fresh_reading(monkeypatch, with_valkey):
     assert RES.summary("B1", "2026-11-16", NOW + timedelta(seconds=61))["reserved"] == 70
 
 
+class FakeTime:
+    """time.time() for aimo's cache and reservations' reading ages; everything else is the real time module."""
+
+    def __init__(self):
+        self.t = 1_000_000.0
+
+    def time(self):
+        return self.t
+
+    def __getattr__(self, name):
+        return getattr(_time, name)
+
+
+@pytest.fixture
+def live_valio(monkeypatch):
+    """The real quote path (Q.offers -> aimo cache, L1 and shared Valkey) over a fake Valio at aimo._fetch,
+    with one clock: set(t) moves Valio's wall time and the gateway's business time (NOW + t) together."""
+    from sous import aimo, clock
+
+    ft, fetches = FakeTime(), []
+    start = ft.t
+
+    def fetch(kind, day, chunk):
+        fetches.append((kind, round(ft.t - start, 1)))
+        if kind == "price":
+            return [{"productId": p, "catalogPrice": {"value": 1.0, "valueWithTax": 1.14, "validTo": None},
+                     "comparisonPrice": {"value": 2.0}, "comparisonUnit": "KG", "tax": {"taxRate": 13.5}}
+                    for p in chunk]
+        return [{"productId": p, "logisticModel": "Stock", "closingTime": "2026-11-15T17:00:00+0200",
+                 "salesBlock": False, "scheduleLines": [{"salesBlock": False, "availableAmount": STOCK["n"],
+                                                         "availableDate": "2026-11-16", "salesUnit": "ST"}]}
+                for p in chunk]
+
+    def set_t(t):
+        ft.t = start + t
+        monkeypatch.setattr(S, "_now", lambda: NOW + timedelta(seconds=t))
+        monkeypatch.setattr(clock, "now", lambda: NOW + timedelta(seconds=t))
+
+    aimo.reset()
+    monkeypatch.setattr(aimo, "time", ft)
+    monkeypatch.setattr(RES, "time", ft)
+    monkeypatch.setattr(aimo, "_fetch", fetch)
+    monkeypatch.setattr(Q, "offers", REAL_OFFERS)
+    set_t(0)
+    yield set_t, fetches
+    aimo.reset()
+
+
 @pytest.mark.parametrize("with_valkey", [False, True])
-def test_release_unchanged_on_a_fresh_unchanged_reading(monkeypatch, with_valkey):
+def test_release_unchanged_ignores_a_cache_hit(monkeypatch, live_valio, with_valkey):
+    """rene-codex-qa: a cache hit 61 s after the order, on a reading Valio returned 1.1 s earlier (59.9 s after
+    the order), must not count as a reading fetched at quote time."""
+    set_t, fetches = live_valio
+    if with_valkey:
+        valkey()
+    monkeypatch.setenv("SOUS_RESERVATION_RELEASE_UNCHANGED", "1")
+    set_t(-0.2)
+    q1, q2 = quote(1, 70), quote(2, 70)  # one Valio reading at -0.2 s, then a cache hit
+    set_t(0)
+    assert order(1, q1)["status"] == "ordered"
+    set_t(59.9)
+    quote(3, 1)  # the cache is 60.1 s old: Valio is asked again at 59.9 s (still < 60 s after the order)
+    set_t(61)
+    quote(3, 1)  # a cache hit: the reading is from 59.9 s, not from now
+    assert [t for k, t in fetches if k == "availability"] == [-0.2, 59.9]
+    o2 = order(2, q2)
+    assert o2["status"] == "refused" and o2["allocation"]["lines"][0]["left"] == 30
+    assert RES.summary("B1", "2026-11-16", NOW + timedelta(seconds=61))["reserved"] == 70
+
+
+@pytest.mark.parametrize("with_valkey", [False, True])
+def test_release_unchanged_on_a_fresh_unchanged_reading(monkeypatch, live_valio, with_valkey):
+    set_t, fetches = live_valio
     if with_valkey:
         valkey()
     monkeypatch.setenv("SOUS_RESERVATION_RELEASE_UNCHANGED", "1")
     order(1, quote(1, 80))
-    assert quote(2, 80)["lines"][0]["quantity"] == 20  # a reading within aimo's cache window: still reserved
-    at(monkeypatch, NOW + timedelta(seconds=61))
-    assert quote(2, 80)["lines"][0]["quantity"] == 80  # a fresh reading still says 100: released
+    assert quote(2, 80)["lines"][0]["quantity"] == 20  # a cache hit: still reserved
+    set_t(61)
+    assert quote(2, 80)["lines"][0]["quantity"] == 80  # Valio asked again at 61 s, still 100: released
+    assert [t for k, t in fetches if k == "availability"] == [0, 61]
     assert RES.summary("B1", "2026-11-16", NOW + timedelta(seconds=61))["reserved"] == 0
 
 

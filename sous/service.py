@@ -475,7 +475,7 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
         unit = None if item.unit == "SALES_UNIT" else item.unit
         day = (fetch_on or {}).get(item_index, req.delivery_date)
         offers, now = Q.offers(item.product_ids, day, item.amount, unit)
-        RES.adjust_offers(offers, mandate.buyer if mandate else None, now, RES.pool_of(mandate))  # minus reserved
+        RES.adjust_offers(offers, mandate.buyer if mandate else None, now, RES.pool_of(mandate), day)  # minus reserved
         if day > req.delivery_date:
             OPT.flag_later(offers, req.delivery_date, f"chosen option {req.option_id}")
         if not offers:

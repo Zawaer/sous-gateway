@@ -209,12 +209,13 @@ def _floor(qty: float, pk: str) -> float:
 
 # --- observations: Valio's last known available amount ------------------------------------------
 
-def observe(pid: str, day: str, amount: float, now: datetime) -> None:
-    """Record what Valio reports now and end the reservations it reflects."""
+def observe(pid: str, day: str, amount: float, now: datetime, fetched_at: datetime | None = None) -> None:
+    """Record what Valio reports and end the reservations it reflects. `fetched_at`: when Valio actually
+    returned this reading (business time; a cache hit is older than `now`), None when unknown."""
     _ensure()
     if _seen.get(("obs", pid, day)) == float(amount):
-        if _release_unchanged():  # an unchanged fresh reading is what ends a reservation under this setting
-            _settle_global(pid, day, float(amount), now)
+        if _release_unchanged() and fetched_at is not None:  # only a reading with a known fetch time counts
+            _settle_global(pid, day, float(amount), now, fetched_at)
         return  # otherwise nothing new: no rewrite
     _seen[("obs", pid, day)] = float(amount)
     store._upsert("stock_observation", ["product_id", "delivery_date", "amount", "observed_at"],
@@ -227,21 +228,21 @@ def observe(pid: str, day: str, amount: float, now: datetime) -> None:
             shared._ok()
         except Exception as e:  # noqa: BLE001 - fail open
             shared._failed(e)
-    _settle_global(pid, day, float(amount), now)  # the global pool's reflected reservations end now
+    _settle_global(pid, day, float(amount), now, fetched_at)  # the global pool's reflected reservations end now
 
 
-def _settle_global(pid: str, day: str, amount: float, now: datetime) -> None:
-    """A Valio reading just came in (`now`): settle the global pool against it, in the database and Valkey.
-    Only here may a reservation end as 'unchanged' (SOUS_RESERVATION_RELEASE_UNCHANGED): never on the stored
-    observation alone, which may be older than the reservation."""
-    _settle_db(pid, day, amount, now, fresh_at=now)
+def _settle_global(pid: str, day: str, amount: float, now: datetime, fetched_at: datetime | None) -> None:
+    """A Valio reading came in, fetched from Valio at `fetched_at`: settle the global pool against it, in the
+    database and Valkey. Only here may a reservation end as 'unchanged' (SOUS_RESERVATION_RELEASE_UNCHANGED), and
+    only against the reading's real fetch time: never the stored observation alone or a cache hit's quote time."""
+    _settle_db(pid, day, amount, now, fresh_at=fetched_at)
     r = shared._redis()
-    if r is None or not _release_unchanged():
+    if r is None or not _release_unchanged() or fetched_at is None:
         return
 
     def tx(pipe):
         raw = pipe.hgetall(_key(pid, day))
-        active, ended = _settle([json.loads(v) for v in raw.values()], amount, now, fresh_at=now)
+        active, ended = _settle([json.loads(v) for v in raw.values()], amount, now, fresh_at=fetched_at)
         pipe.multi()
         if ended:
             pipe.hdel(_key(pid, day), *ended)
@@ -627,14 +628,33 @@ def options(order_id: str, shortfalls: list[dict]) -> list[dict]:
             for n, s in enumerate((s for s in shortfalls if s["left"] > 0), 1)]
 
 
-def adjust_offers(offers: list[dict], buyer: str | None, now: datetime, scope: str = "") -> None:
-    """Quote hook: record Valio's amount and size each offer to what is left for this buyer in pool `scope`."""
+def fetched_at(pid: str, requested, amount: float, now: datetime) -> datetime | None:
+    """When Valio actually returned the availability reading behind an offer (business time), from aimo's cache:
+    a cache hit (L1, or a copy from the shared Valkey cache) keeps its original fetch time, so it is never taken
+    for a reading fetched at quote time. None when unknown (replay, no cached copy) or when the cached copy no
+    longer shows the offer's amount (refreshed meanwhile)."""
+    if requested is None:
+        return None
+    from . import aimo
+    hit = aimo.peek("availability", requested, pid)
+    if not hit:
+        return None
+    t, item = hit
+    lines = item.get("scheduleLines") or []
+    if not lines or lines[0].get("availableAmount") is None or abs(float(lines[0]["availableAmount"]) - amount) > EPS:
+        return None
+    return now - timedelta(seconds=max(0.0, time.time() - t))  # the reading's age, on the business clock
+
+
+def adjust_offers(offers: list[dict], buyer: str | None, now: datetime, scope: str = "", requested=None) -> None:
+    """Quote hook: record Valio's amount and size each offer to what is left for this buyer in pool `scope`.
+    `requested`: the date the offers were fetched for (aimo's cache key), to find each reading's fetch time."""
     for o in offers:
         day, amount = o.get("delivery_date"), o.get("available_amount")
         if o.get("logistic_model") != "Stock" or amount is None or not day:
             continue
         if not any(i["code"] == "DATA_STALE" for i in o.get("issues") or []):
-            observe(o["product_id"], day, amount, now)
+            observe(o["product_id"], day, amount, now, fetched_at(o["product_id"], requested, amount, now))
         pk = _pk(o["product_id"], scope)
         note_demand(buyer, pk, day, o.get("quantity"), now)
         left, why = available(pk, day, amount, buyer, now)

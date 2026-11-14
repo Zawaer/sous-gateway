@@ -457,6 +457,14 @@ def health() -> dict:
         }
 
 
+def peek(kind: str, requested: date, pid: str) -> tuple[float, dict] | None:
+    """The in-process copy of one item and when Valio Aimo actually returned it (epoch seconds; a copy adopted
+    from the shared Valkey cache keeps the original fetch time). Never calls Valio. sous/reservations.py uses it
+    to tell a fresh reading from a cache hit."""
+    with _lock:
+        return _cache.get((kind, requested.isoformat(), pid))
+
+
 def reset() -> None:
     """Forget cache, budget, circuit and counters (tests)."""
     global _circuit_until
