@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
-from . import access, agent_auth, aimo, catalog, clock, config, exposure, holds, quote as Q, rules, sandbox, service as S, signing, standing, store
+from . import access, agent_auth, aimo, catalog, clock, config, exposure, holds, pause, quote as Q, rules, sandbox, service as S, signing, standing, store
 from .mandate import Mandate
 from .mcp_server import mcp
 
@@ -491,6 +491,29 @@ def rule_detail(rule_id: str):
     if not (r := rules.get(rule_id)):
         raise S.GatewayError("rule_not_found", f"No rule {rule_id}; GET /rules lists them all.", 404)
     return r
+
+
+# --- Valio pause of agent ordering (sous/pause.py) ---------------------------
+
+@app.get("/agent-ordering", tags=["holds"])
+def agent_ordering():
+    """Whether Valio Aimo has paused agent ordering, for every buyer or named buyers. Public: agents need it."""
+    return pause.status()
+
+
+@app.post("/agent-ordering/pause", tags=["holds"], dependencies=[Depends(require_global_approver)])
+def pause_agent_ordering(req: pause.PauseIn):
+    """Valio's kill switch (global approver code only). Without `buyer`, every buyer's agents are stopped. Every
+    order under an affected mandate is refused (rule ordering.paused), and held orders can't be approved."""
+    return pause.pause(req)
+
+
+@app.post("/agent-ordering/resume", tags=["holds"], dependencies=[Depends(require_global_approver)])
+def resume_agent_ordering(req: pause.ResumeIn):
+    """Lift a pause (the every-buyer one without `buyer`). New decisions only; refused orders stay refused."""
+    if (out := pause.resume(req)) is None:
+        raise HTTPException(404, f"Agent ordering is not paused for {req.buyer or 'every buyer'}.")
+    return out
 
 
 # --- Valio product holds (sous/holds.py) --------------------------------------

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import secrets
 import threading
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -645,7 +645,24 @@ def _evaluate(mandate: Mandate, agent_id: str, q: dict, now: datetime, extra_fin
                     substitute_for=subs, uncovered=uncovered,
                     spent_today_eur=store.spent_today(mandate.id, now.date().isoformat()), now=now,
                     extra_findings=extra_findings, quantities=usual.profile(q["lines"]),
-                    usual_quantities=usual.history(mandate.id, now) if mandate.unusual_quantity_factor else None)
+                    usual_quantities=usual.history(mandate.id, now) if mandate.unusual_quantity_factor else None,
+                    **_spend_context(mandate, now))
+
+
+def _spend_context(mandate: Mandate, now: datetime) -> dict:
+    """History for spend.weekly_limit, spend.split_orders and product.first_time; read only when the mandate uses
+    the rule. An order being approved isn't 'ordered' yet, so it never counts against itself."""
+    local = now.astimezone(config.TZ)
+    out: dict = {}
+    if mandate.weekly_limit_eur is not None:
+        monday = (local - timedelta(days=local.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        out["spent_week_eur"] = store.spent_since(mandate.id, monday.isoformat(timespec="milliseconds"))
+    if mandate.split_window_minutes:
+        since = local - timedelta(minutes=mandate.split_window_minutes)
+        out["recent_orders"] = store.ordered_since(mandate.id, since.isoformat(timespec="milliseconds"))
+    if mandate.first_time_products:
+        out["ordered_products"] = store.ordered_product_ids(mandate.id)
+    return out
 
 
 def _refresh_cutoffs(q: dict, now: datetime) -> None:

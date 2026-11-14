@@ -382,6 +382,25 @@ def spent_today(mandate_id: str, day: str) -> float:
     return float(r[0]["s"])
 
 
+def spent_since(mandate_id: str, since_iso: str) -> float:
+    """Ordered total under the mandate since a Helsinki ISO timestamp (created_at compares as text, same format)."""
+    r = _exec("SELECT COALESCE(SUM(total_ex_vat), 0) AS s FROM purchase_order "
+              "WHERE mandate_id = ? AND status = 'ordered' AND created_at >= ?", (mandate_id, since_iso))[0]
+    return float(r[0]["s"])
+
+
+def ordered_since(mandate_id: str, since_iso: str) -> list[dict]:
+    """[{id, total_ex_vat}] of the mandate's orders that went through since a Helsinki ISO timestamp."""
+    rows = _exec("SELECT id, total_ex_vat FROM purchase_order WHERE mandate_id = ? AND status = 'ordered' "
+                 "AND created_at >= ? ORDER BY created_at", (mandate_id, since_iso))[0]
+    return [{"id": r["id"], "total_ex_vat": float(r["total_ex_vat"])} for r in rows]
+
+
+def ordered_product_ids(mandate_id: str) -> set[str]:
+    """Every product id in an order that went through under the mandate."""
+    return {l["product_id"] for o in list_orders(status="ordered", mandate_id=mandate_id) for l in o.get("lines") or []}
+
+
 def _iso(dt) -> str | None:
     return dt.replace(tzinfo=timezone.utc).astimezone(config.TZ).isoformat(timespec="milliseconds") if dt else None
 

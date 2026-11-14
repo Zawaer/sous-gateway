@@ -96,6 +96,9 @@ Source: `sous/mandate.py`, class `Mandate`. All money is EUR excluding VAT.
 | `auto_approve_limit_eur` | number | 500 | Up to this, no human is needed. Above it, the order is held. |
 | `hard_limit_eur` | number or null | 5000 | Above this, the order is refused. |
 | `daily_limit_eur` | number or null | null | Today's `ordered` total plus this order above the limit means a human must approve. |
+| `weekly_limit_eur` | number or null | null | This calendar week's (Mon-Sun, Helsinki) `ordered` total plus this order above the limit means a human must approve. |
+| `split_window_minutes` | 1-1440 or null | null | Orders that went through within this many minutes, each under `auto_approve_limit_eur`, plus this one above that limit: a human must approve (rule `spend.split_orders`). |
+| `first_time_products` | `notify` \| `ask` \| `block` or null | null | Tier for a product never ordered under this mandate before (rule `product.first_time`). |
 | `allowed_categories` | list or null | null | Valio Aimo category codes. Null means any. |
 | `avoid_allergens` | list | [] | GS1 allergen codes, e.g. `AM` milk, `AN` tree nuts, `AP` peanuts, `AW` gluten cereals. `AM`, `AN` and `AW` expand to their whole family (see `GET /allergens`). |
 | `allow_may_contain` | bool | false | If false, "may contain" counts as contains. |
@@ -256,6 +259,10 @@ If the tier is `silent` or `notify`, a final `mandate.ok` finding is added with 
 | `spend.auto_limit` | ask | Total > `auto_approve_limit_eur` (and not over the hard limit). |
 | `spend.notify` | notify | Total > `notify_above_eur` (and within the auto limit). |
 | `spend.daily_limit` | ask | Today's ordered total + this total > `daily_limit_eur`. |
+| `spend.weekly_limit` | ask | This week's ordered total + this total > `weekly_limit_eur`. |
+| `spend.split_orders` | ask | This order is under `auto_approve_limit_eur`, and with the orders under it that went through in the last `split_window_minutes` it passes that limit. |
+| `product.first_time` | `first_time_products` | The product is in no order that went through under this mandate. |
+| `ordering.paused` | block | Valio Aimo has paused agent ordering for every buyer or this buyer (section 24). |
 | `need.partial` | ask | Part of the need is uncovered. |
 | `availability.<code>` | block | Any blocking issue on a line, code lowercased: `availability.unit_mismatch`, `availability.content_unknown`, `availability.no_price`, `availability.no_availability`, `availability.sales_block`, `availability.undeliverable`, `availability.out_of_stock`, `availability.cutoff_passed`. |
 | `availability.partial_stock` | ask | Line still has `PARTIAL_STOCK`: known stock is below the quantity ordered. |
@@ -856,3 +863,12 @@ The mandate is the buyer's control; a hold is the seller's. Valio Aimo staff can
 - **Who is told:** on creation every buyer with an open `pending_approval` order or an active standing order containing the product gets a `product.held` notification (feed plus their channels, section 10), and each affected order or standing order gets an audit event `product.held`. A `recall` also lists the buyer's orders of the last 14 days with the product, so they can check deliveries. The response's `affected` lists them per mandate.
 - **Atomic with orders:** creating or lifting a hold (writing it and listing the affected orders) takes the same lock as placing and approving an order, and both read the holds from the database inside it (not the 2-second cache). So an order either completes before the hold and is listed as affected (a recall lists it as recently ordered), or it is evaluated after the hold and blocked by `product.held`; it can never slip between them. The lock is per process: the gateway runs one uvicorn worker (Dockerfile). Running several workers would need a database-level guard (e.g. a hold version row checked in the order's transaction).
 - Storage: table `product_hold`, SYSTEM VERSIONED on MariaDB like `mandate` and `standing_order`, so a lifted hold keeps its history. Lifting a hold doesn't change signed quotes; ask for a new quote.
+
+## 24. Pausing agent ordering (Valio's kill switch, `sous/pause.py`)
+
+Product holds stop one product; a pause stops a buyer's agents, or every buyer's, from ordering anything: for an incident, a runaway agent or unpaid invoices.
+
+- `POST /agent-ordering/pause` `{buyer?, reason, by?}` with the **global** approver code. Without `buyer` it covers every buyer, sandboxes included. `POST /agent-ordering/resume` `{buyer?, by?}` lifts that scope (404 if it wasn't paused). `GET /agent-ordering` and the MCP resource `sous://agent-ordering` (public) return `{paused_for_everyone, pauses: [{scope, buyer, reason, since}]}`.
+- **Rule `ordering.paused` (owner valio, block):** fires on every decision under an affected mandate: the quote's mandate preview shows it, `place_order` is refused, and approving a held order is refused (`_approval_blocker` re-runs the rules). Search and quotes keep working. Resuming affects new decisions; refused orders stay refused.
+- Writing a pause takes the order lock, like a hold, so an order either completes before the pause or is evaluated after it.
+- Audit events `ordering.paused` and `ordering.resumed`. Table `agent_pause`, SYSTEM VERSIONED on MariaDB.

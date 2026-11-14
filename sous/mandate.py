@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from . import catalog, config, holds
+from . import catalog, config, holds, pause
 
 # Four tiers, from least to most human involvement:
 #   silent: routine, the order goes through and is logged
@@ -35,6 +35,13 @@ class Mandate(BaseModel):
     auto_approve_limit_eur: float = Field(500.0, description="Orders up to this (ex VAT) need no human")
     hard_limit_eur: float | None = Field(5000.0, description="Orders above this (ex VAT) are refused outright")
     daily_limit_eur: float | None = Field(None, description="Total per day before a human must approve")
+    weekly_limit_eur: float | None = Field(
+        None, description="Total per calendar week (Mon-Sun, Helsinki) before a human must approve; None = off")
+    split_window_minutes: int | None = Field(
+        None, ge=1, le=1440, description="Ask when orders placed within this many minutes, each under the "
+        "auto-approve limit, add up to more than it (an agent slicing one big order into small ones); None = off")
+    first_time_products: Literal["notify", "ask", "block"] | None = Field(
+        None, description="Tier for a product never ordered under this mandate before; None = off")
     allowed_categories: list[str] | None = Field(None, description="Category codes; None = any")
     avoid_allergens: list[str] = Field(default_factory=list, description="GS1 allergen codes, e.g. AM (milk), AN (nuts)")
     allow_may_contain: bool = False
@@ -100,10 +107,16 @@ def evaluate(
     extra_findings: list[Finding] | None = None,
     quantities: dict[tuple[str, str], dict] | None = None,
     usual_quantities: dict[tuple[str, str], list[float]] | None = None,
+    spent_week_eur: float = 0.0,
+    recent_orders: list[dict] | None = None,
+    ordered_products: set[str] | None = None,
 ) -> tuple[Tier, list[Finding]]:
     """`extra_findings` are checks made outside the mandate (e.g. standing-order drift); they count like any rule.
     `quantities` is this order's amount per (product family, unit), `usual_quantities` the same buyer's past
-    ordered amounts per key (both from sous/usual.py); they feed quantity.unusual."""
+    ordered amounts per key (both from sous/usual.py); they feed quantity.unusual.
+    `spent_week_eur` is this calendar week's ordered total (spend.weekly_limit), `recent_orders` the orders that
+    went through within split_window_minutes as [{id, total_ex_vat}] (spend.split_orders), `ordered_products`
+    every product id ever ordered under the mandate (product.first_time)."""
     f: list[Finding] = []
 
     def add(rule, outcome, message, pid=None):
@@ -118,6 +131,9 @@ def evaluate(
         add("mandate.agent", "block", f"Agent '{agent_id}' is not the holder of mandate {mandate.id}.")
     if not lines:
         add("order.empty", "block", "Nothing orderable was found for this request.")
+    # Valio Aimo's kill switch: no agent orders (nor approvals) while ordering is paused for this buyer.
+    if paused := pause.active_for(mandate.buyer):
+        add("ordering.paused", "block", pause.message(paused))
 
     # An unorderable line already blocks the order (availability.*); it never counts towards spend.
     total = round(sum(l.get("line_total_ex_vat") or 0 for l in lines if l.get("orderable", True)), 2)
@@ -130,6 +146,19 @@ def evaluate(
     elif mandate.notify_above_eur is not None and total > mandate.notify_above_eur:
         add("spend.notify", "notify",
             f"Order total €{total:,.2f} is above €{mandate.notify_above_eur:,.2f}, so the buyer gets an FYI.")
+    if mandate.weekly_limit_eur is not None and spent_week_eur + total > mandate.weekly_limit_eur:
+        add("spend.weekly_limit", "ask",
+            f"With this order, this week's spend would be €{spent_week_eur + total:,.2f}, "
+            f"above the weekly limit of €{mandate.weekly_limit_eur:,.2f}.")
+    # Slicing: orders that each stay under the auto-approve limit but together pass it within a short window.
+    small = [o for o in recent_orders or () if (o.get("total_ex_vat") or 0) <= mandate.auto_approve_limit_eur]
+    if (mandate.split_window_minutes and small and 0 < total <= mandate.auto_approve_limit_eur
+            and sum(o["total_ex_vat"] for o in small) + total > mandate.auto_approve_limit_eur):
+        together = sum(o["total_ex_vat"] for o in small) + total
+        add("spend.split_orders", "ask",
+            f"This order and {len(small)} more in the last {mandate.split_window_minutes} min add up to "
+            f"€{together:,.2f}, above the €{mandate.auto_approve_limit_eur:,.2f} the agent may spend alone: "
+            "small orders in a row are checked together.")
     if mandate.daily_limit_eur is not None and spent_today_eur + total > mandate.daily_limit_eur:
         add("spend.daily_limit", "ask",
             f"With this order, today's spend would be €{spent_today_eur + total:,.2f}, "
@@ -183,6 +212,10 @@ def evaluate(
                 add("unit.interpreted", "ask", f"{name}: {issue['message']}", pid)
             elif issue["code"] == "TYPE_MISMATCH":  # not the kind of product asked for (coffee milk for milk)
                 add("product.type_mismatch", "ask", f"{name}: {issue['message']}", pid)
+
+        if mandate.first_time_products and ordered_products is not None and pid not in ordered_products:
+            add("product.first_time", mandate.first_time_products,
+                f"{name} has never been ordered under this mandate before.", pid)
 
         if mandate.allowed_categories is not None and p.get("category") not in mandate.allowed_categories:
             add("product.category", "block",

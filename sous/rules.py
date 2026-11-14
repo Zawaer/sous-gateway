@@ -83,6 +83,10 @@ def _build() -> list[dict]:
         _r("mandate.ok", "finding", ["silent", "notify"], "buyer",
            "Every check passed: the order goes through (with an FYI to the buyer if a notify rule fired).", None),
         _r("order.empty", "finding", ["block"], "gateway", "Nothing orderable was found for the request.", None),
+        _r("ordering.paused", "finding", ["block"], "valio",
+           "Valio Aimo has paused agent ordering for every buyer or for this buyer (GET /agent-ordering): no "
+           "order goes through and no held order can be approved until Valio Aimo resumes it. Search and "
+           "quotes still work.", None),
         # --- money
         _r("spend.hard_limit", "finding", ["block"], "buyer",
            "An order above the hard limit (ex VAT) is refused outright.", "hard_limit_eur"),
@@ -90,6 +94,13 @@ def _build() -> list[dict]:
            "An order above what the agent may spend alone waits for a human.", "auto_approve_limit_eur"),
         _r("spend.notify", "finding", ["notify"], "buyer",
            "An order above this amount goes through and the buyer gets an FYI.", "notify_above_eur"),
+        _r("spend.weekly_limit", "finding", ["ask"], "buyer",
+           "This calendar week's ordered total (Monday to Sunday, Helsinki time) plus this order may not pass "
+           "the weekly limit without a human.", "weekly_limit_eur"),
+        _r("spend.split_orders", "finding", ["ask"], "buyer",
+           "Orders that each stay under the auto-approve limit but together pass it within the window wait for "
+           "a human: an agent can't slice one big order into small ones to avoid approval. Orders that went "
+           "through in the window count; ones that waited for a human already had one.", "split_window_minutes"),
         _r("spend.daily_limit", "finding", ["ask"], "buyer",
            "Today's ordered total plus this order may not pass the daily limit without a human. Splitting a "
            "large order into small ones (a slice attack) doesn't get around it: the order that crosses the "
@@ -102,6 +113,9 @@ def _build() -> list[dict]:
            "A product above the buyer's cap on comparison price (e.g. € per litre) waits for a human.",
            "max_comparison_price_eur"),
         # --- what is bought
+        _r("product.first_time", "finding", ["notify", "ask", "block"], "buyer",
+           "A product never ordered under this mandate before gets the tier the buyer chose (FYI, approval or "
+           "refusal), so a new product reaches the kitchen only when a human wants it to.", "first_time_products"),
         _r("product.category", "finding", ["block"], "buyer",
            "The product's category is outside the categories the mandate allows.", "allowed_categories"),
         _r("product.claims", "finding", ["block"], "buyer",

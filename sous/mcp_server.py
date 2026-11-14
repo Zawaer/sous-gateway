@@ -591,6 +591,14 @@ def holds_resource() -> dict:
     return {"holds": [holds.public(h) for h in holds.list_active()]}
 
 
+@mcp.resource("sous://agent-ordering", title="Is agent ordering paused?", mime_type="application/json")
+def agent_ordering_resource() -> dict:
+    """Valio Aimo's pause of agent ordering (every buyer, or named buyers). While it covers your buyer, every
+    order is refused with rule ordering.paused; searching and quoting still work."""
+    from . import pause
+    return pause.status()
+
+
 @mcp.resource("sous://mandates/{mandate_id}", title="Mandate", mime_type="application/json")
 def mandate_resource(mandate_id: str, ctx: Context | None = None) -> dict:
     """A mandate (sous): limits and rules the agent acts under, with its JWS signature (yours or a public demo one)."""
