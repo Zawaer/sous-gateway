@@ -1,6 +1,6 @@
 # Tech challenge write-ups
 
-One file per challenge, each ≤ 2,500 characters, ready to paste. Numbers come from the eval results, `docs/COSTS.md` and CI runs; `[PENDING: ...]` marks what isn't true yet. **Remove or resolve every `[PENDING]` before pasting.**
+One file per challenge, each ≤ 2,500 characters, ready to paste. Numbers come from the eval results, `docs/COSTS.md` and CI runs; Each write-up ends with what is not done; keep those lines when pasting.
 
 | Challenge | Write-up | Where it goes |
 |---|---|---|
@@ -14,16 +14,14 @@ One file per challenge, each ≤ 2,500 characters, ready to paste. Numbers come 
 ## Checklist
 
 - [ ] Repo is **public** before any link is posted (Discord, form).
-- [ ] **Verda:** post the Discord text below in Verda's challenge channel; paste verda.md in the form.
-- [ ] **Verda:** decide whether to run vLLM on a Verda GPU, or keep it marked as documented-not-run.
-- [ ] **CRACI:** link a green CRACI run; screenshot CRACI's SBOM + vulnerability view and the `smoke` job's network trace (empty); push the Valkey TLS rule.
-- [ ] **CRACI:** confirm the CI job is visible in the CRACI dashboard under the team.
-- [ ] **Codex:** fix or document the open `issue_mandate` lock race (see codex.md), then drop the PENDING line.
-- [ ] **Gemini / Nemotron:** add a demo surface (menu box / photo upload on `/buyer/`) or show the CLI in the video.
-- [ ] **Nemotron:** commit run 3 (CI 43528096128) results and update the numbers in nemotron.md and NEMOTRON.md.
-- [ ] **Aiven:** set `SOUS_VALKEY_URL` + `SOUS_DEPLOYMENT_ROLE` on prod and staging (Rene's infra), redeploy, check `/health` -> `valio_aimo.shared_budget.backend == "valkey"`.
-- [ ] Re-run the LLM eval after the "by Saturday" date fix and refresh `docs/LLM_EVAL.md` (it still shows the earlier runs: Kimi 36/40 from CI, Gemini 37/40 local).
+- [ ] **Verda:** post the Discord text below in Verda's challenge channel (Verda's site is down since Sat ~00:15Z; check it is back); paste verda.md in the form.
+- [ ] **Verda:** re-run Kimi when Verda Inference is reachable, then update the numbers here, in verda.md, VERDA.md and STATUS.md.
+- [ ] **CRACI:** screenshots of CRACI's SBOM/vulnerability view and the `smoke` job's empty trace for run 43530484114.
+- [ ] **Aiven:** set `SOUS_VALKEY_URL` + `SOUS_DEPLOYMENT_ROLE` on prod and staging, redeploy, check `/health` -> `shared_budget.backend == "valkey"`; then update aiven.md ("Where it is live").
+- [ ] **Gemini / Nemotron:** model keys on the servers and `SOUS_BUYER_AGENT=1`, or show the CLI in the video; then update the "Not done" lines.
 - [ ] No secrets in any pasted text (API keys, approver codes, the Valkey URI).
+
+Done since the first draft: CI run 43530484114 green on CRACI with Valkey; Codex lock race fixed (fe41018); Nemotron runs 3-5 committed; LLM eval re-run (Gemini 39/40).
 
 ## Verda Discord post (paste as is)
 
@@ -31,6 +29,6 @@ One file per challenge, each ≤ 2,500 characters, ready to paste. Numbers come 
 >
 > **On Verda:** the gateway (FastAPI + MCP + MariaDB) runs on a **CPU instance in Finland**: no GPU needed, and orders and the audit log stay next to the Finnish wholesaler. The buyer agent's model is **Kimi K3.1 Pro on Verda Inference** (open weights, EU, prompts not stored), because what a hospital or school kitchen buys is sensitive.
 >
-> **Process:** compose deploy -> LLM agent on the gateway's MCP tools -> per-model eval in CI. Kimi on Verda: 36/40 requests matched without correction, 31/31 unsafe requests blocked or escalated, 0 mandate violations, p50 8.4 s. Scale-out: same model on a Verda GPU with vLLM, only the base URL changes.
+> **Process:** compose deploy -> LLM agent on the gateway's MCP tools -> per-model eval in CI. Kimi on Verda (CI run 43511463514, 40 buyer sentences we wrote, live Valio prices): 36/40 matched without correction (34/40 in a later run), 31/31 unsafe requests blocked or escalated, 0 mandate violations, p50 8.4 s. Next (not run yet): the same model on a Verda GPU with vLLM; only the base URL changes.
 >
 > Write-up: https://github.com/Zawaer/sous/blob/main/docs/VERDA.md · Repo: https://github.com/Zawaer/sous
