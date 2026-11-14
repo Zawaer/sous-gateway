@@ -135,14 +135,14 @@ def require_approver(request: Request, x_approver_code: str | None = Header(defa
         if presented:
             raise S.refuse_agent_approval(request.path_params.get("order_id", ""), presented[0],
                                           "approve" if path.endswith("/approve") else "reject")
-    if config.APPROVER_CODE and x_approver_code != config.APPROVER_CODE and not (
+    if config.APPROVER_CODE and not access.approver_code_ok(x_approver_code) and not (
             request.url.path.endswith(("/approve", "/reject"))
             and sandbox.may_approve(x_approver_code, request.path_params.get("order_id"))):
         raise HTTPException(401, "Human approver code required (X-Approver-Code header).")
 
 
 def require_global_approver(x_approver_code: str | None = Header(default=None)):
-    if config.APPROVER_CODE and x_approver_code != config.APPROVER_CODE:
+    if config.APPROVER_CODE and not access.approver_code_ok(x_approver_code):
         raise HTTPException(401, "Human approver code required (X-Approver-Code header).")
 
 

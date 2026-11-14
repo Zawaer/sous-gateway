@@ -49,6 +49,12 @@ class Reader:
         return "all" if self.everything else "+".join([*self.kinds, "public_demo"])
 
 
+def approver_code_ok(code: str | None) -> bool:
+    """Whether `code` is the global approver code, compared in constant time (False when none is configured).
+    The one place the approver code is checked: REST guards (api.py) and read scopes use it."""
+    return bool(code and config.APPROVER_CODE) and hmac.compare_digest(code.encode(), config.APPROVER_CODE.encode())
+
+
 def _sha(s: str) -> str:
     return hashlib.sha256(s.encode()).hexdigest()
 
@@ -77,7 +83,7 @@ def from_headers(headers: Mapping | None) -> Reader:
         return Reader(everything=True, kinds=["open"])
     code = headers.get("x-approver-code") or None
     bearer = agent_auth.bearer(headers.get("authorization"))
-    if code and hmac.compare_digest(code.encode(), config.APPROVER_CODE.encode()):
+    if approver_code_ok(code):
         return Reader(everything=True, kinds=["approver"])
     r = Reader()
     for tok in dict.fromkeys(t for t in (code, bearer) if t):
