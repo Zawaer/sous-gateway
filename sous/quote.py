@@ -199,6 +199,52 @@ def content_per_sales_unit(product: dict, price: dict | None) -> tuple[float, st
     return None
 
 
+# Typical densities (kg per litre) of liquids kitchens order by weight ("40 kg kermaa"), keyed by the product type
+# read from the product's own name (substitutes.product_type). Used only when that type is known; the line then says
+# what it assumed (unit_note) and carries UNIT_INTERPRETED, so a human confirms (rule unit.interpreted, ask).
+# Values: common dairy-technology and food-composition figures at fridge/room temperature (milk 1.028-1.035; cream
+# falls with fat, ~1.00 at 35-40 %, ~1.02 at 10-20 %; yoghurt and soured milks ~1.03-1.04; vegetable oils 0.91-0.92;
+# fruit juices ~1.04-1.05), rounded to two decimals. An assumption, not a measurement: never applied silently.
+DENSITY_BASIS = "typical density for the product type (sous/quote.py DENSITY); an assumption a human confirms"
+DENSITY: dict[str, float] = {
+    "maito": 1.03, "maitojuoma": 1.03, "kahvimaito": 1.03, "piimä": 1.03, "kefiiri": 1.03, "viili": 1.03,
+    "jogurtti": 1.03, "jogurttijuoma": 1.03, "kaakaojuoma": 1.04,
+    "kerma": 1.02, "ruokakerma": 1.02, "kahvikerma": 1.02, "kuohukerma": 1.00,
+    "öljy": 0.92, "mehu": 1.04, "mehujuoma": 1.04,
+}
+
+
+def density(product: dict | None) -> tuple[float, str] | None:
+    """(kg per L, type label) for a product whose type has a typical density, else None. Plant-based drinks and
+    creams (oat 'cream') are not dairy: no density is assumed for them."""
+    if not product:
+        return None
+    from .substitutes import product_type  # substitutes imports this module
+    t = product_type(product)
+    if t.get("key") in DENSITY and not t.get("plant_based"):
+        return DENSITY[t["key"]], t.get("label") or t["key"]
+    return None
+
+
+def need_factor(need_unit: str, content_unit: str, kg_per_l: float) -> float:
+    """What one need unit is in the product's content unit: 1 kg of cream is 1/1.02 L; 1 L of oil is 0.92 kg."""
+    if need_unit == content_unit:
+        return 1.0
+    return 1 / kg_per_l if need_unit == "KG" else kg_per_l
+
+
+def need_content(o: dict, need_unit: str | None) -> float | None:
+    """How much of the need (in L or KG) one sales unit of an offer covers, through its density when it has one."""
+    c = o.get("content_per_sales_unit") or {}
+    if not c.get("amount"):
+        return None
+    if c["unit"] == need_unit:
+        return c["amount"]
+    if (d := o.get("density")) and need_unit in ("L", "KG"):
+        return c["amount"] / need_factor(need_unit, c["unit"], d["kg_per_l"])
+    return None
+
+
 def round_to_lot(qty: float, sales_unit: str, lot: float | None) -> float:
     if sales_unit != "KG":
         qty = math.ceil(qty - 1e-9)
@@ -236,9 +282,20 @@ def build_offer(
                 issues.append(Issue("UNIT_INTERPRETED", WARNING, note + ". A human confirms the quantity."))
         elif content and content[1] == need_unit:
             qty = round_to_lot(need / content[0], su, product["allowed_lot_size"])
+        elif content and (dens := density(product)) and {need_unit, content[1]} == {"L", "KG"}:
+            # 40 kg of cream: read as litres at the product type's typical density, and a human confirms it
+            factor = need_factor(need_unit, content[1], dens[0])
+            qty = round_to_lot(need * factor / content[0], su, product["allowed_lot_size"])
+            note = (f"{need:g} {need_unit.lower() if need_unit == 'KG' else need_unit} read as "
+                    f"{round(need * factor, 1):g} {content[1] if content[1] == 'L' else 'kg'} of {dens[1]} at "
+                    f"{dens[0]:g} kg/L (typical density, an assumption)")
+            issues.append(Issue("UNIT_INTERPRETED", WARNING, note + ". A human confirms the quantity."))
         elif content:
             issues.append(Issue("UNIT_MISMATCH", BLOCKING,
-                                f"Need is in {need_unit} but this product is measured in {content[1]}."))
+                                f"Need is in {need_unit} but this product is measured in {content[1]}"
+                                + (f"; ask in {content[1]} (or SALES_UNIT): no typical density is known for this "
+                                   "product's type, so the gateway won't convert." if need_unit in ("L", "KG")
+                                   and content[1] in ("L", "KG") else ".")))
         else:
             issues.append(Issue("CONTENT_UNKNOWN", BLOCKING,
                                 f"Can't tell how many {need_unit} one {su} holds, so the quantity can't be computed."))
@@ -328,6 +385,10 @@ def build_offer(
 
     delivery_date = max(requested, available_date) if available_date else None
     covered = qty * content[0] if (qty is not None and content and content[1] == need_unit) else None
+    dens = density(product) if (qty is not None and content and need_unit in ("L", "KG")
+                                and content[1] != need_unit) else None
+    if dens:
+        covered = qty * content[0] / need_factor(need_unit, content[1], dens[0])
     co2 = None
     if product["co2_kg_per_kg_group_avg"] is not None and covered is not None:
         # L of a drink ~ 1 kg; flagged as a product-group estimate either way.
@@ -342,6 +403,7 @@ def build_offer(
         "sales_unit": su,
         "allowed_lot_size": product["allowed_lot_size"],
         "content_per_sales_unit": {"amount": content[0], "unit": content[1], "source": content[2]} if content else None,
+        **({"density": {"kg_per_l": dens[0], "type": dens[1], "basis": DENSITY_BASIS}} if dens else {}),
         "quantity": qty,
         "covers": ({"amount": round(covered, 2), "unit": covers_unit(product, need_unit)}
                    if covered is not None else None),
@@ -473,8 +535,7 @@ def _greedy(need: float, need_unit: str | None, ranked: list[dict], sized: bool)
         if remaining <= 1e-9 or not o["orderable"] or o["quantity"] is None:
             continue
         product = catalog.get(o["product_id"])
-        content = (packs_per_sales_unit(product, need_unit) if is_packs(need_unit)
-                   else (o["content_per_sales_unit"] or {}).get("amount"))
+        content = packs_per_sales_unit(product, need_unit) if is_packs(need_unit) else need_content(o, need_unit)
         if not content:
             continue
         lot = o.get("allowed_lot_size")
@@ -488,7 +549,8 @@ def _greedy(need: float, need_unit: str | None, ranked: list[dict], sized: bool)
         line["line_total_ex_vat"] = round(o["unit_price_ex_vat"] * want, 2)
         line["line_total_inc_vat"] = round(o["unit_price_inc_vat"] * want, 2)
         line["covers"] = {"amount": round(want * content, 2), "unit": covers_unit(product, need_unit)}
-        line.pop("unit_note", None)
+        if not o.get("density"):  # a density reading's note describes the whole need and stays
+            line.pop("unit_note", None)
         if need_unit in PACK_CODES and product and (
                 note := pack_unit_note(product, min(remaining, want * content), need_unit, want)):
             line["unit_note"] = note

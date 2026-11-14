@@ -192,7 +192,9 @@ def _build() -> list[dict]:
         _r("unit.interpreted", "finding", ["ask"], "gateway",
            "The need's unit isn't one of the product's units (20 ST of a product sold per KI with no single piece "
            "unit), so it was read as sales units: the line says so in unit_note and a human confirms the "
-           "quantity. A unit the product defines, or ST on its one piece unit (PRK, BOT, ...), stays silent.", None),
+           "quantity. A unit the product defines, or ST on its one piece unit (PRK, BOT, ...), stays silent. Also "
+           "fires when kg of a liquid (40 kg of cream) is read as litres, or the reverse, at the product type's "
+           "typical density.", None),
         _r("quantity.pack_oversize", "finding", ["notify"], "gateway",
            f"The planned packs exceed a need in L or KG by more than {config.PACK_OVERSIZE_PCT:g}% (12 kg -> one "
            f"20 kg bag, +67%) and no plan with less surplus costs at most {config.PACK_OVERSIZE_PRICE_PCT:g}% more: "

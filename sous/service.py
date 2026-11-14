@@ -492,6 +492,11 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
                        if o["product_id"] not in picked][:6]
         if uncovered > 0:
             gaps.append({"item": item.model_dump(), "item_index": item_index, "uncovered": uncovered, "unit": item.unit})
+        elif chosen and (step := _unit_dead_end(chosen, item.unit)):
+            # The unit can't be read for any candidate (kg of a product measured in L with no known density): not a
+            # silent dead end, the item is uncovered with the reason and what to ask instead.
+            gaps.append({"item": item.model_dump(), "item_index": item_index, "uncovered": item.amount,
+                         "unit": item.unit, **step})
         if sized and item_index not in skip_options and OPT.trouble(chosen, uncovered, req.delivery_date):
             troubled.append((item_index, item, [o for o in cands if o["product_id"] not in off_type], chosen))
 
@@ -542,6 +547,20 @@ def _request_quote(req: QuoteRequest, skip_options: set[int] = frozenset(), appr
                     for l in lines], "uncovered": gaps, "preview": body.get("mandate_preview", {}).get("outcome"),
                  "valio_api_calls": body["valio_api_calls"], "rationale": body.get("rationale")})
     return {"quote": body, "jws": jws, **({"approver_view": sidecar} if sidecar else {})}
+
+
+def _unit_dead_end(chosen: list[dict], unit: str) -> dict | None:
+    """{reason, next_step} when no line of an item can be ordered because its unit can't be converted for any
+    candidate (UNIT_MISMATCH / CONTENT_UNKNOWN on every line), else None."""
+    codes = [{i["code"] for i in l["issues"] if i["severity"] == "blocking"} for l in chosen]
+    if any(l["orderable"] for l in chosen) or not all(c & {"UNIT_MISMATCH", "CONTENT_UNKNOWN"} for c in codes):
+        return None
+    measured = sorted({(l.get("content_per_sales_unit") or {}).get("unit") for l in chosen} - {None})
+    ask = " or ".join(measured + ["SALES_UNIT"])
+    return {"reason": f"The need is in {unit}, but the candidates are measured in "
+                      f"{' / '.join(measured) or 'an unknown amount per pack'}, and the gateway can't convert it "
+                      "without a typical density for the product type.",
+            "next_step": f"Ask again in {ask} (e.g. {measured[0] if measured else 'SALES_UNIT'} instead of {unit})."}
 
 
 def _considered(o: dict, item_index: int, off_type: str | None, refusals: list | None, chosen: list[dict]) -> dict:

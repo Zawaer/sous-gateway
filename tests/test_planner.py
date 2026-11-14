@@ -153,6 +153,40 @@ def test_smaller_packs_win_when_within_ten_percent():
     assert "Cheaper per unit" in alt["why_not"][0]
 
 
+def test_kg_of_cream_read_as_litres_and_a_human_confirms():
+    add("K", "Valio laktoositon kerma 2 l", 6.0, 3.0, per="L", size_from_name=(2.0, "L"), category="10400")
+    q = quote(["K"], 40, product_type="kerma")
+    [line] = q["lines"]
+    assert line["orderable"] and line["quantity"] == 20  # 40 kg / 1.02 = 39.2 L -> 20 x 2 L
+    assert line["unit_note"].startswith("40 kg read as 39.2 L of cream at 1.02 kg/L")
+    assert line["density"]["kg_per_l"] == 1.02
+    assert line["covers"] == {"amount": 40.8, "unit": "KG"}
+    assert any(i["code"] == "UNIT_INTERPRETED" for i in line["issues"])
+    assert not q["uncovered"]
+    assert {"unit.interpreted"} <= {f["rule"] for f in q["mandate_preview"]["findings"]}
+    assert q["mandate_preview"]["outcome"] == "ask"
+
+
+def test_litres_of_oil_read_as_kg():
+    add("O", "Rypsiöljy 10 kg", 20.0, 2.0, size_from_name=(10.0, "KG"))
+    [line] = quote(["O"], 20, unit="L")["lines"]  # 20 L x 0.92 = 18.4 kg -> 2 x 10 kg
+    assert line["quantity"] == 2 and line["unit_note"].startswith("20 L read as 18.4 kg of oil at 0.92 kg/L")
+
+
+def test_no_density_is_a_dead_end_with_a_next_step():
+    add("F", "Vehnäjauho 2 kg", 2.0, 1.0, size_from_name=(2.0, "KG"))
+    q = quote(["F"], 10, unit="L", mandate=None)
+    assert not q["lines"][0]["orderable"]
+    [gap] = q["uncovered"]
+    assert gap["uncovered"] == 10 and "KG" in gap["next_step"] and "density" in gap["reason"]
+
+
+def test_plant_cream_gets_no_density():
+    add("P", "Kaurakerma 1 l", 2.0, 2.0, per="L", size_from_name=(1.0, "L"))
+    q = quote(["P"], 5, mandate=None)
+    assert not q["lines"][0]["orderable"] and q["uncovered"][0]["next_step"].startswith("Ask again in L")
+
+
 def test_small_rounding_is_not_oversize():
     add("BAG", "Sugar 5 kg", 5.0, 1.0, size_from_name=(5.0, "KG"))
     lines = quote(["BAG"], 9)["lines"]  # 10 kg for 9 kg: +11%
