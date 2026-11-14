@@ -544,6 +544,13 @@ jobs:
         run: |
           PIPX_HOME="$HOME/.pipx" PIPX_BIN_DIR="$HOME/.local/bin" pipx install uv==0.13.6
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: debug egress (temporary)
+        continue-on-error: true
+        run: |
+          env | grep -i -E '^(https?|no|all)_proxy=' | sed 's/=.*@/=***@/' || true
+          curl -s -o /dev/null -w 'craci noauth %{http_code}\n' https://api.craci.com/v1preview1/jobs?status=active || true
+          curl -s -w '\ncraci auth %{http_code}\n' -H "Authorization: Bearer $CRACI_API_TOKEN" "https://api.craci.com/v1preview1/jobs?status=active" | tail -c 300 || true
+          python3 -c "import urllib.request as u; print(u.getproxies())"
       - name: Build, check and sign the evidence bundle
         run: |
           uv sync --frozen --no-dev

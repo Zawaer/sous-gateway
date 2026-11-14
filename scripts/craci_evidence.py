@@ -498,11 +498,18 @@ def build(args) -> tuple[dict, int]:
         bundle["api_gaps"].append(f"GitHub cache list unavailable (HTTP {st})")
     foreign = [x for x in ledger for cr in x["craci_creators"] if cr["repository"] not in (None, args.repo)]
     prov["gha_caches"] = {"checked": len(ledger), "created_on_craci": sum(1 for x in ledger if x["craci_creators"]),
-                          "not_recorded": sum(1 for x in ledger if not x["craci_creators"]),
+                          "not_recorded": sum(1 for x in ledger if x["status"] == "not recorded by CRACI"),
+                          "lookup_failed": sum(1 for x in ledger if x["status"].startswith("HTTP")),
                           "created_by_other_repo": len(foreign), "entries": ledger}
 
+    missing = [j["job"] for j in bundle["jobs"] if (j.get("egress") or {}).get("verdict") == "unavailable"
+               and (j.get("declared") or {}).get("mode", "observe") != "observe"]
+    if missing:
+        bundle["api_gaps"].append(f"no CRACI network trace for deny-mode job(s) {', '.join(missing)}: not proven")
     bundle["summary"] = {
-        "egress_verdict": "fail" if failed else "pass",
+        # pass needs a trace for every deny-mode job that ran; a missing trace is never read as "clean"
+        "egress_verdict": "fail" if failed else ("incomplete" if missing else "pass"),
+        "jobs_without_trace": missing,
         "jobs_checked": sum(1 for j in bundle["jobs"] if (j.get("egress") or {}).get("verdict") in ("pass", "fail")),
         "jobs_observe_only": sum(1 for j in bundle["jobs"] if (j.get("egress") or {}).get("verdict") == "observe"),
         "undeclared_hosts": sorted({h for j in bundle["jobs"] for h in (j.get("egress") or {}).get(
@@ -549,7 +556,8 @@ def markdown(bundle: dict, jwk: dict | None, key_note: str | None, digest: str |
                                   f"{', '.join(h for t in d['tls'] + d['tcp'] for h in t['hosts']) or 'no connections'}")
         dests = e.get("destinations") or []
         hosts = ", ".join(f"{x['host']}:{x['port']}" for x in dests if x["allowed"] and x["declared_by"] !=
-                          "github-infra (implicit)") or "none besides GitHub"
+                          "github-infra (implicit)") or ("none besides GitHub" if "destinations" in e
+                                                          else e.get("error", "-"))
         nblk = sum(1 for x in dests if x["denied"])
         verdict = icon.get(e.get("verdict"), j.get("note", "-"))
         out.append(f"| `{j['job']}` | {decl} | {verdict} | {hosts} / {nblk} | "
@@ -581,7 +589,7 @@ def markdown(bundle: dict, jwk: dict | None, key_note: str | None, digest: str |
     if c:
         out += ["", f"### Cache provenance (main): {c['checked']} caches, {c['created_on_craci']} created by a "
                     f"recorded CRACI job, {c['not_recorded']} not recorded, {c['created_by_other_repo']} from another "
-                    "repo"]
+                    f"repo, {c['lookup_failed']} lookups failed"]
     img = bundle["provenance"].get("image")
     if img:
         p = img["oci_manifest_provenance"]
@@ -631,6 +639,8 @@ def main() -> int:
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
             f.write(md)
     print(md)
+    if bundle["summary"]["egress_verdict"] == "incomplete":
+        print("::warning::CRACI evidence incomplete: " + "; ".join(bundle["api_gaps"]))
     for h in bundle["summary"]["undeclared_hosts"]:
         print(f"::error::A deny-mode job reached {h}, which its declared network policy does not allow")
     return 0 if args.no_fail else code
