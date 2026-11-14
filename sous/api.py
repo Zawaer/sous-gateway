@@ -147,7 +147,8 @@ def require_global_approver(x_approver_code: str | None = Header(default=None)):
 
 
 _SANDBOX_Q = Query(None, alias="sandbox", description="Judge sandbox id (e.g. SBX-7Q2K): show only its data. "
-                                     "Without it, sandbox data is hidden.")
+                                     "Without it, sandbox data is hidden. With it, the call needs the sandbox's approver or agent token "
+                                     "(401 approver_code_required otherwise, also for unknown ids).")
 
 
 _agent_bearer = HTTPBearer(auto_error=False, scheme_name="agentToken",
@@ -394,6 +395,7 @@ def list_orders(status: Literal["ordered", "pending_approval", "refused", "rejec
                 mandate_id: str | None = None, sandbox_id: str | None = _SANDBOX_Q,
                 r: access.Reader = Depends(access.reader)):
     """Orders you may read (see docs/PROTOCOL.md "Read access"), newest first."""
+    access.check_sandbox_list(r, sandbox_id)
     scope = sandbox.list_scope(sandbox_id)
     if scope is None:
         return {"orders": []}
@@ -462,6 +464,7 @@ def issue_mandate(m: Mandate, mint_agent_credential: bool | None = None):
 def list_mandates(sandbox_id: str | None = _SANDBOX_Q, r: access.Reader = Depends(access.reader)):
     """Mandates you may read: all with the approver code, a sandbox's with its token, an agent's own with its
     bearer token, and the public demo mandates (demo_public) without credentials."""
+    access.check_sandbox_list(r, sandbox_id)
     scope = sandbox.list_scope(sandbox_id)
     if scope is None:
         return {"mandates": []}
@@ -606,6 +609,7 @@ def create_standing_order(req: standing.StandingOrderIn):
 @app.get("/standing-orders", tags=["standing orders"])
 def list_standing_orders(mandate_id: str | None = None, sandbox_id: str | None = _SANDBOX_Q,
                          r: access.Reader = Depends(access.reader)):
+    access.check_sandbox_list(r, sandbox_id)
     scope = sandbox.list_scope(sandbox_id)
     if scope is None:
         return {"standing_orders": []}
@@ -655,6 +659,7 @@ def list_notifications(buyer: str | None = None, order_id: str | None = None, li
     """In-app feed of FYIs (notify tier), approval requests (ask tier) and decisions, newest first.
     Only buyers you may read (see GET /mandates)."""
     from . import notifications_store
+    access.check_sandbox_list(r, sandbox_id)
     scope = sandbox.list_scope(sandbox_id)
     if scope is None:
         return {"notifications": []}
@@ -695,6 +700,7 @@ def get_sandbox(sandbox_id: str, r: access.Reader = Depends(access.reader)):
     out = sandbox.get(sandbox_id)
     if not r.everything and not set(m["mandate_id"] for m in out["mandates"]) & r.mandates:
         out["orders"].pop("recent", None)
+        out["orders"]["recent_hidden"] = "send the sandbox's approver or agent credential, or the approver code"
     return out
 
 
@@ -713,6 +719,7 @@ def audit(subject: str | None = None, buyer: str | None = None, limit: int = Que
 
     Judge-sandbox events are in the same hash chain but hidden here unless ?sandbox=<id> (or a subject) is given.
     Only buyers you may read (see GET /mandates); the approver code reads everything. GET /audit/verify is public."""
+    access.check_sandbox_list(r, sandbox_id)
     scope = sandbox.list_scope(sandbox_id)
     if scope is None:
         return {"events": []}

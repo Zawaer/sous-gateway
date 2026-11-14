@@ -146,8 +146,9 @@ def test_sandbox_token_reads_its_sandbox_only(c):
     assert not any(store.get_mandate(m["mandate_id"]).get("demo_public") for m in a["mandates"])
 
     # without a token nobody sees a sandbox's data, even knowing its id
-    assert c.get("/orders", params={"sandbox": sa}).json()["orders"] == []
-    assert c.get("/mandates", params={"sandbox": sa}).json()["mandates"] == []
+    for path in ("/orders", "/mandates"):
+        r = c.get(path, params={"sandbox": sa})
+        assert r.status_code == 401 and r.json()["error"] == "approver_code_required", path
     assert c.get(f"/orders/{oa['id']}").status_code == 404
     assert c.get(f"/mandates/{a['mandates'][0]['mandate_id']}").status_code == 404
     assert "recent" not in c.get(f"/sandbox/{sa}").json()["orders"]
@@ -159,7 +160,7 @@ def test_sandbox_token_reads_its_sandbox_only(c):
         assert len(c.get("/mandates", params={"sandbox": sa}, headers=h).json()["mandates"]) == 3
         assert c.get(f"/orders/{oa['id']}", headers=h).status_code == 200
         assert c.get(f"/orders/{ob['id']}", headers=h).status_code == 404
-        assert c.get("/orders", params={"sandbox": sb}, headers=h).json()["orders"] == []
+        assert c.get("/orders", params={"sandbox": sb}, headers=h).status_code == 401  # another sandbox's lists
         feed = c.get("/notifications", params={"sandbox": sa}, headers=h).json()["notifications"]
         assert [n["order_id"] for n in feed] == [oa["id"], a["seeded"]["held_order_id"]]
         events = c.get("/audit", params={"sandbox": sa, "limit": 1000}, headers=h).json()["events"]
@@ -169,6 +170,37 @@ def test_sandbox_token_reads_its_sandbox_only(c):
     h = {"Authorization": f"Bearer {a['agent_token']}"}
     assert {o["id"] for o in c.get("/orders", params={"sandbox": sa}, headers=h).json()["orders"]} == \
         {oa["id"], a["seeded"]["held_order_id"]}
+
+
+def test_sandbox_lists_without_its_credential_answer_401(c):
+    """The seller UI at /ui/?sandbox=SBX-XXXX#/inbox lists with ?sandbox=; without a credential it must get a 401
+    (its code dialog) instead of an empty inbox, and the same 401 for an id that doesn't exist (no oracle)."""
+    seed_curated()
+    a, b = new(c, "10.0.0.1"), new(c, "10.0.0.2")
+    sa = a["sandbox"]["id"]
+    held = a["seeded"]["held_order_id"]
+    lists = [("/orders", {"status": "pending_approval"}), ("/mandates", {}), ("/standing-orders", {}),
+             ("/notifications", {}), ("/audit", {"limit": 5})]
+    other = {"X-Approver-Code": b["approver_token"], "Authorization": f"Bearer {b['agent_token']}"}
+    for path, params in lists:
+        answers = []
+        for sid in (sa, "SBX-ZZZZ", sa.lower()):
+            for h in ({}, {"X-Approver-Code": "wrong"}, other):
+                r = c.get(path, params={**params, "sandbox": sid}, headers=h)
+                assert r.status_code == 401, (path, sid, h, r.text)
+                answers.append(r.json())
+        assert all(x["error"] == "approver_code_required" for x in answers)
+        same = {x["message"].upper().replace(sa, "ID").replace("SBX-ZZZZ", "ID") for x in answers}
+        assert len(same) == 1, path  # the same answer, known id or not
+        # without ?sandbox= the list is still public demo data, filtered silently
+        assert c.get(path, params=params).status_code == 200, path
+    ui = {"X-Approver-Code": a["approver_token"], "Authorization": f"Bearer {a['approver_token']}"}
+    r = c.get("/orders", params={"status": "pending_approval", "sandbox": sa}, headers=ui)
+    assert r.status_code == 200 and held in [o["id"] for o in r.json()["orders"]]
+    for h in (AC, {"Authorization": f"Bearer {a['agent_token']}"}):
+        assert c.get("/standing-orders", params={"sandbox": sa}, headers=h).json()["standing_orders"], h
+    s = c.get(f"/sandbox/{sa}").json()
+    assert "recent" not in s["orders"] and "credential" in s["orders"]["recent_hidden"]
 
 
 class Ctx:

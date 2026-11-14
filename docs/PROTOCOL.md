@@ -762,7 +762,7 @@ Credentials add up (an agent token plus `X-Approver-Code: sbxa_...` reads both).
 - A detail you may not read answers **404** with the same error as an id that doesn't exist (`order_not_found`, ...), so ids are never confirmed.
 - Lists are filtered silently. Every scoped response has the header `X-Sous-Read-Scope`: `all`, `public_demo`, `agent+public_demo`, `sandbox:SBX-XXXX+public_demo`.
 - Notifications and audit events are filtered by buyer: a buyer's events are visible when every mandate with that buyer name is readable, so a real mandate that shares a demo buyer's name never leaks. Buyer-less events (anonymous catalog searches) need the approver code; a sandbox token also sees its sandbox's lifecycle events.
-- `?sandbox=SBX-XXXX` still narrows lists to one sandbox; it no longer grants anything by itself.
+- `?sandbox=SBX-XXXX` narrows lists to one sandbox and grants nothing by itself. A list that names it (`GET /orders`, `/mandates`, `/standing-orders`, `/notifications`, `/audit`) needs a credential that reads that sandbox: the global approver code, the sandbox's `sbxa_` approver token or its agent token. Otherwise it answers **401 `approver_code_required`**, the same for an unknown, expired or malformed id (no existence oracle), so the seller UI at `/ui/?sandbox=SBX-XXXX#/inbox` shows its code dialog instead of an empty inbox. Lists without `?sandbox=` keep filtering silently.
 **Live lookups under a mandate.** `GET /mandates/{id}/suggestions`, `GET /products/{id}/substitutes?mandate_id=` and the MCP tools `get_suggestions` and `suggest_substitutes` (with `mandate_id`) are scoped like `GET /mandates/{id}`: the agent's `vka_` bearer, the global `X-Approver-Code`, or a sandbox's `sbxa_` token (as `X-Approver-Code` or Bearer) for its own mandates; public demo mandates need nothing. The mandate is checked first, before the mandate itself or the product is looked up, so the answer never says whether a private mandate exists (`check_live` in `sous/access.py`):
 
 - credentials that grant nothing (none sent, or none recognised): **401 `agent_auth_required`** for every non-public id, existing or not. 401 makes the seller UI show its code dialog, and agents keep the code they already handled for sandbox mandates;
@@ -772,7 +772,7 @@ Credentials add up (an agent token plus `X-Approver-Code: sbxa_...` reads both).
 Without `mandate_id`, substitutes are catalog data and stay public.
 
 - `/mandates/{id}/verify` is scoped like the mandate: for buyer-signed mandates it returns the VC, which contains the whole mandate.
-- `GET /sandbox/{id}` stays public (status, lookups left, order counts); its `orders.recent` list needs one of the sandbox's tokens.
+- `GET /sandbox/{id}` stays public (status, lookups left, order counts); its `orders.recent` list needs one of the sandbox's tokens; without one it is replaced by `orders.recent_hidden` (a hint).
 - Quotes requested without a mandate are readable by id: they hold catalog prices any caller may request.
 
 **Public on purpose.** `/products*`, `/allergens`, `/.well-known/*` (JWKS, agent and server cards), `/schemas/*`, `/health`, `/docs`, `/openapi.json`, `/audit/verify` (only `ok`, event count and head hash; no event bodies), `/buyers/{buyer}/keys` (public did:keys).

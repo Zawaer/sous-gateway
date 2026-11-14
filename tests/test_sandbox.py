@@ -327,7 +327,9 @@ def test_expired_sandbox_is_hidden_and_its_mandates_revoked(c, monkeypatch):
     st = c.get(f"/sandbox/{sid}").json()
     assert st["status"] == "expired" and st["orders"]["total"] == 2  # the seeded held order + this one
     assert all(S._mandate(m["mandate_id"]).revoked for m in s["mandates"])
-    assert c.get("/orders", params={"sandbox": sid}).json()["orders"] == []
+    assert c.get("/orders", params={"sandbox": sid}).status_code == 401  # no credential: 401, as for any id
+    assert c.get("/orders", params={"sandbox": sid},
+                 headers={"X-Approver-Code": s["approver_token"]}).json()["orders"] == []
     r = quote(c, s)
     assert r.status_code == 410 and r.json()["error"] == "sandbox_expired"
     assert c.post(f"/orders/{o['id']}/approve", json={"by": "judge"},
@@ -342,7 +344,7 @@ def test_approver_deletes_a_sandbox(c):
     r = c.delete(f"/sandbox/{sid}", params={"by": "Rene"}, headers={"X-Approver-Code": CODE})
     assert r.status_code == 200 and r.json()["status"] == "deleted"
     assert all(S._mandate(m["mandate_id"]).revoked for m in s["mandates"])
-    assert c.get("/mandates", params={"sandbox": sid}).json()["mandates"] == []
+    assert c.get("/mandates", params={"sandbox": sid}, headers={"X-Approver-Code": CODE}).json()["mandates"] == []
     assert c.get("/sandbox/SBX-ZZZZ").status_code == 404
 
 

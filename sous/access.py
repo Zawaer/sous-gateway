@@ -189,6 +189,27 @@ def check_live(r: Reader | None, mandate_id: str) -> None:
     raise _not_found("mandate_not_found", f"No mandate {mandate_id}.")
 
 
+def check_sandbox_list(r: Reader, sandbox_id: str | None) -> None:
+    """A list that names ?sandbox=<id> needs a credential that reads that sandbox: the global approver code, the
+    sandbox's approver token (sbxa_), or its agent token. Otherwise 401 approver_code_required, the same for an
+    unknown, expired or malformed id, so the answer never says whether a sandbox exists. The 401 makes the seller
+    UI ask for the code instead of showing an empty inbox. Lists without ?sandbox= are filtered silently."""
+    if not sandbox_id or r.everything:
+        return
+    sid = (sandbox_id or "").strip().upper()
+    if sid in r.sandboxes:
+        return
+    if r.mandates:
+        owners = sandbox.index()["mandates"]
+        if any(owners.get(m) == sid for m in r.mandates):
+            return
+    from . import service as S
+    raise S.GatewayError(
+        "approver_code_required",
+        f"Sandbox {sid}'s lists need its approver token (sbxa_..., as X-Approver-Code or Authorization: Bearer), "
+        "its agent token, or the approver code.", 401)
+
+
 def skips_agent_check(r: Reader | None, m) -> bool:
     """True when the reader is the global approver, or holds the approver token of m's sandbox: the seller UI acts
     for the buyer then and needs no agent token for live lookups (sandbox.authorize)."""
