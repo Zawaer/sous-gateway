@@ -66,6 +66,8 @@ _GATEWAY_BLOCKING = {
     "UNIT_MISMATCH": "The need is in litres but the product is sold by weight (or the reverse): the gateway "
                      "won't guess a conversion.",
     "CONTENT_UNKNOWN": "The gateway can't tell how much one pack holds, so it can't compute the quantity.",
+    "OFFER_VAT_UNKNOWN": "A line quoted on a Valio Aimo offer has no VAT rate from Valio and no tax-inclusive price to "
+                         "derive it from: the gateway never assumes 0 %, so the offer line is refused (sous/offers.py).",
 }
 
 

@@ -199,3 +199,28 @@ def test_mcp_list_offers_structured(c):
     validator_for(tool.output_schema)(tool.output_schema).validate(res.structured_content)
     assert json.loads(res.content[0].text) == res.structured_content
     assert res.structured_content["offers"][0]["id"] == o["id"]
+
+
+@pytest.mark.parametrize("inc", [1.14, 0.5])  # 0.5 < ex: no usable tax-inclusive price
+def test_missing_vat_rate_is_derived_or_the_offer_line_refused_never_zero(c, monkeypatch, inc):
+    """QA blocker (rene-codex-qa 11:49Z): no taxRate from Valio must not mean 0 % VAT on the offer price."""
+    from sous import quote as Q
+    live = Q.offers
+
+    def no_rate(*a, **k):
+        offs, now = live(*a, **k)
+        for x in offs:
+            x["vat_rate"], x["unit_price_inc_vat"] = None, inc
+        return offs, now
+
+    monkeypatch.setattr(Q, "offers", no_rate)
+    o = offer(c).json()
+    q = quote(c, o["id"]).json()["quote"]
+    line = q["lines"][0]
+    if inc > 1:  # derived from Valio's €1.00 ex / €1.14 inc: 14 %
+        assert line["vat_rate"] == 14.0 and "derived" in line["vat_rate_source"]
+        assert line["unit_price_ex_vat"] == 0.8 and line["line_total_inc_vat"] == 9.12 > line["line_total_ex_vat"]
+    else:  # nothing to derive it from: the offer line is refused with the reason
+        assert not line["orderable"] and "OFFER_VAT_UNKNOWN" in [i["code"] for i in line["issues"]]
+        assert line.get("offer_id") is None and q["mandate_preview"]["outcome"] == "block"
+        assert "availability.offer_vat_unknown" in [f["rule"] for f in q["mandate_preview"]["findings"]]

@@ -411,6 +411,19 @@ def for_quote(offer_id: str, mandate: Mandate | None) -> dict:
     return o
 
 
+def _vat_rate(l: dict) -> float | None:
+    """The line's VAT rate in percent: Valio's taxRate, else derived from its ex/inc unit prices (and written to the
+    line, with the source), else None. Never 0 by default."""
+    if l.get("vat_rate") is not None:
+        return l["vat_rate"]
+    ex, inc = l.get("unit_price_ex_vat"), l.get("unit_price_inc_vat")
+    if ex and inc is not None and inc >= ex:
+        l["vat_rate"] = round((inc / ex - 1) * 100, 2)
+        l["vat_rate_source"] = "derived from Valio Aimo's ex/inc VAT unit prices (no taxRate given)"
+        return l["vat_rate"]
+    return None
+
+
 def apply(o: dict, mandate: Mandate, lines: list[dict]) -> dict:
     """Price the quote's lines for the offer's products at min(offer price, live price). Raises when the offer
     covers no line or the quote asks for more than is left. Returns the quote's `offer` reference."""
@@ -426,7 +439,13 @@ def apply(o: dict, mandate: Mandate, lines: list[dict]) -> dict:
         raise _err("offer_over_cap", f"Offer {o['id']} has {left:g} sales units left; this quote needs {qty:g}. "
                    f"Ask for at most {left:g}.", 409)
     for l in hit:
-        live, vat = l["unit_price_ex_vat"], l.get("vat_rate") or 0
+        live, vat = l["unit_price_ex_vat"], _vat_rate(l)
+        if vat is None:  # never assume 0 %: the offer line is refused, with the reason
+            l["issues"] = l["issues"] + [{"code": "OFFER_VAT_UNKNOWN", "severity": "blocking", "message": (
+                f"Valio Aimo gave no VAT rate for this product and no tax-inclusive price to derive it from, so the "
+                f"offer {o['id']} price can't be stated incl. VAT; ask for a quote without the offer.")}]
+            l["orderable"] = False
+            continue
         new = min(price[l["product_id"]], live)
         ratio = new / live
         l["unit_price_ex_vat"] = new
