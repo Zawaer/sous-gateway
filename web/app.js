@@ -108,6 +108,19 @@ const authRequired = (m) => !!m.require_agent_auth || authGlobal;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+// UI review S4/S6/S7: display-only clean-ups of gateway text.
+// Buyer names without the "(sandbox SBX-…)" suffix (the banner already says it).
+const bn = (b) => String(b ?? "").replace(/\s*\(sandbox SBX-[A-Z0-9]+\)$/i, "");
+// Engine messages say "€1,560.00"; show money the same way as the rest of the UI ("1 560,00 €").
+const msg = (t) => esc(t).replace(/€(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)/g,
+  (_, n) => eur(parseFloat(n.replace(/,/g, ""))));
+// SAP sales units -> words; ALL-CAPS catalogue names -> sentence case.
+const UNIT = { ST: "pcs", KPL: "pcs", PRK: "packs", KI: "cartons", PSS: "bags", BOT: "bottles", PLO: "bottles", RAS: "tins", SK: "cases" };
+const unit = (u) => UNIT[String(u || "").toUpperCase()] || u || "";
+const pname = (n) => { n = String(n ?? ""); return /[a-zåäö]/.test(n) ? n : n.charAt(0) + n.slice(1).toLowerCase(); };
+// Event names: known labels, otherwise "sandbox.created" -> "Sandbox created".
+const evLabel = (e) => EVENT_LABEL[e] || (e.charAt(0).toUpperCase() + e.slice(1)).replace(/[._]/g, " ");
+
 const eur = (n) => n == null ? "–" :
   new Intl.NumberFormat("fi-FI", { style: "currency", currency: "EUR" }).format(n);
 
@@ -215,7 +228,7 @@ function findingsList(findings, { only, plain } = {}) {
   const fs = (findings || []).filter((f) => !only || only.includes(f.outcome));
   if (!fs.length) return "";
   return `<ul class="findings${plain ? " plain" : ""}">${fs.map((f) => `
-    <li>${plain ? "" : tier(f.outcome)}<div>${esc(f.message)}<div class="rule">${esc(f.rule)}${f.product_id ? " · " + esc(f.product_id) : ""}</div></div></li>`).join("")}
+    <li>${plain ? "" : tier(f.outcome)}<div>${msg(f.message)}<div class="rule">${esc(f.rule)}${f.product_id ? " · " + esc(f.product_id) : ""}</div></div></li>`).join("")}
   </ul>`;
 }
 
@@ -224,8 +237,8 @@ function linesTable(lines) {
       <th>Product</th><th class="num">Qty</th><th class="num hide-s">Unit €</th><th class="num">Total €</th><th class="hide-s">Delivery</th>
     </tr></thead><tbody>${(lines || []).map((l) => `
     <tr>
-      <td>${esc(l.name)}<div class="muted small mono">${esc(l.product_id)}${l.logistic_model ? " · " + esc(l.logistic_model) : ""}</div></td>
-      <td class="num">${esc(l.quantity)} ${esc(l.sales_unit || "")}</td>
+      <td>${esc(pname(l.name))}<div class="muted small mono">${esc(l.product_id)}${l.logistic_model ? " · " + esc(l.logistic_model) : ""}</div></td>
+      <td class="num">${esc(l.quantity)} ${esc(unit(l.sales_unit))}</td>
       <td class="num hide-s">${eur(l.unit_price_ex_vat)}</td>
       <td class="num">${eur(l.line_total_ex_vat)}</td>
       <td class="hide-s">${dateOnly(l.delivery_date)}</td>
@@ -317,7 +330,7 @@ function renderFeed() {
   if (!el) return;
   el.innerHTML = live.events.length ? live.events.map((e) => `
     <a class="feed-ev ${live.fresh?.has(e.seq) ? "fresh" : ""}" href="#/orders${/^PO-/.test(e.subject || "") ? "/" + esc(e.subject) : ""}">
-      <div class="row"><span>${esc(EVENT_LABEL[e.event] || e.event)}</span><span class="mono muted">${when(e.ts).split(" ").pop()}</span></div>
+      <div class="row"><span>${esc(evLabel(e.event))}</span><span class="mono muted">${when(e.ts).split(" ").pop()}</span></div>
       <div class="small muted"><span class="actor ${esc(e.actor_type)}">${esc(e.actor_type)}</span> ${esc(e.buyer || e.actor)}</div>
     </a>`).join("") : `<div class="small muted">No activity yet.</div>`;
 }
@@ -327,7 +340,7 @@ function inboxCard(o, isNew = false) {
   const asks = (o.decision?.findings || []).filter((f) => f.outcome === "ask");
   return `<article class="card ask ${isNew ? "fresh" : ""}" data-order="${esc(o.id)}">
     <div class="row">
-      <div><div class="muted small">${esc(o.buyer)}</div><div class="big">${eur(o.total_ex_vat)} <span class="muted small">ex VAT</span></div>
+      <div><div class="muted small">${esc(bn(o.buyer))}</div><div class="big">${eur(o.total_ex_vat)} <span class="muted small">ex VAT</span></div>
         ${cut ? `<div class="small" style="margin-top:4px">${decideBy(cut)}</div>` : ""}</div>
       <div>${tier("ask")}</div>
     </div>
@@ -413,9 +426,10 @@ views.orders = {
         `<button class="chip ${k === this.filter ? "on" : ""}" data-f="${k}">${v}</button>`).join("")}</div>
       ${orders.length ? `<div class="list">${orders.map((o) => `
         <button class="item" data-open="${esc(o.id)}">
-          <div><b>${esc(o.buyer)}</b> <span class="muted mono small">${esc(o.id)}</span>
-            <div class="muted small">${esc(o.agent_id)} · ${(o.lines || []).length} line${(o.lines || []).length === 1 ? "" : "s"} · ${when(o.created_at)}</div></div>
-          <div style="text-align:right">${tier(o.status)}<div class="small">${eur(o.total_ex_vat)}</div></div>
+          <div><b>${esc(bn(o.buyer))}</b> <span class="muted mono small">${esc(o.id)}</span>
+            <div class="small">${orderStory(o)}</div>
+            <div class="muted small">${esc(o.agent_id)} · ${when(o.created_at)}</div></div>
+          <div style="text-align:right">${orderBadge(o)}<div class="small">${eur(o.total_ex_vat)}</div></div>
         </button>`).join("")}</div>`
         : `<div class="empty">No orders${this.filter ? " with this status" : " yet"}.</div>`}`;
     view.querySelectorAll("[data-f]").forEach((c) => c.addEventListener("click", () => {
@@ -425,12 +439,24 @@ views.orders = {
   },
 };
 
+// UI review S10: a row tells the story: first product and quantity, then how it was decided.
+function orderStory(o) {
+  const ls = o.lines || [];
+  if (!ls.length) return `<span class="muted">no lines</span>`;
+  const l = ls[0];
+  return `${esc(pname(l.name))} × ${esc(l.quantity)} ${esc(unit(l.sales_unit))}${ls.length > 1 ? ` <span class="muted">+ ${ls.length - 1} more</span>` : ""}`;
+}
+function orderBadge(o) {
+  if (o.status === "ordered") return o.approval?.approved ? `<span class="tier tier-silent">Approved</span>` : tier(o.decision?.outcome || "silent");
+  return tier(o.status);
+}
+
 async function openOrder(id) {
   const o = await api("/orders/" + encodeURIComponent(id));
   const d = o.decision || {};
   const a = o.approval;
   openSheet(`
-    <div class="muted small">${esc(o.buyer)}</div>
+    <div class="muted small">${esc(bn(o.buyer))}</div>
     <h2>${esc(o.id)} ${tier(o.status)}</h2>
     <div class="big">${eur(o.total_ex_vat)} <span class="muted small">ex VAT · ${eur(o.total_inc_vat)} incl.</span></div>
     ${o.status === "pending_approval" ? `<div class="ask-summary">
@@ -460,7 +486,7 @@ async function openOrder(id) {
     <div id="subs">${(o.lines || []).map((l) => {
       const flagged = (d.findings || []).some((f) => f.product_id === l.product_id && (f.outcome === "ask" || f.outcome === "block"));
       return `<div class="sub-line" data-pid="${esc(l.product_id)}">
-        <div class="row"><div>${esc(l.name)} <span class="muted mono">${esc(l.product_id)}</span>
+        <div class="row"><div>${esc(pname(l.name))} <span class="muted mono">${esc(l.product_id)}</span>
           ${flagged ? ` ${tier(d.findings.find((f) => f.product_id === l.product_id && (f.outcome === "ask" || f.outcome === "block")).outcome)}` : ""}</div>
           <button class="btn plain" data-subs="${esc(l.product_id)}" data-qty="${esc(l.quantity)}"
             data-date="${esc(l.delivery_date || o.delivery_date)}">Find substitutes</button></div>
@@ -540,8 +566,8 @@ function flowSteps(o, q, searches, events) {
   const lookup = step(2, "Lookup", q?.issued_at, ["system", "Sous gateway"],
     q ? `Live price and availability${calls != null ? ` (${calls ? `${calls} Valio API call${calls === 1 ? "" : "s"}` : "from the gateway's short-lived cache, 0 Valio API calls"})` : ""} →
       signed quote <span class="mono">${esc(q.id)}</span>, ${eur(q.total_ex_vat)} ex VAT, valid until ${when(q.expires_at)}.
-      ${(q.lines || []).map((l) => `Chose ${esc(l.quantity)} × ${esc(l.name)}${l.logistic_model ? ` (${esc(l.logistic_model)})` : ""}.`).join(" ")}
-      ${skipped.length ? `Passed over ${skipped.length}: ${skipped.slice(0, 2).map((s) => `${esc(s.name)} (${esc(((s.why_not || [])[0] || "").replace(/\.$/, ""))})`).join("; ")}${skipped.length > 2 ? ` and ${skipped.length - 2} more` : ""}.` : ""}
+      ${(q.lines || []).map((l) => `Chose ${esc(l.quantity)} × ${esc(pname(l.name))}${l.logistic_model ? ` (${esc(l.logistic_model)})` : ""}.`).join(" ")}
+      ${skipped.length ? `Passed over ${skipped.length}: ${skipped.slice(0, 2).map((s) => `${esc(pname(s.name))} (${esc(((s.why_not || [])[0] || "").replace(/\.$/, ""))})`).join("; ")}${skipped.length > 2 ? ` and ${skipped.length - 2} more` : ""}.` : ""}
       ${gaps.length ? `<span style="color:var(--ask)">Could not cover ${gaps.map((g) => `${esc(g.uncovered)} ${esc(g.unit || "")}${g.item?.note ? ` of “${esc(g.item.note)}”` : ""}`).join(", ")}: nothing among its candidates can be delivered in time.</span>` : ""}`
       : `<span class="muted">Quote ${esc(o.quote_id)} not found.</span>`);
 
@@ -549,7 +575,7 @@ function flowSteps(o, q, searches, events) {
   const order = step(3, "Order", o.created_at, ["agent", o.agent_id],
     `${d.outcome === "block" ? "Tried to order" : "Committed to"} the quote at its fixed price, ${eur(o.total_ex_vat)} ex VAT. The gateway re-checked the quote's
      signature and cut-offs, then the mandate engine ruled ${tier(d.outcome)}${fired.length
-       ? `: ${fired.map((f) => esc(f.message)).join(" ")}` : " (all checks passed)."}`);
+       ? `: ${fired.map((f) => msg(f.message)).join(" ")}` : " (all checks passed)."}`);
 
   let appr;
   if (d.outcome === "block") {
@@ -559,7 +585,7 @@ function flowSteps(o, q, searches, events) {
       `${a.approved ? "Approved" : "Rejected"}${a.note ? `: “${esc(a.note)}”` : ""} → ${tier(o.status)}${a.result_reason && a.result_reason !== a.note ? ` ${esc(a.result_reason)}` : ""}`);
   } else if (o.status === "pending_approval") {
     appr = step(4, "Approval", null, ["human", o.buyer],
-      `<span style="color:var(--ask)">Waiting for a human at ${esc(o.buyer)}.</span>${notified.length ? " Approval request sent." : ""}`);
+      `<span style="color:var(--ask)">Waiting for a human at ${esc(bn(o.buyer))}.</span>${notified.length ? " Approval request sent." : ""}`);
   } else {
     appr = step(4, "Approval", d.at, ["system", "mandate engine"],
       `Within the mandate, so the agent decided alone; no human sign-off needed.${d.outcome === "notify" ? " The buyer was sent an FYI." : ""}`);
@@ -633,7 +659,7 @@ function subCard(s) {
   const allergen = s.allergen_check?.status;
   return `<div class="sub">
     <div class="row" style="align-items:center">${tier(s.tier)}${s.official_substitute ? `<span class="mono muted">official</span>` : ""}</div>
-    <div class="nm">${esc(s.name)}</div>
+    <div class="nm">${esc(pname(s.name))}</div>
     ${s.type?.label ? `<div class="small">${esc(s.type.label)} <span class="match m-${esc(s.type.match)}">${esc(MATCH_LABEL[s.type.match] || s.type.match || "")}</span></div>` : ""}
     <div class="muted mono">${esc(s.product_id)}${s.brand ? " · " + esc(s.brand) : ""}${o.logistic_model ? " · " + esc(o.logistic_model) : ""}</div>
     <div class="price">${cp.ex_vat != null ? `${eur(cp.ex_vat)} / ${esc(cp.per)}` : eur(o.unit_price_ex_vat)}
@@ -731,7 +757,7 @@ function eventSummary(e) {
       return `${(d.lines || []).length} line(s), ${eur(d.total_ex_vat)} ex VAT${d.preview ? " · mandate preview " + tier(d.preview) : ""}${calls != null ? ` · ${calls} Valio API call(s)${hits ? `, ${hits} from cache` : ""}` : ""}`;
     }
     case "order.ordered": case "order.pending_approval": case "order.refused":
-      return `${eur(d.total_ex_vat)} ${tier(d.outcome)} ${(d.fired || []).map((f) => esc(f.message)).join(" · ")}`;
+      return `${eur(d.total_ex_vat)} ${tier(d.outcome)} ${(d.fired || []).map((f) => msg(f.message)).join(" · ")}`;
     case "order.approved": case "order.rejected_by_human":
       return `→ ${tier(d.resulting_status)}${d.note ? ` “${esc(d.note)}”` : ""}${d.reason && d.reason !== d.note ? " · " + esc(d.reason) : ""}`;
     case "order.rejected":
@@ -744,7 +770,7 @@ function eventSummary(e) {
     }
     case "standing.renewal_checked":
       return `${eur(d.total_ex_vat)} for ${dateOnly(d.delivery_date)} · ${(d.drift || []).length
-        ? `<span style="color:var(--ask)">drift: ${(d.drift || []).map((x) => esc(x.message || x.rule)).join(" · ")}</span>` : "no drift"}`;
+        ? `<span style="color:var(--ask)">drift: ${(d.drift || []).map((x) => msg(x.message || x.rule)).join(" · ")}</span>` : "no drift"}`;
     case "standing.renewed":
       return `→ <span class="mono">${esc(d.order_id)}</span> ${tier(d.status)}${(d.drift_rules || []).length ? ` · ${esc(d.drift_rules.join(", "))}` : ""}`;
     case "standing.history_simulated":
@@ -757,7 +783,7 @@ function eventSummary(e) {
         : esc(d.no_safe_substitute || "no safe substitute");
     case "mandate.issued": {
       const m = d.mandate || {};
-      return `${esc(m.buyer)} → agent ${esc(m.agent_id)} · alone up to ${eur(m.auto_approve_limit_eur)}`;
+      return `${esc(bn(m.buyer))} → agent ${esc(m.agent_id)} · alone up to ${eur(m.auto_approve_limit_eur)}`;
     }
     default:
       return "";
@@ -768,10 +794,10 @@ function eventRow(e) {
   return `<div class="ev">
     <div class="seq">#${esc(e.seq)}</div>
     <div>
-      <div class="row"><span class="what">${esc(EVENT_LABEL[e.event] || e.event)}</span><span class="muted small">${when(e.ts)}</span></div>
+      <div class="row"><span class="what">${esc(evLabel(e.event))}</span><span class="muted small">${when(e.ts)}</span></div>
       <div class="small"><span class="actor ${esc(e.actor_type)}">${esc(e.actor_type)}</span> ${esc(e.actor)}
         ${e.subject ? ` · <a href="#" class="mono" data-subject="${esc(e.subject)}">${esc(e.subject)}</a>` : ""}
-        ${e.buyer ? ` · <span class="muted">${esc(e.buyer)}</span>` : ""}</div>
+        ${e.buyer ? ` · <span class="muted">${esc(bn(e.buyer))}</span>` : ""}</div>
       <div class="small" style="margin-top:2px">${eventSummary(e)}</div>
       <details><summary>Data and hashes</summary><pre>${esc(JSON.stringify(e.data, null, 2))}\n\nprev_hash ${esc(e.prev_hash)}\nhash      ${esc(e.hash)}</pre></details>
     </div>
@@ -864,11 +890,11 @@ function sugCard(s) {
   return `<div class="sub">
     <div class="row" style="align-items:center"><span class="mono small">${esc(KIND_LABEL[s.kind] || s.kind)}</span>
       ${s.mandate_check?.outcome ? tier(s.mandate_check.outcome) : ""}</div>
-    <div class="nm">${esc(p.name || p.id)}</div>
+    <div class="nm">${esc(pname(p.name || p.id))}</div>
     <div class="muted mono">${esc(p.id)}${o.logistic_model ? " · " + esc(o.logistic_model) : ""}</div>
     ${s.instead_of ? `<div class="small">instead of ${esc(s.instead_of.name)}</div>` : ""}
     ${cp.ex_vat != null ? `<div class="price">${eur(cp.ex_vat)} / ${esc(cp.per)}${o.delivery_date ? `<span class="muted"> · ${dateOnly(o.delivery_date)}</span>` : ""}</div>` : ""}
-    <div class="small muted">${esc(s.reason || "")}</div>
+    <div class="small muted">${msg(s.reason || "")}</div>
   </div>`;
 }
 
@@ -883,7 +909,7 @@ function mandateCard(m) {
   const allergens = (m.avoid_allergens || []).map((c) => (allergenNames?.[c] || c)).join(", ");
   const rule = (k, v) => `<div><span class="muted">${k}</span><span>${v}</span></div>`;
   return `<article class="card ${m.revoked ? "revoked" : ""}">
-    <div class="row"><div><div class="muted small mono">${esc(m.id)}</div><h2>${esc(m.buyer)}</h2></div>
+    <div class="row"><div><div class="muted small mono">${esc(m.id)}</div><h2>${esc(bn(m.buyer))}</h2></div>
       <div style="text-align:right">${m.revoked ? `<span class="state off">Revoked</span>` : `<span class="state">Active</span>`}
         <div class="small" style="margin-top:4px">${m.issuer?.kind === "buyer"
           ? `<span class="match m-same" title="${esc(m.issuer.did || "")}">buyer-signed</span>`
@@ -942,9 +968,9 @@ function standingRow(d) {
   const totals = [...d.renewals].reverse().map((x) => x.total_ex_vat);
   return `<button class="item" data-so="${esc(so.id)}">
     <div><b>${esc(so.name)}</b> <span class="muted mono small">${esc(so.id)}</span>
-      <div class="muted small">${esc(so.buyer)} · every ${DAY[so.cadence?.weekday] || esc(so.cadence?.weekday)} ·
+      <div class="muted small">${esc(bn(so.buyer))} · every ${DAY[so.cadence?.weekday] || esc(so.cadence?.weekday)} ·
         ${so.items.map((i) => `${esc(i.amount)} ${esc(i.unit)} ${esc(i.label || "")}`).join(", ")}</div>
-      ${r ? `<div class="small" style="margin-top:4px">${tier(r.status)} ${esc(r.summary || "")}</div>` : `<div class="small muted">Not renewed yet · next ${dateOnly(d.next_delivery_date)}</div>`}</div>
+      ${r ? `<div class="small" style="margin-top:4px">${tier(r.status)} ${msg(r.summary || "")}</div>` : `<div class="small muted">Not renewed yet · next ${dateOnly(d.next_delivery_date)}</div>`}</div>
     <div style="text-align:right">${so.active ? `<span class="state">Active</span>` : `<span class="state off">Paused</span>`}
       ${spark(totals, r && r.drift?.length ? totals.length - 1 : -1, "Weekly total")}</div>
   </button>`;
@@ -966,7 +992,7 @@ async function openStanding(id) {
   const chrono = [...d.renewals].reverse();
   const flaggedLabels = new Set((live?.drift || []).map((f) => (f.message || "").split(":")[0]));
   openSheet(`
-    <div class="muted small">${esc(so.buyer)} · standing order</div>
+    <div class="muted small">${esc(bn(so.buyer))} · standing order</div>
     <h2>${esc(so.name)} ${so.active ? `<span class="state">Active</span>` : `<span class="state off">Paused</span>`}</h2>
     <dl class="kv small">
       <dt>Delivery</dt><dd>Every ${DAY[so.cadence?.weekday] || esc(so.cadence?.weekday)} · next ${dateOnly(d.next_delivery_date)}</dd>
@@ -977,7 +1003,7 @@ async function openStanding(id) {
         median of the last ${d.rules.history_weeks} ordered renewals</dd>
     </dl>
     ${live ? `<h3>This week ${tier(live.status)}</h3>
-      <p>${esc(live.summary || "")}</p>
+      <p>${msg(live.summary || "")}</p>
       ${live.drift?.length ? findingsList(live.drift) : `<p class="small muted">No drift: renewed like the last weeks.</p>`}
       ${live.order_id ? `<p class="small"><a href="#/orders/${esc(live.order_id)}">Open order ${esc(live.order_id)}</a>${live.status === "pending_approval" ? " to approve or reject" : ""}</p>` : ""}`
       : `<p class="muted">Not renewed yet.</p>`}
@@ -1057,9 +1083,9 @@ views.today = {
         : o.status === "expired" ? (o.approval?.result_reason || "Approved after the order cut-off") : (f?.message || "");
     };
     const row = (o, extra) => `<a class="item today-row" href="#/orders/${esc(o.id)}">
-        <div><b>${esc(o.buyer)}</b> <span class="muted mono small">${esc(o.id)}</span>
+        <div><b>${esc(bn(o.buyer))}</b> <span class="muted mono small">${esc(o.id)}</span>
           <div class="small">${extra}</div></div>
-        <div style="text-align:right">${tier(o.status)}<div class="small">${eur(o.total_ex_vat)}</div></div></a>`;
+        <div style="text-align:right">${orderBadge(o)}<div class="small">${eur(o.total_ex_vat)}</div></div></a>`;
     const buyerSigned = mandates.filter((m) => m.issuer?.kind === "buyer").length;
     const authed = mandates.filter(authRequired).length;
     const tile = (label, value, sub) => `<div class="tile"><div class="muted small">${label}</div><div class="hero">${value}</div><div class="small muted">${sub}</div></div>`;
@@ -1077,15 +1103,15 @@ views.today = {
         <section><h3>Waiting for you</h3>
           ${pending.length ? `<div class="list">${pending.slice(0, 6).map((o) => {
             const cut = earliestCutoff(o);
-            return row(o, `${esc(firstReason(o))}${cut ? ` · decide within <span class="deadline" data-until="${esc(cut)}"></span>` : ""}`);
+            return row(o, `${msg(firstReason(o))}${cut ? ` · decide within <span class="deadline" data-until="${esc(cut)}"></span>` : ""}`);
           }).join("")}</div>${pending.length > 6 ? `<p class="small"><a href="#/inbox">All ${pending.length} in Approvals</a></p>` : ""}`
             : `<p class="muted small">Nothing is waiting. Orders outside an agent's mandate appear here.</p>`}
           <h3>Stopped today, and why</h3>
-          ${stopped.length ? `<div class="list">${stopped.slice(0, 6).map((o) => row(o, esc(firstReason(o)))).join("")}</div>`
+          ${stopped.length ? `<div class="list">${stopped.slice(0, 6).map((o) => row(o, msg(firstReason(o)))).join("")}</div>`
             : `<p class="muted small">Nothing refused today.</p>`}
           ${drift.length ? `<h3>Standing-order drift</h3><div class="list">${drift.map(({ d, r }) => `
             <a class="item today-row" href="#/standing/${esc(d.standing_order.id)}"><div><b>${esc(d.standing_order.name)}</b>
-              <div class="small">${esc(r.summary || "")}</div></div><div>${tier(r.status)}</div></a>`).join("")}</div>` : ""}
+              <div class="small">${msg(r.summary || "")}</div></div><div>${tier(r.status)}</div></a>`).join("")}</div>` : ""}
         </section>
         <aside>
           <h3>Can this record be trusted?</h3>
