@@ -1,6 +1,6 @@
 # What Sous spent
 
-_Generated from [evals/costs.yaml](../evals/costs.yaml) by `scripts/costs.py`, prorated to Sat 14.11 15:38 (Helsinki)._ Every paid model or API run and every running service is in the ledger; "unknown" means the price still has to be read from that provider's console.
+_Generated from [evals/costs.yaml](../evals/costs.yaml) by `scripts/costs.py`, prorated to Sat 14.11 16:09 (Helsinki)._ Every paid model or API run and every running service is in the ledger; "unknown" means the price still has to be read from that provider's console.
 
 ## Totals per provider (model usage)
 
@@ -11,16 +11,16 @@ _Generated from [evals/costs.yaml](../evals/costs.yaml) by `scripts/costs.py`, p
 | openai | 2 | 728,700 / 4,734 | unknown |
 | verda | 12 | 6,525,543 / 153,749 | $22.68 |
 
-**Known total so far: $38.07** (plus the items marked unknown)
+**Known total so far: $38.13** (plus the items marked unknown)
 
 ## Services (prorated)
 
 | Provider | What | Since | Running | Cost so far | Note |
 |---|---|---|---|---|---|
-| aiven | Valkey, Developer plan (shared Valio budget) | 2026-11-13 22:30 | 17.1 h | $0.35 | paid from Aiven's $50 trial credits |
-| verda | CPU instance CPU.4V.16G, prod (FIN-01) | 2026-11-13 21:15 | 18.4 h | $0.88 | Verda on-demand price from the instance record |
-| verda | CPU instance CPU.4V.16G, staging (FIN-01) | 2026-11-13 21:40 | 18.0 h | $0.86 | Verda on-demand price from the instance record |
-| craci | CI runners (test, docker, smoke, eval, llm-eval) | 2026-11-13 21:40 | 18.0 h | unknown | paid from CRACI's per-team compute credits; see the CRACI dashboard |
+| aiven | Valkey, Developer plan (shared Valio budget) | 2026-11-13 22:30 | 17.7 h | $0.36 | paid from Aiven's $50 trial credits |
+| verda | CPU instance CPU.4V.16G, prod (FIN-01) | 2026-11-13 21:15 | 18.9 h | $0.91 | Verda on-demand price from the instance record |
+| verda | CPU instance CPU.4V.16G, staging (FIN-01) | 2026-11-13 21:40 | 18.5 h | $0.89 | Verda on-demand price from the instance record |
+| craci | CI runners (test, docker, smoke, eval, llm-eval) | 2026-11-13 21:40 | 18.5 h | unknown | paid from CRACI's per-team compute credits; see the CRACI dashboard |
 
 ## Every model run
 
@@ -60,6 +60,6 @@ _Generated from [evals/costs.yaml](../evals/costs.yaml) by `scripts/costs.py`, p
 
 ## Notes
 
-- Gemini and Verda keys are shared with Rene's other work until the Sous-only keys land; usage before the switch is attributed from these run logs, not from the provider dashboards.
+- Google issued one Gemini key per team and the Verda account is shared across the team's projects, so provider dashboards can't be split per project: every Sous figure here is computed from our own logged tokens and run ids.
 - Valio Aimo's API is free for the challenge (rate-limited, not billed).
 - Valio Aimo API calls are counted separately per request in the eval results (they cost nothing but rate limit).

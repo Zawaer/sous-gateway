@@ -49,5 +49,5 @@ services:                      # running infrastructure, prorated
   - {provider: craci, item: "CI runners (test, docker, smoke, eval, llm-eval)", usd_per_hour: null, since: "2026-11-13 21:40", note: "paid from CRACI's per-team compute credits; see the CRACI dashboard"}
 
 notes:
-  - "Gemini and Verda keys are shared with Rene's other work until the Sous-only keys land; usage before the switch is attributed from these run logs, not from the provider dashboards."
+  - "Google issued one Gemini key per team and the Verda account is shared across the team's projects, so provider dashboards can't be split per project: every Sous figure here is computed from our own logged tokens and run ids."
   - "Valio Aimo's API is free for the challenge (rate-limited, not billed)."

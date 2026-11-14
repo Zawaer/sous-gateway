@@ -13,3 +13,8 @@ dist/
 .sous-agent-tokens.json
 sous-demo-*.json
 sous-demo-*.txt
+*.pem
+*.key
+*.sql
+*.sql.gz
+*.dump
