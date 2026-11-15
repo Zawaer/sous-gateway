@@ -21,7 +21,7 @@ Built at Junction 2026 for Valio Aimo's challenge "Trusted Trade Agents".
 - **Buyer controls.** Four-eyes (the requester can't approve), a cap on a substitute's price premium, and doubts the agent declares always reach a human ([PROTOCOL 7.3](docs/PROTOCOL.md)).
 - **A record both sides can check.** Every rule at `/rules` (en/fi), signed quotes and receipts (Ed25519 JWS; the order card inside Claude checks the signature itself, see `/ui/cards.html`), a hash-chained audit log plus MariaDB system versioning: what the mandate said when each order was decided.
 
-**Try it:** watch agents order live at [135-181-8-209.sslip.io](https://135-181-8-209.sslip.io/) · **try it in the browser in 5 minutes, nothing to install or paste: `/ui/try.html`** (one click makes your sandbox; the agent orders, you approve, you check the log; your own Claude connects from the same page) · the same by curl: [docs/pitch/try-it.md](docs/pitch/try-it.md) · approve as the buyer: `/ui/buyer.html` · try seven attacks: `/ui/break.html` · in claude.ai add the connector `https://135-181-8-209.sslip.io/connect/mcp` and press "Create a demo sandbox and connect" (on staging now, `https://staging.135-181-63-134.sslip.io/connect/mcp`, until production is redeployed; you get the approver token, the assistant only the agent token; other clients: [docs/CONNECT.md](docs/CONNECT.md)) · honest numbers, held-out set included: [docs/STATUS.md](docs/STATUS.md#evaluation).
+**Try it:** watch agents order live at [sous.saarikko.dev](https://sous.saarikko.dev/) · **try it in the browser in 5 minutes, nothing to install or paste: `/ui/try.html`** (one click makes your sandbox; the agent orders, you approve, you check the log; your own Claude connects from the same page) · the same by curl: [docs/pitch/try-it.md](docs/pitch/try-it.md) · approve as the buyer: `/ui/buyer.html` · try seven attacks: `/ui/break.html` · in claude.ai add the connector `https://sous.saarikko.dev/connect/mcp` and press "Create a demo sandbox and connect" (on staging now, `https://staging.sous.saarikko.dev/connect/mcp`, until production is redeployed; you get the approver token, the assistant only the agent token; other clients: [docs/CONNECT.md](docs/CONNECT.md)) · honest numbers, held-out set included: [docs/STATUS.md](docs/STATUS.md#evaluation).
 
 Download a verification bundle from an order in the reference buyer, then verify it with independently trusted public keys (Node 22+, no dependencies):
 
@@ -34,13 +34,13 @@ The second command demonstrates rejection of an altered receipt and preserves th
 
 ## Judge path in 5 minutes
 
-The demo server is production, `https://135-181-8-209.sslip.io`, set as `SOUS` below. It is redeployed from `main` until the Sun 15.11 08:00 Helsinki freeze. Staging, `https://staging.135-181-63-134.sslip.io`, is the fallback if production is ever down and usually runs newer code (on Sat 14.11 14:11Z `/health` showed prod at a431ff6, staging at ea4cd19); [docs/STATUS.md](docs/STATUS.md#deployed-now) says what runs where. Needs `curl` and `jq`.
+The demo server is production, `https://sous.saarikko.dev`, set as `SOUS` below (the earlier `135-181-8-209.sslip.io` and `staging.135-181-63-134.sslip.io` names still work). It is redeployed from `main` until the Sun 15.11 08:00 Helsinki freeze. Staging, `https://staging.sous.saarikko.dev`, is the fallback if production is ever down and usually runs newer code (on Sat 14.11 14:11Z `/health` showed prod at a431ff6, staging at ea4cd19); [docs/STATUS.md](docs/STATUS.md#deployed-now) says what runs where. Needs `curl` and `jq`.
 
 **Dates:** Valio's mock gives Stock products a cut-off of Sun 15.11 17:00 for Monday delivery. After that the quickstart's Monday date is refused (`availability.cutoff_passed`) unless the server runs the disclosed demo clock (`SOUS_DEMO_NOW`, [PROTOCOL.md section 21](docs/PROTOCOL.md); shown in `/health` as `clock.mode`) or you ask for a later date.
 
 1. **Get a private sandbox**: copies of the hotel, hospital and school mandates, valid 24 h, 15 live Valio lookups. The two tokens in the response are shown once.
    ```bash
-   export SOUS=https://135-181-8-209.sslip.io
+   export SOUS=https://sous.saarikko.dev
    curl -s -X POST $SOUS/sandbox | tee sandbox.json | jq '{sandbox, mandates: [.mandates[] | {mandate_id, rules}]}'
    ```
 2. **Run the quickstart**: the response's `quickstart.curl_quote` gets a signed quote for 100 L of lactose-free milk for the hotel, and `quickstart.curl_order` orders it.

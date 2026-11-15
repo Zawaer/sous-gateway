@@ -368,7 +368,7 @@ class Prep:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--base", required=True, help="gateway URL, e.g. https://135-181-8-209.sslip.io")
+    ap.add_argument("--base", required=True, help="gateway URL, e.g. https://sous.saarikko.dev")
     ap.add_argument("--out", type=Path, default=None, help="handoff JSON (default ~/sous-demo-<date>.json); "
                                                           "a .txt is written next to it")
     ap.add_argument("--check-only", action="store_true", help="health and links only; no sandbox, no Valio calls")

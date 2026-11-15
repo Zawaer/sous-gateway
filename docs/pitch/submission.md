@@ -1,4 +1,4 @@
-<!-- Description below: 4,960 characters (limit 5,000), counted with Python len() on the text between the
+<!-- Description below: 4,955 characters (limit 5,000), counted with Python len() on the text between the
      Description and Challenge headings, trimmed. Recount after any edit:
      python3 -c "s=open('docs/pitch/submission.md').read();print(len(s.split(chr(10)+'## Description'+chr(10))[1].split(chr(10)+'## Challenge'+chr(10))[0].strip()))"
      Story order follows Valio's criteria: end to end 30, need match 20, autonomy + controls 20, exceptions 15, openness 15.
@@ -21,7 +21,7 @@ Trust between Valio Aimo and its customers, for AI purchasing agents: the custom
 
 **The problem.** We asked a general shopping agent for "1,000 litres of lactose-free milk by Monday". After 13 minutes it told us to phone a wholesaler. Agents will buy anyway; the question is whose rules they follow.
 
-**End to end, hosted: request → lookup → order → approval.** Search covers 17,546 products (fi/sv/en) on a local index, no API calls. A quote costs at most 2 batched Valio calls (0.47 per request on average in CI). A held order reaches the buyer's phone with an approve-by time (earliest cut-off minus 15 min). Claude Code over MCP and claude.ai through our OAuth connector each ordered 1,000 L of lactose-free milk with 2 Valio calls. Try it now at https://135-181-8-209.sslip.io (Finland): in claude.ai add the connector and press "Create a demo sandbox and connect"; you get the approver token, the assistant only the agent token. Scripted cases: 60/60, 43/43 unsafe blocked or escalated.
+**End to end, hosted: request → lookup → order → approval.** Search covers 17,546 products (fi/sv/en) on a local index, no API calls. A quote costs at most 2 batched Valio calls (0.47 per request on average in CI). A held order reaches the buyer's phone with an approve-by time (earliest cut-off minus 15 min). Claude Code over MCP and claude.ai through our OAuth connector each ordered 1,000 L of lactose-free milk with 2 Valio calls. Try it now at https://sous.saarikko.dev (Finland): in claude.ai add the connector and press "Create a demo sandbox and connect"; you get the approver token, the assistant only the agent token. Scripted cases: 60/60, 43/43 unsafe blocked or escalated.
 
 **Matching what the buyer asked.** Search ranks by product type (lactose-free milk before coffee milk), and the gateway checks the chosen product fits its use: skimmed milk for a dessert or coffee cream for whipping is held, with a fitting product from the same search. On our own 48 sentences, 5 models x 2 agents auto-ordered 0 mandate violations; with our Sous agent, Gemini 4 Hydrogen and Gemma 4 31B matched 48/48, Kimi K3.1 Pro 47/48. On 15 blind held-out requests (3 runs each) safety held (0 false auto-approvals, 9/9 unsafe stopped) but matching was weak: one item per request, "for 40" read as 40 packs. After fixing those, a second blind set of 20, run once: again 0 false auto-approvals, 12/12 unsafe held; dates right in every quote (was 12 wrong), lines at the right amount 44 % (was 10 %), dishes cookable 5/9 (was 0/9). Whole requests right with no correction stay rare (3/48), but the agent now declares its guesses: 27 runs waited for a human, 3 went through alone (one wrong thickener).
 
@@ -53,7 +53,7 @@ Trust between Valio Aimo and its customers, for AI purchasing agents: the custom
 - Claude Code and OpenAI Codex (development, reviews, and as buyer agents)
 
 ## Links
-- Demo: https://135-181-8-209.sslip.io (staging fallback: https://staging.135-181-63-134.sslip.io)
+- Demo: https://sous.saarikko.dev (staging fallback: https://staging.sous.saarikko.dev)
 - Source: https://github.com/Zawaer/sous (MIT)
 - Pitch deck: [docs/pitch/deck.pdf](deck.pdf)
 - Judge handout: [docs/pitch/try-it.md](try-it.md)

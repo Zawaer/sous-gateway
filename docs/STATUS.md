@@ -2,7 +2,7 @@
 
 _Last updated: Sat 14.11 ~16:20 Helsinki (main at the commit that last touched this file). Every number below names its source file or CI run._
 
-Live: production https://135-181-8-209.sslip.io (Verda CPU instance, Finland), staging https://staging.135-181-63-134.sslip.io. Both run MariaDB with the seeded demo mandates; human actions need the approver code. Production is a few commits behind staging; see [Deployed now](#deployed-now).
+Live: production https://sous.saarikko.dev (Verda CPU instance, Finland), staging https://staging.sous.saarikko.dev. Both run MariaDB with the seeded demo mandates; human actions need the approver code. Production is a few commits behind staging; see [Deployed now](#deployed-now).
 
 ## Deployed now
 

@@ -3,8 +3,8 @@
 Sous is a remote MCP server (Streamable HTTP, protocol 2025-11-25, every tool with an `outputSchema`). Any
 assistant that can add a remote MCP server can buy from Valio Aimo through it, under a mandate it can't exceed.
 
-Below, `SOUS` is the gateway: `https://135-181-8-209.sslip.io` (production demo) or
-`https://staging.135-181-63-134.sslip.io` (staging, same code).
+Below, `SOUS` is the gateway: `https://sous.saarikko.dev` (production demo) or
+`https://staging.sous.saarikko.dev` (staging, same code).
 
 ## 1. Get credentials (30 seconds)
 
@@ -45,7 +45,7 @@ Authenticate, and paste the agent token in the browser page.
 ### claude.ai, Claude Desktop, Claude mobile (OAuth)
 
 1. Settings > Connectors > **Add custom connector** (on Team/Enterprise an Owner adds it under Organization settings).
-2. Name `Sous`, URL **`$SOUS/connect/mcp`** (e.g. `https://135-181-8-209.sslip.io/connect/mcp`). Leave the
+2. Name `Sous`, URL **`$SOUS/connect/mcp`** (e.g. `https://sous.saarikko.dev/connect/mcp`). Leave the
    advanced OAuth client fields empty: Claude registers itself (dynamic client registration).
 3. **Connect**. A Sous page opens: paste the `agent_token`, press Connect. **No token yet?** Press **Create a demo
    sandbox and connect** instead: the next page shows your sandbox's approver token (for you, once) and a link to its
@@ -71,7 +71,7 @@ Desktop and mobile use the same connector once added on claude.ai.
 `~/.cursor/mcp.json` (or `.cursor/mcp.json` in a project):
 
 ```json
-{"mcpServers": {"sous": {"url": "https://135-181-8-209.sslip.io/mcp",
+{"mcpServers": {"sous": {"url": "https://sous.saarikko.dev/mcp",
                          "headers": {"Authorization": "Bearer <agent_token>"}}}}
 ```
 
@@ -82,7 +82,7 @@ Desktop and mobile use the same connector once added on claude.ai.
 ```json
 {
   "inputs": [{"type": "promptString", "id": "sous-token", "description": "Sous agent token (vka_...)", "password": true}],
-  "servers": {"sous": {"type": "http", "url": "https://135-181-8-209.sslip.io/mcp",
+  "servers": {"sous": {"type": "http", "url": "https://sous.saarikko.dev/mcp",
                        "headers": {"Authorization": "Bearer ${input:sous-token}"}}}
 }
 ```

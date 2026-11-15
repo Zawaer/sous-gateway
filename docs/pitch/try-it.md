@@ -2,12 +2,12 @@
 
 Sous is Valio Aimo's front door for AI purchasing agents. Your agent shops; a signed mandate from "your" human decides what it may do alone. You get a private sandbox, so you can't break the demo, and nothing you do is a real delivery.
 
-The demo server is `https://135-181-8-209.sslip.io` (production). If `/rules` returns 404 there, it is still on an older build: use staging, `https://staging.135-181-63-134.sslip.io`, which runs current `main`.
+The demo server is `https://sous.saarikko.dev` (production). If `/rules` returns 404 there, it is still on an older build: use staging, `https://staging.sous.saarikko.dev`, which runs current `main`.
 
 ## 1. Get a sandbox
 
 ```bash
-export SOUS=https://135-181-8-209.sslip.io
+export SOUS=https://sous.saarikko.dev
 curl -s -X POST $SOUS/sandbox | tee sandbox.json | jq
 ```
 

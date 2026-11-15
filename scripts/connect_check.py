@@ -1,6 +1,6 @@
 """Check "use Sous from the AI assistant you already have" end to end with the official MCP Python client.
 
-    uv run python scripts/connect_check.py https://staging.135-181-63-134.sslip.io            # header + OAuth
+    uv run python scripts/connect_check.py https://staging.sous.saarikko.dev            # header + OAuth
     uv run python scripts/connect_check.py <base> --mode header --quote                       # one live quote
 
 Creates ONE judge sandbox (POST /sandbox), then, over Streamable HTTP:

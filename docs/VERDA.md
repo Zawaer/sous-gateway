@@ -26,8 +26,8 @@ mid-sized open-weight model is enough, and why we can measure the model separate
 1. **CPU instance (CPU.4V.16G, FIN-01) for the gateway.** It needs no GPU: search is SQLite FTS5, the
    mandate engine is deterministic, the heavy part is waiting on Valio's API. 4 vCPU / 16 GB runs FastAPI,
    MCP and MariaDB (compose.yaml) with room to spare. Finland keeps orders and audit next to the
-   wholesaler and its customers. Live: production https://135-181-8-209.sslip.io, staging
-   https://staging.135-181-63-134.sslip.io (Caddy + Let's Encrypt; deployed by Rene's infra agent from `main`).
+   wholesaler and its customers. Live: production https://sous.saarikko.dev, staging
+   https://staging.sous.saarikko.dev (Caddy + Let's Encrypt; deployed by Rene's infra agent from `main`).
 2. **Verda Inference (preview) for the buyer agent's model.** One OpenAI-compatible endpoint
    (`https://inference.verda.com/v1`, `Authorization: Bearer $VERDA_INFERENCE_API_KEY`) serving open-weight
    models on Verda's own GPUs in Europe. What made it the right product for buyer data, from Verda's docs:
