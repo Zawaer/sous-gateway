@@ -39,6 +39,33 @@ class ChangesIn(BaseModel):
     changes: list[LineChange] = Field(min_length=1, max_length=50)
 
 
+def _before_place(order_id: str, quote: dict) -> None:
+    """Test seam (no-op): runs under the order lock after the re-check, just before the replacement is placed."""
+
+
+def _before_commit(order_id: str, new: dict) -> None:
+    """Test seam (no-op): runs after the replacement is ordered, just before the original is closed."""
+
+
+def _discard(new_id: str, order_id: str, by: str, authority: str | None, why: str) -> None:
+    """Withdraw a replacement whose original was decided meanwhile: close it as rejected and cancel its unsent ERP
+    outbox row in one transaction, so it is never ordered and the outbox never sends it."""
+    now = S._now()
+    cur = store.get_order(new_id)
+    if cur and cur["status"] in ("ordered", "pending_approval"):
+        prev, ts = cur["status"], now.isoformat(timespec="milliseconds")
+        cur = {**cur, "status": "rejected", "approval_url": None, "updated_at": ts,
+               "approval": {**(cur.get("approval") or {}), "by": by, "authority": authority, "approved": False,
+                            "at": ts, "result_reason": why, "withdrawn_replacement_of": order_id}}
+        cur["receipt_jws"] = S._receipt(cur)
+        with store.transaction():
+            if store.update_order(cur, expected_status=prev):
+                erp.cancel(new_id, why)
+    S.RES.release(new_id, now)
+    store.audit("order.changes_discarded", by, "human", order_id, (cur or {}).get("buyer"),
+                {"order_id": order_id, "new_order_id": new_id, "reason": why, "authority": authority})
+
+
 def approve_with_changes(order_id: str, req: ChangesIn, authority: str | None) -> dict:
     o = S.expire_if_overdue(store.get_order(order_id))
     if not o:
@@ -105,33 +132,54 @@ def approve_with_changes(order_id: str, req: ChangesIn, authority: str | None) -
                     {"order_id": order_id, "quote_id": q["id"], "changes": changed, "reason": why, "authority": authority})
         raise S.GatewayError("changes_refused", f"The changed order is outside the mandate: {why} Nothing changed; "
                              f"{order_id} still waits for a decision.", 409)
+    # Exactly one outcome (QA race, board 2026-11-14): pricing above ran unlocked, so a second approver may have
+    # decided the original meanwhile. Re-check it under the order lock, then place the replacement and close the
+    # original in that same locked section; if the original is no longer waiting, the replacement never stands
+    # (never ordered, never sent to the ERP) and the call is a 409.
     with S._order_lock:
+        cur = store.get_order(order_id) or {}
+        if cur.get("status") != "pending_approval":
+            store.audit("order.changes_discarded", req.by, "human", order_id, o["buyer"],
+                        {"order_id": order_id, "quote_id": q["id"], "changes": changed, "authority": authority,
+                         "reason": f"the original became {cur.get('status')} while the change was priced"})
+            raise S.GatewayError("not_pending", f"Order {order_id} is {cur.get('status')}, not waiting for approval: "
+                                 "it was decided while the change was being priced. Nothing was placed.", 409)
+        _before_place(order_id, q)  # test seam: the race window between pricing and placing
         new, _ = S._place_order(o["agent_id"], o["mandate_id"], q["id"], f"{order_id}-changes-{q['id']}")
-    if new["status"] == "refused":
-        raise S.GatewayError("changes_refused", "The changed order is outside the mandate: "
-                             + " ".join(f["message"] for f in new["decision"]["findings"] if f["outcome"] == "block")
-                             + f" {order_id} still waits for a decision.", 409)
-    if new["status"] == "pending_approval":  # the human the mandate asks for is the one making the change
+        if new["status"] == "refused":
+            raise S.GatewayError("changes_refused", "The changed order is outside the mandate: "
+                                 + " ".join(f["message"] for f in new["decision"]["findings"] if f["outcome"] == "block")
+                                 + f" {order_id} still waits for a decision.", 409)
+        if new["status"] == "pending_approval":  # the human the mandate asks for is the one making the change
+            try:
+                new, _ = S._decide_locked(new["id"], req.by, True, req.note, authority)
+            except S.GatewayError:  # never leave a second held order behind: close the replacement, keep the original
+                S._decide_locked(new["id"], req.by, False, f"Approve with changes of {order_id} failed; replacement "
+                                 "withdrawn.", authority)
+                raise
+        if new["status"] != "ordered":
+            raise S.GatewayError("changes_not_ordered", f"The changed order {new['id']} is {new['status']}: "
+                                 f"{(new.get('approval') or {}).get('result_reason') or ''} {order_id} still waits.", 409)
+        _before_commit(order_id, new)  # test seam: another process deciding the original right now
+        new = {**new, "approval_changes": {"from_order": order_id, "changes": changed, "by": req.by, "note": req.note,
+                                           "authority": authority, "quote_id": q["id"]}}
+        new["receipt_jws"] = S._receipt(new)
         try:
-            new, _ = S._decide_locked(new["id"], req.by, True, req.note, authority)
-        except S.GatewayError:  # never leave a second held order behind: close the replacement, keep the original
-            S._decide_locked(new["id"], req.by, False, f"Approve with changes of {order_id} failed; replacement "
-                             "withdrawn.", authority)
-            raise
-    if new["status"] != "ordered":
-        raise S.GatewayError("changes_not_ordered", f"The changed order {new['id']} is {new['status']}: "
-                             f"{(new.get('approval') or {}).get('result_reason') or ''} {order_id} still waits.", 409)
-    new = {**new, "approval_changes": {"from_order": order_id, "changes": changed, "by": req.by, "note": req.note,
-                                       "authority": authority, "quote_id": q["id"]}}
-    new["receipt_jws"] = S._receipt(new)
-    store.update_order(new, expected_status="ordered")
-    old, m = S._decide_locked(order_id, req.by, False,
-                              f"Approved with changes as {new['id']}: " + "; ".join(
-                                  f"{c['name']} {c['from']:g} → {c['to']:g} {c['unit'] or ''}".strip() for c in changed),
-                              authority)
-    old = {**old, "approval": {**old["approval"], "replaced_by": new["id"]}}
-    old["receipt_jws"] = S._receipt(old)
-    store.update_order(old, expected_status="rejected")
+            with store.transaction():  # the replacement's marker and the original's closing commit together or not at all
+                if not store.update_order(new, expected_status="ordered"):
+                    raise S.GatewayError("changes_not_ordered", f"The changed order {new['id']} changed meanwhile.", 409)
+                old, m = S._decide(order_id, req.by, False,
+                                   f"Approved with changes as {new['id']}: " + "; ".join(
+                                       f"{c['name']} {c['from']:g} → {c['to']:g} {c['unit'] or ''}".strip()
+                                       for c in changed), authority)
+                old = {**old, "approval": {**old["approval"], "replaced_by": new["id"]}}
+                old["receipt_jws"] = S._receipt(old)
+                store.update_order(old, expected_status="rejected")
+        except S.GatewayError as e:  # the original was decided elsewhere (another worker): withdraw the replacement
+            _discard(new["id"], order_id, req.by, authority, f"{order_id} was decided meanwhile ({e.message}); "
+                     "the changed order is withdrawn and was never sent.")
+            raise S.GatewayError("not_pending", f"{e.message} The changed order {new['id']} was withdrawn; nothing "
+                                 "was sent.", 409)
     store.audit("order.approved_with_changes", req.by, "human", order_id, o["buyer"],
                 {"order_id": order_id, "new_order_id": new["id"], "quote_id": q["id"], "changes": changed,
                  "old_total_ex_vat": o.get("total_ex_vat"), "new_total_ex_vat": new.get("total_ex_vat"),

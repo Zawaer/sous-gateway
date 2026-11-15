@@ -382,12 +382,53 @@ def reconcile_changes(limit: int = 200) -> int:
     return n
 
 
+def cancel(order_id: str, reason: str) -> None:
+    """Mark an unsent order's outbox row `cancelled` (never sent; the sweep only picks pending/failed rows). Used
+    when an order is withdrawn before it was final (sous/approve_changes.py), inside that order's transaction."""
+    _ensure()
+    row = _get(order_id)
+    if row is not None and row["status"] in ("pending", "failed"):
+        row["status"], row["data"]["cancelled"] = "cancelled", reason[:300]
+        _save(row)
+
+
+def _blocked(order_id: str) -> str | None:
+    """Why a queued order row must not be sent, or None. Only a final `ordered` order goes to the ERP: never one
+    withdrawn or not ordered, and never an approve-with-changes replacement whose original wasn't closed as
+    replaced by it (the race QA found: both the original and its replacement sent)."""
+    if "/" in order_id:  # an amendment's change message: its order went through this check already
+        return None
+    o = store.get_order(order_id)
+    if not o or o.get("status") != "ordered":
+        return f"order is {(o or {}).get('status')}, not ordered"
+    if frm := (o.get("approval_changes") or {}).get("from_order"):
+        orig = store.get_order(frm) or {}
+        if orig.get("status") != "rejected" or (orig.get("approval") or {}).get("replaced_by") != order_id:
+            return f"original {frm} is {orig.get('status')}, not replaced by {order_id}"
+    return None
+
+
+def _unfinished_replacement(order_id: str) -> bool:
+    """An approve-with-changes replacement placed but not committed yet (no approval_changes marker): wait."""
+    o = store.get_order(order_id) or {}
+    return "-changes-" in (o.get("idempotency_key") or "") and not o.get("approval_changes")
+
+
 def attempt(order_id: str) -> dict | None:
     """Send one queued order now (if it's due or never tried). Idempotent; failures stay queued."""
     with _send_lock:
         row = _get(order_id)
-        if row is None or row["status"] in ("sent", "confirmed", "simulated", "legacy") or row["data"].get("gave_up"):
+        if row is None or row["status"] in ("sent", "confirmed", "simulated", "legacy", "cancelled") \
+                or row["data"].get("gave_up"):
             return row
+        if why := _blocked(order_id):
+            row["status"], row["data"]["cancelled"] = "cancelled", why[:300]
+            _save(row)
+            store.audit("order.erp_cancelled", "erp-adapter", "system", order_id, row["data"].get("buyer"),
+                        {"order_id": order_id, "reason": why})
+            return row
+        if "/" not in order_id and _unfinished_replacement(order_id):
+            return row  # stays pending; the sweep tries again once the change is committed (or withdrawn)
         payload = json.loads(row["payload"])
         d, buyer, now = row["data"], row["data"].get("buyer"), _clock()
         row["attempts"] += 1
