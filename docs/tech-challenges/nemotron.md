@@ -12,7 +12,7 @@
 - v1 baseline prompt: 16 silent errors, 76 % auto-correct, traps 0/6.
 - v3 prompt from Nemotron's own errors + code checks + second look (NVIDIA API, 32 reads): **0 silent errors, 100 %, 4.3 s/page**; reasoning on: same, 20.7 s.
 - **On Verda** (32 + 8 reads): reasoning off is fastest (1.2 s/page) but made **6 silent errors** (a crossed-out line, a red-pen correction). Reasoning on: **0 silent errors, 100 %, 5.5 s/page**, 4x faster than on the free tier, so that is the default there.
-- As buyer agent: 30/48, 0 mandate violations ordered.
+- Also tried as a text-only buyer agent (not its role here): 30/48 matched, 0 mandate violations ordered.
 
 **Creativity.** Code checks the model against its own transcription; it asks again only where they disagree. The eval decided reasoning on/off per deployment.
 
