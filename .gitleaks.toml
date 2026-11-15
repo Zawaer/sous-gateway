@@ -16,6 +16,7 @@ regexes = ['''did:key:z[1-9A-HJ-NP-Za-km-z]{40,}''']
 
 [[allowlists]]
 description = "one finding: the SOUS_BUYER_KEY_TOFU on/off flag in docs/SECURITY.md is a config switch, not a key (Toivo approved, Sun 15.11)"
+condition = "AND"
 regexTarget = "secret"
 regexes = ['''^SOUS_BUYER_KEY_TOFU=[01]$''']
 paths = ['''^docs/SECURITY\.md$''']
