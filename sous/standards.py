@@ -799,7 +799,7 @@ class ApprovalDoc(_Open):
     result_reason: str | None = None
 
 
-OrderStatus = Literal["ordered", "pending_approval", "refused", "rejected", "expired", "expired_cutoff"]
+OrderStatus = Literal["ordered", "pending_approval", "refused", "rejected", "expired", "expired_cutoff", "cancelled"]
 
 
 class ReceiptDoc(_Open):

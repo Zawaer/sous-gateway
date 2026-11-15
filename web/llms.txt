@@ -1,0 +1,44 @@
+# Sous: Valio Aimo's gateway for AI purchasing agents
+
+> Sous lets a buyer's own AI agent search Valio Aimo's catalog, get a signed quote with live price and stock, and
+> order inside a mandate its human signed. Plain code decides every order: auto, auto + FYI, held for a person,
+> or refused, with the rule that fired. Agents can never approve. Every step is in a hash-chained audit log.
+
+## Connect
+- MCP (Streamable HTTP): `/mcp` with `Authorization: Bearer <agent token>`; `/connect/mcp` for OAuth-only clients
+  (claude.ai, Claude Desktop, ChatGPT): the consent page can create a private demo sandbox for you.
+- REST + OpenAPI 3.1: `/openapi.json`, docs at `/docs`. Same operations as MCP.
+- Get credentials: `POST /sandbox` -> three demo mandates (hotel, hospital, school) for 24 h, an `agent_token`
+  (for the agent) and an `approver_token` (for the human only; never give it to an agent).
+
+## The flow (REST; MCP tools have the same names)
+1. Read your mandate: `GET /mandates/{mandate_id}` (MCP `get_mandate`, `my_mandates`): limits, allergen rules,
+   what needs a person.
+2. Search (no Valio calls): `GET /products?q=laktoositon maito&claims=FREE_FROM_LACTOSE` (MCP `search_products`).
+3. Quote (live price + stock, signed, expires): `POST /quotes`
+   `{"agent_id": "...", "mandate_id": "...", "delivery_date": "YYYY-MM-DD",
+     "items": [{"product_ids": ["..."], "amount": 100, "unit": "L"}], "rationale": "the buyer's need"}`
+   Units: L, KG or SALES_UNIT; the gateway turns litres and kilos into whole packs and splits across products.
+   Read `quote.mandate_preview` (the tier it would get), `quote.uncovered` and `quote.options`.
+4. Order: `POST /orders` `{"agent_id", "mandate_id", "quote_id", "idempotency_key"}`. Reuse the key on retries.
+   Result: `ordered`, `pending_approval` (a person decides at `approval_url`; poll `GET /orders/{id}`) or
+   `refused` (`decision.findings` say which rule).
+5. Cancel before the order cut-off: `POST /orders/{id}/cancel` `{"by", "reason"}` with your agent token.
+6. Substitutes: `GET /products/{id}/substitutes?delivery_date=...&amount=...&unit=...` (good / better / best,
+   allergen rules never relaxed); quote one with `substitute_for`.
+
+## Trust: check it yourself
+- Signatures: quotes, receipts and mandates are Ed25519 JWS; keys at `/.well-known/jwks.json`.
+- Audit: `GET /audit/verify` recomputes the hash chain; `GET /audit/checkpoints` gives signed checkpoints to save
+  and check later with `/audit/verify?checkpoint=<jws>`. Every receipt carries `audit_head`.
+- Rules: `GET /rules` lists every rule (id, tier, owner, plain text) and its `sha256`; every decision carries
+  `decision.policy.rules_sha256`.
+- A held order is re-checked live with Valio when a person approves it: a moved price or lost stock expires it
+  and a fresh quote is attached (`order.requote`).
+
+## Errors
+JSON `{"error": code, "message": ...}`. `agent_auth_required` / `agent_auth_invalid`: send your agent token.
+`quote_expired`: ask for a new quote. `valio_unavailable` / `rate_limited`: retry after `Retry-After`.
+
+## More
+`/proof` (evidence), `/ui/try.html` (guided walkthrough), `/ui/trace.html` (one order's journey), `/docs`.

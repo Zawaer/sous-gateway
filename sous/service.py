@@ -1097,6 +1097,8 @@ def _receipt(order: dict) -> str:
     body = {k: order.get(k) for k in ("id", "quote_id", "mandate_id", "status", "total_ex_vat",
                                       "lines", "decision", "approval", "updated_at", "clock", "approve_by",
                                       "expiry")}
+    if order.get("cancellation"):  # the buyer cancelled before the cut-off (cancel_order)
+        body["cancellation"] = order["cancellation"]
     body |= {k: order[k] for k in ("declared_risks", "requested_by") if order.get(k)}  # sous/controls.py
     if order.get("buyer_request"):  # the buyer's words the quantities were checked against
         body["buyer_request"] = order["buyer_request"]
@@ -1382,6 +1384,49 @@ def _decide(order_id: str, approver: str, approve: bool, note: str | None,
                  "authority": authority, **({"passkey": evidence} if evidence else {}),
                  **({"recheck": recheck_record} if recheck_record else {})})
     return o, mandate
+
+
+def cancel_order(order_id: str, by: str, reason: str | None = None, *, agent_token: str | None = None,
+                 approver: bool = False) -> dict:
+    """The buyer cancels an order before its order cut-off (POST /orders/{id}/cancel). Allowed for an `ordered`
+    order and for a held one (the request is withdrawn). The order's own agent credential or the approver code may
+    cancel. Status becomes `cancelled`, reservations are released, the receipt is re-signed with `cancellation`
+    {by, actor, reason, at}, and the audit records order.cancelled. After the earliest cut-off among its lines (or
+    the start of its delivery day when it has none) Valio is already picking: 409 cancel_window_closed."""
+    with _order_lock:
+        o = store.get_order(order_id)
+        if not o:
+            raise GatewayError("order_not_found", f"No order {order_id}.", 404)
+        if not approver:
+            authorize_agent(o["mandate_id"], o["agent_id"], agent_token, "cancel_order")
+        if o["status"] not in ("ordered", "pending_approval"):
+            raise GatewayError("not_cancellable", f"Order {order_id} is {o['status']}; only an ordered or held order "
+                               "can be cancelled.", 409)
+        now = _now()
+        cutoffs = [datetime.fromisoformat(l["order_cutoff"]) for l in o.get("lines") or [] if l.get("order_cutoff")]
+        if cutoffs:
+            closes = min(cutoffs)
+        else:
+            day = min(deadline.delivery_days(o) or [o.get("delivery_date") or o["requested_delivery_date"]])
+            closes = datetime.combine(date.fromisoformat(day), datetime.min.time(), tzinfo=config.TZ)
+        if now >= closes:
+            raise GatewayError("cancel_window_closed", f"Order {order_id} could be cancelled until "
+                               f"{closes.isoformat(timespec='minutes')} (its order cut-off); Valio is already "
+                               "preparing it. Ask Valio Aimo for a change instead.", 409)
+        was = o["status"]
+        o["status"] = "cancelled"
+        o["cancellation"] = {"by": by, "actor": "human (approver code)" if approver else "agent", "reason": reason,
+                             "at": now.isoformat(timespec="milliseconds"), "was": was,
+                             "window_closed_at": closes.isoformat(timespec="milliseconds")}
+        o["approval_url"] = None
+        o["updated_at"] = now.isoformat(timespec="milliseconds")
+        RES.release(order_id, now)
+        o["receipt_jws"] = _receipt(o)
+        if not store.update_order(o, expected_status=was):
+            raise GatewayError("not_cancellable", f"Order {order_id} changed meanwhile; read it again.", 409)
+        store.audit("order.cancelled", by, "human" if approver else "agent", order_id, o["buyer"],
+                    {"order_id": order_id, "was": was, "reason": reason, "actor": o["cancellation"]["actor"]})
+    return o
 
 
 def _decide_locked(order_id: str, approver: str, approve: bool, note: str | None,

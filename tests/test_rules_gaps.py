@@ -622,3 +622,39 @@ def test_a_stored_checkpoint_row_must_match_what_it_signs():
     store._exec("DELETE FROM audit_event WHERE seq >= ?", (cp["seq"],))
     v = store.verify_chain()
     assert not v["ok"] and "doesn't match" in v["checkpoints"]["problems"][0]["why"]
+
+
+# --- buyer cancellation before the cut-off, /llms.txt -------------------------------------------------------
+
+def test_buyer_cancels_before_the_cutoff_with_a_signed_receipt():
+    issue()
+    o = order(10)
+    assert o["status"] == "ordered"
+    c = S.cancel_order(o["id"], "Anna", "menu changed", agent_token="any")
+    assert c["status"] == "cancelled" and c["cancellation"]["was"] == "ordered" and c["cancellation"]["actor"] == "agent"
+    rec = signing.verify(c["receipt_jws"], "sous-order+jws")
+    assert rec["status"] == "cancelled" and rec["cancellation"]["reason"] == "menu changed"
+    assert any(e["event"] == "order.cancelled" for e in store.audit_events(subject=o["id"]))
+    with pytest.raises(S.GatewayError) as e:
+        S.cancel_order(o["id"], "Anna")
+    assert e.value.code == "not_cancellable"
+
+
+def test_cancel_window_closes_at_the_cutoff_and_held_orders_can_be_withdrawn():
+    issue(auto_approve_limit_eur=50)
+    held = order(60)
+    assert S.cancel_order(held["id"], "Anna", approver=True)["status"] == "cancelled"
+    issue("M2", buyer="School")
+    o = order(10, mid="M2")
+    clock["now"] = datetime(2026, 11, 25, 18, 0, tzinfo=config.TZ)  # after the 25.11 17:00 cut-off
+    with pytest.raises(S.GatewayError) as e:
+        S.cancel_order(o["id"], "Anna")
+    assert e.value.code == "cancel_window_closed"
+
+
+def test_llms_txt_is_served_as_plain_text():
+    from fastapi.testclient import TestClient
+    from sous.api import app
+    r = TestClient(app).get("/llms.txt")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/plain")
+    assert "POST /quotes" in r.text and "/orders/{id}/cancel" in r.text and "/audit/checkpoints" in r.text

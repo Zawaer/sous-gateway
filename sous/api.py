@@ -464,6 +464,12 @@ def proof_data(x_approver_code: str | None = Header(default=None)):
     return proof.data()
 
 
+@app.get("/llms.txt", include_in_schema=False)
+def llms_txt():
+    """How an AI agent uses this gateway, in plain text (llmstxt.org convention): connect, flow, trust, errors."""
+    return FileResponse(WEB_DIR / "llms.txt", media_type="text/plain; charset=utf-8")
+
+
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon():
     return Response(status_code=204)
@@ -711,7 +717,7 @@ def place_order(req: OrderRequest, token: str | None = Depends(agent_token)):
 
 
 @app.get("/orders", tags=["ordering"])
-def list_orders(status: Literal["ordered", "pending_approval", "refused", "rejected", "expired", "expired_cutoff"] | None = None,
+def list_orders(status: Literal["ordered", "pending_approval", "refused", "rejected", "expired", "expired_cutoff", "cancelled"] | None = None,
                 mandate_id: str | None = None, sandbox_id: str | None = _SANDBOX_Q,
                 r: access.Reader = Depends(access.reader)):
     """Orders you may read (see docs/PROTOCOL.md "Read access"), newest first."""
@@ -823,6 +829,21 @@ def approve(order_id: str, d: Decision, authority: str = Depends(require_approve
         o = {**o, "allergen_clearances": clearance.record_from_order(o, S._mandate(o["mandate_id"]), d.by,
                                                                      authority, d.note)}
     return o
+
+
+class CancelIn(BaseModel):
+    by: str = Field(min_length=1, max_length=100, description="Who cancels (the buyer's person, or the agent's name)")
+    reason: str | None = Field(None, max_length=500)
+
+
+@app.post("/orders/{order_id}/cancel", tags=["ordering"])
+def cancel_order(order_id: str, req: CancelIn, token: str | None = Depends(agent_token),
+                 x_approver_code: str | None = Header(default=None)):
+    """The buyer cancels an order before its order cut-off: an `ordered` order, or a held one (withdrawn). Send
+    the order's agent credential (Authorization: Bearer) or the approver code. The order becomes `cancelled`
+    with a re-signed receipt; after the earliest cut-off among its lines: 409 cancel_window_closed."""
+    return S.cancel_order(order_id, req.by, req.reason, agent_token=token,
+                          approver=bool(config.APPROVER_CODE) and access.approver_code_ok(x_approver_code))
 
 
 from . import approve_changes as AC  # noqa: E402  approve with changes (sous/approve_changes.py)
