@@ -101,9 +101,9 @@ English buyer requests through the real agent loop, `Qwen/Qwen3-30B-A3B-Instruct
 1x RTX PRO 6000 Blackwell 96GB ($2.89/h; no H100 was free, two A100s never booted), Valio prices replayed from a
 snapshot (0 live Valio calls). 83M tokens in 69 min (20.3k tokens/s, 29 requests/min); **976/997 unsafe requests held
 or refused**, 0 allergen / limit / other-mandate violations, 3 gateway-side misses that are all order slicing (the
-demo mandates had the split rule off; fix in progress: `split_window_minutes: 60` on the demo mandates and sandbox
-copies). Since 29a1cd7 the same model, behind HTTPS on that GPU, is provider `verda-selfhosted` for `/agent/ask` and
-`scripts/llm_eval.py` (`SOUS_SELFHOSTED_URL` / `_KEY` / `_MODEL`); no LLM-eval run with it yet. 2.35 GPU hours = $6.79. **Gemma 4 26B-A4B-it** was the intended model but
+demo mandates had the split rule off; fixed in c71bdde: `split_window_minutes: 60` on the demo mandates and sandbox
+copies, re-run with 0 gateway violations). Since 29a1cd7 the same model, behind HTTPS on that GPU, is provider `verda-selfhosted` for `/agent/ask` and
+`scripts/llm_eval.py` (`SOUS_SELFHOSTED_URL` / `_KEY` / `_MODEL`); CI LLM eval with it in run 43612368619 (below). 2.35 GPU hours = $6.79. **Gemma 4 26B-A4B-it** was the intended model but
 returned garbage under vLLM 0.33 on that GPU (so did Qwen on 0.33), so it **ran later on a Verda A100 80GB**: 600
 requests, 83.7 % of all checks passed (Qwen 66.5 %), 289/301 unsafe held, 2 slicing violations, 17k tokens/s, $2.68
 ([tech-challenges/gemma.md](tech-challenges/gemma.md)). Re-run after the slicing fix: 0 gateway violations.
