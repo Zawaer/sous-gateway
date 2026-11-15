@@ -403,10 +403,22 @@ function rankReasons(fs) {
   const r = (f) => { const i = REASON_RANK.findIndex((re) => re.test(f.rule || "")); return i < 0 ? REASON_RANK.length : i; };
   return [...fs].sort((a, b) => r(a) - r(b));
 }
+const SEV = { block: 0, ask: 1, notify: 2, silent: 3 };
+const leadFirst = (fs) => rankReasons(fs).sort((x, y) => (SEV[x.outcome] ?? 9) - (SEV[y.outcome] ?? 9));
 function reasons(fs) {
   const [lead, ...rest] = rankReasons(fs);
   if (!lead) return "";
   return `${findingsList([lead], { plain: true })}${rest.length ? `<details class="also"><summary>${rest.length} more reason${rest.length > 1 ? "s" : ""}</summary>${findingsList(rest, { plain: true })}</details>` : ""}`;
+}
+
+// What exactly is being approved, readable in ten seconds: every line (up to four), the delivery day, the total.
+function approveSummary(o) {
+  const ls = o.lines || [];
+  return `<div class="approve-sum" aria-label="What you are approving">
+    <div class="approve-h">You are approving</div>
+    <ul>${ls.slice(0, 4).map((l) => `<li><span class="q">${esc(l.quantity)} ${esc(unit(l.sales_unit))}</span><span class="n">${esc(pname(l.name))}${purposeChip(l) ? " " + purposeChip(l) : ""}</span><span class="e">${eur(l.line_total_ex_vat)}</span></li>`).join("")}
+      ${ls.length > 4 ? `<li class="muted"><span class="q"></span><span class="n">and ${ls.length - 4} more line${ls.length > 5 ? "s" : ""}</span><span class="e"></span></li>` : ""}</ul>
+    <div class="approve-f"><span>Delivery ${dateOnly(o.delivery_date)}</span><span><b>${eur(o.total_ex_vat)}</b> ex VAT · ${eur(o.total_inc_vat)} incl.</span></div></div>`;
 }
 
 // The approval card: amount, what, why, deadline, then the two buttons. Everything else is one click away.
@@ -419,8 +431,8 @@ function inboxCard(o, isNew = false) {
   return `<article class="card ask decide-card ${isNew ? "fresh" : ""}" data-order="${esc(o.id)}">
     <div class="row"><div class="muted small">${esc(bn(o.buyer))}</div><div>${tier("ask")}</div></div>
     <div class="big">${eur(o.total_ex_vat)} <span class="muted small">ex VAT</span></div>
-    <p class="what">${orderStory(o)} · delivery ${dateOnly(o.delivery_date)}</p>
     ${reasons(asks)}
+    ${SIDE === "buyer" ? approveSummary(o) : `<p class="what">${orderStory(o)} · delivery ${dateOnly(o.delivery_date)}</p>`}
     ${cut ? `<p class="deadline-line">${decideBy(cut)}</p>` : ""}
     ${sus ? claimBlock(o) : ""}
     ${SIDE === "buyer" ? `${rememberBox(o)}
@@ -692,7 +704,7 @@ async function openOrder(id) {
     <div class="muted small" data-sheet-order="${esc(o.id)}">${esc(bn(o.buyer))} · <span class="mono">${esc(o.id)}</span></div>
     <div class="sheet-head"><div class="big">${eur(o.total_ex_vat)} <span class="muted small">ex VAT · ${eur(o.total_inc_vat)} incl.</span></div>
       <div>${orderBadge(o)}</div></div>
-    <p class="what">${orderStory(o)} · delivery ${dateOnly(o.delivery_date)}</p>
+    ${pending && SIDE === "buyer" ? "" : `<p class="what">${orderStory(o)} · delivery ${dateOnly(o.delivery_date)}</p>`}
     ${pending ? `<div class="ask-summary">
       <p>${msg(top.message || "Held by the mandate for a human decision.")}</p>
       ${asks.length > 1 ? `<details class="also"><summary>${asks.length - 1} more reason${asks.length > 2 ? "s" : ""}</summary>${findingsList(asks.slice(1), { plain: true })}</details>` : ""}
@@ -701,6 +713,7 @@ async function openOrder(id) {
     ${sus ? claimBlock(o) : ""}
     ${pending && SIDE === "seller" ? waitingForBuyer(o) : ""}
     ${pending && SIDE === "buyer" ? `<div class="decide-inline" data-order="${esc(o.id)}">
+      ${approveSummary(o)}
       ${rememberBox(o)}
       <input data-note type="text" placeholder="Note for the agent and the log (optional)" aria-label="Note">
       <div class="actions">
@@ -807,7 +820,7 @@ function flowSteps(o, q, searches, events) {
     : q ? `Live price and availability${calls != null ? ` (${calls ? `${calls} Valio API call${calls === 1 ? "" : "s"}` : "from the gateway's short-lived cache, 0 Valio API calls"})` : ""} →
       signed quote <span class="mono">${esc(q.id)}</span>, orderable total ${eur(q.total_ex_vat)} ex VAT${q.indicative_total_ex_vat != null && q.indicative_total_ex_vat !== q.total_ex_vat ? ` (indicative ${eur(q.indicative_total_ex_vat)} incl. lines that can't be ordered)` : ""}, valid until ${when(q.expires_at)}.
       ${(q.lines || []).map((l) => `Chose ${esc(l.quantity)} × ${esc(pname(l.name))}${l.logistic_model ? ` (${esc(l.logistic_model)})` : ""}.`).join(" ")}
-      ${skipped.length ? `Passed over ${skipped.length}: ${skipped.slice(0, 2).map((s) => `${esc(pname(s.name))} (${esc(((s.why_not || [])[0] || "").replace(/\.$/, ""))})`).join("; ")}${skipped.length > 2 ? ` and ${skipped.length - 2} more` : ""}.` : ""}
+      ${skipped.length ? `Passed over ${skipped.length}: ${skipped.slice(0, 2).map((s) => `${esc(pname(s.name))} (${esc(((s.why_not || [])[0] || "").split(/[.,] /)[0].replace(/\.$/, ""))})`).join("; ")}${skipped.length > 2 ? ` and ${skipped.length - 2} more` : ""}.` : ""}
       ${gaps.length ? `<span style="color:var(--ask)">Could not cover ${gaps.map((g) => `${esc(g.uncovered)} ${esc(g.unit || "")}${g.item?.note ? ` of “${esc(g.item.note)}”` : ""}`).join(", ")}: nothing among its candidates can be delivered in time.</span>` : ""}`
       : `<span class="muted">Quote ${esc(o.quote_id)} not found.</span>`);
 
@@ -815,7 +828,7 @@ function flowSteps(o, q, searches, events) {
   const order = step(3, "Order", o.created_at, ["agent", o.agent_id],
     `${d.outcome === "block" ? "Tried to order" : "Committed to"} the quote at its fixed price, ${eur(o.total_ex_vat)} ex VAT. The gateway re-checked the quote's
      signature and cut-offs, then the mandate engine ruled ${tier(d.outcome)}${fired.length
-       ? `: ${fired.map((f) => msg(f.message)).join(" ")}` : " (all checks passed)."}`);
+       ? `: ${msg(leadFirst(fired)[0].message)}${fired.length > 1 ? ` <span class="muted">+ ${fired.length - 1} more reason${fired.length > 2 ? "s" : ""}</span>` : ""}` : " (all checks passed)."}`);
 
   let appr;
   if (d.outcome === "block") {
@@ -1251,6 +1264,12 @@ views.standing = {
 
 function lastLive(d) { return d.renewals.find((r) => !r.simulated) || null; }
 
+function medOf(xs) {
+  const v = xs.filter((x) => typeof x === "number" && Number.isFinite(x)).sort((a, b) => a - b);
+  if (!v.length) return null;
+  const m = v.length >> 1;
+  return v.length % 2 ? v[m] : Math.round(((v[m - 1] + v[m]) / 2) * 100) / 100;
+}
 function standingRow(d) {
   const so = d.standing_order;
   const r = lastLive(d);
@@ -1291,16 +1310,18 @@ async function openStanding(id) {
         cost or price per unit +${Math.round(d.rules.cost_drift * 100)} %, a switched product or new supply risk, each vs the
         median of the last ${d.rules.history_weeks} ordered renewals</dd>
     </dl>
-    ${live ? `<h3>This week ${tier(live.status)}</h3>
-      <p>${msg(live.summary || "")}</p>
-      ${live.drift?.length ? findingsList(live.drift) : `<p class="small muted">No drift: renewed like the last weeks.</p>`}
+    ${live ? `<h3>This week ${live.status === "ordered" && live.drift?.length ? `<span class="tier tier-silent">Approved</span>` : tier(live.status)}</h3>
+      ${live.drift?.length ? `${live.status === "ordered" ? `<p class="small muted">The renewal was held for these reasons, then a human approved it.</p>` : ""}${findingsList(live.drift, { plain: true })}`
+        : `<p>${msg(live.summary || "")}</p><p class="small muted">No drift: renewed like the last weeks.</p>`}
       ${live.order_id ? `<p class="small"><a href="#/orders/${esc(live.order_id)}">Open order ${esc(live.order_id)}</a>${live.status === "pending_approval" ? " to approve or reject" : ""}</p>` : ""}`
       : `<p class="muted">Not renewed yet.</p>`}
     <h3>Week by week</h3>
-    <table class="lines"><thead><tr><th>Item</th><th>Trend</th><th class="num">Median</th><th class="num">${live ? "This week" : "Usual"}</th></tr></thead><tbody>
+    <table class="lines"><thead><tr><th>Item</th><th>Trend</th><th class="num">${d.rules.history_weeks}-week median</th><th class="num">${live ? "This week" : "Usual"}</th></tr></thead><tbody>
       ${so.items.map((it, k) => {
         const amounts = chrono.map((r) => r.items?.[k]?.amount);
-        const base = d.baseline.items?.[k] || {};
+        // The median the drift rules compared against: the weeks BEFORE this one (the stored baseline moves on once
+        // this week is ordered, which made the table disagree with the findings above it).
+        const base = live ? { median_amount: medOf(amounts.slice(0, -1).slice(-d.rules.history_weeks)) ?? d.baseline.items?.[k]?.median_amount } : (d.baseline.items?.[k] || {});
         const now = live?.items?.[k]?.amount ?? it.amount;
         const hot = flaggedLabels.has(it.label);
         const pct = base.median_amount ? Math.round((now / base.median_amount - 1) * 100) : null;
@@ -1310,7 +1331,7 @@ async function openStanding(id) {
           <td class="num" ${hot ? `style="color:var(--ask)"` : ""}>${esc(now)} ${esc(it.unit)}${pct ? ` <span class="small">(${pct > 0 ? "+" : ""}${pct} %)</span>` : ""}</td></tr>`;
       }).join("")}
       <tr><td>Total</td><td>${spark(chrono.map((r) => r.total_ex_vat), live?.drift?.some((f) => f.rule === "standing.cost_drift") ? chrono.length - 1 : -1, "weekly total")}</td>
-        <td class="num">${eur(d.baseline.median_total_ex_vat)}</td><td class="num">${eur(live?.total_ex_vat)}</td></tr>
+        <td class="num">${eur((live && medOf(chrono.map((r) => r.total_ex_vat).slice(0, -1).slice(-d.rules.history_weeks))) || d.baseline.median_total_ex_vat)}</td><td class="num">${eur(live?.total_ex_vat)}</td></tr>
     </tbody></table>
     <h3>Renewals</h3>
     <div class="list">${d.renewals.map((r) => `

@@ -47,11 +47,14 @@
     .dot { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: #171715;
       border: 1px solid var(--ink-12); transition: border-color .3s, box-shadow .3s; }
     .node:hover .dot, .node.sel .dot { border-color: var(--ink-35); box-shadow: 0 0 0 6px rgba(242, 241, 234, .05); }
-    .node .lbl { font-size: .8rem; color: var(--ink-60); max-width: 9.5rem; line-height: 1.25; }
+    /* The label hangs under the dot, outside the button's box, so the dot's centre is exactly the point the canvas
+       draws its lines and rings to (they used to sit half a label too low). */
+    .node .lbl { position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); width: max-content;
+      font-size: .8rem; color: var(--ink-60); max-width: 9.5rem; line-height: 1.25; }
     .node .lbl b { display: block; color: var(--ink); font-weight: 500; }
     .node.hub .dot { width: 76px; height: 76px; border-color: var(--ink-35); }
     .node.hub .ms { font-size: 30px; }
-    .node.hub .lbl, .node.valio .lbl { margin-top: 16px; }
+    .node.hub .lbl, .node.valio .lbl { top: calc(100% + 18px); }
     .node.valio .dot { width: 64px; height: 64px; }
     .node.pulse .dot { animation: pulse 1.2s ease-out; }
     @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(242, 193, 78, .45); } 100% { box-shadow: 0 0 0 18px rgba(242, 193, 78, 0); } }

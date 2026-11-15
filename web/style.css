@@ -533,3 +533,15 @@ div.mstat:hover { background: none; }
 .sbx a { margin-left: 0; color: var(--ink-60); }
 .sbx.off { background: none; color: var(--block-ink); }
 @media (max-width: 860px) { .sbx { margin: 0; padding: 8px 16px 0; justify-content: flex-start; } }
+/* Badges never run into the sentence beside them. */
+.findings li { grid-template-columns: minmax(112px, max-content) 1fr; }
+.findings.plain li { grid-template-columns: 1fr; }
+@media (max-width: 560px) { .findings li { grid-template-columns: 1fr; } }
+/* "You are approving": the whole order in ten seconds. */
+.approve-sum { border: 1px solid var(--rule); border-radius: 8px; margin: 12px 0 14px; overflow: hidden; }
+.approve-h { font: .7rem var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-60); padding: 10px 14px 0; }
+.approve-sum ul { list-style: none; margin: 0; padding: 6px 14px 8px; }
+.approve-sum li { display: grid; grid-template-columns: 5.2rem 1fr auto; gap: 10px; padding: 5px 0; align-items: baseline; }
+.approve-sum .q { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.approve-sum .e { font-variant-numeric: tabular-nums; color: var(--ink-80); white-space: nowrap; }
+.approve-f { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 14px; background: var(--panel); font-size: .92rem; }
