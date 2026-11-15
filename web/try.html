@@ -161,7 +161,7 @@
     .recap div:nth-child(2) { animation-delay: .08s; } .recap div:nth-child(3) { animation-delay: .16s; } .recap div:nth-child(4) { animation-delay: .24s; }
     .recap b { display: block; font: 400 1.25rem/1.2 var(--serif); margin-top: 8px; font-variant-numeric: tabular-nums; }
     h2 { font: 400 1.5rem/1.2 var(--serif); margin: 44px 0 14px; text-align: center; }
-    .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: left; }
+    .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: left; }
     .tile { display: flex; gap: 12px; align-items: center; background: var(--panel); border: 0; border-radius: var(--radius); padding: 14px 16px; color: var(--ink);
       text-decoration: none; font: inherit; cursor: pointer; text-align: left; transition: background .15s, transform .15s; }
     .tile:hover { background: var(--panel-strong); transform: translateY(-1px); }
@@ -172,6 +172,13 @@
     .tile.wide:hover { background: var(--solid); opacity: .9; }
     .tile.wide .ms, .tile.wide span.d { color: inherit; opacity: .75; }
 
+    .phone { display: flex; gap: 22px; align-items: center; text-align: left; border: 1px solid var(--rule); border-radius: var(--radius); padding: 18px; margin-top: 10px; }
+    .qr { flex: none; width: 168px; height: 168px; border-radius: 10px; overflow: hidden; background: #fff; }
+    .qr svg { display: block; width: 100%; height: 100%; }
+    .phone-t b { display: block; font-weight: 500; }
+    .phone-t .d { display: block; color: var(--ink-60); font-size: .9rem; margin: 2px 0 12px; }
+    .phone-acts { display: flex; gap: 6px 10px; align-items: center; flex-wrap: wrap; }
+    @media (max-width: 600px) { .phone { flex-direction: column; align-items: flex-start; } .qr { display: none; } }
     .panel { text-align: left; border: 1px solid var(--rule); border-radius: var(--radius); padding: 20px; margin-top: 10px; animation: enter .4s both; }
     .panel h3 { font: 500 1rem/1.3 var(--sans); margin: 0 0 14px; }
     .panel ol { margin: 0; padding: 0; list-style: none; counter-reset: n; }
@@ -210,6 +217,7 @@
     <div id="stage" aria-live="polite"></div>
   </div></main>
 
+<script src="qr.js"></script>
 <script>
 "use strict";
 // The judge path, one idea per screen: three orders with three outcomes (auto, needs approval, refused), then the proof.
@@ -621,12 +629,24 @@ function done() {
           <button class="quiet" style="padding:0;font-size:inherit" data-copy="cc" type="button">copy the command</button> · <a href="https://github.com/Zawaer/sous/blob/main/docs/CONNECT.md" target="_blank" rel="noopener">guide</a></p>
       </div>
       <a class="tile" href="break.html${q()}">${ms("bug_report")}<span><b>Try to break it</b><span class="d">Six attacks</span></span></a>
-      <a class="tile" href="buyer.html${q()}#/inbox">${ms("how_to_reg")}<span><b>The buyer's inbox</b><span class="d">Approve on a phone</span></span></a>
       <a class="tile" href="./${q()}#/today">${ms("storefront")}<span><b>Valio Aimo's view</b><span class="d">Orders and audit log</span></span></a>
       <a class="tile" href="${trace(d[1]?.id || state.held || "")}">${ms("verified_user")}<span><b>The trust board</b><span class="d">One order, proven</span></span></a>
     </div>
+    <div class="phone">
+      <div class="qr" id="qr"></div>
+      <div class="phone-t"><b>The buyer's inbox, on your phone</b>
+        <span class="d">Scan the code. Then send an order that needs a human, and approve it from the phone.</span>
+        <div class="phone-acts"><button class="btn small solid" id="send-held" type="button">Send an order that needs approval</button>
+          <a class="quiet" href="buyer.html${q()}#/inbox">or open the inbox here</a></div>
+        <p class="status" id="held-st" role="status" style="text-align:left;margin:6px 0 0"></p></div>
+    </div>
     <div class="panel" id="orders-panel" hidden><h3>Your sandbox's orders</h3><ul class="orders" id="orders"></ul></div>
     <p class="foot"><span id="left"></span> <button class="quiet" id="reset" type="button">Start over</button></p>`);
+  // The phone needs this sandbox's approver token: it travels in the link's fragment, which is not sent to the server.
+  const phoneUrl = `${location.origin}/ui/buyer.html${q()}#/inbox?k=${encodeURIComponent(state.approver || "")}`;
+  const code = typeof QR !== "undefined" && state.approver ? QR.svg(phoneUrl, { border: 3 }) : "";
+  if (code) $("#qr").innerHTML = code; else $("#qr").hidden = true;
+  $("#send-held").addEventListener("click", sendHeld);
   $("#t-claude").addEventListener("click", () => { const p = $("#claude"); p.hidden = !p.hidden; state.claude = !p.hidden; save(); });
   $("#reset").addEventListener("click", () => {
     if (!confirm("Leave this sandbox and start with a new one? This browser forgets its tokens.")) return;
@@ -634,6 +654,24 @@ function done() {
   });
   loadOrders();
   clearInterval(timer); timer = setInterval(() => { if (!document.hidden && state?.at === 5) loadOrders(); }, 5000);
+}
+
+// A real order just over the hotel's limit (2,000 L of milk, live price): the mandate holds it for a human.
+async function sendHeld() {
+  const b = $("#send-held"), st = $("#held-st");
+  b.disabled = true; st.textContent = "The agent asks for 2,000 litres of milk, more than it may buy alone…";
+  try {
+    const body = { ...state.quote_body, items: state.quote_body.items.map((it) => ({ ...it, amount: 2000 })) };
+    const qr = await call("/quotes", { method: "POST", body });
+    if (!qr.quote?.id) throw new Error(qr.message || "no quote came back");
+    const o = await call("/orders", { method: "POST", body: { agent_id: body.agent_id, mandate_id: body.mandate_id, quote_id: qr.quote.id,
+      idempotency_key: `${state.id.toLowerCase()}-${qr.quote.id}` } });
+    st.textContent = o.status === "pending_approval" ? `${eur(o.total_ex_vat)} is waiting for a human. It is in the inbox now.`
+      : o.status === "ordered" ? `${eur(o.total_ex_vat)} was inside the limit and went through. Try again in a moment.`
+      : `The mandate refused it: ${sentence((o.decision?.findings || [])[0]?.message || "")}`;
+    loadOrders();
+  } catch (e) { st.textContent = `That did not go through: ${e.message}`; }
+  finally { b.disabled = false; }
 }
 
 async function copy(text, btn) {

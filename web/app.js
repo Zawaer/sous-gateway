@@ -23,6 +23,14 @@ const store = {
 // Its approver token (sbxa_…) is kept per sandbox, and also unlocks substitutes and suggestions there.
 const SANDBOX = (new URLSearchParams(location.search).get("sandbox") || "").trim().toUpperCase();
 const CODE_KEY = "vk-approver-code" + (SANDBOX ? ":" + SANDBOX : "");
+// A phone opened from the guided page's QR code brings the sandbox's approver token in the URL fragment (a fragment
+// is never sent to the server). Keep it for this sandbox and take it out of the address. Sandbox tokens (sbxa_) only.
+(() => {
+  const m = /[?&]k=(sbxa_[A-Za-z0-9_-]{8,})/.exec(location.hash);
+  if (!m || !SANDBOX) return;
+  store.set(CODE_KEY, m[1]);
+  try { history.replaceState(null, "", location.pathname + location.search + location.hash.replace(/[?&]k=sbxa_[A-Za-z0-9_-]+/, "")); } catch { /* keep going */ }
+})();
 const SIDE = document.body.dataset.side === "buyer" ? "buyer" : "seller";
 const SBX_QS = SANDBOX ? `?sandbox=${encodeURIComponent(SANDBOX)}` : "";
 const buyerLink = (id) => `/ui/buyer.html${SBX_QS}#/orders/${encodeURIComponent(id)}`;
@@ -345,8 +353,10 @@ views.inbox = {
       : `<div class="empty"><div class="big">Nothing waiting</div>
           <p>${SIDE === "buyer" ? "Orders that fall outside your agent's mandate show up here for you to approve or reject."
             : "Orders held by a buyer's mandate show up here while they wait for the buyer's own approval."}</p>
-          <p><a href="#/orders">See the last decided orders</a> · <a href="/ui/try.html">Try it yourself</a>: a private sandbox with an order
-            waiting for your approval.</p></div>`;
+          ${SANDBOX && SIDE === "buyer" ? `<p>On the <a href="/ui/try.html">guided page</a>, press “Send an order that needs approval”. It appears here within seconds.</p>
+            <p><a href="#/orders">See the orders already decided</a></p>`
+          : `<p><a href="#/orders">See the last decided orders</a> · <a href="/ui/try.html">Try it yourself</a>: a private sandbox with an order
+            waiting for your approval.</p>`}</div>`;
     view.innerHTML = `<div class="head"><div><h2>${orders.length ? (SIDE === "buyer" ? "Waiting for you" : "Waiting for buyers") : (SIDE === "buyer" ? "Approvals" : "Held")}</h2>
       <div class="muted">${orders.length ? `${orders.length} order${orders.length > 1 ? "s" : ""} held by the mandate engine` : "Agents are ordering within their mandates."}</div></div></div>
       ${SIDE === "buyer" ? `<div class="inbox-one">${main}</div>` : `<div class="inbox-grid"><div>${main}</div>

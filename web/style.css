@@ -545,3 +545,13 @@ div.mstat:hover { background: none; }
 .approve-sum .q { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
 .approve-sum .e { font-variant-numeric: tabular-nums; color: var(--ink-80); white-space: nowrap; }
 .approve-f { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 14px; background: var(--panel); font-size: .92rem; }
+/* The empty approvals screen: one centred block (a later .empty rule for small notices had turned it into a row). */
+.inbox-one .empty, .inbox-grid .empty { display: block; text-align: center; max-width: 34rem; margin: 0 auto; padding: 72px 16px; }
+.inbox-one { max-width: none; }
+.inbox-one > .card { max-width: 640px; }
+.inbox-one .empty .big { font-size: 2.2rem; margin-bottom: 12px; }
+.inbox-one .empty p { margin: 0 0 10px; }
+@media (max-width: 560px) {
+  .decide-card .actions .btn, .decide-inline .actions .btn { white-space: nowrap; padding: 0 14px; }
+  .decide-card .actions .btn.no, .decide-inline .actions .btn.no { flex: 0 0 auto; padding: 0 20px; }
+}
