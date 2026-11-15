@@ -13,3 +13,9 @@ regexes = ['''^[A-Za-z_]+=[A-Z]*$''', '''^[a-z]+(_[a-z0-9]+)+$''']
 description = "public did:key identifiers (they are public keys)"
 regexTarget = "line"
 regexes = ['''did:key:z[1-9A-HJ-NP-Za-km-z]{40,}''']
+
+[[allowlists]]
+description = "one finding: the SOUS_BUYER_KEY_TOFU on/off flag in docs/SECURITY.md is a config switch, not a key (Toivo approved, Sun 15.11)"
+regexTarget = "secret"
+regexes = ['''^SOUS_BUYER_KEY_TOFU=[01]$''']
+paths = ['''^docs/SECURITY\.md$''']
