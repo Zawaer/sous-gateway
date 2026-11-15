@@ -555,3 +555,15 @@ div.mstat:hover { background: none; }
   .decide-card .actions .btn, .decide-inline .actions .btn { white-space: nowrap; padding: 0 14px; }
   .decide-card .actions .btn.no, .decide-inline .actions .btn.no { flex: 0 0 auto; padding: 0 20px; }
 }
+/* Today: one sentence, one action, and why the record can be trusted, before any list. */
+.today-head { align-items: flex-end; gap: 16px 24px; flex-wrap: wrap; }
+.today-head h2 { font-size: clamp(1.7rem, 3.4vw, 2.4rem); line-height: 1.12; margin-top: 4px; text-wrap: balance; }
+.today-cta { flex: none; min-height: 44px; padding: 0 20px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.trust-strip { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 22px; }
+.trust-strip span { display: inline-flex; align-items: center; gap: 6px; font-size: .84rem; padding: 6px 12px 6px 9px; border-radius: 999px; border: 1px solid var(--rule); color: var(--ink-80); }
+.trust-strip .ok .ms { color: var(--silent); font-size: 18px; }
+.trust-strip .bad { color: var(--block-ink); border-color: var(--block-ink); }
+.mrow-why { flex-basis: 100%; color: var(--ink-80); font-size: .88rem; line-height: 1.4; margin-top: 2px; white-space: normal; }
+.mrow-main { flex-wrap: wrap; row-gap: 0; }
+.mstats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 560px) { .mstats { grid-template-columns: 1fr; } }

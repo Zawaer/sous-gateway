@@ -1407,16 +1407,19 @@ views.today = {
       return o.status === "rejected" ? `Rejected by ${o.approval?.by || "a human"}${o.approval?.note ? `: “${o.approval.note}”` : ""}`
         : o.status === "expired" ? (o.approval?.result_reason || "Approved after the order cut-off") : (f?.message || "");
     };
-    const reasons = (o) => (o.decision?.findings || []).filter((f) => f.outcome === "block" || f.outcome === "ask");
+    const reasons = (o) => leadFirst((o.decision?.findings || []).filter((f) => f.outcome === "block" || f.outcome === "ask"));
+    // The one sentence a person needs before opening the order.
+    const lead = (o) => (o.status === "rejected" || o.status === "expired" ? firstReason(o) : reasons(o)[0]?.message || "");
     // Minimal by default: one line per order; the reasons open in place, the full story in the order panel.
     const row = (o, sub = "") => `<details class="mrow">
         <summary>${ic(STATUS_ICON[o.status] || "receipt_long", "st-" + (TIER_STYLE[o.status] || "silent"))}
-          <span class="mrow-main"><b>${esc(bn(o.buyer))}</b><span class="muted">${orderStory(o)}</span>${sub}</span>
+          <span class="mrow-main"><b>${esc(bn(o.buyer))}</b><span class="muted">${orderStory(o)}</span>${sub}
+            ${lead(o) ? `<span class="mrow-why">${msg(lead(o))}</span>` : ""}</span>
           <span class="mrow-amt">${eur(o.total_ex_vat)}</span>${ic("expand_more", "chev")}</summary>
         <div class="mrow-more">
           ${o.status === "rejected" || o.status === "expired" ? `<p>${msg(firstReason(o))}</p>` : ""}
-          ${reasons(o).length ? `<ul class="why">${reasons(o).slice(0, 4).map((f) => `<li>${msg(f.message)}</li>`).join("")}
-            ${reasons(o).length > 4 ? `<li class="muted">+ ${reasons(o).length - 4} more</li>` : ""}</ul>` : ""}
+          ${reasons(o).length > 1 ? `<ul class="why">${reasons(o).slice(1, 5).map((f) => `<li>${msg(f.message)}</li>`).join("")}
+            ${reasons(o).length > 5 ? `<li class="muted">+ ${reasons(o).length - 5} more</li>` : ""}</ul>` : ""}
           <a class="btn plain sm" href="#/orders/${esc(o.id)}">${o.status === "pending_approval" && SIDE === "buyer" ? "Review and decide" : "Open order"} ${ic("arrow_forward")}</a>
           <span class="muted mono small">${esc(o.id)}</span></div></details>`;
     const buyerSigned = mandates.filter((m) => m.issuer?.kind === "buyer").length;
@@ -1425,14 +1428,22 @@ views.today = {
     const spent = ordered.reduce((s, o) => s + (o.total_ex_vat || 0), 0);
     const stat = (icon, cls, value, label, href) => `<a class="mstat ${cls}" href="${href}">${ic(icon)}<b>${value}</b><span>${label}</span></a>`;
 
-    view.innerHTML = `<div class="head"><h2>Today</h2>
-        <span class="muted">${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Helsinki" })}</span></div>
+    const n = pending.length, alone = ordered.filter((o) => !o.approval).length;
+    const headline = SIDE === "buyer"
+      ? (n ? `${n} order${n > 1 ? "s are" : " is"} waiting for you.` : alone ? `Nothing needs you. ${alone} order${alone > 1 ? "s" : ""} went through on ${alone > 1 ? "their" : "its"} own today.` : "Nothing needs you right now.")
+      : (n ? `${n} order${n > 1 ? "s are" : " is"} waiting for ${n > 1 ? "their buyers" : "its buyer"}.` : alone ? `${alone} agent order${alone > 1 ? "s" : ""} today, no human needed.` : "No agent orders yet today.");
+    view.innerHTML = `<div class="head today-head"><div><div class="muted small">${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Helsinki" })}</div>
+        <h2>${headline}</h2></div>
+        ${n ? `<a class="btn yes today-cta" href="#/inbox">${SIDE === "buyer" ? `Review ${n === 1 ? "it" : "them"}` : "See held orders"} ${ic("arrow_forward")}</a>` : ""}</div>
+      <div class="trust-strip">
+        <span class="${chain.ok ? "ok" : "bad"}">${ic(chain.ok ? "verified" : "gpp_bad")}${chain.ok ? `Audit log intact · ${Number(chain.events).toLocaleString("en-GB")} entries` : "Audit log broken"}</span>
+        <span class="ok">${ic("draw")}Every quote and receipt signed</span>
+        <span class="ok">${ic("rule")}Rules decide, not AI</span>
+      </div>
       <div class="mstats">
-        ${stat("pending_actions", pending.length ? "st-ask" : "", pending.length, SIDE === "buyer" ? "waiting for you" : "waiting for buyers", "#/inbox")}
-        ${stat("check_circle", "", ordered.length, `ordered, ${eur(spent)}`, "#/orders")}
-        ${stat("block", stopped.length ? "st-block" : "", stopped.length, "stopped", "#/orders")}
-        ${stat("trending_up", heldDrift ? "st-ask" : "", heldDrift, "drift held", "#/standing")}
-        ${stat(chain.ok ? "verified" : "gpp_bad", chain.ok ? "st-silent" : "st-block", chain.ok ? "Intact" : "Broken", "audit chain", "#/audit")}
+        ${stat("check_circle", "", ordered.length, `ordered today · ${eur(spent)}`, "#/orders")}
+        ${stat("block", stopped.length ? "st-block" : "", stopped.length, "stopped today", "#/orders")}
+        ${stat("trending_up", heldDrift ? "st-ask" : "", heldDrift, "standing orders drifting", "#/standing")}
       </div>
       ${needs.length ? `<section class="msec"><h3>Your needs changed</h3><div class="mlist">${needs.map((r) => `
         <details class="mrow"><summary>${ic("rule", r.held.length || r.flagged.length ? "st-ask" : "st-notify")}
