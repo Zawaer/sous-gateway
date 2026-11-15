@@ -61,7 +61,7 @@ as not passing, so the exit code is 1.
 
 ## Staging run
 
-Run on 2026-11-14 at 12:34 Helsinki time against staging at commit 7685e81 (the kit is client-side, so the new
+Run on 2026-11-14 at 12:34 Helsinki time against staging at commit 15a8c1a (the kit is client-side, so the new
 checks need no deploy); the sandbox, quote and order ids are from that run. No tokens appear in the output.
 
 ```text
@@ -112,8 +112,8 @@ passkey assertion, enrolling its own passkey): every one 400, 401 or 403, and th
 11 MCP tools decides. `stock_oracle`: Valio reports no stock limit for 464201 at 10^6 L (`stock_level unknown` on the
 anonymous quote, nothing to size under the mandate), so on staging it shows that no field or message carries an exact
 number; the split path (mandate quote sized to stock, anonymous quote not) runs offline against the mock's
-stock (below). An earlier run on 2026-11-14 (15 checks, before 895b04e was deployed) failed `stock_buckets_seeded`:
-seeded lines had no `stock_level`; fixed in 895b04e.
+stock (below). An earlier run on 2026-11-14 (15 checks, before 32f2275 was deployed) failed `stock_buckets_seeded`:
+seeded lines had no `stock_level`; fixed in 32f2275.
 
 ## In CI
 

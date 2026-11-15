@@ -18,4 +18,4 @@ Valkey holds coordination state only (orders and audit are in MariaDB), so losin
 
 **Creativity.** A managed key-value store used as a shared rate-limit, circuit breaker and cache for a third-party API key, with priority by deployment role.
 
-Code: https://github.com/Zawaer/sous · [docs/AIVEN.md](../AIVEN.md) · [sous/shared.py](../../sous/shared.py)
+Code: https://github.com/Zawaer/sous-gateway · [docs/AIVEN.md](../AIVEN.md) · [sous/shared.py](../../sous/shared.py)

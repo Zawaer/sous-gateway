@@ -75,11 +75,11 @@ Scaling).
 
 ## Results
 
-From `docs/LLM_EVAL.md` (numbers as [STATUS.md](STATUS.md#evaluation) states them): all three models live in the same CI run on CRACI runners, [43587725624](https://github.com/Zawaer/sous/actions/runs/43587725624) on commit 11d8448 (Sat 14.11), 60 cases of which 48 are one buyer sentence written by the team, live Valio prices, real model calls, fresh state per case. (Nemotron 3.5 Super VL, the third, scored 30/48 with 0 violations; see STATUS.)
+From `docs/LLM_EVAL.md` (numbers as [STATUS.md](STATUS.md#evaluation) states them): all three models live in the same CI run on CRACI runners, 43587725624 on commit f31967b (Sat 14.11), 60 cases of which 48 are one buyer sentence written by the team, live Valio prices, real model calls, fresh state per case. (Nemotron 3.5 Super VL, the third, scored 30/48 with 0 violations; see STATUS.)
 
 | | `verda:kimi-k3-1-pro` | `gemini:gemini-4-hydrogen` |
 |---|---|---|
-| Run | CI 43587725624, 11d8448, Sat 14.11 11:24Z | same run, 11:16Z |
+| Run | CI 43587725624, f31967b, Sat 14.11 11:24Z | same run, 11:16Z |
 | Matched the buyer's need without manual correction | 47/48 = 97.9 % | 46/48 = 95.8 % |
 | Need understood (amount, unit, date, product) | 48/48 | 47/48 |
 | Unsafe requests blocked or escalated | 34/34 | 34/34 |
@@ -90,7 +90,7 @@ From `docs/LLM_EVAL.md` (numbers as [STATUS.md](STATUS.md#evaluation) states the
 | Cost per request | ~$0.058 at list price (~$2.80 the run) | $0.046 ($2.21 the run) |
 | Buyer data stays in the EU | yes (Germany) | no guarantee |
 
-Same code, same run, so this is a like-for-like comparison. Kimi's one miss is **S04**, which all three models miss and which is not a real miss: the case expects a coconut cream with no allergen data to be refused, but a live agent finds one with declared allergens (468967), and the gateway held Kimi's order for a human (`product.type_mismatch`). Gemini also missed H02 (a milk drink instead of milk). Earlier runs: [43557209740](https://github.com/Zawaer/sous/actions/runs/43557209740) (0b0ad68, 49 sentences) Kimi 48/49, Gemini 46/49, both missing only H20 (now scripted-only for the same reason); [43533142451](https://github.com/Zawaer/sous/actions/runs/43533142451) (768efee, 43 sentences) 43/43 with both. Verda Inference had an outage on Fri-Sat night (empty HTTP 200s in run 43530717095, then a registrar suspension page); it has worked again since run 43533142451. No mandate violation was auto-ordered with any model: the gateway decides. `deepseek-4-1-flash-1017` has not been run.
+Same code, same run, so this is a like-for-like comparison. Kimi's one miss is **S04**, which all three models miss and which is not a real miss: the case expects a coconut cream with no allergen data to be refused, but a live agent finds one with declared allergens (468967), and the gateway held Kimi's order for a human (`product.type_mismatch`). Gemini also missed H02 (a milk drink instead of milk). Earlier runs: 43557209740 (0424796, 49 sentences) Kimi 48/49, Gemini 46/49, both missing only H20 (now scripted-only for the same reason); 43533142451 (010c37b, 43 sentences) 43/43 with both. Verda Inference had an outage on Fri-Sat night (empty HTTP 200s in run 43530717095, then a registrar suspension page); it has worked again since run 43533142451. No mandate violation was auto-ordered with any model: the gateway decides. `deepseek-4-1-flash-1017` has not been run.
 
 The harness itself is validated without a model: replaying the scripted plan through the same agent runtime passes 40/40 (`evals/llm_results.oracle.json`, the 40-case set of Fri 13.11; not re-run).
 
@@ -101,8 +101,8 @@ English buyer requests through the real agent loop, `Qwen/Qwen3-30B-A3B-Instruct
 1x RTX PRO 6000 Blackwell 96GB ($2.89/h; no H100 was free, two A100s never booted), Valio prices replayed from a
 snapshot (0 live Valio calls). 83M tokens in 69 min (20.3k tokens/s, 29 requests/min); **976/997 unsafe requests held
 or refused**, 0 allergen / limit / other-mandate violations, 3 gateway-side misses that are all order slicing (the
-demo mandates had the split rule off; fixed in c71bdde: `split_window_minutes: 60` on the demo mandates and sandbox
-copies, re-run with 0 gateway violations). Since 29a1cd7 the same model, behind HTTPS on that GPU, is provider `verda-selfhosted` for `/agent/ask` and
+demo mandates had the split rule off; fixed in ad366ce: `split_window_minutes: 60` on the demo mandates and sandbox
+copies, re-run with 0 gateway violations). Since a89d439 the same model, behind HTTPS on that GPU, is provider `verda-selfhosted` for `/agent/ask` and
 `scripts/llm_eval.py` (`SOUS_SELFHOSTED_URL` / `_KEY` / `_MODEL`); CI LLM eval with it in run 43612368619 (below). 2.35 GPU hours = $6.79. **Gemma 4 26B-A4B-it** was the intended model but
 returned garbage under vLLM 0.33 on that GPU (so did Qwen on 0.33), so it **ran later on a Verda A100 80GB**: 600
 requests, 83.7 % of all checks passed (Qwen 66.5 %), 289/301 unsafe held, 2 slicing violations, 17k tokens/s, $2.68

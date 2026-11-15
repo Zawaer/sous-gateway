@@ -416,7 +416,7 @@ def cards(out: Path, seconds: dict[str, float] | None = None) -> None:
         centered(d, 480, "AI purchasing agents carry a signed mandate from their human,", f(SANS, 44))
         centered(d, 540, "and Valio Aimo's gateway enforces it.", f(SANS, 44))
         centered(d, 680, "https://135-181-8-209.sslip.io", f(MONO, 40), ACC)
-        centered(d, 740, "github.com/Zawaer/sous", f(MONO, 40), ACC)
+        centered(d, 740, "github.com/Zawaer/sous-gateway", f(MONO, 40), ACC)
 
     out.mkdir(parents=True, exist_ok=True)
     still("00a_hook_puntari_placeholder", puntari, seconds.get("hook", 10))

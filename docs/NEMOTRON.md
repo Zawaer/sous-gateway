@@ -51,7 +51,7 @@ uv run python -m agent.vision --from-json evals/vision/samples/01_order_handwrit
 ```
 
 The output shows the chain: each line read with its confidence → the products → the quote → the
-mandate preview → the order. It ends with a "Needs a human (not ordered)" list. For an upload box (built in `/agent/`, 08371ec, but switched off on both servers until they have model keys): `agent.vision.order_from_image(image_bytes, gateway=..., mandate_id=..., agent_id=...,
+mandate preview → the order. It ends with a "Needs a human (not ordered)" list. For an upload box (built in `/agent/`, b0a94eb, but switched off on both servers until they have model keys): `agent.vision.order_from_image(image_bytes, gateway=..., mandate_id=..., agent_id=...,
 llm=ChatClient(config_from_env("nvidia")))` returns a `PhotoOrder`, and its `.to_dict()` is the JSON for the
 page.
 
@@ -135,12 +135,12 @@ NVIDIA Nemotron 3.5 Super VL, `scripts/vision_eval.py` in CI (`vision_only`): 8 
 | **v3 + code checks + second look** (default) | 32 | 100 % | 100 % | 100 % | 100 % | 100 % | **100 %** | **0** | 8/8 | 37 | 4.3 |
 | v3 + second look + reasoning on | 8 | 100 % | 100 % | 100 % | 100 % | 100 % | 100 % | 0 | 2/2 | 8 | 20.7 |
 
-Each row is the **latest CI run of that variant**, and the pipeline code changed between runs, so rows come from different runs: v1 and v2 from run 3 (CI 43528096128, e0988ad), v3 from run 4 (CI 43529398231, f27f862), v3+verify from run 5 (CI 43530170621, c64cd9d), reasoning-on from run 2 (CI 43526999077, d8ab856). Earlier runs of the same variant were worse, see below and `evals/vision/history/`. All runs are on the same 8 pages we rendered ourselves; there is no held-out set of real kitchen photos.
+Each row is the **latest CI run of that variant**, and the pipeline code changed between runs, so rows come from different runs: v1 and v2 from run 3 (CI 43528096128, fd7e02d), v3 from run 4 (CI 43529398231, 36d7401), v3+verify from run 5 (CI 43530170621, c4a81e1), reasoning-on from run 2 (CI 43526999077, 9aa379e). Earlier runs of the same variant were worse, see below and `evals/vision/history/`. All runs are on the same 8 pages we rendered ourselves; there is no held-out set of real kitchen photos.
 
 Item recall was 100 % in every variant. *auto-correct* is the share of truth lines that would be ordered
 automatically and correctly. The rest go to a human, never to the basket wrongly.
 
-Run to run, the numbers moved. v3+verify had 1 silent error in run 3 (fixed by the page-level check, e0988ad) and 94 % auto-correct with 0 silent errors in run 4. v3 alone was not perfect either. In run 3 it applied the red-pen correction on the photographed
+Run to run, the numbers moved. v3+verify had 1 silent error in run 3 (fixed by the page-level check, fd7e02d) and 94 % auto-correct with 0 silent errors in run 4. v3 alone was not perfect either. In run 3 it applied the red-pen correction on the photographed
 delivery note in only 1 of 3 reads (auto-correct 87 %, delivered 93 %). The code checks caught the other two,
 so they went to a human instead of becoming silent errors. With the page check and the targeted second look
 (run 5, 4 reads per page), all 32 pages were right and only 3 needed a second call. Reasoning mode reaches

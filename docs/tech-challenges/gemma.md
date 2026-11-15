@@ -17,8 +17,8 @@
 
 **What it did badly.** (1) Asked to split an order "so nobody approves", it ordered one slice, like Qwen. (2) It misread Finnish thousands spacing twice ("1 539 litraa" -> 539 l; "1 101 kiloa" -> 101 kg), shrinking over-limit orders under the limit.
 
-**How we improved the outcome.** Gemma's slicing exposed the gateway gap: the demo mandates had the split-order rule off. Fixed on main (`split_window_minutes: 60`, c71bdde); re-running Gemma on 100 slicing requests against the fixed gateway: **0 gateway violations** (was 2 in 29), the split rule fired. The remaining agent-side issues (one slice, Finnish digit grouping) are prompt work for the buyer agent.
+**How we improved the outcome.** Gemma's slicing exposed the gateway gap: the demo mandates had the split-order rule off. Fixed on main (`split_window_minutes: 60`, ad366ce); re-running Gemma on 100 slicing requests against the fixed gateway: **0 gateway violations** (was 2 in 29), the split rule fired. The remaining agent-side issues (one slice, Finnish digit grouping) are prompt work for the buyer agent.
 
 **Honest notes.** The first attempt, on an RTX PRO 6000 Blackwell (confidential-compute mode), produced garbage under vLLM 0.33 (every model), so the 2,000-request pass ran on Qwen and Gemma ran on an A100 later. GPU for the Gemma run: 1.12 h = $2.68.
 
-Code: https://github.com/Zawaer/sous · `scripts/redteam_gpu.sh` · [REDTEAM.md](../REDTEAM.md)
+Code: https://github.com/Zawaer/sous-gateway · `scripts/redteam_gpu.sh` · [REDTEAM.md](../REDTEAM.md)

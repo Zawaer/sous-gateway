@@ -40,7 +40,7 @@ For one workflow run (this run by default, or any past run with `evidence_run_id
 
 ## Real results
 
-**Run [43580565490](https://github.com/Zawaer/sous/actions/runs/43580565490)** (push of 3972163, all jobs
+**Run 43580565490** (push of c0636bf, all jobs
 green): egress **PASS**. All 4 deny-mode jobs that ran (`eval`, `llm-eval`, `draft-eval`, `smoke`) stayed
 inside their declarations.
 - `eval` reached `junction26.valioaimo.fi` (18 KiB out, 36 KiB in), Aiven Valkey on port 23770 (119 KiB out)
@@ -50,21 +50,21 @@ inside their declarations.
   `pkg.github.com/_dns`. These are runner probes, not our code. The same probes **went out** from the
   observe-mode `docker` job.
 
-**The check caught something in run [43582172396](https://github.com/Zawaer/sous/actions/runs/43582172396)**
-(0216a3e). The evidence job failed: `smoke` runs under `default: deny` with no connections, yet CRACI
+**The check caught something in run 43582172396**
+(86b1b39). The evidence job failed: `smoke` runs under `default: deny` with no connections, yet CRACI
 **allowed** `GET https://pkg.github.com/_dns` and `GET https://copilot-proxy.githubusercontent.com/_dns`. It
 recorded no `matchedRule` for either (`policyDenied: false`, HTTP 200). Under `presets: [pypi]`, CRACI blocks
 the same two requests (`draft-eval`). They are the runner's connectivity probes: nothing sent, 2 to 5 bytes
 back. So the evidence job now accepts exactly that shape (GET, path `/_dns`, those two hosts, at most 64
 bytes back, nothing sent) and labels it `runner probe`. Any other request to those hosts still fails the run
-(test `test_runner_probe_is_accepted_only_in_its_exact_shape`). Re-audit of that run: PASS (43584176961); next full run green: [43584327314](https://github.com/Zawaer/sous/actions/runs/43584327314) (692521f, `eval` -> Valio 30 KiB out, signature verified). The open question for CRACI: which rule let
+(test `test_runner_probe_is_accepted_only_in_its_exact_shape`). Re-audit of that run: PASS (43584176961); next full run green: 43584327314 (998b7c8, `eval` -> Valio 30 KiB out, signature verified). The open question for CRACI: which rule let
 them through in a deny-mode job, and why does the trace name none?
 
-**[43580577498](https://github.com/Zawaer/sous/actions/runs/43580577498)** (`draft_only`): `draft-eval` sent
+**43580577498** (`draft_only`): `draft-eval` sent
 137 KiB to `generativelanguage.googleapis.com` and nothing else. **PASS**.
 
 **Audit of the live LLM run 43557209740** (evidence run
-[43580597144](https://github.com/Zawaer/sous/actions/runs/43580597144)): `llm-eval` sent 4.2 MiB to Gemini,
+43580597144): `llm-eval` sent 4.2 MiB to Gemini,
 4.0 MiB to Verda, 112 KiB to Valio and 584 KiB to Valkey. All are declared. **PASS**.
 
 SBOMs (run 43580565490):
@@ -109,7 +109,7 @@ What the job does with what the API does give:
   three groups, the blocking list and the probe results all go into `evidence.json`, so they are signed with the
   egress verdict (`summary.vuln_verdict`), and into the job summary.
 
-**Run [43611583279](https://github.com/Zawaer/sous/actions/runs/43611583279)** (push of 83942b9, everything green):
+**Run 43611583279** (push of 84e7826, everything green):
 - CRACI SBOMs: 201 PyPI packages and Actions refs from 7 jobs, **0 findings**.
 - Image: 218 findings, 0 Critical. 61 High with 2 fixable, 73 Medium with 12 fixable; nearly all are Debian packages
   in the base image.
@@ -126,7 +126,7 @@ or model key:
 - the red team pinned to 4/8/16 CPUs;
 - the one-process load test with gateway and MariaDB pinned to 4/8/16/30 CPUs (`scripts/craci_scale.py`).
 
-**Run [43611589764](https://github.com/Zawaer/sous/actions/runs/43611589764)** took 6 minutes for the whole job:
+**Run 43611589764** took 6 minutes for the whole job:
 - All 4,000 red-team requests ran in **15.4 s**: 2,036/2,036 unsafe held, 0 gateway violations.
 - The red team scales linearly: 2.4k, 5.1k, 9.6k and 15.5k requests/min at 4, 8, 16 and 32 CPUs.
 - One gateway process stays flat at 24-29 req/s from 4 to 30 CPUs, which is the GIL bottleneck in docs/CAPACITY.md.

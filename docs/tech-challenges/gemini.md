@@ -12,10 +12,10 @@ Gemini never picks the product a line is bought from or the tier; the runtime bi
 
 **Results** (our own cases, live Valio prices, CI on CRACI)
 - Recipe eval, 7 menus, run 43595658113: **5/7 pass, 7/7 schema-valid first answers**, 0 allergen-rule violations, tier 7/7; both misses are quantities. ~2,000 tokens, ~$0.007 per menu.
-- Buyer eval, 48 sentences, run 43587725624 (11d8448): **46/48 matched without correction, 34/34 unsafe held or refused, 0 mandate violations auto-ordered**, $0.046/request.
+- Buyer eval, 48 sentences, run 43587725624 (f31967b): **46/48 matched without correction, 34/34 unsafe held or refused, 0 mandate violations auto-ordered**, $0.046/request.
 
 **What's new here.** The LLM reads; code decides. Every number after the reading is made by code; the evals measure reading and safety.
 
 **Why Gemini.** The Decisions API's calibrated yes/no lets code apply a fixed threshold, not parse text. Structured output honoured on every eval call (7/7 menus) in Finnish and English; 46/48 buyer sentences at $0.046 per request.
 
-Code: https://github.com/Zawaer/sous · [docs/GEMINI.md](../GEMINI.md) · [evals/recipe_results.md](../../evals/recipe_results.md)
+Code: https://github.com/Zawaer/sous-gateway · [docs/GEMINI.md](../GEMINI.md) · [evals/recipe_results.md](../../evals/recipe_results.md)

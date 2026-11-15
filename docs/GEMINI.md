@@ -75,7 +75,7 @@ the chef costs a wrong quantity on a quote a human can read, never an order the 
 
 ## Results
 
-Recipe eval: CI run [43595658113](https://github.com/Zawaer/sous/actions/runs/43595658113) (`recipe_only` dispatch on da3e797, after the R05 crash fix 108d582; 14.11.2026, live Valio prices). It replaces the earlier runs (43524836008; 43587725624, where R05 crashed with a TypeError in `request_quote` for every provider). Full tables: [`evals/recipe_results.md`](../evals/recipe_results.md) and [LLM_EVAL.md](LLM_EVAL.md).
+Recipe eval: CI run 43595658113 (`recipe_only` dispatch on dc40b21, after the R05 crash fix aa67faa; 14.11.2026, live Valio prices). It replaces the earlier runs (43524836008; 43587725624, where R05 crashed with a TypeError in `request_quote` for every provider). Full tables: [`evals/recipe_results.md`](../evals/recipe_results.md) and [LLM_EVAL.md](LLM_EVAL.md).
 
 **Menu -> one order (recipe eval, 7 cases):**
 
@@ -104,7 +104,7 @@ differences are visible in the ingredient table before anything is ordered, and 
 with them. The curated table is exact by construction (it *is* the reference), which is why it is the offline
 fallback and not the default: it knows six dishes, Gemini knows the menu.
 
-**Single purchase requests (buyer agent, `evals/cases.yaml`, live Valio prices; numbers as [STATUS.md](STATUS.md#evaluation) states them):** three models in the same CI run, [43587725624](https://github.com/Zawaer/sous/actions/runs/43587725624) on commit 11d8448 (Sat 14.11), 60 cases of which 48 are one buyer sentence.
+**Single purchase requests (buyer agent, `evals/cases.yaml`, live Valio prices; numbers as [STATUS.md](STATUS.md#evaluation) states them):** three models in the same CI run, 43587725624 on commit f31967b (Sat 14.11), 60 cases of which 48 are one buyer sentence.
 
 | | Gemini 4 Hydrogen | Kimi K3.1 Pro (Verda, EU) | Nemotron 3.5 Super VL (NVIDIA) |
 |---|---|---|---|
@@ -115,7 +115,7 @@ fallback and not the default: it knows six dishes, Gemini knows the menu.
 | Tool calls / Valio calls per request | 2.96 / 1.71 | 2.92 / 1.04 | 4.6 / 1.0 |
 | Latency p50 / cost per request | 14.8 s / $0.046 ($2.21 the run) | 9.9 s / ~$0.058 at list price (~$2.80 the run) | 8.2 s / $0 (free tier) |
 
-Gemini's misses: **H02** picked a lactose-free semi-skimmed milk drink (464306) instead of milk, within the mandate; **S04**, missed by all three, expects a coconut cream with no allergen data to be refused by `allergen.unknown`, but live the agents found one with declared allergens (468967), which the gateway held for a human for Gemini and Kimi (`product.type_mismatch`). Earlier, run [43557209740](https://github.com/Zawaer/sous/actions/runs/43557209740) (0b0ad68, 49 sentences) scored Gemini 46/49, Kimi 48/49, and run [43533142451](https://github.com/Zawaer/sous/actions/runs/43533142451) (768efee, 43 sentences) 43/43 with both. With every model the gateway auto-ordered nothing the mandate forbids. The cases are written by the team, not a held-out set.
+Gemini's misses: **H02** picked a lactose-free semi-skimmed milk drink (464306) instead of milk, within the mandate; **S04**, missed by all three, expects a coconut cream with no allergen data to be refused by `allergen.unknown`, but live the agents found one with declared allergens (468967), which the gateway held for a human for Gemini and Kimi (`product.type_mismatch`). Earlier, run 43557209740 (0424796, 49 sentences) scored Gemini 46/49, Kimi 48/49, and run 43533142451 (010c37b, 43 sentences) 43/43 with both. With every model the gateway auto-ordered nothing the mandate forbids. The cases are written by the team, not a held-out set.
 
 ## Mandate drafting (plain language -> a proposed mandate)
 
@@ -146,7 +146,7 @@ key; the gateway only ever sees that signed credential.
   vague limits, unsupported asks, conflicts and injection attempts; `scripts/draft_eval.py` scores the rule parser
   (23/23, run in `tests/test_draft.py`) and, with `--provider gemini`, the Gemini path through the same validator.
   The CI job `draft-eval` runs both ([docs/CI.md](CI.md)). **Gemini 4 Hydrogen: 15/19** in
-  [run 43562850006](https://github.com/Zawaer/sous/actions/runs/43562850006) (19 calls, 26,519 tokens in, 2,260
+  run 43562850006 (19 calls, 26,519 tokens in, 2,260
   out, about $0.06; results in `evals/draft_results.gemini.json`). Every miss was caught by the eval, none loosened
   a mandate, and all four injection traps passed. Where it differs from the rule parser:
   - **D01, D18** ("ei pähkinöitä", "nut-free"): Gemini also avoids peanuts (AP) as well as tree nuts (AN). That is
@@ -171,7 +171,7 @@ key; the gateway only ever sees that signed credential.
 
   `tests/test_draft.py` replays Gemini's recorded answers from run 43562850006 (frozen in
   `tests/fixtures/draft_results.gemini.run43562850006.json`) through the new validator offline:
-  19/19. Then [run 43563950578](https://github.com/Zawaer/sous/actions/runs/43563950578) (5c44284) scored
+  19/19. Then run 43563950578 (2b785aa) scored
   **Gemini 4 Hydrogen 19/19** (19 calls, 32,694 tokens in, 2,327 out, about $0.07; the longer prompt costs ~6k
   tokens per run). With the tighter prompt Gemini now gets these right on its own. It avoids gluten (AW), asks
   about the weekly budget, and asks about peanuts instead of adding them. The validator is the guarantee when it
@@ -186,7 +186,7 @@ key; the gateway only ever sees that signed credential.
   - A preference ("prefer dairy-free when possible") is never a hard avoid or a required claim. It goes to
     unsupported, with a question asking whether to refuse such products outright.
 
-  [Run 43566010358](https://github.com/Zawaer/sous/actions/runs/43566010358) (d158f4c): rules 23/23 and
+  Run 43566010358 (6034896): rules 23/23 and
   **Gemini 23/23** (23 calls, 41,773 tokens in, 2,808 out, about $0.08).
 
 ## Decisions API on undeclared allergens (gateway side, `sous/allergen_ai.py`)

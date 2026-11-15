@@ -18,4 +18,4 @@
 
 Limits: rendered pages, no held-out real photos; reasoning-on sample on Verda is 8 reads.
 
-Code: https://github.com/Zawaer/sous · [docs/NEMOTRON.md](../NEMOTRON.md) · [evals/vision/history/](../../evals/vision/history/)
+Code: https://github.com/Zawaer/sous-gateway · [docs/NEMOTRON.md](../NEMOTRON.md) · [evals/vision/history/](../../evals/vision/history/)

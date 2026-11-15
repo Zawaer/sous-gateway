@@ -2,8 +2,8 @@
      Description and Challenge headings, trimmed. Recount after any edit:
      python3 -c "s=open('docs/pitch/submission.md').read();print(len(s.split(chr(10)+'## Description'+chr(10))[1].split(chr(10)+'## Challenge'+chr(10))[0].strip()))"
      Story order follows Valio's criteria: end to end 30, need match 20, autonomy + controls 20, exceptions 15, openness 15.
-     Numbers: scripted 60/60 and drafting 23/23 from CI run 43587725624 (11d8448); 5 models x generic/Sous agent from local runs
-     (docs/STATUS.md, b86c6d6, evals/llm_results.*.json); Decisions allergen check docs/GEMINI.md (483/488, 468/4,118); held-out
+     Numbers: scripted 60/60 and drafting 23/23 from CI run 43587725624 (f31967b); 5 models x generic/Sous agent from local runs
+     (docs/STATUS.md, 08144fb, evals/llm_results.*.json); Decisions allergen check docs/GEMINI.md (483/488, 468/4,118); held-out
      from CI 43620135327 (docs/LLM_EVAL.md#held-out, evals/heldout/), set 2 from CI 43628767992 (evals/heldout2/); red team Qwen + Gemma + slicing re-run from
      docs/REDTEAM.md; 32-vCPU run 43611589764 (docs/CRACI.md); Nemotron 32 reads CI 43530170621, Verda 8 reads run 6
      (docs/NEMOTRON.md); earned autonomy thresholds PROTOCOL 7.2; conformance 17/17 (docs/CONFORMANCE.md). Checked Sat 14.11 ~18:10Z. -->
@@ -54,7 +54,7 @@ Trust between Valio Aimo and its customers, for AI purchasing agents: the custom
 
 ## Links
 - Demo: https://sous.saarikko.dev (staging fallback: https://staging.sous.saarikko.dev)
-- Source: https://github.com/Zawaer/sous (MIT)
+- Source: https://github.com/Zawaer/sous-gateway (MIT)
 - Pitch deck: [docs/pitch/deck.pdf](deck.pdf)
 - Judge handout: [docs/pitch/try-it.md](try-it.md)
 

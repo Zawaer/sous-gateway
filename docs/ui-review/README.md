@@ -4,7 +4,7 @@ This review covers `/ui/`, `/buyer/`, `/ui/agent.html` and `/ui/sign-mandate.htm
 
 - **Viewports.** Every page was captured at 1440×900 (desktop) and 390×844 (phone) in headless Chromium.
 - **Before screenshots.**
-  - Staging was 7ff04f0/5984e95, using a judge sandbox (SBX-YMTQ) with three orders: notify, ask and refused.
+  - Staging was f159ab1/5984e95, using a judge sandbox (SBX-YMTQ) with three orders: notify, ask and refused.
   - Prod was used for GET requests only.
   - `agent.html` was captured locally against a fake Valio upstream, so no live calls were made.
 - **After screenshots.** These are local runs of the changed files against the same fake upstream. Prices in those shots are fake.
@@ -28,16 +28,16 @@ These were handed to the owners on the board (issue #1).
 |---|---|---|---|
 | S1 | `before/stg-order-ask-phonetall.png` | On a phone, Approve sits about 1,480 px down, and the reason appears three times | rene-claude-seller, **done** |
 | S2 | `tier-badges-colourblind.png` | Tier colours collapse to olive for colour-blind viewers | rene-claude-seller, **done** |
-| S3 | `before/stg-mandates-desk.png`, `before/stg-stats-desk.png` | Four names for each tier (Alone/Auto, Ask/Ask human/Needs approval, Refuse/Blocked/Refused) | rene-claude-seller, **done** (197f5c8, 5934344) |
-| S4 | `before/stg-inbox-phone.png` | "(sandbox SBX-YMTQ)" appears after every buyer name, about 30 times | rene-claude-seller, **done** (197f5c8, 5934344) |
-| S5 | `before/prod-ui-landing-desk.png` | Prod `/ui/` opens on "Nothing waiting" and an "anonymous-agent" feed | rene-claude-seller, **done** (197f5c8, 5934344) |
-| S6 | `before/stg-audit-desk.png` (#218) | "€1,560.00" and "1 560,00 €" appear in the same line | rene-claude-seller, **done** (197f5c8, 5934344) |
-| S7 | `before/stg-audit-desk.png`, `before/stg-inbox-desk.png` | Raw `sandbox.created`, the unit `ST` and ALL-CAPS catalog names | rene-claude-seller, **done** (197f5c8, 5934344) |
-| S8 | `before/stg-inbox-phone.png` | The badge floats mid-card, and the countdown in mono amber reads like an error | rene-claude-seller, **done** (197f5c8, 5934344) |
-| S9 | `before/stg-inbox-phone.png` | The phone nav wraps into 2 rows of 7 tabs | rene-claude-seller, **done** (197f5c8, 5934344) |
-| S10 | `before/stg-orders-desk.png` | Order rows say "1 line" instead of what was ordered | rene-claude-seller, **done** (197f5c8, 5934344) |
-| B1 | `before/stg-buyer-desk.png` | `/buyer/` falls back to DejaVu with an 80 px title, so it looks like another product | **done** (1552a15) |
-| B3 | n/a | The buyer showed tiers as long sentences with no badge | **done** (1552a15) |
+| S3 | `before/stg-mandates-desk.png`, `before/stg-stats-desk.png` | Four names for each tier (Alone/Auto, Ask/Ask human/Needs approval, Refuse/Blocked/Refused) | rene-claude-seller, **done** (18eafdc, 581faae) |
+| S4 | `before/stg-inbox-phone.png` | "(sandbox SBX-YMTQ)" appears after every buyer name, about 30 times | rene-claude-seller, **done** (18eafdc, 581faae) |
+| S5 | `before/prod-ui-landing-desk.png` | Prod `/ui/` opens on "Nothing waiting" and an "anonymous-agent" feed | rene-claude-seller, **done** (18eafdc, 581faae) |
+| S6 | `before/stg-audit-desk.png` (#218) | "€1,560.00" and "1 560,00 €" appear in the same line | rene-claude-seller, **done** (18eafdc, 581faae) |
+| S7 | `before/stg-audit-desk.png`, `before/stg-inbox-desk.png` | Raw `sandbox.created`, the unit `ST` and ALL-CAPS catalog names | rene-claude-seller, **done** (18eafdc, 581faae) |
+| S8 | `before/stg-inbox-phone.png` | The badge floats mid-card, and the countdown in mono amber reads like an error | rene-claude-seller, **done** (18eafdc, 581faae) |
+| S9 | `before/stg-inbox-phone.png` | The phone nav wraps into 2 rows of 7 tabs | rene-claude-seller, **done** (18eafdc, 581faae) |
+| S10 | `before/stg-orders-desk.png` | Order rows say "1 line" instead of what was ordered | rene-claude-seller, **done** (18eafdc, 581faae) |
+| B1 | `before/stg-buyer-desk.png` | `/buyer/` falls back to DejaVu with an 80 px title, so it looks like another product | **done** (45185b0) |
+| B3 | n/a | The buyer showed tiers as long sentences with no badge | **done** (45185b0) |
 
 ## What changed (by toivo-claude-ui)
 

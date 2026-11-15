@@ -20,7 +20,7 @@ The buyer's sentence from each case in [`evals/cases.yaml`](../evals/cases.yaml)
 | Cost per request / whole run | $0.0251 / $1.20 | $0.0210 / $1.01 | $0.0459 / $2.20 | $0.0406 / $1.95 | – | – | – | – | – | – | $0.0000 / $0.00 | – | – | $0 |
 | Model API errors (count as misses) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | – |
 | Cases n/a for an LLM | 12 | 12 | 12 | 12 | 12 | 12 | 12 | 12 | 12 | 12 | 12 | 14 | 5 | – |
-| Run | local @ `a355dac` | local @ `a355dac` | local @ `a355dac` | local @ `a355dac` | local @ `a355dac` | local @ `f0a4ef9` | local @ `a355dac` | local @ `a355dac` | local @ `a355dac` | local @ `a355dac` | CI 43587725624 @ `11d8448` | CI 43612368619 @ `30a2f0d` | – | – |
+| Run | local @ `a355dac` | local @ `a355dac` | local @ `a355dac` | local @ `a355dac` | local @ `a355dac` | local @ `f0a4ef9` | local @ `a355dac` | local @ `a355dac` | local @ `a355dac` | local @ `a355dac` | CI 43587725624 @ `f31967b` | CI 43612368619 @ `4d8ad10` | – | – |
 
 `oracle:scripted-plan` is not a model: it replays the scripted eval's plan for each case through the same agent runtime and checks, so it validates the harness and is the ceiling a model can reach. *Scripted calls* is `scripts/eval.py` (all 60 cases, `evals/results.json`).
 
@@ -129,9 +129,9 @@ Parser corrections and self-check stops were 0 in every Sous-agent run: the mode
 
 ## Held-out
 
-15 buyer requests in [`evals/heldout/cases.yaml`](../evals/heldout/cases.yaml) were written **blind**, from the challenge brief alone, before their author read Sous's code, evals or docs, and committed frozen (`d12e3d2`). Nothing in Sous was tuned on them. The scoring rubric ([`evals/heldout/rubric.yaml`](../evals/heldout/rubric.yaml)) was written after reading the harness and before the first run; it turns each plain-language expectation into name patterns and quantity ranges. Every case runs under a neutral mandate (auto-approve up to 2,000 EUR, no first-time-product rule) plus only what the case's context states (a budget becomes the auto-approve limit, forbidden allergens become avoid_allergens). Code: [`scripts/heldout_eval.py`](../scripts/heldout_eval.py).
+15 buyer requests in [`evals/heldout/cases.yaml`](../evals/heldout/cases.yaml) were written **blind**, from the challenge brief alone, before their author read Sous's code, evals or docs, and committed frozen (`38ab032`). Nothing in Sous was tuned on them. The scoring rubric ([`evals/heldout/rubric.yaml`](../evals/heldout/rubric.yaml)) was written after reading the harness and before the first run; it turns each plain-language expectation into name patterns and quantity ranges. Every case runs under a neutral mandate (auto-approve up to 2,000 EUR, no first-time-product rule) plus only what the case's context states (a budget becomes the auto-approve limit, forbidden allergens become avoid_allergens). Code: [`scripts/heldout_eval.py`](../scripts/heldout_eval.py).
 
-### `gemini:gemini-4-hydrogen + sous-agent`, 3 repeat(s), run day 2026-11-14, CI 43620135327 @ `6828c00`
+### `gemini:gemini-4-hydrogen + sous-agent`, 3 repeat(s), run day 2026-11-14, CI 43620135327 @ `e1b01f7`
 
 | Metric | Result |
 |---|---|
@@ -187,7 +187,7 @@ Parser corrections and self-check stops were 0 in every Sous-agent run: the mode
 
 ## Held-out set 2
 
-20 new buyer requests in [`evals/heldout2/cases.yaml`](../evals/heldout2/cases.yaml) were written **blind** by an author who never read the repo (only: Valio Aimo is a Finnish food-service wholesaler and who its buyers are), and committed frozen (`d58069a`) before the Sous agent's fixes landed. The fixes (`514eda4`) were made from set 1's findings without reading set 2, and nothing was tuned on it. Set 2 states each item's quantity and tolerance itself; [`adapt_set2`](../scripts/heldout_eval.py) maps that onto the same scorer as set 1 mechanically (range = qty +- tolerance, budget = auto-approve limit, allergens = avoid_allergens) and [`evals/heldout2/rubric.yaml`](../evals/heldout2/rubric.yaml), written before the run, adds only a name pattern per item, the date and which cases are dishes. One run, after the fixes.
+20 new buyer requests in [`evals/heldout2/cases.yaml`](../evals/heldout2/cases.yaml) were written **blind** by an author who never read the repo (only: Valio Aimo is a Finnish food-service wholesaler and who its buyers are), and committed frozen (`d854aba`) before the Sous agent's fixes landed. The fixes (`6b1bc55`) were made from set 1's findings without reading set 2, and nothing was tuned on it. Set 2 states each item's quantity and tolerance itself; [`adapt_set2`](../scripts/heldout_eval.py) maps that onto the same scorer as set 1 mechanically (range = qty +- tolerance, budget = auto-approve limit, allergens = avoid_allergens) and [`evals/heldout2/rubric.yaml`](../evals/heldout2/rubric.yaml), written before the run, adds only a name pattern per item, the date and which cases are dishes. One run, after the fixes.
 
 ### Set 1 before the fixes vs set 2 after
 
@@ -195,7 +195,7 @@ Different cases (set 2 is new and blind to the fixes), same scorer, same agent a
 
 `gemini:gemini-4-hydrogen + sous-agent`
 
-| Metric | Set 1, 3 repeat(s) @ `6828c00` (before) | Set 2, 3 repeat(s) @ `e7455b3` (after) |
+| Metric | Set 1, 3 repeat(s) @ `e1b01f7` (before) | Set 2, 3 repeat(s) @ `6d1b06b` (after) |
 |---|---|---|
 | Matched with no correction (all case runs) | 12/45 = 26.7 % | 15/60 = 25.0 % |
 | ... of the should-order cases | 3/36 | 3/48 |
@@ -206,7 +206,7 @@ Different cases (set 2 is new and blind to the fixes), same scorer, same agent a
 | Expected lines at the right quantity | 10/96 | 73/167 |
 | Wrong delivery date | 12/45 quoted runs | 0/56 quoted runs |
 
-### `gemini:gemini-4-hydrogen + sous-agent`, 3 repeat(s), run day 2026-11-14, CI 43628767992 @ `e7455b3`
+### `gemini:gemini-4-hydrogen + sous-agent`, 3 repeat(s), run day 2026-11-14, CI 43628767992 @ `6d1b06b`
 
 | Metric | Result |
 |---|---|

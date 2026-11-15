@@ -1,7 +1,7 @@
 # CI
 
 One workflow, [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), runs on every push to
-`main`, every pull request and on demand (`workflow_dispatch`). It runs on [CRACI](https://docs.craci.com) runners: the repo variable `CI_RUNNER=craci` is set (without it, GitHub-hosted `ubuntu-24.04`). Last run with every job green, including the live evals: [43530484114](https://github.com/Zawaer/sous/actions/runs/43530484114) (e84bb41).
+`main`, every pull request and on demand (`workflow_dispatch`). It runs on [CRACI](https://docs.craci.com) runners: the repo variable `CI_RUNNER=craci` is set (without it, GitHub-hosted `ubuntu-24.04`). Last run with every job green, including the live evals: 43530484114 (74d1c42).
 
 ```
 test ──────────► eval (main / manual only; needs VALIO_AIMO_API_KEY + scripts/eval.py)

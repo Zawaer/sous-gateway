@@ -49,7 +49,7 @@ the mandate's 0.9 delivery-reliability floor, unknown allergen data, and stock a
 past that point only latency grows. The gateway process never used more than about one core of the four. In
 the same mix that is roughly 11 searches, 7.5 quotes and **~3 orders per second**, or ~10,000 orders an hour.
 
-**Before the fix** (commit ea4cd19, same run): 20.2-21.3 req/s at the plateau. Search p50 at 1 agent was 32
+**Before the fix** (commit ede8518, same run): 20.2-21.3 req/s at the plateau. Search p50 at 1 agent was 32
 ms (23 after) and at 16 agents 92 ms (70 after). The order ceiling did not move.
 
 **SQLite** (the dev default, file on this host's disk) is far slower: 6.5 req/s with 1 agent and 9.1 with 8.
@@ -61,7 +61,7 @@ The `redteam-scale` CI job (by hand: `gh workflow run ci.yml -f redteam_scale=tr
 this test on a dedicated CRACI VM (`size: 32`, NVMe), Valio replayed, MariaDB 11.4 as a service container. For
 each CPU count the gateway was pinned with `taskset` and MariaDB with `docker update --cpuset-cpus` to the same
 CPUs; the load generator had the last 2 vCPUs. Stages of 15 s. Run
-[43611589764](https://github.com/Zawaer/sous/actions/runs/43611589764) (commit 83942b9), egress proved by its
+43611589764 (commit 84e7826), egress proved by its
 `craci-evidence` job (PyPI and Docker Hub only).
 
 | gateway + DB CPUs | 1 agent | 4 agents | 16 agents | 64 agents | peak orders/s | gateway CPU at peak | errors |

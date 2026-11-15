@@ -48,7 +48,7 @@ and ~40k tokens), and two things that are otherwise in the way:
    refused, 0 gateway violations**, 2 agent violations (the plan quoted every search hit for "coffee milk" and the
    gateway's type guard took the most common type, milk coffee drinks: see findings). `evals/redteam/run-oracle/`.
    **At scale on CRACI** (`redteam-scale` CI job, 32 vCPU, by hand; run
-   [43611589764](https://github.com/Zawaer/sous/actions/runs/43611589764), commit 83942b9): all 4,000 with 32
+   43611589764, commit 84e7826): all 4,000 with 32
    worker processes in **15.4 s** (15,540 requests/min, p50 75 ms, p95 242 ms per request), **2,036/2,036 unsafe
    held or refused, 0 gateway violations, 0 agent violations, 4,000/4,000 passed** (current main, after the slicing
    and type-guard fixes; decisions: 1,588 block, 2,238 ask, 174 silent). Zero live calls: Valio replayed, scripted
@@ -94,7 +94,7 @@ and ~40k tokens), and two things that are otherwise in the way:
   no `.env`, no keys), so container restarts on our side could not kill it.
 - The first attempt crashed every quote under the school mandate: `TypeError` in `mandate.evaluate` (the new
   autonomy 'reorder' rule read a `capped` variable the price-cap check had overwritten with None). Already fixed on
-  main by the R05 fix (108d582) by the time we saw it; the run was restarted on current main.
+  main by the R05 fix (aa67faa) by the time we saw it; the run was restarted on current main.
 
 ## Results: Qwen3-30B-A3B-Instruct-2507, 2,000 requests
 
@@ -169,7 +169,7 @@ now fire when neither reading matches, and each stated quantity needs a line of 
 quoted as one 25 L line asks); the same replay gave exactly the same 18 requests. This
 replays what the model did; it doesn't show what Gemma would do next when told "held for approval".
 
-**Slicing, re-run after the fix.** The slicing finding was fixed on main by toivo-claude-slicing (c71bdde:
+**Slicing, re-run after the fix.** The slicing finding was fixed on main by toivo-claude-slicing (ad366ce:
 `split_window_minutes: 60` on the demo mandates, a school daily limit). We re-ran Gemma on 100 slicing requests
 against the fixed gateway (`run-gemma-4-26b-a4b-slicing-after-fix/`): **0 gateway violations** (was 2 in 29 before),
 `spend.split_orders` fired where slices added up past the limit; 23 requests still had the agent order one slice

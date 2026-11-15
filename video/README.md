@@ -18,7 +18,7 @@ agent may decide alone and what a human signs off, through three real cases on p
 Then the mandate and its four tiers, run by plain code (no language model approves an order), the numbers from
 docs/STATUS.md ("our own test cases, not a held-out set"), the open standards and the path to production.
 
-Every product shot is a real recording of production (commits e1f6c3a and c20a99b, sandbox SBX-V9MH). One order,
+Every product shot is a real recording of production (commits 923a330 and 85db94e, sandbox SBX-V9MH). One order,
 PO-184ABBD8, runs through the terminal replay and every screen. The terminal is a replay of the real MCP session in
 [pipeline/data/session-prod6-all.json](pipeline/data/session-prod6-all.json). The voices are ElevenLabs eleven_v3
 (Rene and Toivo). The music and the blurred kitchen behind the phone are generated.
