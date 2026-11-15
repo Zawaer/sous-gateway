@@ -580,7 +580,8 @@ function done() {
       <ol class="built">
         <li><span class="num">1</span><b>Lookup</b><span class="v">${d[1].checked ? d[1].checked + " products checked, with " : ""}live price and stock from Valio Aimo</span></li>
         <li><span class="num">2</span><b>Request and order</b><span class="v">1,000 L of milk committed at ${esc(eur(d[1].total ?? 0))}, a fixed and signed price</span></li>
-        <li><span class="num">3</span><b>Permissions and approval</b><span class="v">${tier(d[1].outcome || "silent")} agent alone <span class="tag">${d[2].status === "ordered" ? "Approved" : "Rejected"}</span> by you ${tier("block")} by the mandate</span></li>
+        <li><span class="num">3</span><b>Permissions and approval</b><span class="v">${tier(d[1].outcome || "silent")} agent alone <span class="tag">${d[2].status === "ordered" ? "Approved" : "Rejected"}</span> by you ${tier("block")} by the mandate</span>
+          <span class="v">The same rules also check allergens, quantity deviations, price changes and delivery issues on every order.</span></li>
         <li><span class="num">\u2713</span><b>Trust on both sides</b><span class="v">One log of ${Number(d[4].events).toLocaleString("en-GB")} entries, intact, read by buyer and Valio Aimo alike</span></li>
       </ol>`
     : `<h1>Your sandbox is ready.</h1><p class="line">Explore freely, or take the four-step tour first.</p>
@@ -600,7 +601,7 @@ function done() {
         <p class="muted" style="font-size:.84rem;margin:0">The approval key stays in this browser. Claude Code and others:
           <button class="quiet" style="padding:0;font-size:inherit" data-copy="cc" type="button">copy the command</button> · <a href="https://github.com/Zawaer/sous/blob/main/docs/CONNECT.md" target="_blank" rel="noopener">guide</a></p>
       </div>
-      <a class="tile" href="break.html${q()}">${ms("bug_report")}<span><b>Try to break it</b><span class="d">Seven attacks</span></span></a>
+      <a class="tile" href="break.html${q()}">${ms("bug_report")}<span><b>Try to break it</b><span class="d">Six attacks</span></span></a>
       <a class="tile" href="buyer.html${q()}#/inbox">${ms("how_to_reg")}<span><b>The buyer's inbox</b><span class="d">Approve on a phone</span></span></a>
       <a class="tile" href="./${q()}#/today">${ms("storefront")}<span><b>Valio Aimo's view</b><span class="d">Orders and audit log</span></span></a>
       <a class="tile" href="${trace(d[1]?.id || state.held || "")}">${ms("verified_user")}<span><b>The trust board</b><span class="d">One order, proven</span></span></a>

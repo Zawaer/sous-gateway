@@ -82,8 +82,9 @@
 
 <main>
   <h1 data-i18n="break.h1">Try to break it</h1>
-  <p class="lead" data-i18n="break.lead">Seven things a careless or hostile purchasing agent might try. Each button runs one against your
+  <p class="lead" data-i18n="break.lead">Six things a careless or hostile purchasing agent might try. Each button runs one against your
     sandbox through the same gateway code an agent's calls reach: the mandate rules, the signature check, the approval guard.</p>
+  <p class="fine" data-i18n="break.also">The same rules also hold or refuse orders for everyday reasons: an allergen the buyer avoids, an unusual quantity, a price that moved, a delivery that would come late.</p>
   <details class="finebox"><summary data-i18n="break.fine_sum">How the attacks are run</summary>
   <p class="fine" data-i18n="break.fine">Quotes here are priced from reference prices stored in the gateway, so no Valio Aimo call is made
     and your sandbox's live lookups stay untouched. Orders an attack creates are real sandbox orders, marked as attack
@@ -128,7 +129,7 @@
 // Same text as sous/attacks.py CATALOG (English in web/i18n.js, keys break.a.<name>.title/desc/side).
 // "side" says what an attack leaves behind when that matters.
 const t = I18N.t;
-const ATTACK_NAMES = ["self_approve", "slice", "injection", "tamper_quote", "replay_other_agent", "over_limit", "wrong_allergen"];
+const ATTACK_NAMES = ["self_approve", "slice", "injection", "tamper_quote", "replay_other_agent", "over_limit"];  // allergens are named in break.also, not run as their own example
 const attack = (name) => {
   const side = "break.a." + name + ".side";
   return { name, title: t("break.a." + name + ".title"), desc: t("break.a." + name + ".desc"), side: I18N.STRINGS.en[side] ? t(side) : "" };

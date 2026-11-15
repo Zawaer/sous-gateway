@@ -150,7 +150,8 @@
 
   "break.title": "Try to break it · Sous",
   "break.h1": "Try to break it",
-  "break.lead": "Seven things a careless or hostile purchasing agent might try. Each button runs one against your sandbox through the same gateway code an agent's calls reach: the mandate rules, the signature check, the approval guard.",
+  "break.lead": "Six things a careless or hostile purchasing agent might try. Each button runs one against your sandbox through the same gateway code an agent's calls reach: the mandate rules, the signature check, the approval guard.",
+  "break.also": "The same rules also hold or refuse orders for everyday reasons: an allergen the buyer avoids, an unusual quantity, a price that moved, a delivery that would come late.",
   "break.fine": "Quotes here are priced from reference prices stored in the gateway, so no Valio Aimo call is made and your sandbox's live lookups stay untouched. Orders an attack creates are real sandbox orders, marked as attack demos, and appear in the seller UI and the audit log. Orders that could go through are placed under a separate attack-demo mandate in your sandbox (€500 per order, orders within an hour added up against it, €1,500 a day), so your hotel, hospital and school mandates keep their limits for your own tries.",
   "break.fine_sum": "How the attacks are run",
   "break.create": "Start with a new sandbox",
@@ -590,7 +591,8 @@
 
   "break.title": "Yritä murtaa se · Sous",
   "break.h1": "Yritä murtaa se",
-  "break.lead": "Seitsemän temppua, joita huolimaton tai vihamielinen ostoagentti voisi kokeilla. Jokainen painike ajaa yhden niistä testiympäristöäsi vastaan samalla Sousin koodilla, johon agentin kutsut osuvat: valtakirjan säännöt, allekirjoituksen tarkistus ja hyväksyntäsuoja.",
+  "break.lead": "Kuusi temppua, joita huolimaton tai vihamielinen ostoagentti voisi kokeilla. Jokainen painike ajaa yhden niistä testiympäristöäsi vastaan samalla Sousin koodilla, johon agentin kutsut osuvat: valtakirjan säännöt, allekirjoituksen tarkistus ja hyväksyntäsuoja.",
+  "break.also": "Samat säännöt pysäyttävät tai estävät tilauksen myös arkisista syistä: ostajan välttämä allergeeni, poikkeava määrä, muuttunut hinta tai myöhästyvä toimitus.",
   "break.fine": "Tarjoukset hinnoitellaan täällä Sousiin tallennetuilla viitehinnoilla, joten Valio Aimoon ei tehdä kutsuja eikä testiympäristösi live-hakuja kulu. Hyökkäysten luomat tilaukset ovat oikeita testiympäristön tilauksia. Ne on merkitty hyökkäysdemoiksi, ja ne näkyvät myyjän näkymässä ja tapahtumalokissa. Tilaukset, jotka voisivat mennä läpi, tehdään erillisellä hyökkäysdemon valtakirjalla (500\u00a0€ tilaukselta, tunnin sisällä tehdyt tilaukset yhteen laskien, 1\u00a0500\u00a0€ päivässä), joten hotellin, sairaalan ja koulun valtakirjojen rajat jäävät omiin kokeiluihisi.",
   "break.fine_sum": "Näin hyökkäykset ajetaan",
   "break.create": "Aloita uudella testiympäristöllä",
