@@ -125,6 +125,11 @@
     .result p { margin: 0; color: var(--ink-80); }
     .result p b { color: var(--ink); }
     .result.err { background: var(--panel); border-radius: var(--radius); padding: 16px; text-align: left; }
+    .notice { display: flex; gap: 14px; align-items: flex-start; text-align: left; max-width: 27rem; margin: 18px auto 0; padding: 14px 16px;
+      border-radius: var(--radius); background: var(--notify-bg, #e3edf7); color: var(--ink); animation: enter .45s .25s cubic-bezier(.2, .7, .2, 1) both; }
+    .notice .ms { color: var(--notify, #1f5a96); flex: none; margin-top: 2px; }
+    .notice b { display: block; font-weight: 600; }
+    .notice span { display: block; font-size: .9rem; color: var(--ink-80); margin-top: 2px; }
     .deadline { color: var(--ask-ink); font-weight: 500; font-size: .92rem; margin-top: 6px !important; }
     .tag { display: inline-block; font: 500 .78rem/1 var(--sans); padding: .45em .8em; border-radius: 999px; background: var(--pill); }
     details.more { margin: 18px auto 0; max-width: 27rem; font-size: .88rem; text-align: left; }
@@ -523,14 +528,28 @@ function out3(d, animate) {
   setFlow(refused ? "back" : d.result === "held for approval" ? "hold" : "auto");
   $("#out").innerHTML = `<div class="result"><div class="big" id="big">${esc(eur(d.total))}</div>
     <p><b>${refused ? "Refused." : esc(sentence(d.result))}</b> ${refused ? "No human can wave it through and the agent cannot argue." : ""}</p></div>
+    <div id="notice"></div>
     <details class="more"><summary>Details</summary><div class="in"><dl>
       <dt>Rule</dt><dd><a class="mono" href="/rules/${encodeURIComponent(d.rule || "")}" target="_blank" rel="noopener">${esc(d.rule || "")}</a></dd>
       <dt>It says</dt><dd>${esc(d.text || "")}</dd>
       ${d.id ? `<dt>Order</dt><dd><a class="mono" href="${trace(d.id)}" target="_blank" rel="noopener">${esc(d.id)}</a>, stored as refused</dd>` : ""}</dl></div></details>`;
   if (animate) countUp($("#big"), d.total);
+  if (refused && d.id) notice(d.id);
   $("#acts").innerHTML = next(4, "Next: the proof");
   $("#acts [data-next]").addEventListener("click", () => go(4));
   stepper();
+}
+
+// A refusal is never silent: the gateway tells the buyer's human at once. Show that message, as it was sent.
+async function notice(orderId) {
+  let n = null;
+  try {
+    const d = await call(`/notifications?sandbox=${encodeURIComponent(state.id)}&limit=50`);
+    n = (d.notifications || []).find((x) => x.order_id === orderId && x.audience === "buyer");
+  } catch { /* fall back to the plain sentence */ }
+  const el = $("#notice"); if (!el) return;
+  const text = n?.message ? String(n.message).split(" Order: ")[0] : "Your agent's order was refused and nothing was ordered.";
+  el.innerHTML = `<div class="notice">${ms("notifications_active")}<div><b>The school's buyer was told at once</b><span>“${esc(text)}”</span></div></div>`;
 }
 
 // --- 4: the proof -----------------------------------------------------------------------------------------------------
