@@ -1,0 +1,21 @@
+html, body { background: #0d0f13; }
+.tw { position: absolute; inset: 0; background: #12141a; overflow: hidden; }
+.tt { height: 30px; background: #1d2027; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-bottom: 1px solid #262a33; }
+.tt i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+.tt span { flex: 1; text-align: center; margin-right: 60px; color: #8b9099; font: 12px/1 var(--sans); }
+.view { position: absolute; top: 30px; left: 0; right: 0; bottom: 0; padding: 14px 22px; overflow: hidden; }
+.lines { will-change: transform; }
+.ln { font: 13.4px/22.5px var(--mono); color: #d5d8de; white-space: pre-wrap; word-break: break-word; min-height: 22.5px; }
+.ln.gap { min-height: 8px; }
+.ln.call { margin-top: 9px; }
+.tx { background-image: linear-gradient(rgba(253,219,50,.30), rgba(253,219,50,.30)); background-repeat: no-repeat; background-size: 0% 100%;
+  border-radius: 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone; padding: 1px 2px; }
+.pr { color: #7cc68e; font-weight: 600; }
+.prompt .tx { color: #fff; font-weight: 600; }
+.cur { display: inline-block; width: 8px; height: 16px; background: #d5d8de; vertical-align: -3px; margin-left: 1px; }
+.dim { color: #7b818c; }
+.ar { color: #7fb8ff; font-weight: 600; } .ar2 { color: #b48ead; font-weight: 600; }
+.fn { color: #7fb8ff; font-weight: 600; }
+.k { color: #9cdcfe; } .s { color: #ce9178; } .n { color: #b5cea8; } .l { color: #c586c0; }
+.ok { color: #7cc68e; }
+.hlt { color: #fff; }

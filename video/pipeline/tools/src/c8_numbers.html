@@ -1,0 +1,42 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=block" rel="stylesheet">
+<link rel="stylesheet" href="common.css"><script src="common.js"></script>
+<style>
+  .lead { position: absolute; left: 150px; top: 96px; font: 400 19px/1 var(--sans); color: var(--muted); }
+  .cols { position: absolute; left: 150px; right: 150px; top: 236px; display: grid; grid-template-columns: 0.8fr 1fr 1.35fr 1fr; gap: 36px; }
+  .col .n { font: 400 72px/1 var(--serif); letter-spacing: -.025em; color: var(--ink); font-variant-numeric: lining-nums tabular-nums; white-space: nowrap; }
+  .col .n .den { color: #b9b9b1; }
+  .col .rule { height: 3px; background: var(--lime); margin: 22px 0 16px; width: 48px; transform-origin: 0 50%; border-radius: 2px; }
+  .col .l { font: 400 18px/1.42 var(--sans); color: var(--body); max-width: 260px; }
+  
+  .open b { font-weight: 500; color: var(--ink); }
+  .src { position: absolute; left: 150px; top: 124px; font: 400 40px/1.1 var(--serif); letter-spacing: -.015em; color: var(--ink); }
+</style></head>
+<body>
+<div class="lead" id="lead">Measured, and attacked</div>
+<div class="src" id="src">Our own test cases, not a held-out set.</div>
+<div class="cols">
+<div class="col" id="c1"><div class="n" id="n1">0</div><div class="rule"></div><div class="l">mandate violations ordered, across 5 LLMs and 10 runs</div></div>
+<div class="col" id="c2"><div class="n" id="n2">0<span class="den">/43</span></div><div class="rule"></div><div class="l">unsafe actions blocked or sent to a human</div></div>
+<div class="col" id="c3"><div class="n" id="n3">0<span class="den">/997</span></div><div class="rule"></div><div class="l">unsafe red-team requests held, of 2,000 on a Verda GPU; 3 slicing misses, since fixed</div></div>
+<div class="col" id="c4"><div class="n" id="n4">0<span class="den">/60</span></div><div class="rule"></div><div class="l">scripted buyer requests on live Valio prices</div></div>
+</div>
+<script>
+setup(6.4);
+window.render = function (t) {
+  const pa = (s, d) => ease((t - s) / d), la = (s, d) => clamp((t - s) / d);
+  fadeUp($('lead'), pa(0.0, 0.6), 8);
+  fadeUp($('src'), pa(0.2, 0.6), 8);
+  const starts = [1.6, 2.0, 2.4, 2.8];
+  ['c1', 'c2', 'c3', 'c4'].forEach((id, i) => {
+    fadeUp($(id), pa(starts[i], 0.6), 18);
+    $(id).querySelector('.rule').style.transform = `scaleX(${pa(starts[i] + 0.3, 0.6).toFixed(3)})`;
+  });
+  const cnt = (id, n, d, s) => { $(id).innerHTML = Math.round(n * easeInOut(la(s, 1.0))) + `<span class="den">/${d}</span>`; };
+  cnt('n2', 43, 43, 2.1); cnt('n3', 976, 997, 2.5); cnt('n4', 60, 60, 2.9);
+};
+render(0);
+</script>
+</body>
+</html>

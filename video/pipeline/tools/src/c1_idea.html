@@ -1,0 +1,65 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Fragment+Mono&family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=block" rel="stylesheet">
+<link rel="stylesheet" href="common.css"><script src="common.js"></script>
+<style>
+  .box { position: absolute; border-radius: 16px; display: flex; flex-direction: column; justify-content: center; padding: 0 26px; }
+  .box h2 { margin: 0; font: 500 30px/1.1 var(--serif); }
+  .box p { margin: 10px 0 0; font: 400 15px/1.35 var(--sans); color: var(--ink-60); white-space: nowrap; }
+  #agent { left: 75px; top: 262px; width: 280px; height: 124px; padding: 0 22px; background: #fff; border: 1.5px solid var(--rule); box-shadow: 0 10px 30px rgba(0,0,0,.06); }
+  #sous { left: 499px; top: 240px; width: 300px; height: 168px; background: var(--ink); color: var(--paper); box-shadow: 0 16px 40px rgba(0,0,0,.18); }
+  #sous h2 { font-size: 52px; }
+  #sous p { color: rgba(248, 248, 243, .72); }
+  #valio { left: 943px; top: 262px; width: 262px; height: 124px; background: var(--aimo-tint); border: 1.5px solid rgba(0, 86, 112, .25); }
+  #valio h2 { color: var(--aimo-dark); }
+  #valio p { color: var(--aimo); }
+  .arrow { position: absolute; height: 2px; }
+  .arrow .ln { position: absolute; left: 0; top: 0; height: 2px; width: 100%; transform-origin: 0 50%; }
+  .arrow .hd { position: absolute; right: -2px; top: -6px; width: 0; height: 0; border-left: 12px solid; border-top: 7px solid transparent; border-bottom: 7px solid transparent; }
+  .arrow .lab { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font: 600 13.5px/1.2 var(--sans); white-space: nowrap; }
+  #a1 { left: 363px; top: 323px; width: 128px; }
+  #a1 .ln { background: var(--ink); } #a1 .hd { border-left-color: var(--ink); } #a1 .lab { color: var(--ink-80); font-family: var(--mono); font-weight: 400; font-size: 14px; }
+  #a2 { left: 807px; top: 323px; width: 128px; }
+  #a2 .ln { background: repeating-linear-gradient(90deg, var(--aimo) 0 7px, transparent 7px 12px); } #a2 .hd { border-left-color: var(--aimo); } #a2 .lab { color: var(--aimo-dark); }
+  #chip { position: absolute; left: 52px; top: 372px; width: 380px; padding: 14px 18px 14px 18px; background: #fffef8; border: 1.5px solid rgba(0,0,0,.14); border-left: 5px solid var(--aimo); border-radius: 10px; box-shadow: 0 14px 34px rgba(0,0,0,.12); transform-origin: 30% 50%; }
+  #chip .t { font: 600 15px/1.25 var(--sans); color: var(--ink); display: flex; align-items: center; gap: 8px; }
+  #chip .t .seal { width: 18px; height: 18px; border-radius: 50%; background: var(--aimo); color: #fff; display: inline-flex; align-items: center; justify-content: center; }
+  #chip .t .seal svg { width: 11px; height: 11px; }
+  #chip .s { margin-top: 6px; font: 400 13.5px/1.3 var(--sans); color: var(--ink-60); }
+  #chip .s b { font-weight: 500; color: var(--ink-80); }
+</style></head>
+<body>
+<div id="bar" class="barwrap"></div>
+<div class="box" id="agent"><h2>Any agent</h2><p>Claude · ChatGPT · their own bot</p></div>
+<div class="arrow" id="a1"><div class="ln"></div><div class="hd"></div><div class="lab">MCP · OpenAPI</div></div>
+<div class="box" id="sous"><h2>Sous</h2><p>Valio Aimo's front door for agents</p></div>
+<div class="arrow" id="a2"><div class="ln"></div><div class="hd"></div><div class="lab"><span class="hl" id="hl2">only when needed</span></div></div>
+<div class="box" id="valio"><h2>Valio Aimo APIs</h2><p>price · availability</p></div>
+<div id="chip">
+  <div class="t"><span class="seal" id="seal"></span>Mandate · signed by the hotel's manager</div>
+  <div class="s"><b>spend limits</b> · <b>allergens</b> · <b>substitutes</b></div>
+</div>
+<script>
+setup(8);
+$('bar').innerHTML = chapterBar(Q.get('bar') === 'none' ? -1 : 0);
+if (Q.get('bar') === 'none') $('bar').style.display = 'none';
+$('seal').innerHTML = ICON.check;
+function arrow(el, a) {
+  el.querySelector('.ln').style.transform = `scaleX(${a.toFixed(3)})`;
+  el.querySelector('.hd').style.opacity = clamp((a - .85) / .15);
+  el.querySelector('.lab').style.opacity = clamp((a - .2) / .6);
+}
+window.render = function (t) {
+  fadeUp($('agent'), p(t, 0.25, 0.7), 18);
+  arrow($('a1'), easeInOut(lin(t, 1.0, 0.7)));
+  fadeUp($('sous'), p(t, 1.6, 0.75), 18);
+  arrow($('a2'), easeInOut(lin(t, 2.4, 0.7)));
+  hl($('hl2'), easeInOut(lin(t, 3.1, 0.6)));
+  fadeUp($('valio'), p(t, 3.0, 0.75), 18);
+  const c = p(t, 4.5, 0.9);
+  $('chip').style.opacity = clamp(c * 1.6);
+  $('chip').style.transform = `translateY(${((1 - c) * 70).toFixed(2)}px) rotate(${(-5 + 3.8 * c).toFixed(3)}deg)`;
+};
+render(0);
+</script>
+</body></html>

@@ -1,0 +1,139 @@
+1
+00:00:00,400 --> 00:00:04,160
+With Sous, AI agents buy from Valio Aimo for a kitchen.
+
+2
+00:00:04,328 --> 00:00:06,647
+The question is what they may do alone.
+
+3
+00:00:07,299 --> 00:00:11,581
+There are three answers: order alone, ask a person, or refuse.
+
+4
+00:00:11,660 --> 00:00:13,325
+Here's each one, live.
+
+5
+00:00:13,799 --> 00:00:16,224
+Alone first, with the brief's own example:
+
+6
+00:00:16,224 --> 00:00:19,112
+a thousand litres of lactose-free milk for Monday.
+
+7
+00:00:19,192 --> 00:00:22,140
+Sous checks live price and stock, signs a fixed price,
+
+8
+00:00:22,140 --> 00:00:23,832
+and the agent orders by itself.
+
+9
+00:00:26,099 --> 00:00:29,540
+Now a harder one: whipping cream for Monday's panna cotta.
+
+10
+00:00:29,663 --> 00:00:34,632
+The search covers over seventeen thousand products without calling Valio's systems,
+
+11
+00:00:34,632 --> 00:00:38,044
+and the quote shows the usual cream's cut-off has passed.
+
+12
+00:00:38,300 --> 00:00:40,349
+So the agent asks for substitutes,
+
+13
+00:00:40,349 --> 00:00:42,459
+and says the cream is for a recipe.
+
+14
+00:00:42,605 --> 00:00:46,574
+The pick comes back as a signed quote: a fixed price,
+
+15
+00:00:46,574 --> 00:00:49,047
+with reliability, origin and CO₂.
+
+16
+00:00:49,300 --> 00:00:51,510
+The agent orders, and the order waits,
+
+17
+00:00:51,510 --> 00:00:53,780
+because what it's for decides the swap.
+
+18
+00:00:53,887 --> 00:00:58,544
+Coffee could take any cream of the same kind; a recipe needs the chef.
+
+19
+00:00:58,625 --> 00:01:02,068
+Anything off the usual waits too: bigger quantities,
+
+20
+00:01:02,068 --> 00:01:05,378
+later delivery, a price jump, different allergens.
+
+21
+00:01:06,000 --> 00:01:09,027
+Valio Aimo sees the order, but doesn't decide it.
+
+22
+00:01:09,152 --> 00:01:13,650
+The chef gets the reason in plain words, in Finnish too,
+
+23
+00:01:13,650 --> 00:01:15,739
+and approves on the phone.
+
+24
+00:01:17,700 --> 00:01:19,380
+And some things are never allowed.
+
+25
+00:01:19,607 --> 00:01:23,096
+A school's order over its limit is refused outright,
+
+26
+00:01:23,096 --> 00:01:25,981
+and so is an agent approving its own order.
+
+27
+00:01:26,700 --> 00:01:29,529
+All of it comes from the mandate the buyer issued,
+
+28
+00:01:29,529 --> 00:01:31,339
+run by plain code in four tiers.
+
+29
+00:01:31,468 --> 00:01:34,580
+No language model approves an order or relaxes a rule.
+
+30
+00:01:35,100 --> 00:01:37,739
+On our own test cases, not a held-out set:
+
+31
+00:01:37,739 --> 00:01:40,440
+zero mandate violations across five models.
+
+32
+00:01:40,452 --> 00:01:45,563
+And it's open: MCP, OpenAPI, Peppol, MIT.
+
+33
+00:01:46,100 --> 00:01:52,020
+Next: buyer login, Valio Aimo's order API and contract prices.
+
+34
+00:01:52,600 --> 00:01:52,920
+Sous.
+
+35
+00:01:53,011 --> 00:01:56,469
+Agents do the buying, and the customer stays in control.

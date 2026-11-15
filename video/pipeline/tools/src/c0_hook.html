@@ -1,0 +1,36 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=block" rel="stylesheet">
+<link rel="stylesheet" href="common.css"><script src="common.js"></script>
+<style>
+  html, body { background: radial-gradient(120% 90% at 78% 18%, #2c5a46 0%, #17362b 46%, #10261e 100%); }
+  .wrap { position: absolute; left: 150px; right: 500px; top: 0; bottom: 70px; display: flex; flex-direction: column; justify-content: center; }
+  .label { font: 400 19px/1 var(--sans); color: rgba(232, 238, 230, .62); margin-bottom: 26px; }
+  .line { font: 400 54px/1.18 var(--serif); color: #f3f5ef; letter-spacing: -.012em; }
+  .rest { visibility: hidden; }
+  .caret { display: inline-block; width: 3px; height: 52px; background: var(--lime); vertical-align: -8px; margin: 0 1px 0 3px; }
+</style></head>
+<body>
+<div class="grain" id="grain"></div><div id="shade" style="display:none;position:absolute;inset:0;background:linear-gradient(90deg, rgba(9,22,16,.86) 0%, rgba(9,22,16,.62) 48%, rgba(9,22,16,.12) 82%, rgba(9,22,16,0) 100%)"></div>
+<div class="wrap">
+  <div class="label" id="label">A hotel kitchen's purchasing agent</div>
+  <div class="line"><span id="typed"></span><span class="caret" id="caret"></span><span class="rest" id="rest"></span></div>
+</div>
+<script>
+setup(7);
+if (Q.get('transparent')) { document.documentElement.style.background = 'transparent'; document.body.style.background = 'transparent'; $('grain').style.display = 'none'; $('shade').style.display = 'block'; }
+const FULL = "Monday's panna cotta: our usual whipping cream can't come. Find a replacement.";
+const times = []; { let t = 0.75; for (let i = 0; i < FULL.length; i++) { times.push(t); t += 0.058; if ('.:'.includes(FULL[i])) t += 0.22; } }
+const TYPE_END = times[times.length - 1];
+window.render = function (t) {
+  fadeUp($('label'), p(t, 0.1, 0.7), 10);
+  let n = 0; while (n < FULL.length && times[n] * K <= t) n++;
+  $('typed').textContent = FULL.slice(0, n);
+  $('rest').textContent = FULL.slice(n);
+  const blinking = t > TYPE_END * K + 0.25;
+  $('caret').style.opacity = (!blinking || Math.floor((t - TYPE_END * K) * 1.8) % 2 === 0) ? 1 : 0;
+  if (t < 0.6 * K) $('caret').style.opacity = Math.floor(t * 2.4) % 2 === 0 ? 1 : 0;
+};
+render(0);
+</script>
+</body></html>

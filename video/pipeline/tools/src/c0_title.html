@@ -1,0 +1,26 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=block" rel="stylesheet">
+<link rel="stylesheet" href="common.css"><script src="common.js"></script>
+<style>
+  .panel { position: absolute; right: 0; top: 0; bottom: 0; width: 430px; background: radial-gradient(120% 80% at 30% 20%, #2c5a46 0%, #17362b 55%, #10261e 100%); overflow: hidden; }
+  h1 { position: absolute; left: 150px; top: 196px; margin: 0; font: 400 132px/1 var(--serif); letter-spacing: -.03em; color: var(--ink); }
+  .sub { position: absolute; left: 154px; top: 362px; font: 400 34px/1.3 var(--serif); color: #55554f; letter-spacing: -.01em; }
+  .foot { position: absolute; left: 154px; top: 452px; font: 400 16px/1.3 var(--sans); color: #9a9a92; }
+</style></head>
+<body>
+<div class="panel"><div class="grain"></div></div>
+<h1 id="h">Sous</h1>
+<div class="sub" id="s">Valio Aimo's front door for AI purchasing agents.</div>
+<div class="foot" id="f">Junction 2026 · Trusted Trade Agents · sous.saarikko.dev</div>
+<script>
+setup(2.6);
+window.render = function (t) {
+  const pa = (s, d) => ease((t - s) / d);
+  fadeUp($('h'), pa(0.05, 0.6), 12);
+  fadeUp($('s'), pa(0.35, 0.6), 10);
+  fadeUp($('f'), pa(0.7, 0.6), 6);
+};
+render(0);
+</script>
+</body></html>

@@ -1,0 +1,18 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Fragment+Mono&family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=block" rel="stylesheet">
+<link rel="stylesheet" href="common.css"><script src="common.js"></script>
+<style>
+  /* recording slot: 1504x846 at (208,100) output px = 1002.667x564 at (138.667,66.667) CSS px */
+  #slot { position: absolute; left: 138.6667px; top: 66.6667px; width: 1002.6667px; height: 564px; background: #fff; border-radius: 10.6667px;
+          box-shadow: 0 22px 60px rgba(0,0,0,.13), 0 3px 10px rgba(0,0,0,.07), 0 0 0 1px rgba(0,0,0,.06); }
+</style></head>
+<body>
+<div id="bar" class="barwrap"></div>
+<div id="slot"></div>
+<script>
+setup(1);
+$('bar').innerHTML = chapterBar(parseInt(Q.get('n') ?? '0'));
+window.render = function () {};
+</script>
+</body></html>

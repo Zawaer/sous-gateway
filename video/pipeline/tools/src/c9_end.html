@@ -1,0 +1,46 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=block" rel="stylesheet">
+<link rel="stylesheet" href="common.css"><script src="common.js"></script><script src="qr.js"></script>
+<style>
+  .panel { position: absolute; right: 0; top: 0; bottom: 0; width: 430px; background: radial-gradient(120% 80% at 30% 20%, #2c5a46 0%, #17362b 55%, #10261e 100%); overflow: hidden; }
+  h1 { position: absolute; left: 150px; top: 128px; margin: 0; font: 400 120px/1 var(--serif); letter-spacing: -.03em; color: var(--ink); }
+  .lines { position: absolute; left: 150px; top: 290px; font: 400 34px/1.38 var(--serif); color: var(--ink); }
+  .lines .u { box-shadow: inset 0 -5px 0 var(--lime); }
+  .foot { position: absolute; left: 150px; top: 492px; display: flex; align-items: center; gap: 22px; }
+  .foot img { width: 92px; height: 92px; border-radius: 8px; }
+  .foot .url { font: 500 26px/1.2 var(--sans); color: var(--ink); }
+  .foot .gh { margin-top: 6px; font: 400 17px/1.2 var(--sans); color: var(--muted); }
+  .muted { position: absolute; left: 150px; font: 400 15px/1.3 var(--sans); color: var(--muted); }
+  .pq { position: absolute; left: 56px; right: 48px; bottom: 64px; font: 400 26px/1.3 var(--serif); color: var(--green-ink); }
+  .pq span { display: block; font: 400 15px/1.3 var(--sans); color: rgba(232, 238, 230, .6); margin-top: 12px; }
+</style></head>
+<body>
+<div class="panel"><div class="grain"></div><div class="pq" id="pq">Valio Aimo's front door for AI purchasing agents.<span>Junction 2026 · Trusted Trade Agents</span></div></div>
+<h1 id="h">Sous</h1>
+<div class="lines">
+  <div id="l1">The agent carries the mandate.</div>
+  <div id="l2">Valio Aimo enforces it.</div>
+  <div id="l3"><span class="u" id="u3">The customer stays in control.</span></div>
+</div>
+<div class="foot" id="foot">
+  <img id="qr" alt="">
+  <div><div class="url">sous.saarikko.dev</div><div class="gh">github.com/Zawaer/sous-gateway</div></div>
+</div>
+<div class="muted" id="m1" style="top:618px">Next: buyer login, Valio Aimo's order API, contract prices.</div>
+<script>
+setup(6);
+$('qr').src = window.QR;
+window.render = function (t) {
+  fadeUp($('h'), p(t, 0.0, 0.7), 14);
+  fadeUp($('l1'), p(t, 0.6, 0.6), 12);
+  fadeUp($('l2'), p(t, 1.15, 0.6), 12);
+  fadeUp($('l3'), p(t, 1.7, 0.6), 12);
+  $('u3').style.boxShadow = `inset 0 -${(5 * easeInOut(lin(t, 2.25, 0.75))).toFixed(2)}px 0 var(--lime)`;
+  fadeUp($('foot'), p(t, 2.6, 0.7), 10);
+  fadeUp($('m1'), p(t, 3.0, 0.6), 6);
+  fadeUp($('pq'), p(t, 0.4, 0.8), 10);
+};
+render(0);
+</script>
+</body></html>
